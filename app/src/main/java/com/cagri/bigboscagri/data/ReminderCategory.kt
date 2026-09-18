@@ -19,7 +19,7 @@ fun List<ReminderItem>.inCategory(
 ): List<ReminderItem> = filter { item ->
     when (category) {
         ReminderCategory.Completed -> item.isCompleted
-        ReminderCategory.NoAlert -> !item.isCompleted && item.alertAt == null
+        ReminderCategory.NoAlert -> item.isNoAlert
         ReminderCategory.Important -> !item.isCompleted && item.isImportant
         ReminderCategory.Planned -> !item.isCompleted && item.alertAt != null
         ReminderCategory.Today -> !item.isCompleted && item.alertAt?.let {
@@ -39,8 +39,8 @@ fun List<ReminderItem>.categoryCounts(today: LocalDate, zone: ZoneId = ZoneId.sy
         if (item.isCompleted) add(ReminderCategory.Completed)
         else {
             if (item.isImportant) add(ReminderCategory.Important)
-            if (item.alertAt == null) add(ReminderCategory.NoAlert)
-            else {
+            if (item.isNoAlert) add(ReminderCategory.NoAlert)
+            if (item.alertAt != null) {
                 add(ReminderCategory.Planned)
                 if (Instant.ofEpochMilli(item.alertAt).atZone(zone).toLocalDate() == today) add(ReminderCategory.Today)
             }

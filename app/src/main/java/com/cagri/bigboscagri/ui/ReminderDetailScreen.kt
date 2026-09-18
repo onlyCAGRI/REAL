@@ -243,52 +243,78 @@ fun ReminderDetailScreen(
                     }
                 }
                 HorizontalDivider(Modifier.padding(top = 24.dp, bottom = 18.dp), color = Color(0xFF38383F))
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ActionIcon(if (reminder.isCompleted) ActionGlyph.Check else ActionGlyph.Note,
-                        Modifier.padding(top = 2.dp).size(21.dp), Color(0xFF94B8F7))
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        if (reminder.isCompleted) {
-                            Text("Tamamlandı", color = Color(0xFFD3D3D9), fontSize = 14.sp)
-                        } else if (reminder.alertAt == null) {
-                            Text("Uyarı yok", color = Color(0xFFD3D3D9), fontSize = 14.sp)
-                        } else {
-                            val isOverdue = reminder.alertAt < System.currentTimeMillis()
-                            val dateColor = if (isOverdue) Color(0xFFF87171) else Color(0xFF94B8F7)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text("Planlı", color = Color(0xFFD3D3D9), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                Text("•", color = Color(0xFF6B6B75), fontSize = 12.sp)
-                                Text(reminderDate(reminder.alertAt), color = dateColor, fontSize = 14.sp)
-                            }
-                            val repeatText = reminder.repeatRule.repeatSummary(reminder.anchorAlertAt ?: reminder.alertAt)
-                            if (repeatText != null) {
-                                Text(
-                                    repeatText,
-                                    color = Color(0xFFA5A5B0),
-                                    fontSize = 12.sp,
-                                    lineHeight = 16.sp,
-                                    modifier = Modifier.padding(top = 1.dp)
-                                )
-                            }
+                val assignedCategory = customCategories.firstOrNull { it.id == reminder.customCategoryId }
+                if (assignedCategory != null && isStandaloneCategoryInDetail(reminder)) {
+                    val startColor = ReminderColorChoices.getOrNull(assignedCategory.accentStart)?.color ?: Color(0xFF233F73)
+                    val endColor = assignedCategory.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            Modifier.size(32.dp).clip(CircleShape).background(Brush.linearGradient(listOf(startColor, endColor))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CategoryIconGlyph(CategoryIcon.fromKey(assignedCategory.iconKey), Modifier.size(16.dp), Color.White)
                         }
-                        val assignedCategory = customCategories.firstOrNull { it.id == reminder.customCategoryId }
-                        if (assignedCategory != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.padding(top = 1.dp)
-                            ) {
-                                val startColor = ReminderColorChoices.getOrNull(assignedCategory.accentStart)?.color ?: Color(0xFF233F73)
-                                val endColor = assignedCategory.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
-                                Box(
-                                    Modifier.size(16.dp).clip(CircleShape).background(Brush.linearGradient(listOf(startColor, endColor))),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CategoryIconGlyph(CategoryIcon.fromKey(assignedCategory.iconKey), Modifier.size(10.dp), Color.White)
+                        Text(
+                            assignedCategory.name,
+                            color = Color(0xFFE2E2E8),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ActionIcon(
+                            if (reminder.isCompleted) ActionGlyph.Check else ActionGlyph.Note,
+                            Modifier.padding(top = 2.dp).size(21.dp),
+                            Color(0xFF94B8F7)
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            val statusText = reminderDetailStatusText(reminder, hasCategory = assignedCategory != null)
+                            if (statusText != null) {
+                                if (reminder.isCompleted || reminder.alertAt == null) {
+                                    Text(statusText, color = Color(0xFFD3D3D9), fontSize = 14.sp)
+                                } else {
+                                    val isOverdue = reminder.alertAt < System.currentTimeMillis()
+                                    val dateColor = if (isOverdue) Color(0xFFF87171) else Color(0xFF94B8F7)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(statusText, color = Color(0xFFD3D3D9), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        Text("•", color = Color(0xFF6B6B75), fontSize = 12.sp)
+                                        Text(reminderDate(reminder.alertAt), color = dateColor, fontSize = 14.sp)
+                                    }
+                                    val repeatText = reminder.repeatRule.repeatSummary(reminder.anchorAlertAt ?: reminder.alertAt)
+                                    if (repeatText != null) {
+                                        Text(
+                                            repeatText,
+                                            color = Color(0xFFA5A5B0),
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp,
+                                            modifier = Modifier.padding(top = 1.dp)
+                                        )
+                                    }
                                 }
-                                Text(assignedCategory.name, color = Color(0xFFC4C4CE), fontSize = 12.sp)
+                            }
+                            if (assignedCategory != null) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(top = 1.dp)
+                                ) {
+                                    val startColor = ReminderColorChoices.getOrNull(assignedCategory.accentStart)?.color ?: Color(0xFF233F73)
+                                    val endColor = assignedCategory.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
+                                    Box(
+                                        Modifier.size(16.dp).clip(CircleShape).background(Brush.linearGradient(listOf(startColor, endColor))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CategoryIconGlyph(CategoryIcon.fromKey(assignedCategory.iconKey), Modifier.size(10.dp), Color.White)
+                                    }
+                                    Text(assignedCategory.name, color = Color(0xFFC4C4CE), fontSize = 12.sp)
+                                }
                             }
                         }
                     }
@@ -485,4 +511,19 @@ private fun DetailPreview() {
     BigBosTheme {
         ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _ -> }, {})
     }
+}
+
+fun shouldShowNoAlertInDetail(reminder: ReminderItem): Boolean =
+    !reminder.isCompleted && reminder.alertAt == null && reminder.customCategoryId == null
+
+fun isStandaloneCategoryInDetail(reminder: ReminderItem): Boolean =
+    !reminder.isCompleted && reminder.alertAt == null && reminder.customCategoryId != null
+
+fun reminderDetailStatusText(
+    reminder: ReminderItem,
+    hasCategory: Boolean = (reminder.customCategoryId != null)
+): String? = when {
+    reminder.isCompleted -> "Tamamlandı"
+    reminder.alertAt == null -> if (!hasCategory) "Uyarı yok" else null
+    else -> "Planlı"
 }

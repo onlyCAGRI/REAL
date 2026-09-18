@@ -18,6 +18,7 @@ data class ReminderItem(
     val isCompleted: Boolean get() = completedAt != null
     val shouldPinNotification: Boolean get() = isImportant && !isCompleted
     val hasRepeat: Boolean get() = repeatRule != RecurrenceRule.NONE
+    val isNoAlert: Boolean get() = !isCompleted && alertAt == null && customCategoryId == null
 
     fun toggleCompleted(now: Long): ReminderItem = copy(
         completedAt = if (isCompleted) null else now,

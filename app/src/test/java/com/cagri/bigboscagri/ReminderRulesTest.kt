@@ -5,9 +5,15 @@ import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderCategory
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.data.ReminderRepository
+import com.cagri.bigboscagri.data.categoryCounts
 import com.cagri.bigboscagri.data.deleteCategoryWithRollback
 import com.cagri.bigboscagri.data.inCategory
+import com.cagri.bigboscagri.notifications.needsBigTextStyle
+import com.cagri.bigboscagri.notifications.resolveNotificationMetadata
 import com.cagri.bigboscagri.speech.VoiceDraft
+import com.cagri.bigboscagri.ui.isStandaloneCategoryInDetail
+import com.cagri.bigboscagri.ui.reminderDetailStatusText
+import com.cagri.bigboscagri.ui.shouldShowNoAlertInDetail
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -551,6 +557,181 @@ class ReminderRulesTest {
         assertEquals(1, catRepo.load().size)
         assertEquals(catSnapshot.first().id, catRepo.load().first().id)
         assertEquals(1, CategoryRepository(catPrefs).load().size)
+    }
+
+    @Test fun noAlertAndNoCustomCategoryEntersNoAlertCategory() {
+        val item = ReminderItem(id = 1L, text = "Genel not", createdAt = 1000L, alertAt = null, customCategoryId = null)
+        val filtered = listOf(item).inCategory(ReminderCategory.NoAlert)
+        assertEquals(1, filtered.size)
+        assertEquals(1L, filtered.first().id)
+
+        val counts = listOf(item).categoryCounts(LocalDate.now())
+        assertEquals(1, counts[ReminderCategory.NoAlert])
+    }
+
+    @Test fun noAlertAndCustomCategoryDoesNotEnterNoAlertCategory() {
+        val item = ReminderItem(id = 2L, text = "Araba bakım", createdAt = 1000L, alertAt = null, customCategoryId = 42L)
+        val filtered = listOf(item).inCategory(ReminderCategory.NoAlert)
+        assertTrue("Reminder with custom category must not enter NoAlert category", filtered.isEmpty())
+
+        val counts = listOf(item).categoryCounts(LocalDate.now())
+        assertEquals(0, counts[ReminderCategory.NoAlert])
+    }
+
+    @Test fun plannedWithCustomCategoryEntersBothPlannedAndCustomCategoryFilter() {
+        val futureAlert = System.currentTimeMillis() + 3600000L
+        val item = ReminderItem(id = 3L, text = "Toplantı", createdAt = 1000L, alertAt = futureAlert, customCategoryId = 77L)
+
+        // Enters Planned system category
+        val plannedList = listOf(item).inCategory(ReminderCategory.Planned)
+        assertEquals(1, plannedList.size)
+        assertEquals(3L, plannedList.first().id)
+
+        val counts = listOf(item).categoryCounts(LocalDate.now())
+        assertEquals(1, counts[ReminderCategory.Planned])
+
+        // Enters custom category filter
+        val customCategoryFiltered = listOf(item).filter { it.customCategoryId == 77L }
+        assertEquals(1, customCategoryFiltered.size)
+        assertEquals(3L, customCategoryFiltered.first().id)
+
+        // Does NOT enter NoAlert
+        assertTrue(listOf(item).inCategory(ReminderCategory.NoAlert).isEmpty())
+    }
+
+    @Test fun categoryNotFoundNotificationMetadataUsesRealFallback() {
+        val categoryPrefs = FakeSharedPreferences()
+        val categoryRepo = CategoryRepository(categoryPrefs)
+
+        // Case A: reminder has customCategoryId pointing to a non-existent category
+        val orphanedReminder = ReminderItem(id = 10L, text = "Yağ ekle", createdAt = 1000L, customCategoryId = 999L)
+        val metadataFallback = resolveNotificationMetadata(orphanedReminder, categoryRepo, fallbackTitle = "Real")
+        assertEquals("Real", metadataFallback.title)
+        assertEquals("Yağ ekle", metadataFallback.text)
+        assertNull(metadataFallback.accentColor)
+        assertNull(metadataFallback.category)
+
+        // Case B: reminder has null customCategoryId
+        val standardReminder = ReminderItem(id = 11L, text = "Ekmek al", createdAt = 1000L, customCategoryId = null)
+        val standardMetadata = resolveNotificationMetadata(standardReminder, categoryRepo, fallbackTitle = "Real")
+        assertEquals("Real", standardMetadata.title)
+        assertEquals("Ekmek al", standardMetadata.text)
+        assertNull(standardMetadata.accentColor)
+        assertNull(standardMetadata.category)
+
+        // Case C: category exists -> metadata uses category name and accent color
+        val addedCategory = categoryRepo.add("Araba", "CAR", 6, null).first()
+        val matchingReminder = ReminderItem(id = 12L, text = "Yağ ekle", createdAt = 1000L, customCategoryId = addedCategory.id)
+        val matchedMetadata = resolveNotificationMetadata(matchingReminder, categoryRepo, fallbackTitle = "Real")
+        assertEquals("Araba", matchedMetadata.title)
+        assertEquals("Yağ ekle", matchedMetadata.text)
+        assertEquals(addedCategory, matchedMetadata.category)
+        assertNotNull(matchedMetadata.accentColor)
+    }
+
+    @Test fun customCategoryWithNoAlertDoesNotAppearInNoAlertFilter() {
+        val itemWithCategory = ReminderItem(
+            id = 1L,
+            text = "Araba bakımı",
+            createdAt = 1000L,
+            alertAt = null,
+            customCategoryId = 42L
+        )
+        val itemWithoutCategory = ReminderItem(
+            id = 2L,
+            text = "Ekmek al",
+            createdAt = 1000L,
+            alertAt = null,
+            customCategoryId = null
+        )
+        val list = listOf(itemWithCategory, itemWithoutCategory)
+
+        // custom category + no alert, NoAlert filtresinde görünmüyor
+        val noAlertList = list.inCategory(ReminderCategory.NoAlert)
+        assertEquals(listOf(itemWithoutCategory), noAlertList)
+        assertFalse(noAlertList.contains(itemWithCategory))
+        assertFalse(itemWithCategory.isNoAlert)
+        assertTrue(itemWithoutCategory.isNoAlert)
+    }
+
+    @Test fun categoryCountDoesNotCountNoAlertForCustomCategoryItem() {
+        val itemWithCategoryNoAlert = ReminderItem(
+            id = 1L,
+            text = "Araba bakımı",
+            createdAt = 1000L,
+            alertAt = null,
+            customCategoryId = 42L
+        )
+        val itemWithoutCategoryNoAlert = ReminderItem(
+            id = 2L,
+            text = "Ekmek al",
+            createdAt = 1000L,
+            alertAt = null,
+            customCategoryId = null
+        )
+        // category count da NoAlert saymıyor
+        val today = LocalDate.now()
+        val counts = listOf(itemWithCategoryNoAlert, itemWithoutCategoryNoAlert).categoryCounts(today)
+        assertEquals(1, counts[ReminderCategory.NoAlert])
+
+        val countsOnlyCustom = listOf(itemWithCategoryNoAlert).categoryCounts(today)
+        assertEquals(0, countsOnlyCustom[ReminderCategory.NoAlert] ?: 0)
+    }
+
+    @Test fun detailPresentationHelperHidesNoAlertForCustomCategoryItem() {
+        val itemWithCategoryNoAlert = ReminderItem(
+            id = 1L,
+            text = "Araba bakımı",
+            createdAt = 1000L,
+            alertAt = null,
+            customCategoryId = 42L
+        )
+        val itemWithoutCategoryNoAlert = ReminderItem(
+            id = 2L,
+            text = "Ekmek al",
+            createdAt = 1000L,
+            alertAt = null,
+            customCategoryId = null
+        )
+        val completedItem = ReminderItem(
+            id = 3L,
+            text = "Tamamlanan",
+            createdAt = 1000L,
+            completedAt = 2000L,
+            customCategoryId = 42L
+        )
+
+        // detail presentation helper varsa custom category + no alert için Uyarı yok göstermiyor
+        assertFalse(shouldShowNoAlertInDetail(itemWithCategoryNoAlert))
+        assertNull(reminderDetailStatusText(itemWithCategoryNoAlert))
+        assertTrue(isStandaloneCategoryInDetail(itemWithCategoryNoAlert))
+
+        assertTrue(shouldShowNoAlertInDetail(itemWithoutCategoryNoAlert))
+        assertEquals("Uyarı yok", reminderDetailStatusText(itemWithoutCategoryNoAlert))
+        assertFalse(isStandaloneCategoryInDetail(itemWithoutCategoryNoAlert))
+
+        assertFalse(shouldShowNoAlertInDetail(completedItem))
+        assertEquals("Tamamlandı", reminderDetailStatusText(completedItem))
+        assertFalse(isStandaloneCategoryInDetail(completedItem))
+
+        val plannedItemWithCategory = ReminderItem(4L, "Toplantı", 1000L, alertAt = 2000L, customCategoryId = 42L)
+        assertFalse(isStandaloneCategoryInDetail(plannedItemWithCategory))
+    }
+
+    @Test fun shortNotificationDoesNotNeedBigTextStyle() {
+        val shortText = "Kısa bir hatırlatıcı metni"
+        assertFalse(needsBigTextStyle(shortText))
+        assertFalse(needsBigTextStyle("1234567890".repeat(8))) // exactly 80 chars
+    }
+
+    @Test fun longNotificationNeedsBigTextStyle() {
+        val longText = "Bu çok uzun bir hatırlatıcı metnidir. ".repeat(4) // > 80 chars
+        assertTrue(longText.length > 80)
+        assertTrue(needsBigTextStyle(longText))
+
+        val multilineText = "İlk satır\nİkinci satır"
+        assertTrue(multilineText.length < 80)
+        assertTrue(needsBigTextStyle(multilineText))
     }
 }
 

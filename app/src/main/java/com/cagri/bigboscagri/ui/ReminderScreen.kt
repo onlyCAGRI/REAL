@@ -322,7 +322,14 @@ fun ReminderScreen(
                                         val saved = onAddReminder(text, at, rule, catId)
                                         if (saved) {
                                             draft = ""; draftAlertAt = null; draftRepeatRule = RecurrenceRule.NONE
-                                            if (category != null) category = if (at == null) ReminderCategory.NoAlert else ReminderCategory.Planned
+                                            if (category != null) {
+                                                if (catId != null) {
+                                                    category = null
+                                                    customCategoryId = catId
+                                                } else {
+                                                    category = if (at == null) ReminderCategory.NoAlert else ReminderCategory.Planned
+                                                }
+                                            }
                                         }
                                         saved
                                     },
@@ -637,7 +644,7 @@ private fun ReminderListScreen(
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     Spacer(Modifier.height(24.dp))
-                    SectionTitle(if (active.any { it.alertAt != null }) "Hatırlatıcılar" else "Uyarı yok")
+                    SectionTitle("Hatırlatıcılar")
                 }
             }
             val isListEmpty = when {
