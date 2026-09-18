@@ -1,0 +1,24 @@
+# Android / Gradle
+.gradle/
+**/build/
+build/
+
+# Local machine configuration
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Local Gradle distributions used by helper scripts
+.gradle-dist/
+gradle-dist/
+
+# Generated APK / bundle artifacts
+*.apk
+*.aab
+
+# Temporary files
+*.log
+*.tmp

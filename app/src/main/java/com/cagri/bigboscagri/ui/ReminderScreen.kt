@@ -1,0 +1,528 @@
+package com.cagri.bigboscagri.ui
+
+import android.os.Build
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
+import com.cagri.bigboscagri.ui.components.RealWordmark
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.cagri.bigboscagri.R
+import com.cagri.bigboscagri.data.ReminderCategory
+import com.cagri.bigboscagri.data.ReminderItem
+import com.cagri.bigboscagri.data.inCategory
+import com.cagri.bigboscagri.speech.VoicePhase
+import com.cagri.bigboscagri.speech.rememberVoiceInput
+import com.cagri.bigboscagri.ui.components.AccountMenuOverlay
+import com.cagri.bigboscagri.ui.components.ActionGlyph
+import com.cagri.bigboscagri.ui.components.ActionIcon
+import com.cagri.bigboscagri.ui.components.CategoryGrid
+import com.cagri.bigboscagri.ui.components.GlassComposer
+import com.cagri.bigboscagri.ui.components.GuestAvatar
+import com.cagri.bigboscagri.ui.components.ReminderCard
+import com.cagri.bigboscagri.ui.components.TopGlassOverlay
+import kotlinx.coroutines.launch
+
+private data class ReminderRoute(val category: ReminderCategory?, val detailId: Long?) {
+    val key: String get() = detailId?.let { "detail_$it" } ?: category?.name ?: "home"
+}
+
+@Composable
+fun ReminderScreen(
+    reminders: List<ReminderItem>,
+    onAddReminder: suspend (String, Long?) -> Boolean,
+    onToggleCompleted: (Long) -> Unit,
+    onToggleImportant: (Long) -> Unit,
+    onEditReminder: (Long, String, Int?, Int?) -> Unit,
+    onDeleteReminder: (Long) -> Unit,
+    onSetAlert: (Long, Long?) -> Unit,
+    exactAlarmsAllowed: Boolean = true,
+    onRequestExactAlarms: () -> Unit = {},
+    requestedReminderId: Long? = null,
+    onRequestHandled: () -> Unit = {},
+    reduceDynamicBlur: Boolean = false,
+    onReduceDynamicBlurChange: (Boolean) -> Unit = {},
+    reduceAnimations: Boolean = false,
+    onReduceAnimationsChange: (Boolean) -> Unit = {},
+    designStyle: DesignStyle = DesignStyle.Glass,
+    onDesignStyleChange: (DesignStyle) -> Unit = {}
+) {
+    var category by rememberSaveable { mutableStateOf<ReminderCategory?>(null) }
+    var detailId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var draft by rememberSaveable { mutableStateOf("") }
+    var draftAlertAt by rememberSaveable { mutableStateOf<Long?>(null) }
+    val stateHolder = rememberSaveableStateHolder()
+    LaunchedEffect(requestedReminderId) {
+        if (requestedReminderId != null) {
+            if (reminders.any { it.id == requestedReminderId }) { detailId = requestedReminderId; showSettings = false }
+            onRequestHandled()
+        }
+    }
+    BackHandler(enabled = !showSettings && (detailId != null || category != null)) {
+        if (detailId != null) detailId = null else category = null
+    }
+    Surface(Modifier.fillMaxSize(), color = Color.Black) {
+        AnimatedContent(
+            targetState = showSettings,
+            contentKey = { if (it) "settings" else "reminders" },
+            transitionSpec = {
+                if (reduceAnimations) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else {
+                    val enterAnim = fadeIn(
+                        tween(220, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                    ) + scaleIn(
+                        tween(260, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
+                        initialScale = 0.98f
+                    ) + slideInVertically(
+                        tween(260, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                    ) { it / 32 }
+
+                    val exitAnim = fadeOut(
+                        tween(180, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                    ) + scaleOut(
+                        tween(200, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
+                        targetScale = 0.98f
+                    )
+
+                    enterAnim togetherWith exitAnim
+                }
+            },
+            label = "settingsPage"
+        ) { settingsVisible ->
+            if (settingsVisible) {
+                SettingsScreen(
+                    reduceDynamicBlur = reduceDynamicBlur,
+                    onReduceDynamicBlurChange = onReduceDynamicBlurChange,
+                    reduceAnimations = reduceAnimations,
+                    onReduceAnimationsChange = onReduceAnimationsChange,
+                    designStyle = designStyle,
+                    onDesignStyleChange = onDesignStyleChange,
+                    exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
+                    onBack = { showSettings = false }
+                )
+            } else AnimatedContent(
+                targetState = ReminderRoute(category, detailId),
+                contentKey = { it.key },
+                transitionSpec = {
+                    if (reduceAnimations) {
+                        EnterTransition.None togetherWith ExitTransition.None
+                    } else {
+                        val isOpeningDetail = initialState.detailId == null && targetState.detailId != null
+                        val isClosingDetail = initialState.detailId != null && targetState.detailId == null
+
+                        when {
+                            isOpeningDetail -> {
+                                val enter = fadeIn(
+                                    tween(260, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                                ) + scaleIn(
+                                    tween(300, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                                    initialScale = 0.94f
+                                ) + slideInVertically(
+                                    tween(300, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                                ) { it / 24 }
+
+                                val exit = fadeOut(
+                                    tween(180, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                ) + scaleOut(
+                                    tween(220, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
+                                    targetScale = 0.97f
+                                )
+
+                                enter togetherWith exit
+                            }
+                            isClosingDetail -> {
+                                val enter = fadeIn(
+                                    tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                                ) + scaleIn(
+                                    tween(260, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                                    initialScale = 0.97f
+                                )
+
+                                val exit = fadeOut(
+                                    tween(200, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                ) + scaleOut(
+                                    tween(240, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
+                                    targetScale = 0.94f
+                                ) + slideOutVertically(
+                                    tween(240, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                ) { it / 24 }
+
+                                enter togetherWith exit
+                            }
+                            else -> {
+                                val enter = fadeIn(
+                                    tween(220, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                ) + scaleIn(
+                                    tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
+                                    initialScale = 0.98f
+                                ) + slideInVertically(
+                                    tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                ) { it / 36 }
+
+                                val exit = fadeOut(
+                                    tween(170, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                ) + scaleOut(
+                                    tween(200, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
+                                    targetScale = 0.98f
+                                )
+
+                                enter togetherWith exit
+                            }
+                        }
+                    }
+                }, label = "reminderPage"
+            ) { route ->
+            stateHolder.SaveableStateProvider(route.key) {
+                val currentReminder = reminders.firstOrNull { it.id == route.detailId }
+                // Keep the outgoing detail visible during its close animation after deletion.
+                var lastReminder by remember(route.detailId) { mutableStateOf(currentReminder) }
+                LaunchedEffect(currentReminder) {
+                    if (currentReminder != null) lastReminder = currentReminder
+                }
+                val reminder = currentReminder ?: lastReminder
+                if (route.detailId != null && reminder != null) {
+                    ReminderDetailScreen(
+                        reminder = reminder,
+                        onBack = { detailId = null },
+                        onToggleCompleted = { onToggleCompleted(reminder.id); detailId = null },
+                        onToggleImportant = { onToggleImportant(reminder.id) },
+                        onSave = { text, accentStart, accentEnd ->
+                            onEditReminder(reminder.id, text, accentStart, accentEnd)
+                        },
+                        onDelete = { onDeleteReminder(reminder.id); detailId = null },
+                        reduceAnimations = reduceAnimations, reduceDynamicBlur = reduceDynamicBlur,
+                        designStyle = designStyle, onSetAlert = { onSetAlert(reminder.id, it) },
+                        exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms
+                    )
+                } else {
+                    ReminderListScreen(
+                        reminders = reminders, category = route.category, draft = draft,
+                        alertAt = draftAlertAt, onAlertChange = { draftAlertAt = it },
+                        exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
+                        onDraftChange = { draft = it }, onBack = { category = null },
+                        onOpenCategory = { category = it }, onOpenReminder = { detailId = it },
+                        onToggleCompleted = onToggleCompleted,
+                        reduceDynamicBlur = reduceDynamicBlur,
+                        reduceAnimations = reduceAnimations,
+                        designStyle = designStyle,
+                        onOpenSettings = { showSettings = true },
+                        onAddReminder = { text, at ->
+                            val saved = onAddReminder(text, at)
+                            if (saved) {
+                                draft = ""; draftAlertAt = null
+                                if (category != null) category = if (at == null) ReminderCategory.NoAlert else ReminderCategory.Planned
+                            }
+                            saved
+                        }
+                    )
+                }
+            }
+        }
+        }
+    }
+}
+
+@Composable
+private fun ReminderListScreen(
+    reminders: List<ReminderItem>, category: ReminderCategory?, draft: String,
+    alertAt: Long?, onAlertChange: (Long?) -> Unit,
+    exactAlarmsAllowed: Boolean, onRequestExactAlarms: () -> Unit,
+    onDraftChange: (String) -> Unit, onBack: () -> Unit,
+    onOpenCategory: (ReminderCategory) -> Unit, onOpenReminder: (Long) -> Unit,
+    onToggleCompleted: (Long) -> Unit, reduceDynamicBlur: Boolean,
+    reduceAnimations: Boolean, designStyle: DesignStyle,
+    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?) -> Boolean
+) {
+    var editing by remember { mutableStateOf(false) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var refocus by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var showAccountMenu by rememberSaveable { mutableStateOf(false) }
+    val inputFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val scene = rememberGraphicsLayer()
+    var scenePosition by remember { mutableStateOf(Offset.Zero) }
+    val submit: (String) -> Unit = { text ->
+        if (text.isNotBlank() && !saving) {
+            if (alertAt != null && alertAt <= System.currentTimeMillis()) {
+                Toast.makeText(context, "Gelecekte bir tarih ve saat seç.", Toast.LENGTH_LONG).show()
+                showDatePicker = true
+            } else {
+                saving = true
+                scope.launch {
+                    try {
+                        if (onAddReminder(text.trim(), alertAt)) {
+                            focusManager.clearFocus(); keyboard?.hide()
+                            if (reduceAnimations) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+                        }
+                    } finally { saving = false }
+                }
+            }
+        }
+    }
+    val voice = rememberVoiceInput(draft, onDraftChange, submit, observeLevel = !reduceAnimations)
+    val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null
+    LaunchedEffect(showDatePicker) {
+        if (!showDatePicker && refocus) { refocus = false; inputFocus.requestFocus(); keyboard?.show() }
+    }
+    val composerHeight by animateDpAsState(
+        if (expanded) 128.dp else 58.dp,
+        if (reduceAnimations) snap() else tween(250),
+        label = "composerHeight"
+    )
+    val bottomGap by animateDpAsState(
+        if (expanded) 20.dp else 12.dp,
+        if (reduceAnimations) snap() else tween(250),
+        label = "keyboardGap"
+    )
+    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    var keyboardWasVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(keyboardVisible) {
+        if (keyboardVisible) keyboardWasVisible = true
+        else if (keyboardWasVisible) {
+            focusManager.clearFocus()
+            keyboardWasVisible = false
+        }
+    }
+    BackHandler(enabled = showAccountMenu) { showAccountMenu = false }
+    BackHandler(enabled = (editing || voice.phase != VoicePhase.Idle) && !showAccountMenu && !showDatePicker) {
+        voice.cancel()
+        focusManager.clearFocus()
+        keyboard?.hide()
+    }
+    val today = rememberReminderDay()
+    val active = remember(reminders, category, today) {
+        if (category == null) reminders.filter { !it.isCompleted } else reminders.inCategory(category, today)
+    }
+    val completed = remember(reminders, category) {
+        if (category == null) reminders.inCategory(ReminderCategory.Completed) else emptyList()
+    }
+    val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    DisposableEffect(category) {
+        if (category != null) showAccountMenu = false
+        onDispose { }
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black).navigationBarsPadding().imePadding()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize()
+                .onGloballyPositioned { scenePosition = it.positionInRoot() }
+                .drawWithContent {
+                    if (!reduceDynamicBlur && Build.VERSION.SDK_INT >= 31) {
+                        scene.record { this@drawWithContent.drawContent() }; drawLayer(scene)
+                    } else drawContent()
+                },
+            contentPadding = PaddingValues(top = statusHeight, bottom = composerHeight + bottomGap + 24.dp)
+        ) {
+            item(key = "header") {
+                if (category == null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, top = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        RealWordmark(Modifier.width(112.dp).height(42.dp))
+                        IconButton(
+                            onClick = {
+                                voice.cancel()
+                                focusManager.clearFocus()
+                                keyboard?.hide()
+                                showAccountMenu = true
+                            },
+                            modifier = Modifier.semantics { contentDescription = "Hesap menüsünü aç" }
+                        ) {
+                            GuestAvatar(Modifier.size(36.dp))
+                        }
+                    }
+                } else {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Ana sayfaya dön" }) {
+                            ActionIcon(ActionGlyph.Back, Modifier.size(23.dp))
+                        }
+                        Text(category.title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(Modifier.height(22.dp))
+            }
+            if (category == null) {
+                item(key = "categories") {
+                    CategoryGrid(
+                        onOpenCategory = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenCategory(it) },
+                        onAdd = { voice.cancel(); inputFocus.requestFocus(); keyboard?.show() },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    SectionTitle(if (active.any { it.alertAt != null }) "Hatırlatıcılar" else "Uyarı yok")
+                }
+            }
+            if (active.isEmpty()) {
+                item(key = "empty") {
+                    Box(Modifier.fillMaxWidth().height(104.dp).padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
+                        Text(category?.emptyMessage ?: "Henüz hatırlatıcı yok", color = Color(0xFF888890), fontSize = 14.sp)
+                    }
+                }
+            }
+            items(active, key = { it.id }, contentType = { "reminder" }) { reminder ->
+                ReminderCard(
+                    reminder, onToggle = { onToggleCompleted(reminder.id) },
+                    onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
+                    reduceAnimations = reduceAnimations,
+                    modifier = Modifier
+                        .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
+                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                )
+            }
+            if (completed.isNotEmpty()) {
+                item(key = "completed_heading") {
+                    Spacer(Modifier.height(18.dp)); SectionTitle("Tamamlandı")
+                }
+                items(completed, key = { it.id }, contentType = { "reminder" }) { reminder ->
+                    ReminderCard(
+                        reminder, onToggle = { onToggleCompleted(reminder.id) },
+                        onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
+                        reduceAnimations = reduceAnimations,
+                        modifier = Modifier
+                            .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
+                            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                    )
+                }
+            }
+        }
+        TopGlassOverlay(
+            scene,
+            { scenePosition },
+            Modifier.align(Alignment.TopCenter),
+            reduceDynamicBlur = reduceDynamicBlur
+        )
+        BottomFade(Modifier.align(Alignment.BottomCenter).height(composerHeight + bottomGap + 46.dp))
+        GlassComposer(
+            value = draft, onValueChange = onDraftChange,
+            alertAt = alertAt, saving = saving,
+            onPickDate = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showDatePicker = true },
+            onClearDate = { onAlertChange(null) },
+            onSubmit = { if (voice.phase == VoicePhase.Idle) submit(draft) else voice.finish() },
+            expanded = expanded, onFocusChanged = { editing = it }, focusRequester = inputFocus,
+            backdrop = scene, backdropPosition = { scenePosition },
+            voicePhase = voice.phase, voiceLevel = voice.level,
+            onMicClick = { focusManager.clearFocus(); keyboard?.hide(); voice.toggle() },
+            reduceDynamicBlur = reduceDynamicBlur,
+            reduceAnimations = reduceAnimations,
+            designStyle = designStyle,
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = bottomGap).height(composerHeight)
+        )
+        if (showAccountMenu && category == null) {
+            AccountMenuOverlay(
+                backdrop = scene,
+                backdropPosition = { scenePosition },
+                onDismiss = { showAccountMenu = false },
+                onSettingsClick = onOpenSettings,
+                reduceDynamicBlur = reduceDynamicBlur,
+                reduceAnimations = reduceAnimations,
+                designStyle = designStyle
+            )
+        }
+        AnimatedDateTimePickerOverlay(visible = showDatePicker, initial = alertAt,
+            backdrop = scene, backdropPosition = { scenePosition },
+            designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
+            reduceAnimations = reduceAnimations,
+            onDismiss = { showDatePicker = false },
+            onConfirm = { onAlertChange(it); refocus = true; showDatePicker = false },
+            exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms)
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, color = Color(0xFFF2F2F4), fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 12.dp))
+}
+
+@Composable
+fun BottomFade(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().background(Brush.verticalGradient(
+        0f to Color.Transparent, 0.6f to Color.Black.copy(alpha = 0.2f), 1f to Color.Black.copy(alpha = 0.92f)
+    )))
+}

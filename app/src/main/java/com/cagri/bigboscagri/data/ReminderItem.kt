@@ -1,0 +1,22 @@
+package com.cagri.bigboscagri.data
+
+data class ReminderItem(
+    val id: Long,
+    val text: String,
+    val createdAt: Long,
+    val updatedAt: Long = createdAt,
+    val completedAt: Long? = null,
+    val isImportant: Boolean = false,
+    val alertAt: Long? = null,
+    val notifiedAlertAt: Long? = null,
+    val accentStart: Int? = null,
+    val accentEnd: Int? = null
+) {
+    val isCompleted: Boolean get() = completedAt != null
+    val shouldPinNotification: Boolean get() = isImportant && !isCompleted
+
+    fun toggleCompleted(now: Long): ReminderItem = copy(
+        completedAt = if (isCompleted) null else now,
+        updatedAt = now
+    )
+}

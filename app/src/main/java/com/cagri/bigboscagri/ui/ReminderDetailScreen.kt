@@ -1,0 +1,315 @@
+package com.cagri.bigboscagri.ui
+
+import android.os.Build
+import com.cagri.bigboscagri.ui.components.DesignPanel
+import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
+import androidx.compose.material3.TextButton
+import android.content.Intent
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.cagri.bigboscagri.data.ReminderItem
+import com.cagri.bigboscagri.ui.components.ActionGlyph
+import com.cagri.bigboscagri.ui.components.ActionIcon
+import com.cagri.bigboscagri.ui.components.GlassPanel
+import com.cagri.bigboscagri.ui.components.DeleteReminderPrompt
+import com.cagri.bigboscagri.ui.components.ReminderColorPicker
+import com.cagri.bigboscagri.ui.components.reminderAccentBrush
+import com.cagri.bigboscagri.ui.components.TopGlassOverlay
+import com.cagri.bigboscagri.ui.theme.BigBosTheme
+
+@Composable
+fun ReminderDetailScreen(
+    reminder: ReminderItem, onBack: () -> Unit, onToggleCompleted: () -> Unit,
+    onToggleImportant: () -> Unit, onSave: (String, Int?, Int?) -> Unit, onDelete: () -> Unit,
+    reduceAnimations: Boolean = false,
+    reduceDynamicBlur: Boolean = false,
+    designStyle: DesignStyle = DesignStyle.Glass,
+    onSetAlert: (Long?) -> Unit = {},
+    exactAlarmsAllowed: Boolean = true,
+    onRequestExactAlarms: () -> Unit = {}
+) {
+    var editing by rememberSaveable(reminder.id) { mutableStateOf(false) }
+    var editedText by rememberSaveable(reminder.id) { mutableStateOf(reminder.text) }
+    var accentStart by rememberSaveable(reminder.id) { mutableStateOf<Int?>(reminder.accentStart) }
+    var accentEnd by rememberSaveable(reminder.id) { mutableStateOf<Int?>(reminder.accentEnd) }
+    var deleting by remember { mutableStateOf(false) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    val scene = rememberGraphicsLayer()
+    val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    var scenePosition by remember { mutableStateOf(Offset.Zero) }
+    val finishEditing: () -> Unit = {
+        editing = false
+        focusManager.clearFocus()
+        keyboard?.hide()
+    }
+    BackHandler(editing || deleting) {
+        if (deleting) deleting = false else finishEditing()
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black).navigationBarsPadding().imePadding()) {
+        Column(
+            Modifier.fillMaxSize()
+                .then(if (deleting) Modifier.clearAndSetSemantics { } else Modifier)
+                .onGloballyPositioned { scenePosition = it.positionInRoot() }
+                .drawWithContent {
+                    if (!reduceDynamicBlur && Build.VERSION.SDK_INT >= 31) { scene.record { this@drawWithContent.drawContent() }; drawLayer(scene) }
+                    else drawContent()
+                }
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, top = statusHeight + 10.dp,
+                    bottom = if (editing) 300.dp else 114.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { if (editing) finishEditing() else onBack() },
+                    modifier = Modifier.background(Color(0xFF161619), CircleShape)
+                        .semantics { contentDescription = if (editing) "Düzenlemeyi iptal et" else "Geri" }
+                ) { ActionIcon(ActionGlyph.Back, Modifier.size(23.dp)) }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.padding(bottom = 8.dp).size(34.dp, 3.dp)
+                        .background(Color(0xFF5D5D65), CircleShape))
+                    Text(if (editing) "Düzenle" else "Hatırlatıcı", color = Color(0xFFAAAAB3), fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium)
+                }
+                IconButton(
+                    onClick = onToggleImportant,
+                    modifier = Modifier.background(Color(0xFF161619), CircleShape)
+                        .semantics { contentDescription = if (reminder.isImportant) "Önemli işaretini kaldır" else "Önemli olarak işaretle" }
+                ) { ActionIcon(ActionGlyph.Star, Modifier.size(24.dp),
+                    if (reminder.isImportant) Color(0xFFEACB75) else Color.White, filled = reminder.isImportant) }
+            }
+
+            val cardShape = RoundedCornerShape(28.dp)
+            val shownAccentStart = if (editing) accentStart else reminder.accentStart
+            val shownAccentEnd = if (editing) accentEnd else reminder.accentEnd
+            val accentBrush = remember(shownAccentStart, shownAccentEnd, reminder.isCompleted) {
+                reminderAccentBrush(shownAccentStart, shownAccentEnd, reminder.isCompleted)
+            }
+            Column(
+                Modifier.padding(top = 24.dp).fillMaxWidth().clip(cardShape)
+                    .then(
+                        if (accentBrush == null) Modifier.background(
+                            Brush.linearGradient(listOf(Color(0xFF25252C), Color(0xFF17171B), Color(0xFF131315)))
+                        ) else Modifier.background(accentBrush)
+                    )
+                    .border(0.8.dp, Brush.verticalGradient(listOf(Color(0xFF494953), Color(0xFF252529))), cardShape)
+                    .padding(horizontal = 22.dp, vertical = 25.dp)
+            ) {
+                if (editing) {
+                    BasicTextField(
+                        value = editedText, onValueChange = { editedText = it },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)
+                            .semantics { contentDescription = "Hatırlatıcı metni" },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontSize = 21.sp, lineHeight = 31.sp),
+                        cursorBrush = SolidColor(Color(0xFF82B3FF)),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+                    )
+                } else {
+                    SelectionContainer {
+                        Text(reminder.text, color = if (reminder.isCompleted) Color(0xFF9999A2) else Color(0xFFF4F4F6),
+                            fontSize = 21.sp, lineHeight = 31.sp,
+                            textDecoration = if (reminder.isCompleted) TextDecoration.LineThrough else TextDecoration.None)
+                    }
+                }
+                HorizontalDivider(Modifier.padding(top = 24.dp, bottom = 18.dp), color = Color(0xFF38383F))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ActionIcon(if (reminder.isCompleted) ActionGlyph.Check else ActionGlyph.Note,
+                        Modifier.size(21.dp), Color(0xFF94B8F7))
+                    Text(if (reminder.isCompleted) "Tamamlandı" else if (reminder.alertAt == null) "Uyarı yok" else "Planlı",
+                        color = Color(0xFFD3D3D9), fontSize = 14.sp)
+                }
+                if (editing && !reminder.isCompleted) {
+                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = {
+                            focusManager.clearFocus()
+                            keyboard?.hide()
+                            showDatePicker = true
+                        }, modifier = Modifier.weight(1f)) {
+                            Text(reminder.alertAt?.let { reminderDate(it) } ?: "Tarih ve saat ekle", color = Color(0xFF91B9FF), fontSize = 13.sp)
+                        }
+                        if (reminder.alertAt != null) IconButton(onClick = { onSetAlert(null) },
+                            modifier = Modifier.semantics { contentDescription = "Tarih ve saati kaldır" }) {
+                            ActionIcon(ActionGlyph.Close, Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+            Text(
+                reminder.completedAt?.let { "Tamamlandı: ${reminderDate(it)}" }
+                    ?: "Son düzenleme: ${reminderDate(reminder.updatedAt)}",
+                color = Color(0xFF8E8E98), fontSize = 12.sp, lineHeight = 18.sp, textAlign = TextAlign.End,
+                modifier = Modifier.fillMaxWidth().padding(top = 15.dp, start = 10.dp, end = 10.dp)
+            )
+        }
+        TopGlassOverlay(scene, { scenePosition }, Modifier.align(Alignment.TopCenter), reduceDynamicBlur)
+        BottomFade(Modifier.align(Alignment.BottomCenter).height(130.dp))
+        if (deleting) {
+            Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.16f))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { deleting = false }
+                .semantics { contentDescription = "Silme sorusunu kapat" })
+        }
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp)) {
+            AnimatedVisibility(
+                visible = editing,
+                enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)) + slideInVertically(tween(240)) { it / 8 } + scaleIn(tween(240), initialScale = 0.97f),
+                exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 8 } + scaleOut(tween(180), targetScale = 0.97f)
+            ) {
+                ReminderColorPicker(
+                    startIndex = accentStart,
+                    endIndex = accentEnd,
+                    onStartChange = { accentStart = it },
+                    onEndChange = { accentEnd = it },
+                    backdrop = scene,
+                    backdropPosition = { scenePosition },
+                    designStyle = designStyle,
+                    reduceDynamicBlur = reduceDynamicBlur,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                )
+            }
+            AnimatedVisibility(
+                visible = deleting,
+                enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)) + slideInVertically(tween(240)) { it / 8 } + scaleIn(tween(240), initialScale = 0.97f),
+                exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 8 } + scaleOut(tween(180), targetScale = 0.97f)
+            ) {
+                DeleteReminderPrompt(scene, { scenePosition },
+                    onDismiss = { deleting = false }, onConfirm = { deleting = false; onDelete() },
+                    modifier = Modifier.padding(bottom = 12.dp), designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur)
+            }
+            DesignPanel(scene, { scenePosition }, modifier = Modifier.fillMaxWidth(), corners = 36.dp, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (editing) {
+                        DetailAction("Vazgeç", ActionGlyph.Close, Modifier.weight(1f), onClick = finishEditing)
+                        DetailAction("Kaydet", ActionGlyph.Check, Modifier.weight(1f), enabled = editedText.isNotBlank(),
+                            color = Color(0xFF91B9FF), onClick = {
+                                onSave(editedText.trim(), accentStart, accentEnd)
+                                finishEditing()
+                            })
+                    } else {
+                        DetailAction(if (reminder.isCompleted) "Geri al" else "Tamamla",
+                            if (reminder.isCompleted) ActionGlyph.Undo else ActionGlyph.Check,
+                            Modifier.weight(1f), enabled = !deleting, onClick = onToggleCompleted)
+                        DetailAction("Düzenle", ActionGlyph.Edit, Modifier.weight(1f), enabled = !deleting, onClick = {
+                            focusManager.clearFocus()
+                            keyboard?.hide()
+                            editedText = reminder.text
+                            accentStart = reminder.accentStart
+                            accentEnd = reminder.accentEnd
+                            editing = true
+                        })
+                        DetailAction("Paylaş", ActionGlyph.Share, Modifier.weight(1f), enabled = !deleting, onClick = {
+                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"; putExtra(Intent.EXTRA_TEXT, reminder.text)
+                            }, "Hatırlatıcıyı paylaş"))
+                        })
+                        DetailAction("Sil", ActionGlyph.Delete, Modifier.weight(1f), onClick = { deleting = !deleting })
+                    }
+                }
+            }
+        }
+        AnimatedDateTimePickerOverlay(visible = showDatePicker, initial = reminder.alertAt,
+            onDismiss = { showDatePicker = false },
+            backdrop = scene, backdropPosition = { scenePosition },
+            designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
+            reduceAnimations = reduceAnimations,
+            onConfirm = { onSetAlert(it); showDatePicker = false }, exactAlarmsAllowed = exactAlarmsAllowed,
+            onRequestExactAlarms = onRequestExactAlarms)
+    }
+}
+
+@Composable
+private fun DetailAction(
+    label: String, glyph: ActionGlyph, modifier: Modifier,
+    enabled: Boolean = true, color: Color = Color(0xFFF0F0F4), onClick: () -> Unit
+) {
+    val tint = if (enabled) color else color.copy(alpha = 0.35f)
+    Column(
+        modifier.clip(RoundedCornerShape(28.dp)).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .heightIn(min = 64.dp).padding(vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        ActionIcon(glyph, Modifier.size(24.dp), tint)
+        Text(label, fontSize = 11.sp, color = tint, maxLines = 1)
+    }
+}
+
+@Preview(name = "Cam detay", widthDp = 393, heightDp = 852, showBackground = true)
+@Composable
+private fun DetailPreview() {
+    BigBosTheme {
+        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _ -> }, {})
+    }
+}
