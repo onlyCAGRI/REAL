@@ -47,6 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.data.RecurrenceRule
 import com.cagri.bigboscagri.speech.VoicePhase
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
+import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.ui.DesignStyle
 
 @Composable
@@ -57,6 +62,9 @@ fun GlassComposer(
     saving: Boolean = false,
     onPickDate: () -> Unit = {},
     onClearDate: () -> Unit = {},
+    customCategories: List<CustomCategory> = emptyList(),
+    selectedCategoryId: Long? = null,
+    onPickCategory: () -> Unit = {},
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
     expanded: Boolean,
@@ -170,21 +178,77 @@ fun GlassComposer(
                 }
             }
         }
-        if (expanded) Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-            .padding(start = 16.dp, end = 10.dp, bottom = 6.dp).height(40.dp), verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).clickable(enabled = !recording && !saving, onClick = onPickDate).padding(6.dp),
-                verticalAlignment = Alignment.CenterVertically) {
+        if (expanded) Row(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .padding(start = 16.dp, end = 10.dp, bottom = 6.dp).height(40.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                Modifier.weight(1f).clickable(enabled = !recording && !saving, onClick = onPickDate).padding(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 ActionIcon(ActionGlyph.Calendar, Modifier.size(18.dp), Color(0xFF91B9FF))
                 val dateLabel = if (alertAt != null) {
                     val dateStr = reminderDate(alertAt)
                     if (repeatRule != RecurrenceRule.NONE) "$dateStr • ${repeatRule.displayName}" else dateStr
                 } else "Tarih ve saat ekle"
-                Text(dateLabel, color = Color(0xFFBFCDE6), fontSize = 12.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 9.dp))
+                Text(
+                    dateLabel, color = Color(0xFFBFCDE6), fontSize = 12.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 9.dp)
+                )
             }
-            if (alertAt != null) IconButton(onClick = onClearDate, enabled = !saving,
-                modifier = Modifier.size(38.dp).semantics { contentDescription = "Tarih ve saati kaldır" }) {
-                ActionIcon(ActionGlyph.Close, Modifier.size(17.dp), Color(0xFFAAAAB4))
+            if (alertAt != null) IconButton(
+                onClick = onClearDate, enabled = !saving,
+                modifier = Modifier.size(36.dp).semantics { contentDescription = "Tarih ve saati kaldır" }
+            ) {
+                ActionIcon(ActionGlyph.Close, Modifier.size(16.dp), Color(0xFFAAAAB4))
+            }
+
+            if (customCategories.isNotEmpty()) {
+                val selectedCategory = customCategories.firstOrNull { it.id == selectedCategoryId }
+                Row(
+                    modifier = Modifier
+                        .padding(start = 4.dp, end = 2.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(enabled = !recording && !saving, onClick = onPickCategory)
+                        .background(if (selectedCategory != null) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.05f))
+                        .border(
+                            0.6.dp,
+                            if (selectedCategory != null) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.12f),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (selectedCategory != null) {
+                        val startColor = ReminderColorChoices.getOrNull(selectedCategory.accentStart)?.color ?: Color(0xFF233F73)
+                        val endColor = selectedCategory.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
+                        Box(
+                            Modifier.size(15.dp).clip(CircleShape)
+                                .background(Brush.linearGradient(listOf(startColor, endColor))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CategoryIconGlyph(CategoryIcon.fromKey(selectedCategory.iconKey), Modifier.size(9.dp), Color.White)
+                        }
+                        Text(
+                            selectedCategory.name,
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 5.dp)
+                        )
+                    } else {
+                        ActionIcon(ActionGlyph.Note, Modifier.size(13.dp), Color(0xFF9EA3B0))
+                        Text(
+                            "Kategori",
+                            color = Color(0xFFB8B8C2),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 5.dp)
+                        )
+                    }
+                }
             }
         }
     }

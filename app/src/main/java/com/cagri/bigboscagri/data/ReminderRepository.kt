@@ -32,7 +32,8 @@ class ReminderRepository(context: Context) {
                             accentStart = item.optionalAccent("accentStart"),
                             accentEnd = item.optionalAccent("accentEnd"),
                             repeatRule = RecurrenceRule.fromStorage(if (item.has("repeatRule")) item.optString("repeatRule") else null),
-                            anchorAlertAt = item.optionalTimestamp("anchorAlertAt") ?: item.optionalTimestamp("alertAt")
+                            anchorAlertAt = item.optionalTimestamp("anchorAlertAt") ?: item.optionalTimestamp("alertAt"),
+                            customCategoryId = item.optionalTimestamp("customCategoryId")
                         )
                     )
                 }
@@ -46,7 +47,8 @@ class ReminderRepository(context: Context) {
     fun add(
         text: String,
         alertAt: Long? = null,
-        repeatRule: RecurrenceRule = RecurrenceRule.NONE
+        repeatRule: RecurrenceRule = RecurrenceRule.NONE,
+        customCategoryId: Long? = null
     ): List<ReminderItem> = synchronized(mutationLock) {
         require(text.isNotBlank())
         val now = System.currentTimeMillis()
@@ -59,7 +61,8 @@ class ReminderRepository(context: Context) {
             createdAt = now,
             alertAt = alertAt,
             repeatRule = if (alertAt != null) repeatRule else RecurrenceRule.NONE,
-            anchorAlertAt = alertAt
+            anchorAlertAt = alertAt,
+            customCategoryId = customCategoryId
         )
         val updated = listOf(newItem) + previous
         save(updated)
@@ -74,7 +77,14 @@ class ReminderRepository(context: Context) {
         it.copy(isImportant = !it.isImportant, updatedAt = System.currentTimeMillis())
     }
 
-    fun edit(id: Long, text: String, accentStart: Int?, accentEnd: Int?): List<ReminderItem> {
+    fun edit(
+        id: Long,
+        text: String,
+        accentStart: Int?,
+        accentEnd: Int?,
+        customCategoryId: Long? = null,
+        updateCategory: Boolean = true
+    ): List<ReminderItem> {
         require(text.isNotBlank())
         require(accentStart == null || accentStart in ACCENT_RANGE)
         require(accentEnd == null || accentEnd in ACCENT_RANGE)
@@ -83,9 +93,14 @@ class ReminderRepository(context: Context) {
                 text = text.trim(),
                 accentStart = accentStart,
                 accentEnd = accentEnd,
+                customCategoryId = if (updateCategory) customCategoryId else it.customCategoryId,
                 updatedAt = System.currentTimeMillis()
             )
         }
+    }
+
+    fun setCustomCategory(id: Long, customCategoryId: Long?): List<ReminderItem> = update(id) {
+        it.copy(customCategoryId = customCategoryId, updatedAt = System.currentTimeMillis())
     }
 
     fun setAlert(
@@ -144,6 +159,15 @@ class ReminderRepository(context: Context) {
         else load().filterNot { it.id in ids }.also(::save)
     }
 
+    fun unassignCategory(categoryId: Long): List<ReminderItem> = synchronized(mutationLock) {
+        val items = load().map {
+            if (it.customCategoryId == categoryId) it.copy(customCategoryId = null, updatedAt = System.currentTimeMillis())
+            else it
+        }
+        save(items)
+        items
+    }
+
     private fun update(id: Long, change: (ReminderItem) -> ReminderItem): List<ReminderItem> =
         synchronized(mutationLock) { load().map { if (it.id == id) change(it) else it }.also(::save) }
 
@@ -164,6 +188,7 @@ class ReminderRepository(context: Context) {
                     .put("accentEnd", reminder.accentEnd ?: JSONObject.NULL)
                     .put("repeatRule", reminder.repeatRule.storageKey)
                     .put("anchorAlertAt", reminder.anchorAlertAt ?: JSONObject.NULL)
+                    .put("customCategoryId", reminder.customCategoryId ?: JSONObject.NULL)
             )
         }
         val raw = array.toString()

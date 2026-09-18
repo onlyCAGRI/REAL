@@ -12,7 +12,8 @@ data class ReminderItem(
     val accentStart: Int? = null,
     val accentEnd: Int? = null,
     val repeatRule: RecurrenceRule = RecurrenceRule.NONE,
-    val anchorAlertAt: Long? = alertAt
+    val anchorAlertAt: Long? = alertAt,
+    val customCategoryId: Long? = null
 ) {
     val isCompleted: Boolean get() = completedAt != null
     val shouldPinNotification: Boolean get() = isImportant && !isCompleted

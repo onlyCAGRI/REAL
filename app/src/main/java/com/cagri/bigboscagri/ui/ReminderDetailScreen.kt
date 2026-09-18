@@ -92,6 +92,11 @@ import com.cagri.bigboscagri.ui.components.ActionGlyph
 import com.cagri.bigboscagri.ui.components.ActionIcon
 import com.cagri.bigboscagri.ui.components.GlassPanel
 import com.cagri.bigboscagri.ui.components.DeleteReminderPrompt
+import com.cagri.bigboscagri.data.CustomCategory
+import com.cagri.bigboscagri.ui.components.CategoryIcon
+import com.cagri.bigboscagri.ui.components.CategoryIconGlyph
+import com.cagri.bigboscagri.ui.components.CategorySelectionOverlay
+import com.cagri.bigboscagri.ui.components.ReminderColorChoices
 import com.cagri.bigboscagri.ui.components.ReminderColorPicker
 import com.cagri.bigboscagri.ui.components.reminderAccentBrush
 import com.cagri.bigboscagri.ui.components.TopGlassOverlay
@@ -101,7 +106,8 @@ import com.cagri.bigboscagri.ui.theme.BigBosTheme
 @Composable
 fun ReminderDetailScreen(
     reminder: ReminderItem, onBack: () -> Unit, onToggleCompleted: () -> Unit,
-    onToggleImportant: () -> Unit, onSave: (String, Int?, Int?) -> Unit, onDelete: () -> Unit,
+    onToggleImportant: () -> Unit, onSave: (String, Int?, Int?, Long?) -> Unit, onDelete: () -> Unit,
+    customCategories: List<CustomCategory> = emptyList(),
     reduceAnimations: Boolean = false,
     reduceDynamicBlur: Boolean = false,
     designStyle: DesignStyle = DesignStyle.Glass,
@@ -115,6 +121,8 @@ fun ReminderDetailScreen(
     var editedText by rememberSaveable(reminder.id) { mutableStateOf(reminder.text) }
     var accentStart by rememberSaveable(reminder.id) { mutableStateOf<Int?>(reminder.accentStart) }
     var accentEnd by rememberSaveable(reminder.id) { mutableStateOf<Int?>(reminder.accentEnd) }
+    var selectedCategoryId by rememberSaveable(reminder.id) { mutableStateOf(reminder.customCategoryId) }
+    var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -125,11 +133,14 @@ fun ReminderDetailScreen(
     var scenePosition by remember { mutableStateOf(Offset.Zero) }
     val finishEditing: () -> Unit = {
         editing = false
+        selectedCategoryId = reminder.customCategoryId
         focusManager.clearFocus()
         keyboard?.hide()
     }
-    BackHandler(editing || deleting) {
-        if (deleting) deleting = false else finishEditing()
+    BackHandler(editing || deleting || showCategoryPicker) {
+        if (showCategoryPicker) showCategoryPicker = false
+        else if (deleting) deleting = false
+        else finishEditing()
     }
 
     val chromeAlpha by if (animatedVisibilityScope != null && !reduceAnimations) {
@@ -262,6 +273,24 @@ fun ReminderDetailScreen(
                                 )
                             }
                         }
+                        val assignedCategory = customCategories.firstOrNull { it.id == reminder.customCategoryId }
+                        if (assignedCategory != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(top = 1.dp)
+                            ) {
+                                val startColor = ReminderColorChoices.getOrNull(assignedCategory.accentStart)?.color ?: Color(0xFF233F73)
+                                val endColor = assignedCategory.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
+                                Box(
+                                    Modifier.size(16.dp).clip(CircleShape).background(Brush.linearGradient(listOf(startColor, endColor))),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CategoryIconGlyph(CategoryIcon.fromKey(assignedCategory.iconKey), Modifier.size(10.dp), Color.White)
+                                }
+                                Text(assignedCategory.name, color = Color(0xFFC4C4CE), fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
                 if (editing && !reminder.isCompleted) {
@@ -306,17 +335,67 @@ fun ReminderDetailScreen(
                 enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)) + slideInVertically(tween(240)) { it / 8 } + scaleIn(tween(240), initialScale = 0.97f),
                 exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 8 } + scaleOut(tween(180), targetScale = 0.97f)
             ) {
-                ReminderColorPicker(
-                    startIndex = accentStart,
-                    endIndex = accentEnd,
-                    onStartChange = { accentStart = it },
-                    onEndChange = { accentEnd = it },
-                    backdrop = scene,
-                    backdropPosition = { scenePosition },
-                    designStyle = designStyle,
-                    reduceDynamicBlur = reduceDynamicBlur,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ReminderColorPicker(
+                        startIndex = accentStart,
+                        endIndex = accentEnd,
+                        onStartChange = { accentStart = it },
+                        onEndChange = { accentEnd = it },
+                        backdrop = scene,
+                        backdropPosition = { scenePosition },
+                        designStyle = designStyle,
+                        reduceDynamicBlur = reduceDynamicBlur,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    DesignPanel(
+                        backdrop = scene,
+                        backdropPosition = { scenePosition },
+                        modifier = Modifier.fillMaxWidth(),
+                        corners = 22.dp,
+                        designStyle = designStyle,
+                        reduceDynamicBlur = reduceDynamicBlur
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(22.dp))
+                                .clickable {
+                                    focusManager.clearFocus()
+                                    keyboard?.hide()
+                                    showCategoryPicker = true
+                                }
+                                .padding(horizontal = 16.dp, vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Kategori", color = Color(0xFFB7B7C0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                val currentCat = customCategories.firstOrNull { it.id == selectedCategoryId }
+                                if (currentCat != null) {
+                                    val startColor = ReminderColorChoices.getOrNull(currentCat.accentStart)?.color ?: Color(0xFF233F73)
+                                    val endColor = currentCat.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
+                                    Box(
+                                        Modifier.size(18.dp).clip(CircleShape)
+                                            .background(Brush.linearGradient(listOf(startColor, endColor))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CategoryIconGlyph(CategoryIcon.fromKey(currentCat.iconKey), Modifier.size(11.dp), Color.White)
+                                    }
+                                    Text(currentCat.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                } else {
+                                    Text("Kategori yok", color = Color(0xFF8E8E98), fontSize = 13.sp)
+                                }
+                                ActionIcon(ActionGlyph.ChevronRight, Modifier.size(14.dp), Color(0xFF8E8E98))
+                            }
+                        }
+                    }
+                }
             }
             AnimatedVisibility(
                 visible = deleting,
@@ -333,7 +412,7 @@ fun ReminderDetailScreen(
                         DetailAction("Vazgeç", ActionGlyph.Close, Modifier.weight(1f), onClick = finishEditing)
                         DetailAction("Kaydet", ActionGlyph.Check, Modifier.weight(1f), enabled = editedText.isNotBlank(),
                             color = Color(0xFF91B9FF), onClick = {
-                                onSave(editedText.trim(), accentStart, accentEnd)
+                                onSave(editedText.trim(), accentStart, accentEnd, selectedCategoryId)
                                 finishEditing()
                             })
                     } else {
@@ -346,6 +425,7 @@ fun ReminderDetailScreen(
                             editedText = reminder.text
                             accentStart = reminder.accentStart
                             accentEnd = reminder.accentEnd
+                            selectedCategoryId = reminder.customCategoryId
                             editing = true
                         })
                         DetailAction("Paylaş", ActionGlyph.Share, Modifier.weight(1f), enabled = !deleting, onClick = {
@@ -367,6 +447,18 @@ fun ReminderDetailScreen(
             onConfirm = { at, rule -> onSetAlert(at, rule); showDatePicker = false },
             exactAlarmsAllowed = exactAlarmsAllowed,
             onRequestExactAlarms = onRequestExactAlarms)
+        CategorySelectionOverlay(
+            visible = showCategoryPicker,
+            customCategories = customCategories,
+            selectedCategoryId = selectedCategoryId,
+            onSelectCategory = { selectedCategoryId = it },
+            onDismiss = { showCategoryPicker = false },
+            backdrop = scene,
+            backdropPosition = { scenePosition },
+            designStyle = designStyle,
+            reduceDynamicBlur = reduceDynamicBlur,
+            reduceAnimations = reduceAnimations
+        )
     }
 }
 
@@ -391,6 +483,6 @@ private fun DetailAction(
 @Composable
 private fun DetailPreview() {
     BigBosTheme {
-        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _ -> }, {})
+        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _ -> }, {})
     }
 }

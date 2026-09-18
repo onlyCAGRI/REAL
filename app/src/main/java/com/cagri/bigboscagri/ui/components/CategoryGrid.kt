@@ -13,10 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,11 +35,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderCategory
 
 private enum class Glyph { Calendar, Clock, Star, Note, Completed, Add }
@@ -48,38 +53,115 @@ private data class CategoryStyle(
     val lower: Color
 )
 
-private val categories = listOf(
-    CategoryStyle("Bugün", Glyph.Calendar, Color(0xFF141E4E), Color(0xFF23457D), Color(0xFF863D59)),
-    CategoryStyle("Planlı", Glyph.Clock, Color(0xFF202142), Color(0xFF32655E), Color(0xFF803B4D)),
-    CategoryStyle("Önemli", Glyph.Star, Color(0xFF352137), Color(0xFF8E664A), Color(0xFF7B355F)),
-    CategoryStyle("Uyarı yok", Glyph.Note, Color(0xFF222142), Color(0xFF414E83), Color(0xFF674878)),
-    CategoryStyle("Tamamlananlar", Glyph.Completed, Color(0xFF152F35), Color(0xFF387D70), Color(0xFF333F77)),
-    CategoryStyle("Ekle", Glyph.Add, Color(0xFF1C1C1E), Color.Transparent, Color.Transparent)
+private sealed interface GridItem {
+    data class System(val style: CategoryStyle, val category: ReminderCategory) : GridItem
+    data class Custom(val category: CustomCategory) : GridItem
+    data object Add : GridItem
+}
+
+private val systemCategories = listOf(
+    CategoryStyle("Bugün", Glyph.Calendar, Color(0xFF141E4E), Color(0xFF23457D), Color(0xFF863D59)) to ReminderCategory.Today,
+    CategoryStyle("Planlı", Glyph.Clock, Color(0xFF202142), Color(0xFF32655E), Color(0xFF803B4D)) to ReminderCategory.Planned,
+    CategoryStyle("Önemli", Glyph.Star, Color(0xFF352137), Color(0xFF8E664A), Color(0xFF7B355F)) to ReminderCategory.Important,
+    CategoryStyle("Uyarı yok", Glyph.Note, Color(0xFF222142), Color(0xFF414E83), Color(0xFF674878)) to ReminderCategory.NoAlert,
+    CategoryStyle("Tamamlananlar", Glyph.Completed, Color(0xFF152F35), Color(0xFF387D70), Color(0xFF333F77)) to ReminderCategory.Completed
 )
+
+private val addCategoryStyle = CategoryStyle("Ekle", Glyph.Add, Color(0xFF1C1C1E), Color.Transparent, Color.Transparent)
 
 @Composable
 fun CategoryGrid(
+    customCategories: List<CustomCategory> = emptyList(),
     onOpenCategory: (ReminderCategory) -> Unit,
-    onAdd: () -> Unit,
+    onOpenCustomCategory: (CustomCategory) -> Unit = {},
+    onAddCategory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        categories.chunked(3).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { category ->
-                    val target = when (category.glyph) {
-                        Glyph.Calendar -> ReminderCategory.Today
-                        Glyph.Clock -> ReminderCategory.Planned
-                        Glyph.Star -> ReminderCategory.Important
-                        Glyph.Note -> ReminderCategory.NoAlert
-                        Glyph.Completed -> ReminderCategory.Completed
-                        Glyph.Add -> null
+    val allItems = remember(customCategories) {
+        buildList<GridItem> {
+            systemCategories.forEach { (style, cat) ->
+                add(GridItem.System(style, cat))
+            }
+            customCategories.forEach { customCat ->
+                add(GridItem.Custom(customCat))
+            }
+            add(GridItem.Add)
+        }
+    }
+
+    val pageCount = (allItems.size + 5) / 6
+    val pagerState = rememberPagerState(pageCount = { pageCount })
+
+    Column(modifier = modifier) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth()
+        ) { page ->
+            val pageItems = allItems.drop(page * 6).take(6)
+            val row1 = pageItems.take(3)
+            val row2 = pageItems.drop(3).take(3)
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row1.forEach { item ->
+                        when (item) {
+                            is GridItem.System -> CategoryCard(
+                                category = item.style,
+                                onClick = { onOpenCategory(item.category) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            is GridItem.Custom -> CustomCategoryCard(
+                                category = item.category,
+                                onClick = { onOpenCustomCategory(item.category) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            is GridItem.Add -> CategoryCard(
+                                category = addCategoryStyle,
+                                onClick = onAddCategory,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
-                    CategoryCard(
-                        category = category,
-                        onClick = { if (target == null) onAdd() else onOpenCategory(target) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    repeat(3 - row1.size) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+
+                if (row2.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        row2.forEach { item ->
+                            when (item) {
+                                is GridItem.System -> CategoryCard(
+                                    category = item.style,
+                                    onClick = { onOpenCategory(item.category) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                is GridItem.Custom -> CustomCategoryCard(
+                                    category = item.category,
+                                    onClick = { onOpenCustomCategory(item.category) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                is GridItem.Add -> CategoryCard(
+                                    category = addCategoryStyle,
+                                    onClick = onAddCategory,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        repeat(3 - row2.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                } else {
+                    // Empty row placeholder to maintain uniform 2-row height across all pages
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        repeat(3) {
+                            Spacer(Modifier.weight(1f).height(110.dp))
+                        }
+                    }
                 }
             }
         }
@@ -125,6 +207,60 @@ private fun CategoryCard(category: CategoryStyle, onClick: () -> Unit, modifier:
         Spacer(Modifier.height(7.dp))
         Text(
             text = category.label,
+            color = Color(0xFFE7E7EB), fontSize = 12.sp, lineHeight = 18.sp,
+            fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodySmall.copy(platformStyle = PlatformTextStyle(includeFontPadding = true)),
+            modifier = Modifier.fillMaxWidth().padding(start = 1.dp, end = 1.dp, bottom = 3.dp)
+        )
+    }
+}
+
+@Composable
+private fun CustomCategoryCard(
+    category: CustomCategory,
+    onClick: () -> Unit,
+    modifier: Modifier
+) {
+    val shape = RoundedCornerShape(18.dp)
+    val startColor = ReminderColorChoices.getOrNull(category.accentStart)?.color ?: Color(0xFF233F73)
+    val endColor = category.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
+    val icon = CategoryIcon.fromKey(category.iconKey)
+
+    Column(
+        modifier = modifier.clickable(
+            role = Role.Button, onClickLabel = category.name, onClick = onClick
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(82.dp)
+                .clip(shape)
+                .drawWithCache {
+                    val topLight = Brush.radialGradient(
+                        colors = listOf(startColor.copy(alpha = 0.85f), Color.Transparent),
+                        center = Offset(size.width * 0.95f, -size.height * 0.1f),
+                        radius = size.width * 1.12f
+                    )
+                    val bottomLight = Brush.radialGradient(
+                        colors = listOf(endColor.copy(alpha = 0.70f), Color.Transparent),
+                        center = Offset(-size.width * 0.05f, size.height * 1.1f),
+                        radius = size.width * 1.15f
+                    )
+                    onDrawBehind {
+                        drawRect(Color(0xFF14151C))
+                        drawRect(topLight)
+                        drawRect(bottomLight)
+                    }
+                }
+                .border(0.75.dp, Color.White.copy(alpha = 0.07f), shape),
+            contentAlignment = Alignment.Center
+        ) {
+            CategoryIconGlyph(icon, Modifier.size(32.dp), color = Color.White)
+        }
+        Spacer(Modifier.height(7.dp))
+        Text(
+            text = category.name,
             color = Color(0xFFE7E7EB), fontSize = 12.sp, lineHeight = 18.sp,
             fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodySmall.copy(platformStyle = PlatformTextStyle(includeFontPadding = true)),

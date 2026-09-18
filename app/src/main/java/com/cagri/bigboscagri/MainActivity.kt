@@ -31,7 +31,9 @@ import kotlinx.coroutines.sync.withLock
 
 class MainActivity : ComponentActivity() {
     private lateinit var repository: ReminderRepository
+    private lateinit var categoryRepository: CategoryRepository
     private var reminders by mutableStateOf<List<ReminderItem>>(emptyList())
+    private var customCategories by mutableStateOf<List<CustomCategory>>(emptyList())
     private var ready by mutableStateOf(false)
     private var loadFailed by mutableStateOf(false)
     private var exactAllowed by mutableStateOf(false)
@@ -54,7 +56,9 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.BLACK))
         if (Build.VERSION.SDK_INT >= 29) window.isStatusBarContrastEnforced = false
         repository = ReminderRepository(applicationContext)
+        categoryRepository = CategoryRepository(applicationContext)
         reminders = try { repository.load() } catch (_: Exception) { emptyList() }
+        customCategories = try { categoryRepository.load() } catch (_: Exception) { emptyList() }
         ready = true
         com.cagri.bigboscagri.ui.components.prewarmRealWordmark(applicationContext)
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
@@ -73,9 +77,9 @@ class MainActivity : ComponentActivity() {
                     }
                 } else ReminderScreen(
                     reminders = reminders,
-                    onAddReminder = { text, alertAt, repeatRule ->
+                    onAddReminder = { text, alertAt, repeatRule, customCategoryId ->
                         perform(warnIfBlocked = true) {
-                            val newest = repository.add(text, alertAt, repeatRule).first()
+                            val newest = repository.add(text, alertAt, repeatRule, customCategoryId).first()
                             if (alertAt == null && !ReminderNotifications.show(this@MainActivity, newest)) waiting.add(newest.id)
                         }
                     },
@@ -88,8 +92,8 @@ class MainActivity : ComponentActivity() {
                         if (item?.shouldPinNotification == true) ReminderNotifications.show(this, item)
                         else { ReminderNotifications.cancel(this, id); waiting.remove(id) }
                     } },
-                    onEditReminder = { id, text, accentStart, accentEnd -> mutate {
-                        repository.edit(id, text, accentStart, accentEnd).firstOrNull { it.id == id }
+                    onEditReminder = { id, text, accentStart, accentEnd, customCategoryId -> mutate {
+                        repository.edit(id, text, accentStart, accentEnd, customCategoryId).firstOrNull { it.id == id }
                             ?.let { ReminderNotifications.refreshEdited(this, it) }
                     } },
                     onSetAlert = { id, at, repeatRule -> mutate {
@@ -116,7 +120,34 @@ class MainActivity : ComponentActivity() {
                     designStyle = style,
                     onDesignStyleChange = { style = it; preferences.edit().putString("design_style", if (it == DesignStyle.Ice) "ice" else "glass").apply() },
                     exactAlarmsAllowed = exactAllowed,
-                    onRequestExactAlarms = ::openAlarmAccess
+                    onRequestExactAlarms = ::openAlarmAccess,
+                    customCategories = customCategories,
+                    onCreateCategory = { name, iconKey, start, end ->
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val updated = categoryRepository.add(name, iconKey, start, end)
+                            withContext(Dispatchers.Main) {
+                                customCategories = updated
+                            }
+                        }
+                    },
+                    onEditCategory = { id, name, iconKey, start, end ->
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val updated = categoryRepository.update(id, name, iconKey, start, end)
+                            withContext(Dispatchers.Main) {
+                                customCategories = updated
+                            }
+                        }
+                    },
+                    onDeleteCategory = { id ->
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val updatedReminders = repository.unassignCategory(id)
+                            val updatedCategories = categoryRepository.delete(id)
+                            withContext(Dispatchers.Main) {
+                                reminders = updatedReminders
+                                customCategories = updatedCategories
+                            }
+                        }
+                    }
                 )
             }
         }
@@ -126,6 +157,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         exactAllowed = ReminderScheduler.canScheduleExact(this)
         if (::repository.isInitialized) lifecycleScope.launch { perform() }
+        if (::categoryRepository.isInitialized) {
+            customCategories = try { categoryRepository.load() } catch (_: Exception) { emptyList() }
+        }
     }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
