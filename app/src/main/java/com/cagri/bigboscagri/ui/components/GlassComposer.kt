@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cagri.bigboscagri.data.RecurrenceRule
 import com.cagri.bigboscagri.speech.VoicePhase
 import com.cagri.bigboscagri.ui.DesignStyle
 
@@ -52,6 +53,7 @@ import com.cagri.bigboscagri.ui.DesignStyle
 fun GlassComposer(
     value: String,
     alertAt: Long? = null,
+    repeatRule: RecurrenceRule = RecurrenceRule.NONE,
     saving: Boolean = false,
     onPickDate: () -> Unit = {},
     onClearDate: () -> Unit = {},
@@ -173,7 +175,11 @@ fun GlassComposer(
             Row(Modifier.weight(1f).clickable(enabled = !recording && !saving, onClick = onPickDate).padding(6.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 ActionIcon(ActionGlyph.Calendar, Modifier.size(18.dp), Color(0xFF91B9FF))
-                Text(alertAt?.let { reminderDate(it) } ?: "Tarih ve saat ekle", color = Color(0xFFBFCDE6), fontSize = 12.sp,
+                val dateLabel = if (alertAt != null) {
+                    val dateStr = reminderDate(alertAt)
+                    if (repeatRule != RecurrenceRule.NONE) "$dateStr • ${repeatRule.displayName}" else dateStr
+                } else "Tarih ve saat ekle"
+                Text(dateLabel, color = Color(0xFFBFCDE6), fontSize = 12.sp,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 9.dp))
             }
             if (alertAt != null) IconButton(onClick = onClearDate, enabled = !saving,

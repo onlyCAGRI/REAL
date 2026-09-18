@@ -16,7 +16,9 @@ object ReminderScheduler {
 
     fun reconcile(context: Context, repository: ReminderRepository) = synchronized(ReminderRepository.mutationLock) {
         val now = System.currentTimeMillis()
-        repository.deliverDue(now) { ReminderNotifications.show(context, it, alerting = true) }
+        repository.deliverDue(now) { item ->
+            ReminderNotifications.show(context, item, alerting = true)
+        }
         val manager = context.getSystemService(AlarmManager::class.java)
         val pending = PendingIntent.getBroadcast(context, 0,
             Intent(context, ReminderAlarmReceiver::class.java).apply {

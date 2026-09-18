@@ -75,6 +75,12 @@ object ReminderNotifications {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val subText = when {
+            pinned -> "Önemli"
+            reminder.hasRepeat -> reminder.repeatRule.displayName
+            else -> null
+        }
+
         val notification = android.app.Notification.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
@@ -83,7 +89,7 @@ object ReminderNotifications {
             .setContentIntent(pendingIntent)
             .setCategory(android.app.Notification.CATEGORY_REMINDER)
             .setOngoing(pinned)
-            .setSubText(if (pinned) "Önemli" else null)
+            .setSubText(subText)
             .setAutoCancel(false)
             .setShowWhen(true)
             .setOnlyAlertOnce(!alerting)

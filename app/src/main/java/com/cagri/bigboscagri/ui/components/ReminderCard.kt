@@ -1,6 +1,10 @@
 package com.cagri.bigboscagri.ui.components
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -33,8 +37,17 @@ import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.ui.reminderDate
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun ReminderCard(reminder: ReminderItem, onToggle: () -> Unit, onOpen: () -> Unit, reduceAnimations: Boolean = false, modifier: Modifier = Modifier) {
+fun ReminderCard(
+    reminder: ReminderItem,
+    onToggle: () -> Unit,
+    onOpen: () -> Unit,
+    reduceAnimations: Boolean = false,
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null,
+    modifier: Modifier = Modifier
+) {
     val shape = RoundedCornerShape(22.dp)
     val accentBrush = remember(reminder.accentStart, reminder.accentEnd, reminder.isCompleted) {
         reminderAccentBrush(reminder.accentStart, reminder.accentEnd, reminder.isCompleted)
@@ -44,8 +57,23 @@ fun ReminderCard(reminder: ReminderItem, onToggle: () -> Unit, onOpen: () -> Uni
         if (reduceAnimations) snap() else tween(200),
         label = "completionColor"
     )
+
+    val sharedBoundsModifier = if (!reduceAnimations && sharedTransitionScope != null && animatedVisibilityScope != null) {
+        with(sharedTransitionScope) {
+            Modifier.sharedBounds(
+                rememberSharedContentState(key = "reminder-card-${reminder.id}"),
+                animatedVisibilityScope = animatedVisibilityScope,
+                boundsTransform = { _, _ -> tween(320, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)) },
+                clipInOverlayDuringTransition = OverlayClip(shape)
+            )
+        }
+    } else Modifier
+
     Row(
-        modifier.fillMaxWidth().clip(shape)
+        modifier
+            .then(sharedBoundsModifier)
+            .fillMaxWidth()
+            .clip(shape)
             .then(if (accentBrush == null) Modifier.background(Color(0xFF141416)) else Modifier.background(accentBrush))
             .border(0.75.dp, if (accentBrush == null) Color(0xFF222225) else Color.White.copy(alpha = 0.10f), shape)
             .clickable(role = Role.Button, onClickLabel = "Hatırlatıcıyı aç", onClick = onOpen)
@@ -74,7 +102,10 @@ fun ReminderCard(reminder: ReminderItem, onToggle: () -> Unit, onOpen: () -> Uni
                 maxLines = 3, overflow = TextOverflow.Ellipsis
             )
             if (!reminder.isCompleted) reminder.alertAt?.let {
-                Text(reminderDate(it), color = Color(0xFF94B8F7), fontSize = 11.sp, lineHeight = 16.sp,
+                val isOverdue = it < System.currentTimeMillis()
+                val dateColor = if (isOverdue) Color(0xFFF87171) else Color(0xFF94B8F7)
+                val alertText = if (reminder.hasRepeat) "${reminderDate(it)} • ${reminder.repeatRule.displayName}" else reminderDate(it)
+                Text(alertText, color = dateColor, fontSize = 11.sp, lineHeight = 16.sp,
                     modifier = Modifier.padding(top = 5.dp))
             }
             reminder.completedAt?.let {

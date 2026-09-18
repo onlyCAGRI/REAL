@@ -70,9 +70,9 @@ class MainActivity : ComponentActivity() {
                     }
                 } else ReminderScreen(
                     reminders = reminders,
-                    onAddReminder = { text, alertAt ->
+                    onAddReminder = { text, alertAt, repeatRule ->
                         perform(warnIfBlocked = true) {
-                            val newest = repository.add(text, alertAt).first()
+                            val newest = repository.add(text, alertAt, repeatRule).first()
                             if (alertAt == null && !ReminderNotifications.show(this@MainActivity, newest)) waiting.add(newest.id)
                         }
                     },
@@ -89,8 +89,8 @@ class MainActivity : ComponentActivity() {
                         repository.edit(id, text, accentStart, accentEnd).firstOrNull { it.id == id }
                             ?.let { ReminderNotifications.refreshEdited(this, it) }
                     } },
-                    onSetAlert = { id, at -> mutate {
-                        val item = repository.setAlert(id, at).firstOrNull { it.id == id }
+                    onSetAlert = { id, at, repeatRule -> mutate {
+                        val item = repository.setAlert(id, at, repeatRule).firstOrNull { it.id == id }
                         ReminderNotifications.cancel(this, id)
                         if (item != null && (at == null || item.shouldPinNotification)) ReminderNotifications.show(this, item)
                     } },

@@ -7,8 +7,14 @@ import androidx.compose.material3.TextButton
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -61,6 +67,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -78,7 +85,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cagri.bigboscagri.data.RecurrenceRule
 import com.cagri.bigboscagri.data.ReminderItem
+import com.cagri.bigboscagri.data.repeatSummary
 import com.cagri.bigboscagri.ui.components.ActionGlyph
 import com.cagri.bigboscagri.ui.components.ActionIcon
 import com.cagri.bigboscagri.ui.components.GlassPanel
@@ -88,6 +97,7 @@ import com.cagri.bigboscagri.ui.components.reminderAccentBrush
 import com.cagri.bigboscagri.ui.components.TopGlassOverlay
 import com.cagri.bigboscagri.ui.theme.BigBosTheme
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ReminderDetailScreen(
     reminder: ReminderItem, onBack: () -> Unit, onToggleCompleted: () -> Unit,
@@ -95,9 +105,11 @@ fun ReminderDetailScreen(
     reduceAnimations: Boolean = false,
     reduceDynamicBlur: Boolean = false,
     designStyle: DesignStyle = DesignStyle.Glass,
-    onSetAlert: (Long?) -> Unit = {},
+    onSetAlert: (Long?, RecurrenceRule) -> Unit = { _, _ -> },
     exactAlarmsAllowed: Boolean = true,
-    onRequestExactAlarms: () -> Unit = {}
+    onRequestExactAlarms: () -> Unit = {},
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     var editing by rememberSaveable(reminder.id) { mutableStateOf(false) }
     var editedText by rememberSaveable(reminder.id) { mutableStateOf(reminder.text) }
@@ -120,6 +132,23 @@ fun ReminderDetailScreen(
         if (deleting) deleting = false else finishEditing()
     }
 
+    val chromeAlpha by if (animatedVisibilityScope != null && !reduceAnimations) {
+        animatedVisibilityScope.transition.animateFloat(
+            transitionSpec = {
+                if (EnterExitState.PreEnter isTransitioningTo EnterExitState.Visible) {
+                    tween(200, delayMillis = 80, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
+                } else {
+                    tween(120, easing = CubicBezierEasing(0.4f, 0f, 1f, 1f))
+                }
+            },
+            label = "detailChromeAlpha"
+        ) { state ->
+            if (state == EnterExitState.Visible) 1f else 0f
+        }
+    } else {
+        remember { mutableStateOf(1f) }
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black).navigationBarsPadding().imePadding()) {
         Column(
             Modifier.fillMaxSize()
@@ -133,7 +162,10 @@ fun ReminderDetailScreen(
                 .padding(start = 16.dp, end = 16.dp, top = statusHeight + 10.dp,
                     bottom = if (editing) 300.dp else 114.dp)
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().graphicsLayer { alpha = chromeAlpha },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(
                     onClick = { if (editing) finishEditing() else onBack() },
                     modifier = Modifier.background(Color(0xFF161619), CircleShape)
@@ -159,8 +191,22 @@ fun ReminderDetailScreen(
             val accentBrush = remember(shownAccentStart, shownAccentEnd, reminder.isCompleted) {
                 reminderAccentBrush(shownAccentStart, shownAccentEnd, reminder.isCompleted)
             }
+            val sharedCardModifier = if (!reduceAnimations && sharedTransitionScope != null && animatedVisibilityScope != null) {
+                with(sharedTransitionScope) {
+                    Modifier.sharedBounds(
+                        rememberSharedContentState(key = "reminder-card-${reminder.id}"),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                        boundsTransform = { _, _ -> tween(320, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)) },
+                        clipInOverlayDuringTransition = OverlayClip(cardShape)
+                    )
+                }
+            } else Modifier
+
             Column(
-                Modifier.padding(top = 24.dp).fillMaxWidth().clip(cardShape)
+                Modifier.padding(top = 24.dp)
+                    .then(sharedCardModifier)
+                    .fillMaxWidth()
+                    .clip(cardShape)
                     .then(
                         if (accentBrush == null) Modifier.background(
                             Brush.linearGradient(listOf(Color(0xFF25252C), Color(0xFF17171B), Color(0xFF131315)))
@@ -186,11 +232,37 @@ fun ReminderDetailScreen(
                     }
                 }
                 HorizontalDivider(Modifier.padding(top = 24.dp, bottom = 18.dp), color = Color(0xFF38383F))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ActionIcon(if (reminder.isCompleted) ActionGlyph.Check else ActionGlyph.Note,
-                        Modifier.size(21.dp), Color(0xFF94B8F7))
-                    Text(if (reminder.isCompleted) "Tamamlandı" else if (reminder.alertAt == null) "Uyarı yok" else "Planlı",
-                        color = Color(0xFFD3D3D9), fontSize = 14.sp)
+                        Modifier.padding(top = 2.dp).size(21.dp), Color(0xFF94B8F7))
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        if (reminder.isCompleted) {
+                            Text("Tamamlandı", color = Color(0xFFD3D3D9), fontSize = 14.sp)
+                        } else if (reminder.alertAt == null) {
+                            Text("Uyarı yok", color = Color(0xFFD3D3D9), fontSize = 14.sp)
+                        } else {
+                            val isOverdue = reminder.alertAt < System.currentTimeMillis()
+                            val dateColor = if (isOverdue) Color(0xFFF87171) else Color(0xFF94B8F7)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("Planlı", color = Color(0xFFD3D3D9), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Text("•", color = Color(0xFF6B6B75), fontSize = 12.sp)
+                                Text(reminderDate(reminder.alertAt), color = dateColor, fontSize = 14.sp)
+                            }
+                            val repeatText = reminder.repeatRule.repeatSummary(reminder.anchorAlertAt ?: reminder.alertAt)
+                            if (repeatText != null) {
+                                Text(
+                                    repeatText,
+                                    color = Color(0xFFA5A5B0),
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    modifier = Modifier.padding(top = 1.dp)
+                                )
+                            }
+                        }
+                    }
                 }
                 if (editing && !reminder.isCompleted) {
                     Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -199,9 +271,13 @@ fun ReminderDetailScreen(
                             keyboard?.hide()
                             showDatePicker = true
                         }, modifier = Modifier.weight(1f)) {
-                            Text(reminder.alertAt?.let { reminderDate(it) } ?: "Tarih ve saat ekle", color = Color(0xFF91B9FF), fontSize = 13.sp)
+                            val label = if (reminder.alertAt != null) {
+                                val dateStr = reminderDate(reminder.alertAt)
+                                if (reminder.hasRepeat) "$dateStr • ${reminder.repeatRule.displayName}" else dateStr
+                            } else "Tarih ve saat ekle"
+                            Text(label, color = Color(0xFF91B9FF), fontSize = 13.sp)
                         }
-                        if (reminder.alertAt != null) IconButton(onClick = { onSetAlert(null) },
+                        if (reminder.alertAt != null) IconButton(onClick = { onSetAlert(null, RecurrenceRule.NONE) },
                             modifier = Modifier.semantics { contentDescription = "Tarih ve saati kaldır" }) {
                             ActionIcon(ActionGlyph.Close, Modifier.size(18.dp))
                         }
@@ -212,7 +288,7 @@ fun ReminderDetailScreen(
                 reminder.completedAt?.let { "Tamamlandı: ${reminderDate(it)}" }
                     ?: "Son düzenleme: ${reminderDate(reminder.updatedAt)}",
                 color = Color(0xFF8E8E98), fontSize = 12.sp, lineHeight = 18.sp, textAlign = TextAlign.End,
-                modifier = Modifier.fillMaxWidth().padding(top = 15.dp, start = 10.dp, end = 10.dp)
+                modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = chromeAlpha }.padding(top = 15.dp, start = 10.dp, end = 10.dp)
             )
         }
         TopGlassOverlay(scene, { scenePosition }, Modifier.align(Alignment.TopCenter), reduceDynamicBlur)
@@ -222,7 +298,9 @@ fun ReminderDetailScreen(
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { deleting = false }
                 .semantics { contentDescription = "Silme sorusunu kapat" })
         }
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp)) {
+        Column(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().graphicsLayer { alpha = chromeAlpha }.padding(horizontal = 24.dp, vertical = 18.dp)
+        ) {
             AnimatedVisibility(
                 visible = editing,
                 enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)) + slideInVertically(tween(240)) { it / 8 } + scaleIn(tween(240), initialScale = 0.97f),
@@ -281,11 +359,13 @@ fun ReminderDetailScreen(
             }
         }
         AnimatedDateTimePickerOverlay(visible = showDatePicker, initial = reminder.alertAt,
+            initialRepeatRule = reminder.repeatRule,
             onDismiss = { showDatePicker = false },
             backdrop = scene, backdropPosition = { scenePosition },
             designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
-            onConfirm = { onSetAlert(it); showDatePicker = false }, exactAlarmsAllowed = exactAlarmsAllowed,
+            onConfirm = { at, rule -> onSetAlert(at, rule); showDatePicker = false },
+            exactAlarmsAllowed = exactAlarmsAllowed,
             onRequestExactAlarms = onRequestExactAlarms)
     }
 }
@@ -306,6 +386,7 @@ private fun DetailAction(
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Preview(name = "Cam detay", widthDp = 393, heightDp = 852, showBackground = true)
 @Composable
 private fun DetailPreview() {

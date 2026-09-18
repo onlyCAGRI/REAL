@@ -10,10 +10,13 @@ data class ReminderItem(
     val alertAt: Long? = null,
     val notifiedAlertAt: Long? = null,
     val accentStart: Int? = null,
-    val accentEnd: Int? = null
+    val accentEnd: Int? = null,
+    val repeatRule: RecurrenceRule = RecurrenceRule.NONE,
+    val anchorAlertAt: Long? = alertAt
 ) {
     val isCompleted: Boolean get() = completedAt != null
     val shouldPinNotification: Boolean get() = isImportant && !isCompleted
+    val hasRepeat: Boolean get() = repeatRule != RecurrenceRule.NONE
 
     fun toggleCompleted(now: Long): ReminderItem = copy(
         completedAt = if (isCompleted) null else now,

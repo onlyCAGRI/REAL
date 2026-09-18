@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 
-enum class ActionGlyph { Calendar, Back, Check, Undo, Edit, Share, Delete, Star, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff }
+enum class ActionGlyph { Calendar, Back, Check, Undo, Edit, Share, Delete, Star, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, Minus }
 
 @Composable
 fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.White, filled: Boolean = false) {
@@ -139,6 +139,38 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                         cubicTo(11.5f, 16.9f, 14.6f, 16.1f, 16.4f, 13.8f)
                     }, color, style = stroke)
                     drawLine(color, Offset(4f, 4f), Offset(20f, 20f), strokeWidth = 2f, cap = StrokeCap.Round)
+                }
+                ActionGlyph.ChevronRight -> {
+                    line(9f, 6f, 15f, 12f)
+                    line(15f, 12f, 9f, 18f)
+                }
+                ActionGlyph.Repeat -> {
+                    // Top loop: arrow right, curves down
+                    line(6f, 7f, 18f, 7f)
+                    line(15f, 4f, 18f, 7f)
+                    line(15f, 10f, 18f, 7f)
+                    drawArc(color, 270f, 90f, false, Offset(14f, 7f), Size(4f, 4f), style = stroke)
+                    // Bottom loop: arrow left, curves up
+                    line(18f, 17f, 6f, 17f)
+                    line(9f, 14f, 6f, 17f)
+                    line(9f, 20f, 6f, 17f)
+                    drawArc(color, 90f, 90f, false, Offset(6f, 13f), Size(4f, 4f), style = stroke)
+                }
+                ActionGlyph.Bell -> {
+                    drawPath(Path().apply {
+                        moveTo(12f, 3.5f)
+                        lineTo(12f, 5f)
+                        moveTo(12f, 5f)
+                        cubicTo(9f, 5.5f, 6.5f, 8f, 6.5f, 12f)
+                        lineTo(5f, 16.5f)
+                        lineTo(19f, 16.5f)
+                        lineTo(17.5f, 12f)
+                        cubicTo(17.5f, 8f, 15f, 5.5f, 12f, 5f)
+                    }, color, style = stroke)
+                    drawArc(color, 0f, 180f, false, Offset(10f, 17.5f), Size(4f, 3.5f), style = stroke)
+                }
+                ActionGlyph.Minus -> {
+                    line(5f, 12f, 19f, 12f)
                 }
             }
         }

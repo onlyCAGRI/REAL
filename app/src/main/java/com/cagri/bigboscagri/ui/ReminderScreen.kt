@@ -7,6 +7,10 @@ import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
 import com.cagri.bigboscagri.ui.components.RealWordmark
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
@@ -41,6 +45,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -77,6 +82,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.R
+import com.cagri.bigboscagri.data.RecurrenceRule
 import com.cagri.bigboscagri.data.ReminderCategory
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.data.inCategory
@@ -99,12 +105,12 @@ private data class ReminderRoute(val category: ReminderCategory?, val detailId: 
 @Composable
 fun ReminderScreen(
     reminders: List<ReminderItem>,
-    onAddReminder: suspend (String, Long?) -> Boolean,
+    onAddReminder: suspend (String, Long?, RecurrenceRule) -> Boolean,
     onToggleCompleted: (Long) -> Unit,
     onToggleImportant: (Long) -> Unit,
     onEditReminder: (Long, String, Int?, Int?) -> Unit,
     onDeleteReminder: (Long) -> Unit,
-    onSetAlert: (Long, Long?) -> Unit,
+    onSetAlert: (Long, Long?, RecurrenceRule) -> Unit,
     exactAlarmsAllowed: Boolean = true,
     onRequestExactAlarms: () -> Unit = {},
     requestedReminderId: Long? = null,
@@ -121,6 +127,7 @@ fun ReminderScreen(
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     var draftAlertAt by rememberSaveable { mutableStateOf<Long?>(null) }
+    var draftRepeatRule by rememberSaveable { mutableStateOf(RecurrenceRule.NONE) }
     val stateHolder = rememberSaveableStateHolder()
     LaunchedEffect(requestedReminderId) {
         if (requestedReminderId != null) {
@@ -171,138 +178,127 @@ fun ReminderScreen(
                     exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
                     onBack = { showSettings = false }
                 )
-            } else AnimatedContent(
-                targetState = ReminderRoute(category, detailId),
-                contentKey = { it.key },
-                transitionSpec = {
-                    if (reduceAnimations) {
-                        EnterTransition.None togetherWith ExitTransition.None
-                    } else {
-                        val isOpeningDetail = initialState.detailId == null && targetState.detailId != null
-                        val isClosingDetail = initialState.detailId != null && targetState.detailId == null
+            } else {
+                @OptIn(ExperimentalSharedTransitionApi::class)
+                SharedTransitionLayout {
+                    AnimatedContent(
+                        targetState = ReminderRoute(category, detailId),
+                        contentKey = { it.key },
+                        transitionSpec = {
+                            if (reduceAnimations) {
+                                EnterTransition.None togetherWith ExitTransition.None
+                            } else {
+                                val isOpeningDetail = initialState.detailId == null && targetState.detailId != null
+                                val isClosingDetail = initialState.detailId != null && targetState.detailId == null
 
-                        when {
-                            isOpeningDetail -> {
-                                val enter = fadeIn(
-                                    tween(260, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
-                                ) + scaleIn(
-                                    tween(300, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                                    initialScale = 0.94f
-                                ) + slideInVertically(
-                                    tween(300, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
-                                ) { it / 24 }
+                                when {
+                                    isOpeningDetail -> {
+                                        fadeIn(
+                                            tween(260, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                        ) togetherWith fadeOut(
+                                            tween(180, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                        )
+                                    }
+                                    isClosingDetail -> {
+                                        fadeIn(
+                                            tween(200, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                        ) togetherWith fadeOut(
+                                            tween(240, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                        )
+                                    }
+                                    else -> {
+                                        val enter = fadeIn(
+                                            tween(220, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                        ) + scaleIn(
+                                            tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
+                                            initialScale = 0.98f
+                                        ) + slideInVertically(
+                                            tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                        ) { it / 36 }
 
-                                val exit = fadeOut(
-                                    tween(180, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
-                                ) + scaleOut(
-                                    tween(220, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
-                                    targetScale = 0.97f
-                                )
+                                        val exit = fadeOut(
+                                            tween(170, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                        ) + scaleOut(
+                                            tween(200, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
+                                            targetScale = 0.98f
+                                        )
 
-                                enter togetherWith exit
+                                        enter togetherWith exit
+                                    }
+                                }
                             }
-                            isClosingDetail -> {
-                                val enter = fadeIn(
-                                    tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
-                                ) + scaleIn(
-                                    tween(260, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                                    initialScale = 0.97f
-                                )
-
-                                val exit = fadeOut(
-                                    tween(200, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
-                                ) + scaleOut(
-                                    tween(240, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
-                                    targetScale = 0.94f
-                                ) + slideOutVertically(
-                                    tween(240, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
-                                ) { it / 24 }
-
-                                enter togetherWith exit
+                        }, label = "reminderPage"
+                    ) { route ->
+                        stateHolder.SaveableStateProvider(route.key) {
+                            val currentReminder = reminders.firstOrNull { it.id == route.detailId }
+                            // Keep the outgoing detail visible during its close animation after deletion.
+                            var lastReminder by remember(route.detailId) { mutableStateOf(currentReminder) }
+                            LaunchedEffect(currentReminder) {
+                                if (currentReminder != null) lastReminder = currentReminder
                             }
-                            else -> {
-                                val enter = fadeIn(
-                                    tween(220, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
-                                ) + scaleIn(
-                                    tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
-                                    initialScale = 0.98f
-                                ) + slideInVertically(
-                                    tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
-                                ) { it / 36 }
-
-                                val exit = fadeOut(
-                                    tween(170, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
-                                ) + scaleOut(
-                                    tween(200, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
-                                    targetScale = 0.98f
+                            val reminder = currentReminder ?: lastReminder
+                            if (route.detailId != null && reminder != null) {
+                                ReminderDetailScreen(
+                                    reminder = reminder,
+                                    onBack = { detailId = null },
+                                    onToggleCompleted = { onToggleCompleted(reminder.id); detailId = null },
+                                    onToggleImportant = { onToggleImportant(reminder.id) },
+                                    onSave = { text, accentStart, accentEnd ->
+                                        onEditReminder(reminder.id, text, accentStart, accentEnd)
+                                    },
+                                    onDelete = { onDeleteReminder(reminder.id); detailId = null },
+                                    reduceAnimations = reduceAnimations, reduceDynamicBlur = reduceDynamicBlur,
+                                    designStyle = designStyle, onSetAlert = { at, rule -> onSetAlert(reminder.id, at, rule) },
+                                    exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = this@AnimatedContent
                                 )
-
-                                enter togetherWith exit
+                            } else {
+                                ReminderListScreen(
+                                    reminders = reminders, category = route.category, draft = draft,
+                                    alertAt = draftAlertAt, repeatRule = draftRepeatRule,
+                                    onAlertChange = { at, rule -> draftAlertAt = at; draftRepeatRule = rule },
+                                    exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
+                                    onDraftChange = { draft = it }, onBack = { category = null },
+                                    onOpenCategory = { category = it }, onOpenReminder = { detailId = it },
+                                    onToggleCompleted = onToggleCompleted,
+                                    reduceDynamicBlur = reduceDynamicBlur,
+                                    reduceAnimations = reduceAnimations,
+                                    designStyle = designStyle,
+                                    onOpenSettings = { showSettings = true },
+                                    onAddReminder = { text, at, rule ->
+                                        val saved = onAddReminder(text, at, rule)
+                                        if (saved) {
+                                            draft = ""; draftAlertAt = null; draftRepeatRule = RecurrenceRule.NONE
+                                            if (category != null) category = if (at == null) ReminderCategory.NoAlert else ReminderCategory.Planned
+                                        }
+                                        saved
+                                    },
+                                    sharedTransitionScope = this@SharedTransitionLayout,
+                                    animatedVisibilityScope = this@AnimatedContent
+                                )
                             }
                         }
                     }
-                }, label = "reminderPage"
-            ) { route ->
-            stateHolder.SaveableStateProvider(route.key) {
-                val currentReminder = reminders.firstOrNull { it.id == route.detailId }
-                // Keep the outgoing detail visible during its close animation after deletion.
-                var lastReminder by remember(route.detailId) { mutableStateOf(currentReminder) }
-                LaunchedEffect(currentReminder) {
-                    if (currentReminder != null) lastReminder = currentReminder
-                }
-                val reminder = currentReminder ?: lastReminder
-                if (route.detailId != null && reminder != null) {
-                    ReminderDetailScreen(
-                        reminder = reminder,
-                        onBack = { detailId = null },
-                        onToggleCompleted = { onToggleCompleted(reminder.id); detailId = null },
-                        onToggleImportant = { onToggleImportant(reminder.id) },
-                        onSave = { text, accentStart, accentEnd ->
-                            onEditReminder(reminder.id, text, accentStart, accentEnd)
-                        },
-                        onDelete = { onDeleteReminder(reminder.id); detailId = null },
-                        reduceAnimations = reduceAnimations, reduceDynamicBlur = reduceDynamicBlur,
-                        designStyle = designStyle, onSetAlert = { onSetAlert(reminder.id, it) },
-                        exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms
-                    )
-                } else {
-                    ReminderListScreen(
-                        reminders = reminders, category = route.category, draft = draft,
-                        alertAt = draftAlertAt, onAlertChange = { draftAlertAt = it },
-                        exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
-                        onDraftChange = { draft = it }, onBack = { category = null },
-                        onOpenCategory = { category = it }, onOpenReminder = { detailId = it },
-                        onToggleCompleted = onToggleCompleted,
-                        reduceDynamicBlur = reduceDynamicBlur,
-                        reduceAnimations = reduceAnimations,
-                        designStyle = designStyle,
-                        onOpenSettings = { showSettings = true },
-                        onAddReminder = { text, at ->
-                            val saved = onAddReminder(text, at)
-                            if (saved) {
-                                draft = ""; draftAlertAt = null
-                                if (category != null) category = if (at == null) ReminderCategory.NoAlert else ReminderCategory.Planned
-                            }
-                            saved
-                        }
-                    )
                 }
             }
-        }
         }
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun ReminderListScreen(
     reminders: List<ReminderItem>, category: ReminderCategory?, draft: String,
-    alertAt: Long?, onAlertChange: (Long?) -> Unit,
+    alertAt: Long?, repeatRule: RecurrenceRule, onAlertChange: (Long?, RecurrenceRule) -> Unit,
     exactAlarmsAllowed: Boolean, onRequestExactAlarms: () -> Unit,
     onDraftChange: (String) -> Unit, onBack: () -> Unit,
     onOpenCategory: (ReminderCategory) -> Unit, onOpenReminder: (Long) -> Unit,
     onToggleCompleted: (Long) -> Unit, reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean, designStyle: DesignStyle,
-    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?) -> Boolean
+    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule) -> Boolean,
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     var editing by remember { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
@@ -326,7 +322,7 @@ private fun ReminderListScreen(
                 saving = true
                 scope.launch {
                     try {
-                        if (onAddReminder(text.trim(), alertAt)) {
+                        if (onAddReminder(text.trim(), alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE)) {
                             focusManager.clearFocus(); keyboard?.hide()
                             if (reduceAnimations) listState.scrollToItem(0) else listState.animateScrollToItem(0)
                         }
@@ -449,6 +445,8 @@ private fun ReminderListScreen(
                     reminder, onToggle = { onToggleCompleted(reminder.id) },
                     onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                     reduceAnimations = reduceAnimations,
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
                     modifier = Modifier
                         .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -463,6 +461,8 @@ private fun ReminderListScreen(
                         reminder, onToggle = { onToggleCompleted(reminder.id) },
                         onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                         reduceAnimations = reduceAnimations,
+                        sharedTransitionScope = sharedTransitionScope,
+                        animatedVisibilityScope = animatedVisibilityScope,
                         modifier = Modifier
                             .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
                             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -479,9 +479,9 @@ private fun ReminderListScreen(
         BottomFade(Modifier.align(Alignment.BottomCenter).height(composerHeight + bottomGap + 46.dp))
         GlassComposer(
             value = draft, onValueChange = onDraftChange,
-            alertAt = alertAt, saving = saving,
+            alertAt = alertAt, repeatRule = repeatRule, saving = saving,
             onPickDate = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showDatePicker = true },
-            onClearDate = { onAlertChange(null) },
+            onClearDate = { onAlertChange(null, RecurrenceRule.NONE) },
             onSubmit = { if (voice.phase == VoicePhase.Idle) submit(draft) else voice.finish() },
             expanded = expanded, onFocusChanged = { editing = it }, focusRequester = inputFocus,
             backdrop = scene, backdropPosition = { scenePosition },
@@ -505,11 +505,12 @@ private fun ReminderListScreen(
             )
         }
         AnimatedDateTimePickerOverlay(visible = showDatePicker, initial = alertAt,
+            initialRepeatRule = repeatRule,
             backdrop = scene, backdropPosition = { scenePosition },
             designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
             onDismiss = { showDatePicker = false },
-            onConfirm = { onAlertChange(it); refocus = true; showDatePicker = false },
+            onConfirm = { at, rule -> onAlertChange(at, rule); refocus = true; showDatePicker = false },
             exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms)
     }
 }

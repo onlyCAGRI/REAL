@@ -30,7 +30,9 @@ class ReminderRepository(context: Context) {
                             alertAt = item.optionalTimestamp("alertAt"),
                             notifiedAlertAt = item.optionalTimestamp("notifiedAlertAt"),
                             accentStart = item.optionalAccent("accentStart"),
-                            accentEnd = item.optionalAccent("accentEnd")
+                            accentEnd = item.optionalAccent("accentEnd"),
+                            repeatRule = RecurrenceRule.fromStorage(if (item.has("repeatRule")) item.optString("repeatRule") else null),
+                            anchorAlertAt = item.optionalTimestamp("anchorAlertAt") ?: item.optionalTimestamp("alertAt")
                         )
                     )
                 }
@@ -41,13 +43,24 @@ class ReminderRepository(context: Context) {
         decoded
     }
 
-    fun add(text: String, alertAt: Long? = null): List<ReminderItem> = synchronized(mutationLock) {
+    fun add(
+        text: String,
+        alertAt: Long? = null,
+        repeatRule: RecurrenceRule = RecurrenceRule.NONE
+    ): List<ReminderItem> = synchronized(mutationLock) {
         require(text.isNotBlank())
         val now = System.currentTimeMillis()
         require(alertAt == null || alertAt > now)
         val previous = load()
         val id = maxOf(now, (previous.maxOfOrNull { it.id } ?: 0L) + 1L)
-        val newItem = ReminderItem(id = id, text = text.trim(), createdAt = now, alertAt = alertAt)
+        val newItem = ReminderItem(
+            id = id,
+            text = text.trim(),
+            createdAt = now,
+            alertAt = alertAt,
+            repeatRule = if (alertAt != null) repeatRule else RecurrenceRule.NONE,
+            anchorAlertAt = alertAt
+        )
         val updated = listOf(newItem) + previous
         save(updated)
         updated
@@ -75,14 +88,50 @@ class ReminderRepository(context: Context) {
         }
     }
 
-    fun setAlert(id: Long, alertAt: Long?): List<ReminderItem> {
+    fun setAlert(
+        id: Long,
+        alertAt: Long?,
+        repeatRule: RecurrenceRule = RecurrenceRule.NONE
+    ): List<ReminderItem> {
         require(alertAt == null || alertAt > System.currentTimeMillis())
-        return update(id) { it.copy(alertAt = alertAt, notifiedAlertAt = null, updatedAt = System.currentTimeMillis()) }
+        return update(id) {
+            it.copy(
+                alertAt = alertAt,
+                notifiedAlertAt = null,
+                repeatRule = if (alertAt != null) repeatRule else RecurrenceRule.NONE,
+                anchorAlertAt = alertAt,
+                updatedAt = System.currentTimeMillis()
+            )
+        }
     }
 
     fun deliverDue(now: Long, post: (ReminderItem) -> Boolean) = synchronized(mutationLock) {
         val before = load()
-        val after = before.map { if (it.isAlertDue(now) && post(it)) it.copy(notifiedAlertAt = it.alertAt) else it }
+        val after = before.map { reminder ->
+            var item = reminder
+            // Deliver main alert if due
+            if (item.isAlertDue(now)) {
+                if (post(item)) {
+                    val anchor = item.anchorAlertAt ?: item.alertAt
+                    val nextOccurrence = if (item.hasRepeat && item.alertAt != null) {
+                        computeNextOccurrence(anchor ?: item.alertAt!!, item.repeatRule, afterMillis = now)
+                    } else null
+
+                    item = if (nextOccurrence != null) {
+                        // Advance to next cycle: reset notification tracking for new cycle
+                        item.copy(
+                            alertAt = nextOccurrence,
+                            anchorAlertAt = anchor ?: item.alertAt,
+                            notifiedAlertAt = null,
+                            updatedAt = now
+                        )
+                    } else {
+                        item.copy(notifiedAlertAt = item.alertAt)
+                    }
+                }
+            }
+            item
+        }
         if (after != before) save(after)
     }
 
@@ -108,6 +157,8 @@ class ReminderRepository(context: Context) {
                     .put("notifiedAlertAt", reminder.notifiedAlertAt ?: JSONObject.NULL)
                     .put("accentStart", reminder.accentStart ?: JSONObject.NULL)
                     .put("accentEnd", reminder.accentEnd ?: JSONObject.NULL)
+                    .put("repeatRule", reminder.repeatRule.storageKey)
+                    .put("anchorAlertAt", reminder.anchorAlertAt ?: JSONObject.NULL)
             )
         }
         val raw = array.toString()
