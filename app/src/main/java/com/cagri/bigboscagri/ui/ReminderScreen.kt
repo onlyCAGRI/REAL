@@ -13,6 +13,7 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
@@ -24,6 +25,9 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.util.lerp
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -131,6 +135,7 @@ fun ReminderScreen(
     val stateHolder = rememberSaveableStateHolder()
     LaunchedEffect(requestedReminderId) {
         if (requestedReminderId != null) {
+            ColdStartTracker.markExecuted()
             if (reminders.any { it.id == requestedReminderId }) { detailId = requestedReminderId; showSettings = false }
             onRequestHandled()
         }
@@ -313,6 +318,26 @@ private fun ReminderListScreen(
     val scope = rememberCoroutineScope()
     val scene = rememberGraphicsLayer()
     var scenePosition by remember { mutableStateOf(Offset.Zero) }
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val shouldAnimateColdStart = remember { category == null && ColdStartTracker.isEligible(reduceAnimations) }
+    var isColdStarting by remember { mutableStateOf(shouldAnimateColdStart) }
+    val coldStartProgress = remember { Animatable(if (shouldAnimateColdStart) 0f else 1f) }
+    var targetLogoOffset by remember { mutableStateOf<Offset?>(null) }
+
+    LaunchedEffect(shouldAnimateColdStart) {
+        if (shouldAnimateColdStart) {
+            ColdStartTracker.markExecuted()
+            coldStartProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 400,
+                    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                )
+            )
+            isColdStarting = false
+        }
+    }
     val submit: (String) -> Unit = { text ->
         if (text.isNotBlank() && !saving) {
             if (alertAt != null && alertAt <= System.currentTimeMillis()) {
@@ -384,6 +409,11 @@ private fun ReminderListScreen(
                     if (!reduceDynamicBlur && Build.VERSION.SDK_INT >= 31) {
                         scene.record { this@drawWithContent.drawContent() }; drawLayer(scene)
                     } else drawContent()
+                }
+                .graphicsLayer {
+                    if (isColdStarting) {
+                        alpha = coldStartProgress.value
+                    }
                 },
             contentPadding = PaddingValues(top = statusHeight, bottom = composerHeight + bottomGap + 24.dp)
         ) {
@@ -396,7 +426,24 @@ private fun ReminderListScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        RealWordmark(Modifier.width(112.dp).height(42.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(112.dp)
+                                .height(42.dp)
+                                .onGloballyPositioned { coords ->
+                                    if (targetLogoOffset == null) {
+                                        targetLogoOffset = coords.positionInRoot()
+                                    }
+                                }
+                        ) {
+                            RealWordmark(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        alpha = if (isColdStarting) 0f else 1f
+                                    }
+                            )
+                        }
                         IconButton(
                             onClick = {
                                 voice.cancel()
@@ -492,6 +539,11 @@ private fun ReminderListScreen(
             designStyle = designStyle,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = bottomGap).height(composerHeight)
+                .graphicsLayer {
+                    if (isColdStarting) {
+                        alpha = coldStartProgress.value
+                    }
+                }
         )
         if (showAccountMenu && category == null) {
             AccountMenuOverlay(
@@ -512,6 +564,41 @@ private fun ReminderListScreen(
             onDismiss = { showDatePicker = false },
             onConfirm = { at, rule -> onAlertChange(at, rule); refocus = true; showDatePicker = false },
             exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms)
+        if (isColdStarting) {
+            val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+            val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+            val startCenterX = screenWidthPx / 2f
+            val startCenterY = screenHeightPx / 2f
+
+            val logoWidthPx = with(density) { 112.dp.toPx() }
+            val logoHeightPx = with(density) { 42.dp.toPx() }
+
+            val fallbackTargetLeft = with(density) { 16.dp.toPx() }
+            val fallbackTargetTop = with(density) { statusHeight.toPx() + 20.dp.toPx() }
+
+            val targetLeft = targetLogoOffset?.x ?: fallbackTargetLeft
+            val targetTop = targetLogoOffset?.y ?: fallbackTargetTop
+            val targetCenterX = targetLeft + (logoWidthPx / 2f)
+            val targetCenterY = targetTop + (logoHeightPx / 2f)
+
+            val p = coldStartProgress.value
+            val currentCenterX = lerp(startCenterX, targetCenterX, p)
+            val currentCenterY = lerp(startCenterY, targetCenterY, p)
+            val currentScale = lerp(1.75f, 1.0f, p)
+
+            Box(
+                modifier = Modifier
+                    .size(112.dp, 42.dp)
+                    .graphicsLayer {
+                        translationX = currentCenterX - (size.width / 2f)
+                        translationY = currentCenterY - (size.height / 2f)
+                        scaleX = currentScale
+                        scaleY = currentScale
+                    }
+            ) {
+                RealWordmark(Modifier.fillMaxSize())
+            }
+        }
     }
 }
 

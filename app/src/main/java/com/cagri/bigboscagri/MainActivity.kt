@@ -54,6 +54,9 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.BLACK))
         if (Build.VERSION.SDK_INT >= 29) window.isStatusBarContrastEnforced = false
         repository = ReminderRepository(applicationContext)
+        reminders = try { repository.load() } catch (_: Exception) { emptyList() }
+        ready = true
+        com.cagri.bigboscagri.ui.components.prewarmRealWordmark(applicationContext)
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
         val preferences = getSharedPreferences("bigbos_ui", MODE_PRIVATE)
         setContent {

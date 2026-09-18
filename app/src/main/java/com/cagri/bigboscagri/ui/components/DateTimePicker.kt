@@ -19,6 +19,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
@@ -154,8 +155,8 @@ fun DateTimePickerOverlay(
     var timeTab by rememberSaveable { mutableStateOf(false) }
     var currentSubScreen by rememberSaveable { mutableStateOf(PickerSubScreen.Main) }
     var selectedRepeatRule by rememberSaveable { mutableStateOf(initialRepeatRule) }
-    var dateAnimatedOnce by rememberSaveable { mutableStateOf(false) }
-    var timeAnimatedOnce by rememberSaveable { mutableStateOf(false) }
+    var dateAnimatedOnce by remember { mutableStateOf(false) }
+    var timeAnimatedOnce by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var moving by remember { mutableStateOf(emptySet<String>()) }
     val tr = remember { Locale.forLanguageTag("tr-TR") }
@@ -289,7 +290,9 @@ fun DateTimePickerOverlay(
                                             { day = it; error = null }, { scrollChanged("day", it) },
                                             Modifier.weight(1f),
                                             animateInitial = shouldAnimateDate,
-                                            initialScrollDelayMs = 20L
+                                            initialScrollDelayMs = 70L,
+                                            initialOffsetItems = 8,
+                                            initialScrollDurationMs = 480
                                         )
                                         NumberWheel(
                                             "Ay", (1..12).toList(), month, { months[it - 1] }, {
@@ -297,7 +300,9 @@ fun DateTimePickerOverlay(
                                             }, { scrollChanged("month", it) },
                                             Modifier.weight(1.2f),
                                             animateInitial = shouldAnimateDate,
-                                            initialScrollDelayMs = 60L
+                                            initialScrollDelayMs = 110L,
+                                            initialOffsetItems = 4,
+                                            initialScrollDurationMs = 500
                                         )
                                         if (includeYear) {
                                             NumberWheel(
@@ -517,14 +522,14 @@ private fun NumberWheel(
     onMoving: (Boolean) -> Unit,
     modifier: Modifier,
     animateInitial: Boolean = false,
-    initialScrollDelayMs: Long = 0L
+    initialScrollDelayMs: Long = 0L,
+    initialOffsetItems: Int? = null,
+    initialScrollDurationMs: Int = 0
 ) {
     val targetIndex = values.indexOf(value).coerceAtLeast(0)
     val initialIndex = remember {
         if (animateInitial && values.size > 2) {
-            // Start 8-12 items away (or as far as available in the list)
-            // so the initial roll is clearly perceptible and visually satisfying
-            val step = when {
+            val step = initialOffsetItems ?: when {
                 values.size >= 24 -> 10.coerceAtMost(values.size - 1)
                 values.size >= 12 -> 7.coerceAtMost(values.size - 1)
                 else -> 4.coerceAtMost(values.size - 1)
@@ -546,7 +551,8 @@ private fun NumberWheel(
     val latestValue by rememberUpdatedState(value)
     val latestOnValue by rememberUpdatedState(onValue)
     val latestMoving by rememberUpdatedState(onMoving)
-    val rowHeight = 54.dp * LocalDensity.current.fontScale.coerceIn(1f, 1.4f)
+    val density = LocalDensity.current
+    val rowHeight = 54.dp * density.fontScale.coerceIn(1f, 1.4f)
     val centered by remember { derivedStateOf {
         val info = state.layoutInfo
         val middle = (info.viewportStartOffset + info.viewportEndOffset) / 2
@@ -560,10 +566,23 @@ private fun NumberWheel(
             if (initialScrollDelayMs > 0L) {
                 delay(initialScrollDelayMs)
             }
-            state.animateScrollToItem(
-                index = targetIndex,
-                scrollOffset = 0
-            )
+            if (initialScrollDurationMs > 0) {
+                val itemHeightPx = with(density) { rowHeight.toPx() }
+                val deltaPx = (targetIndex - initialIndex) * itemHeightPx
+                state.animateScrollBy(
+                    value = deltaPx,
+                    animationSpec = tween(
+                        durationMillis = initialScrollDurationMs,
+                        easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                    )
+                )
+                state.scrollToItem(targetIndex)
+            } else {
+                state.animateScrollToItem(
+                    index = targetIndex,
+                    scrollOffset = 0
+                )
+            }
             initialScrollDone = true
         }
     }

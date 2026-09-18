@@ -270,4 +270,19 @@ class ScheduleRulesTest {
         assertEquals("Her yıl 18 Eylül tekrarlanacak", RecurrenceRule.YEARLY.repeatSummary(testMillis, zone))
         assertNull(RecurrenceRule.NONE.repeatSummary(testMillis, zone))
     }
+
+    @Test fun coldStartTrackerOnlyAllowsSingleExecutionAndRespectsReduceAnimations() {
+        com.cagri.bigboscagri.ui.ColdStartTracker.resetForTesting()
+
+        // When reduceAnimations is true, should never run
+        assertFalse(com.cagri.bigboscagri.ui.ColdStartTracker.isEligible(reduceAnimations = true))
+
+        // When reduceAnimations is false, eligible for cold start
+        assertTrue(com.cagri.bigboscagri.ui.ColdStartTracker.isEligible(reduceAnimations = false))
+
+        // After execution, not eligible again (e.g. background/foreground or navigation)
+        com.cagri.bigboscagri.ui.ColdStartTracker.markExecuted()
+        assertFalse(com.cagri.bigboscagri.ui.ColdStartTracker.isEligible(reduceAnimations = false))
+        assertFalse(com.cagri.bigboscagri.ui.ColdStartTracker.isEligible(reduceAnimations = true))
+    }
 }

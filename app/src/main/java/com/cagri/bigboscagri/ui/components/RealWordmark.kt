@@ -10,11 +10,30 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.unit.dp
+import android.content.Context
 import com.cagri.bigboscagri.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private val cache = LruCache<Int, ImageBitmap>(2)
+
+fun prewarmRealWordmark(context: Context) {
+    try {
+        val resources = context.resources
+        val width = (112 * resources.displayMetrics.density).toInt()
+        if (cache.get(width) == null) {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeResource(resources, R.drawable.real_wordmark, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= width) sample *= 2
+            BitmapFactory.decodeResource(
+                resources, R.drawable.real_wordmark,
+                BitmapFactory.Options().apply { inSampleSize = sample }
+            )?.asImageBitmap()?.also { cache.put(width, it) }
+        }
+    } catch (_: Exception) {}
+}
+
 @Composable
 fun RealWordmark(modifier: Modifier = Modifier) {
     val resources = LocalContext.current.resources
