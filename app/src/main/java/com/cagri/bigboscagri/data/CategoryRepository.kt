@@ -1,11 +1,12 @@
 package com.cagri.bigboscagri.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 
-class CategoryRepository(context: Context) {
-    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+class CategoryRepository(private val preferences: SharedPreferences) {
+    constructor(context: Context) : this(context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE))
 
     private var cachedRaw: String? = null
     private var cachedItems: List<CustomCategory> = emptyList()
@@ -88,6 +89,11 @@ class CategoryRepository(context: Context) {
         load().filterNot { it.id == id }.also(::save)
     }
 
+    fun restore(items: List<CustomCategory>): List<CustomCategory> = synchronized(mutationLock) {
+        save(items)
+        items
+    }
+
     private fun save(items: List<CustomCategory>) {
         val array = JSONArray()
         items.forEach { category ->
@@ -113,3 +119,32 @@ class CategoryRepository(context: Context) {
         private const val KEY_CATEGORIES = "categories_json"
     }
 }
+
+fun deleteCategoryWithRollback(
+    categoryId: Long,
+    reminderRepository: ReminderRepository,
+    categoryRepository: CategoryRepository,
+    deleteCategoryStep: (Long) -> Unit = { categoryRepository.delete(it) }
+): Pair<List<ReminderItem>, List<CustomCategory>> = synchronized(ReminderRepository.mutationLock) {
+    synchronized(CategoryRepository.mutationLock) {
+        val reminderSnapshot = reminderRepository.load()
+        val categorySnapshot = categoryRepository.load()
+        try {
+            val updatedReminders = reminderRepository.unassignCategory(categoryId)
+            deleteCategoryStep(categoryId)
+            val updatedCategories = categoryRepository.load()
+            updatedReminders to updatedCategories
+        } catch (e: Exception) {
+            try {
+                reminderRepository.restore(reminderSnapshot)
+                categoryRepository.restore(categorySnapshot)
+            } catch (rollbackError: Exception) {
+                try {
+                    android.util.Log.e("Real", "Category rollback failed", rollbackError)
+                } catch (_: Throwable) { }
+            }
+            throw e
+        }
+    }
+}
+

@@ -668,13 +668,15 @@ private fun ReminderListScreen(
                     isSelectionMode = isSelectionMode,
                     isSelected = isSelected,
                     onLongClick = {
-                        if (category == null) {
+                        if (category == null && customCategory == null) {
                             voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
                             selectedIds = selectedIds + reminder.id
                         }
                     },
                     onSelectToggle = {
-                        selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
+                        if (category == null && customCategory == null) {
+                            selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
+                        }
                     },
                     modifier = Modifier
                         .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
@@ -696,13 +698,15 @@ private fun ReminderListScreen(
                         isSelectionMode = isSelectionMode,
                         isSelected = isSelected,
                         onLongClick = {
-                            if (category == null) {
+                            if (category == null && customCategory == null) {
                                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
                                 selectedIds = selectedIds + reminder.id
                             }
                         },
                         onSelectToggle = {
-                            selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
+                            if (category == null && customCategory == null) {
+                                selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
+                            }
                         },
                         modifier = Modifier
                             .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))

@@ -1,7 +1,11 @@
 package com.cagri.bigboscagri
 
+import com.cagri.bigboscagri.data.CategoryRepository
+import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderCategory
 import com.cagri.bigboscagri.data.ReminderItem
+import com.cagri.bigboscagri.data.ReminderRepository
+import com.cagri.bigboscagri.data.deleteCategoryWithRollback
 import com.cagri.bigboscagri.data.inCategory
 import com.cagri.bigboscagri.speech.VoiceDraft
 import java.time.Instant
@@ -308,5 +312,342 @@ class ReminderRulesTest {
 
         assertEquals(2, filtered.size)
         assertEquals(listOf(1L, 3L), filtered.map { it.id })
+    }
+
+    @Test fun realReminderRepositoryAddPersistsCustomCategoryId() {
+        val prefs = FakeSharedPreferences()
+        val repo = ReminderRepository(prefs)
+
+        val added = repo.add("Kahve satın al", customCategoryId = 42L)
+        assertEquals(1, added.size)
+        assertEquals(42L, added.first().customCategoryId)
+        assertEquals("Kahve satın al", added.first().text)
+
+        // Verify fresh repository instance reads the persisted data from SharedPreferences
+        val reloaded = ReminderRepository(prefs).load()
+        assertEquals(1, reloaded.size)
+        assertEquals(42L, reloaded.first().customCategoryId)
+        assertEquals("Kahve satın al", reloaded.first().text)
+    }
+
+    @Test fun realReminderRepositoryEditUpdatesCustomCategoryId() {
+        val prefs = FakeSharedPreferences()
+        val repo = ReminderRepository(prefs)
+
+        val item = repo.add("İlk not", customCategoryId = 10L).first()
+        assertEquals(10L, item.customCategoryId)
+
+        // Edit custom category and text
+        val updated = repo.edit(
+            id = item.id,
+            text = "Güncellenmiş not",
+            accentStart = 2,
+            accentEnd = 5,
+            customCategoryId = 20L,
+            updateCategory = true
+        ).first()
+
+        assertEquals("Güncellenmiş not", updated.text)
+        assertEquals(20L, updated.customCategoryId)
+        assertEquals(2, updated.accentStart)
+        assertEquals(5, updated.accentEnd)
+
+        // Edit again, clearing custom category
+        val cleared = repo.edit(
+            id = item.id,
+            text = "Güncellenmiş not",
+            accentStart = 2,
+            accentEnd = 5,
+            customCategoryId = null,
+            updateCategory = true
+        ).first()
+        assertNull(cleared.customCategoryId)
+
+        // Edit with updateCategory = false keeps existing category
+        val restored = repo.setCustomCategory(item.id, 99L).first()
+        assertEquals(99L, restored.customCategoryId)
+
+        val untouchedCategory = repo.edit(
+            id = item.id,
+            text = "Başka bir güncelleme",
+            accentStart = null,
+            accentEnd = null,
+            customCategoryId = null,
+            updateCategory = false
+        ).first()
+        assertEquals("Başka bir güncelleme", untouchedCategory.text)
+        assertEquals(99L, untouchedCategory.customCategoryId)
+
+        // Verify disk persistence with fresh repository instance
+        val reloaded = ReminderRepository(prefs).load().first()
+        assertEquals(99L, reloaded.customCategoryId)
+        assertEquals("Başka bir güncelleme", reloaded.text)
+    }
+
+    @Test fun realReminderRepositoryUnassignCategoryRemovesOnlyTargetCategory() {
+        val prefs = FakeSharedPreferences()
+        val repo = ReminderRepository(prefs)
+
+        repo.add("Kategori A - Not 1", customCategoryId = 100L)
+        repo.add("Kategori A - Not 2", customCategoryId = 100L)
+        repo.add("Kategori B - Not 3", customCategoryId = 200L)
+        repo.add("Kategorisiz - Not 4", customCategoryId = null)
+
+        val afterUnassign = repo.unassignCategory(100L)
+        assertEquals(4, afterUnassign.size)
+
+        val item1 = afterUnassign.first { it.text == "Kategori A - Not 1" }
+        val item2 = afterUnassign.first { it.text == "Kategori A - Not 2" }
+        val item3 = afterUnassign.first { it.text == "Kategori B - Not 3" }
+        val item4 = afterUnassign.first { it.text == "Kategorisiz - Not 4" }
+
+        assertNull(item1.customCategoryId)
+        assertNull(item2.customCategoryId)
+        assertEquals(200L, item3.customCategoryId)
+        assertNull(item4.customCategoryId)
+
+        // Verify disk persistence with fresh repository instance
+        val reloaded = ReminderRepository(prefs).load()
+        assertEquals(4, reloaded.size)
+        assertNull(reloaded.first { it.text == "Kategori A - Not 1" }.customCategoryId)
+        assertNull(reloaded.first { it.text == "Kategori A - Not 2" }.customCategoryId)
+        assertEquals(200L, reloaded.first { it.text == "Kategori B - Not 3" }.customCategoryId)
+        assertNull(reloaded.first { it.text == "Kategorisiz - Not 4" }.customCategoryId)
+    }
+
+    @Test fun realCategoryRepositoryAddUpdateDelete() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+
+        // Add
+        val added = repo.add(name = "Finans", iconKey = "WORK", accentStart = 1, accentEnd = 3)
+        assertEquals(1, added.size)
+        val cat = added.first()
+        assertEquals("Finans", cat.name)
+        assertEquals("WORK", cat.iconKey)
+        assertEquals(1, cat.accentStart)
+        assertEquals(3, cat.accentEnd)
+
+        // Reload from disk
+        val reloaded = CategoryRepository(prefs).load()
+        assertEquals(1, reloaded.size)
+        assertEquals("Finans", reloaded.first().name)
+
+        // Update
+        val updated = repo.update(cat.id, name = "Kişisel Finans", iconKey = "SHOPPING", accentStart = 4, accentEnd = 5)
+        assertEquals(1, updated.size)
+        assertEquals("Kişisel Finans", updated.first().name)
+        assertEquals("SHOPPING", updated.first().iconKey)
+        assertEquals(4, updated.first().accentStart)
+        assertEquals(5, updated.first().accentEnd)
+
+        // Delete
+        val afterDelete = repo.delete(cat.id)
+        assertTrue(afterDelete.isEmpty())
+        assertTrue(CategoryRepository(prefs).load().isEmpty())
+    }
+
+    @Test fun realCategoryDeleteAndUnassignIntegration() {
+        val reminderPrefs = FakeSharedPreferences()
+        val categoryPrefs = FakeSharedPreferences()
+        val reminderRepo = ReminderRepository(reminderPrefs)
+        val categoryRepo = CategoryRepository(categoryPrefs)
+
+        // Create category
+        val category = categoryRepo.add("Okuma", "BOOK", 0, null).first()
+
+        // Create reminders: 2 in category, 1 in other category
+        reminderRepo.add("Kitap oku", customCategoryId = category.id)
+        reminderRepo.add("Makale incele", customCategoryId = category.id)
+        reminderRepo.add("Egzersiz", customCategoryId = 999L)
+
+        // Delete workflow as executed in mutateCategory: unassign then delete
+        reminderRepo.unassignCategory(category.id)
+        categoryRepo.delete(category.id)
+
+        // Verify categories
+        assertTrue(CategoryRepository(categoryPrefs).load().isEmpty())
+
+        // Verify reminders still exist and category is unassigned without deleting reminders
+        val reminders = ReminderRepository(reminderPrefs).load()
+        assertEquals(3, reminders.size)
+        assertNull(reminders.first { it.text == "Kitap oku" }.customCategoryId)
+        assertNull(reminders.first { it.text == "Makale incele" }.customCategoryId)
+        assertEquals(999L, reminders.first { it.text == "Egzersiz" }.customCategoryId)
+    }
+
+    @Test fun categoryDeleteArtificialFailureRollsBackReminderCategoryRelationship() {
+        val reminderPrefs = FakeSharedPreferences()
+        val categoryPrefs = FakeSharedPreferences()
+        val reminderRepo = ReminderRepository(reminderPrefs)
+        val categoryRepo = CategoryRepository(categoryPrefs)
+
+        val category = categoryRepo.add("İş", "WORK", 1, null).first()
+        reminderRepo.add("Rapor yaz", customCategoryId = category.id)
+        reminderRepo.add("Diğer not", customCategoryId = 999L)
+
+        // Pre-check: "Rapor yaz" has customCategoryId = category.id
+        val preItem = reminderRepo.load().first { it.text == "Rapor yaz" }
+        assertEquals(category.id, preItem.customCategoryId)
+
+        // Execute deleteCategoryWithRollback where the deleteStep artificially throws an error
+        var thrown = false
+        try {
+            deleteCategoryWithRollback(category.id, reminderRepo, categoryRepo) {
+                throw RuntimeException("Yapay kategori silme disk hatası")
+            }
+        } catch (e: RuntimeException) {
+            thrown = true
+            assertEquals("Yapay kategori silme disk hatası", e.message)
+        }
+        assertTrue("Exception must be rethrown", thrown)
+
+        // Verify reminder-category relationship is rolled back in memory
+        val inMemoryReminders = reminderRepo.load()
+        val inMemoryTarget = inMemoryReminders.first { it.text == "Rapor yaz" }
+        assertEquals("Reminder customCategoryId must be restored to original value", category.id, inMemoryTarget.customCategoryId)
+        assertEquals(999L, inMemoryReminders.first { it.text == "Diğer not" }.customCategoryId)
+
+        // Verify reminder-category relationship is rolled back on disk (fresh repository instance)
+        val onDiskReminders = ReminderRepository(reminderPrefs).load()
+        val onDiskTarget = onDiskReminders.first { it.text == "Rapor yaz" }
+        assertEquals("Disk customCategoryId must be restored to original value", category.id, onDiskTarget.customCategoryId)
+        assertEquals(999L, onDiskReminders.first { it.text == "Diğer not" }.customCategoryId)
+
+        // Verify category still exists on disk
+        val onDiskCategories = CategoryRepository(categoryPrefs).load()
+        assertEquals(1, onDiskCategories.size)
+        assertEquals(category.id, onDiskCategories.first().id)
+    }
+
+    @Test fun repositoryRestoreOverwritesStateAndPersists() {
+        val reminderPrefs = FakeSharedPreferences()
+        val reminderRepo = ReminderRepository(reminderPrefs)
+
+        val snapshot = reminderRepo.add("Orijinal Not", customCategoryId = 777L)
+        assertEquals(777L, snapshot.first().customCategoryId)
+
+        // Mutate by unassigning
+        reminderRepo.unassignCategory(777L)
+        assertNull(reminderRepo.load().first().customCategoryId)
+
+        // Restore snapshot
+        reminderRepo.restore(snapshot)
+        assertEquals(777L, reminderRepo.load().first().customCategoryId)
+
+        // Verify fresh repository instance sees restored data
+        assertEquals(777L, ReminderRepository(reminderPrefs).load().first().customCategoryId)
+
+        // Also test CategoryRepository restore
+        val catPrefs = FakeSharedPreferences()
+        val catRepo = CategoryRepository(catPrefs)
+        val catSnapshot = catRepo.add("Test Cat", "BOOK", 0, null)
+        assertEquals(1, catSnapshot.size)
+
+        catRepo.delete(catSnapshot.first().id)
+        assertTrue(catRepo.load().isEmpty())
+
+        catRepo.restore(catSnapshot)
+        assertEquals(1, catRepo.load().size)
+        assertEquals(catSnapshot.first().id, catRepo.load().first().id)
+        assertEquals(1, CategoryRepository(catPrefs).load().size)
+    }
+}
+
+private class FakeSharedPreferences : android.content.SharedPreferences {
+    private val data = mutableMapOf<String, Any?>()
+
+    override fun getAll(): Map<String, *> = HashMap(data)
+
+    override fun getString(key: String, defValue: String?): String? =
+        (data[key] as? String) ?: defValue
+
+    @Suppress("UNCHECKED_CAST")
+    override fun getStringSet(key: String, defValues: Set<String>?): Set<String>? =
+        (data[key] as? Set<String>) ?: defValues
+
+    override fun getInt(key: String, defValue: Int): Int =
+        (data[key] as? Int) ?: defValue
+
+    override fun getLong(key: String, defValue: Long): Long =
+        (data[key] as? Long) ?: defValue
+
+    override fun getFloat(key: String, defValue: Float): Float =
+        (data[key] as? Float) ?: defValue
+
+    override fun getBoolean(key: String, defValue: Boolean): Boolean =
+        (data[key] as? Boolean) ?: defValue
+
+    override fun contains(key: String): Boolean = data.containsKey(key)
+
+    override fun edit(): android.content.SharedPreferences.Editor = Editor(this)
+
+    override fun registerOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
+
+    override fun unregisterOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
+
+    private class Editor(private val prefs: FakeSharedPreferences) : android.content.SharedPreferences.Editor {
+        private val modifications = mutableMapOf<String, Any?>()
+        private var clear = false
+
+        override fun putString(key: String, value: String?): android.content.SharedPreferences.Editor {
+            modifications[key] = value
+            return this
+        }
+
+        override fun putStringSet(key: String, values: Set<String>?): android.content.SharedPreferences.Editor {
+            modifications[key] = values
+            return this
+        }
+
+        override fun putInt(key: String, value: Int): android.content.SharedPreferences.Editor {
+            modifications[key] = value
+            return this
+        }
+
+        override fun putLong(key: String, value: Long): android.content.SharedPreferences.Editor {
+            modifications[key] = value
+            return this
+        }
+
+        override fun putFloat(key: String, value: Float): android.content.SharedPreferences.Editor {
+            modifications[key] = value
+            return this
+        }
+
+        override fun putBoolean(key: String, value: Boolean): android.content.SharedPreferences.Editor {
+            modifications[key] = value
+            return this
+        }
+
+        override fun remove(key: String): android.content.SharedPreferences.Editor {
+            modifications[key] = this
+            return this
+        }
+
+        override fun clear(): android.content.SharedPreferences.Editor {
+            clear = true
+            return this
+        }
+
+        override fun commit(): Boolean {
+            synchronized(prefs) {
+                if (clear) {
+                    prefs.data.clear()
+                }
+                for ((key, value) in modifications) {
+                    if (value === this) {
+                        prefs.data.remove(key)
+                    } else {
+                        prefs.data[key] = value
+                    }
+                }
+            }
+            return true
+        }
+
+        override fun apply() {
+            commit()
+        }
     }
 }

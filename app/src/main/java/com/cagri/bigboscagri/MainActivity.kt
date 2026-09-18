@@ -123,29 +123,18 @@ class MainActivity : ComponentActivity() {
                     onRequestExactAlarms = ::openAlarmAccess,
                     customCategories = customCategories,
                     onCreateCategory = { name, iconKey, start, end ->
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            val updated = categoryRepository.add(name, iconKey, start, end)
-                            withContext(Dispatchers.Main) {
-                                customCategories = updated
-                            }
+                        mutateCategory("Kategori oluşturulamadı.") {
+                            categoryRepository.add(name, iconKey, start, end)
                         }
                     },
                     onEditCategory = { id, name, iconKey, start, end ->
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            val updated = categoryRepository.update(id, name, iconKey, start, end)
-                            withContext(Dispatchers.Main) {
-                                customCategories = updated
-                            }
+                        mutateCategory("Kategori güncellenemedi.") {
+                            categoryRepository.update(id, name, iconKey, start, end)
                         }
                     },
                     onDeleteCategory = { id ->
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            val updatedReminders = repository.unassignCategory(id)
-                            val updatedCategories = categoryRepository.delete(id)
-                            withContext(Dispatchers.Main) {
-                                reminders = updatedReminders
-                                customCategories = updatedCategories
-                            }
+                        mutateCategory("Kategori silinemedi. Yeniden deneyebilirsin.") {
+                            deleteCategoryWithRollback(id, repository, categoryRepository)
                         }
                     }
                 )
@@ -166,6 +155,62 @@ class MainActivity : ComponentActivity() {
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
     }
     private fun mutate(action: () -> Unit) { lifecycleScope.launch { perform(action = action) } }
+
+    private fun mutateCategory(
+        errorMessage: String = "Kategori işlemi tamamlanamadı.",
+        action: () -> Unit
+    ) {
+        lifecycleScope.launch {
+            operations.withLock {
+                var reminderSnapshot: List<ReminderItem>? = null
+                var categorySnapshot: List<CustomCategory>? = null
+                try {
+                    val (loadedReminders, loadedCategories) = withContext(Dispatchers.IO) {
+                        synchronized(ReminderRepository.mutationLock) {
+                            synchronized(CategoryRepository.mutationLock) {
+                                reminderSnapshot = repository.load()
+                                categorySnapshot = categoryRepository.load()
+                                action()
+                                repository.load() to categoryRepository.load()
+                            }
+                        }
+                    }
+                    reminders = loadedReminders
+                    customCategories = loadedCategories
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    android.util.Log.e("Real", "Category operation failed", e)
+                    try {
+                        withContext(Dispatchers.IO) {
+                            synchronized(ReminderRepository.mutationLock) {
+                                synchronized(CategoryRepository.mutationLock) {
+                                    reminderSnapshot?.let { repository.restore(it) }
+                                    categorySnapshot?.let { categoryRepository.restore(it) }
+                                }
+                            }
+                        }
+                        reminderSnapshot?.let { reminders = it }
+                        categorySnapshot?.let { customCategories = it }
+                    } catch (rollbackError: Exception) {
+                        android.util.Log.e("Real", "Category rollback failed", rollbackError)
+                        try {
+                            val (recoveredReminders, recoveredCategories) = withContext(Dispatchers.IO) {
+                                synchronized(ReminderRepository.mutationLock) {
+                                    synchronized(CategoryRepository.mutationLock) {
+                                        repository.load() to categoryRepository.load()
+                                    }
+                                }
+                            }
+                            reminders = recoveredReminders
+                            customCategories = recoveredCategories
+                        } catch (_: Exception) { }
+                    }
+                    Toast.makeText(this@MainActivity, errorMessage, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     private suspend fun perform(warnIfBlocked: Boolean = false, action: () -> Unit = {}): Boolean = operations.withLock {
         try {

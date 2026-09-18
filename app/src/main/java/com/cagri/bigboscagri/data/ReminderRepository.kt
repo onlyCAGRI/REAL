@@ -1,11 +1,12 @@
 package com.cagri.bigboscagri.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 
-class ReminderRepository(context: Context) {
-    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+class ReminderRepository(private val preferences: SharedPreferences) {
+    constructor(context: Context) : this(context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE))
 
     // All callers use Dispatchers.IO. Shared lock serializes receivers and activity mutations.
     private var cachedRaw: String? = null
@@ -164,6 +165,11 @@ class ReminderRepository(context: Context) {
             if (it.customCategoryId == categoryId) it.copy(customCategoryId = null, updatedAt = System.currentTimeMillis())
             else it
         }
+        save(items)
+        items
+    }
+
+    fun restore(items: List<ReminderItem>): List<ReminderItem> = synchronized(mutationLock) {
         save(items)
         items
     }
