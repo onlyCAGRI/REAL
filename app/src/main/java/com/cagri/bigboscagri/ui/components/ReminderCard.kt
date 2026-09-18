@@ -7,9 +7,11 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,7 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.ui.reminderDate
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun ReminderCard(
     reminder: ReminderItem,
@@ -46,6 +48,10 @@ fun ReminderCard(
     reduceAnimations: Boolean = false,
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onLongClick: () -> Unit = {},
+    onSelectToggle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(22.dp)
@@ -69,21 +75,49 @@ fun ReminderCard(
         }
     } else Modifier
 
+    val borderColor = when {
+        isSelected -> Color(0xFF94B8F7).copy(alpha = 0.65f)
+        accentBrush != null -> Color.White.copy(alpha = 0.10f)
+        else -> Color(0xFF222225)
+    }
+    val borderWidth = if (isSelected) 1.25.dp else 0.75.dp
+    val selectionOverlay = if (isSelected) Color(0xFF94B8F7).copy(alpha = 0.07f) else Color.Transparent
+
     Row(
         modifier
             .then(sharedBoundsModifier)
             .fillMaxWidth()
             .clip(shape)
             .then(if (accentBrush == null) Modifier.background(Color(0xFF141416)) else Modifier.background(accentBrush))
-            .border(0.75.dp, if (accentBrush == null) Color(0xFF222225) else Color.White.copy(alpha = 0.10f), shape)
-            .clickable(role = Role.Button, onClickLabel = "Hatırlatıcıyı aç", onClick = onOpen)
+            .then(if (isSelected) Modifier.background(selectionOverlay) else Modifier)
+            .border(borderWidth, borderColor, shape)
+            .combinedClickable(
+                role = Role.Button,
+                onClickLabel = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç") else "Hatırlatıcıyı aç",
+                onLongClickLabel = if (!isSelectionMode) "Çoklu seçim" else null,
+                onLongClick = {
+                    if (!isSelectionMode) onLongClick() else onSelectToggle()
+                },
+                onClick = {
+                    if (isSelectionMode) onSelectToggle() else onOpen()
+                }
+            )
             .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.Top
     ) {
         Box(
             Modifier.size(48.dp).clip(CircleShape)
-                .toggleable(value = reminder.isCompleted, role = Role.Checkbox, onValueChange = { onToggle() })
-                .semantics { contentDescription = if (reminder.isCompleted) "Tamamlamayı geri al" else "Tamamla" },
+                .then(
+                    if (isSelectionMode) {
+                        Modifier.clickable(role = Role.Checkbox, onClick = onSelectToggle)
+                    } else {
+                        Modifier.toggleable(value = reminder.isCompleted, role = Role.Checkbox, onValueChange = { onToggle() })
+                    }
+                )
+                .semantics {
+                    contentDescription = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç")
+                        else if (reminder.isCompleted) "Tamamlamayı geri al" else "Tamamla"
+                },
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -116,6 +150,27 @@ fun ReminderCard(
         if (reminder.isImportant) {
             ActionIcon(ActionGlyph.Star, Modifier.padding(start = 8.dp, top = 15.dp).size(14.dp),
                 color = Color(0xFFE8C975), filled = true)
+        }
+        if (isSelectionMode) {
+            Box(
+                Modifier
+                    .padding(start = 10.dp, end = 2.dp, top = 11.dp)
+                    .size(22.dp)
+                    .background(
+                        if (isSelected) Color(0xFF94B8F7) else Color.Transparent,
+                        CircleShape
+                    )
+                    .border(
+                        1.5.dp,
+                        if (isSelected) Color(0xFF94B8F7) else Color.White.copy(alpha = 0.30f),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    ActionIcon(ActionGlyph.Check, Modifier.size(13.dp), Color(0xFF0F172A))
+                }
+            }
         }
     }
 }

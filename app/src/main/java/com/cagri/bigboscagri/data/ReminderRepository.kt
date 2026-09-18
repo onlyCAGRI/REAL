@@ -139,6 +139,11 @@ class ReminderRepository(context: Context) {
         load().filterNot { it.id == id }.also(::save)
     }
 
+    fun deleteAll(ids: Set<Long>): List<ReminderItem> = synchronized(mutationLock) {
+        if (ids.isEmpty()) load()
+        else load().filterNot { it.id in ids }.also(::save)
+    }
+
     private fun update(id: Long, change: (ReminderItem) -> ReminderItem): List<ReminderItem> =
         synchronized(mutationLock) { load().map { if (it.id == id) change(it) else it }.also(::save) }
 

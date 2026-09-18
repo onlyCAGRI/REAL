@@ -100,6 +100,13 @@ class MainActivity : ComponentActivity() {
                     onDeleteReminder = { id -> mutate {
                         repository.delete(id); ReminderNotifications.cancel(this, id); waiting.remove(id)
                     } },
+                    onDeleteReminders = { ids -> mutate {
+                        ids.forEach { id ->
+                            ReminderNotifications.cancel(this, id)
+                            waiting.remove(id)
+                        }
+                        repository.deleteAll(ids)
+                    } },
                     requestedReminderId = openedReminderId,
                     onRequestHandled = { openedReminderId = null; intent.removeExtra(ReminderNotifications.EXTRA_REMINDER_ID) },
                     reduceDynamicBlur = reduceBlur,

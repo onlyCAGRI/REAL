@@ -98,4 +98,16 @@ class ReminderRulesTest {
         assertEquals(2, dualColorItem.accentStart)
         assertEquals(9, dualColorItem.accentEnd)
     }
+
+    @Test fun multipleItemsCanBeFilteredForBulkDeletion() {
+        val items = listOf(
+            ReminderItem(1, "birinci", 100),
+            ReminderItem(2, "ikinci", 200),
+            ReminderItem(3, "üçüncü", 300)
+        )
+        val toDelete = setOf(1L, 3L)
+        val remaining = items.filterNot { it.id in toDelete }
+        assertEquals(1, remaining.size)
+        assertEquals(2L, remaining.first().id)
+    }
 }

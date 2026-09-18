@@ -16,6 +16,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -73,6 +74,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -99,7 +101,9 @@ import com.cagri.bigboscagri.ui.components.CategoryGrid
 import com.cagri.bigboscagri.ui.components.GlassComposer
 import com.cagri.bigboscagri.ui.components.GuestAvatar
 import com.cagri.bigboscagri.ui.components.ReminderCard
+import com.cagri.bigboscagri.ui.components.SelectionActionButtons
 import com.cagri.bigboscagri.ui.components.TopGlassOverlay
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private data class ReminderRoute(val category: ReminderCategory?, val detailId: Long?) {
@@ -115,6 +119,7 @@ fun ReminderScreen(
     onEditReminder: (Long, String, Int?, Int?) -> Unit,
     onDeleteReminder: (Long) -> Unit,
     onSetAlert: (Long, Long?, RecurrenceRule) -> Unit,
+    onDeleteReminders: (Set<Long>) -> Unit = { ids -> ids.forEach { onDeleteReminder(it) } },
     exactAlarmsAllowed: Boolean = true,
     onRequestExactAlarms: () -> Unit = {},
     requestedReminderId: Long? = null,
@@ -267,6 +272,7 @@ fun ReminderScreen(
                                     onDraftChange = { draft = it }, onBack = { category = null },
                                     onOpenCategory = { category = it }, onOpenReminder = { detailId = it },
                                     onToggleCompleted = onToggleCompleted,
+                                    onDeleteReminders = onDeleteReminders,
                                     reduceDynamicBlur = reduceDynamicBlur,
                                     reduceAnimations = reduceAnimations,
                                     designStyle = designStyle,
@@ -299,7 +305,9 @@ private fun ReminderListScreen(
     exactAlarmsAllowed: Boolean, onRequestExactAlarms: () -> Unit,
     onDraftChange: (String) -> Unit, onBack: () -> Unit,
     onOpenCategory: (ReminderCategory) -> Unit, onOpenReminder: (Long) -> Unit,
-    onToggleCompleted: (Long) -> Unit, reduceDynamicBlur: Boolean,
+    onToggleCompleted: (Long) -> Unit,
+    onDeleteReminders: (Set<Long>) -> Unit = {},
+    reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean, designStyle: DesignStyle,
     onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule) -> Boolean,
     sharedTransitionScope: SharedTransitionScope? = null,
@@ -318,15 +326,21 @@ private fun ReminderListScreen(
     val scope = rememberCoroutineScope()
     val scene = rememberGraphicsLayer()
     var scenePosition by remember { mutableStateOf(Offset.Zero) }
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
     val shouldAnimateColdStart = remember { category == null && ColdStartTracker.isEligible(reduceAnimations) }
     var isColdStarting by remember { mutableStateOf(shouldAnimateColdStart) }
     val coldStartProgress = remember { Animatable(if (shouldAnimateColdStart) 0f else 1f) }
-    var targetLogoOffset by remember { mutableStateOf<Offset?>(null) }
+    var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var headerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    LaunchedEffect(shouldAnimateColdStart) {
-        if (shouldAnimateColdStart) {
+    var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val isSelectionMode = category == null && selectedIds.isNotEmpty()
+
+    val isTargetReady = shouldAnimateColdStart &&
+        containerCoordinates?.isAttached == true &&
+        headerCoordinates?.isAttached == true
+
+    LaunchedEffect(isTargetReady) {
+        if (isTargetReady) {
             ColdStartTracker.markExecuted()
             coldStartProgress.animateTo(
                 targetValue = 1f,
@@ -336,6 +350,16 @@ private fun ReminderListScreen(
                 )
             )
             isColdStarting = false
+        }
+    }
+
+    LaunchedEffect(shouldAnimateColdStart) {
+        if (shouldAnimateColdStart) {
+            delay(1000)
+            if (isColdStarting) {
+                ColdStartTracker.markExecuted()
+                isColdStarting = false
+            }
         }
     }
     val submit: (String) -> Unit = { text ->
@@ -369,7 +393,7 @@ private fun ReminderListScreen(
     val bottomGap by animateDpAsState(
         if (expanded) 20.dp else 12.dp,
         if (reduceAnimations) snap() else tween(250),
-        label = "keyboardGap"
+        label = "bottomGap"
     )
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     var keyboardWasVisible by remember { mutableStateOf(false) }
@@ -380,8 +404,9 @@ private fun ReminderListScreen(
             keyboardWasVisible = false
         }
     }
-    BackHandler(enabled = showAccountMenu) { showAccountMenu = false }
-    BackHandler(enabled = (editing || voice.phase != VoicePhase.Idle) && !showAccountMenu && !showDatePicker) {
+    BackHandler(enabled = isSelectionMode) { selectedIds = emptySet() }
+    BackHandler(enabled = showAccountMenu && !isSelectionMode) { showAccountMenu = false }
+    BackHandler(enabled = (editing || voice.phase != VoicePhase.Idle) && !showAccountMenu && !showDatePicker && !isSelectionMode) {
         voice.cancel()
         focusManager.clearFocus()
         keyboard?.hide()
@@ -396,11 +421,23 @@ private fun ReminderListScreen(
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     DisposableEffect(category) {
-        if (category != null) showAccountMenu = false
+        if (category != null) {
+            showAccountMenu = false
+            selectedIds = emptySet()
+        }
         onDispose { }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black).navigationBarsPadding().imePadding()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .navigationBarsPadding()
+            .imePadding()
+            .onGloballyPositioned { coords ->
+                containerCoordinates = coords
+            }
+    ) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize()
@@ -431,9 +468,7 @@ private fun ReminderListScreen(
                                 .width(112.dp)
                                 .height(42.dp)
                                 .onGloballyPositioned { coords ->
-                                    if (targetLogoOffset == null) {
-                                        targetLogoOffset = coords.positionInRoot()
-                                    }
+                                    headerCoordinates = coords
                                 }
                         ) {
                             RealWordmark(
@@ -488,12 +523,24 @@ private fun ReminderListScreen(
                 }
             }
             items(active, key = { it.id }, contentType = { "reminder" }) { reminder ->
+                val isSelected = reminder.id in selectedIds
                 ReminderCard(
                     reminder, onToggle = { onToggleCompleted(reminder.id) },
                     onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                     reduceAnimations = reduceAnimations,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope,
+                    isSelectionMode = isSelectionMode,
+                    isSelected = isSelected,
+                    onLongClick = {
+                        if (category == null) {
+                            voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
+                            selectedIds = selectedIds + reminder.id
+                        }
+                    },
+                    onSelectToggle = {
+                        selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
+                    },
                     modifier = Modifier
                         .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -504,12 +551,24 @@ private fun ReminderListScreen(
                     Spacer(Modifier.height(18.dp)); SectionTitle("Tamamlandı")
                 }
                 items(completed, key = { it.id }, contentType = { "reminder" }) { reminder ->
+                    val isSelected = reminder.id in selectedIds
                     ReminderCard(
                         reminder, onToggle = { onToggleCompleted(reminder.id) },
                         onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                         reduceAnimations = reduceAnimations,
                         sharedTransitionScope = sharedTransitionScope,
                         animatedVisibilityScope = animatedVisibilityScope,
+                        isSelectionMode = isSelectionMode,
+                        isSelected = isSelected,
+                        onLongClick = {
+                            if (category == null) {
+                                voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
+                                selectedIds = selectedIds + reminder.id
+                            }
+                        },
+                        onSelectToggle = {
+                            selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
+                        },
                         modifier = Modifier
                             .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
                             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -523,6 +582,14 @@ private fun ReminderListScreen(
             Modifier.align(Alignment.TopCenter),
             reduceDynamicBlur = reduceDynamicBlur
         )
+        val selectionProgress by animateFloatAsState(
+            targetValue = if (isSelectionMode) 1f else 0f,
+            animationSpec = if (reduceAnimations) snap() else tween(270, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
+            label = "selectionBottomTransition"
+        )
+        val density = LocalDensity.current
+        val bottomSlideOffsetPx = with(density) { (composerHeight + bottomGap + 80.dp).toPx() }
+
         BottomFade(Modifier.align(Alignment.BottomCenter).height(composerHeight + bottomGap + 46.dp))
         GlassComposer(
             value = draft, onValueChange = onDraftChange,
@@ -540,11 +607,32 @@ private fun ReminderListScreen(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = bottomGap).height(composerHeight)
                 .graphicsLayer {
-                    if (isColdStarting) {
-                        alpha = coldStartProgress.value
-                    }
+                    translationY = selectionProgress * bottomSlideOffsetPx
+                    alpha = if (isColdStarting) coldStartProgress.value else (1f - selectionProgress)
                 }
         )
+        if (selectionProgress > 0f || isSelectionMode) {
+            SelectionActionButtons(
+                selectedCount = selectedIds.size,
+                onCancel = { selectedIds = emptySet() },
+                onDelete = {
+                    val toDelete = selectedIds
+                    selectedIds = emptySet()
+                    onDeleteReminders(toDelete)
+                },
+                enabled = isSelectionMode,
+                backdrop = scene,
+                backdropPosition = { scenePosition },
+                reduceDynamicBlur = reduceDynamicBlur,
+                designStyle = designStyle,
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = bottomGap).height(58.dp)
+                    .graphicsLayer {
+                        translationY = (1f - selectionProgress) * bottomSlideOffsetPx
+                        alpha = selectionProgress
+                    }
+            )
+        }
         if (showAccountMenu && category == null) {
             AccountMenuOverlay(
                 backdrop = scene,
@@ -565,38 +653,48 @@ private fun ReminderListScreen(
             onConfirm = { at, rule -> onAlertChange(at, rule); refocus = true; showDatePicker = false },
             exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms)
         if (isColdStarting) {
-            val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
-            val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
-            val startCenterX = screenWidthPx / 2f
-            val startCenterY = screenHeightPx / 2f
+            val container = containerCoordinates
+            val header = headerCoordinates
+            if (container != null && container.isAttached && header != null && header.isAttached) {
+                val targetTopLeft = container.localPositionOf(header, Offset.Zero)
+                val targetCenterX = targetTopLeft.x + (header.size.width / 2f)
+                val targetCenterY = targetTopLeft.y + (header.size.height / 2f)
+                val startCenterX = container.size.width / 2f
+                val startCenterY = container.size.height / 2f
 
-            val logoWidthPx = with(density) { 112.dp.toPx() }
-            val logoHeightPx = with(density) { 42.dp.toPx() }
+                val p = coldStartProgress.value
+                val currentCenterX = lerp(startCenterX, targetCenterX, p)
+                val currentCenterY = lerp(startCenterY, targetCenterY, p)
+                val currentScale = lerp(1.75f, 1.0f, p)
 
-            val fallbackTargetLeft = with(density) { 16.dp.toPx() }
-            val fallbackTargetTop = with(density) { statusHeight.toPx() + 20.dp.toPx() }
-
-            val targetLeft = targetLogoOffset?.x ?: fallbackTargetLeft
-            val targetTop = targetLogoOffset?.y ?: fallbackTargetTop
-            val targetCenterX = targetLeft + (logoWidthPx / 2f)
-            val targetCenterY = targetTop + (logoHeightPx / 2f)
-
-            val p = coldStartProgress.value
-            val currentCenterX = lerp(startCenterX, targetCenterX, p)
-            val currentCenterY = lerp(startCenterY, targetCenterY, p)
-            val currentScale = lerp(1.75f, 1.0f, p)
-
-            Box(
-                modifier = Modifier
-                    .size(112.dp, 42.dp)
-                    .graphicsLayer {
-                        translationX = currentCenterX - (size.width / 2f)
-                        translationY = currentCenterY - (size.height / 2f)
-                        scaleX = currentScale
-                        scaleY = currentScale
+                Box(
+                    modifier = Modifier
+                        .size(112.dp, 42.dp)
+                        .graphicsLayer {
+                            translationX = currentCenterX - (size.width / 2f)
+                            translationY = currentCenterY - (size.height / 2f)
+                            scaleX = currentScale
+                            scaleY = currentScale
+                        }
+                ) {
+                    RealWordmark(Modifier.fillMaxSize())
+                }
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(112.dp, 42.dp)
+                            .graphicsLayer {
+                                scaleX = 1.75f
+                                scaleY = 1.75f
+                            }
+                    ) {
+                        RealWordmark(Modifier.fillMaxSize())
                     }
-            ) {
-                RealWordmark(Modifier.fillMaxSize())
+                }
             }
         }
     }
