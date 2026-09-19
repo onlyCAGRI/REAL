@@ -65,6 +65,11 @@ class MainActivity : ComponentActivity() {
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
         handleShareIntent(intent)
         val preferences = getSharedPreferences("bigbos_ui", MODE_PRIVATE)
+        lifecycleScope.launch {
+            ReminderRepository.updates.collect {
+                perform()
+            }
+        }
         setContent {
             BigBosTheme {
                 var reduceBlur by remember { mutableStateOf(preferences.getBoolean("reduce_dynamic_blur", false)) }

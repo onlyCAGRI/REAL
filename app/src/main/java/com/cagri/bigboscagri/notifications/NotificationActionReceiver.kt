@@ -22,6 +22,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
         ReminderNotifications.cancel(app, reminderId)
 
         CoroutineScope(Dispatchers.IO).launch {
+            var changed = false
             try {
                 synchronized(ReminderRepository.mutationLock) {
                     val repository = ReminderRepository(app)
@@ -37,6 +38,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                             if (!reminder.isCompleted) {
                                 repository.completeFromNotification(reminderId)
                                 ReminderScheduler.reconcile(app, repository)
+                                changed = true
                             }
                         }
                         ACTION_SNOOZE_10 -> {
@@ -45,9 +47,13 @@ class NotificationActionReceiver : BroadcastReceiver() {
                                 val snoozeUntil = now + SNOOZE_DURATION_MILLIS
                                 repository.snooze(reminderId, snoozeUntil)
                                 ReminderScheduler.reconcile(app, repository)
+                                changed = true
                             }
                         }
                     }
+                }
+                if (changed) {
+                    ReminderRepository.notifyChanged()
                 }
             } catch (e: Exception) {
                 Log.e("Real", "Notification action failed for action=$action, id=$reminderId", e)

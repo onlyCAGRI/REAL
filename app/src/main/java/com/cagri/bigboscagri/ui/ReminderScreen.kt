@@ -3,6 +3,8 @@ package com.cagri.bigboscagri.ui
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
+import java.time.LocalDate
+import com.cagri.bigboscagri.speech.TimeOfDay
 import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
 import com.cagri.bigboscagri.ui.components.RealWordmark
 import androidx.activity.compose.BackHandler
@@ -404,6 +406,9 @@ private fun ReminderListScreen(
     var editing by remember { mutableStateOf(false) }
     var isChecklistMode by rememberSaveable { mutableStateOf(false) }
     var isVoiceDraft by rememberSaveable { mutableStateOf(false) }
+    var requiresTimeSelection by rememberSaveable { mutableStateOf(false) }
+    var pendingDateHintEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var pendingTimeOfDay by rememberSaveable { mutableStateOf<TimeOfDay?>(null) }
     var checklistDraftItems by rememberSaveable { mutableStateOf(listOf("")) }
     var sendImmediateNotification by rememberSaveable { mutableStateOf(false) }
     var draftCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -468,7 +473,10 @@ private fun ReminderListScreen(
         }
     }
     val submit: (String) -> Unit = { text ->
-        if (isChecklistMode) {
+        if (requiresTimeSelection && alertAt == null) {
+            Toast.makeText(context, "Lütfen bir saat seç.", Toast.LENGTH_SHORT).show()
+            showDatePicker = true
+        } else if (isChecklistMode) {
             val validItems = checklistDraftItems.map { it.trim() }.filter { it.isNotEmpty() }
             if (text.isNotBlank() && validItems.isNotEmpty() && !saving) {
                 if (alertAt != null && alertAt <= System.currentTimeMillis()) {
@@ -487,6 +495,9 @@ private fun ReminderListScreen(
                                 sendImmediateNotification = false
                                 onDraftChange("")
                                 isVoiceDraft = false
+                                requiresTimeSelection = false
+                                pendingDateHintEpochDay = null
+                                pendingTimeOfDay = null
                                 onShareDraftChange(false)
                                 onDraftReferenceUrlChange(null)
                                 focusManager.clearFocus(); keyboard?.hide()
@@ -510,6 +521,9 @@ private fun ReminderListScreen(
                                 sendImmediateNotification = false
                                 onDraftChange("")
                                 isVoiceDraft = false
+                                requiresTimeSelection = false
+                                pendingDateHintEpochDay = null
+                                pendingTimeOfDay = null
                                 onShareDraftChange(false)
                                 onDraftReferenceUrlChange(null)
                                 focusManager.clearFocus(); keyboard?.hide()
@@ -532,8 +546,19 @@ private fun ReminderListScreen(
         if (result.alertAt != null) {
             onAlertChange(result.alertAt, result.repeatRule)
             sendImmediateNotification = false
-        } else if (result.repeatRule != RecurrenceRule.NONE) {
-            onAlertChange(alertAt, result.repeatRule)
+            requiresTimeSelection = false
+            pendingDateHintEpochDay = null
+            pendingTimeOfDay = null
+        } else {
+            requiresTimeSelection = result.requiresTimeSelection
+            pendingDateHintEpochDay = result.dateHint?.toEpochDay()
+            pendingTimeOfDay = result.timeOfDay
+            if (result.repeatRule != RecurrenceRule.NONE) {
+                onAlertChange(null, result.repeatRule)
+            }
+            if (result.requiresTimeSelection) {
+                sendImmediateNotification = false
+            }
         }
         isVoiceDraft = true
     }
@@ -550,7 +575,7 @@ private fun ReminderListScreen(
             textLineCount = 1
         }
     }
-    val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null || draftCategoryId != null || isChecklistMode || isVoiceDraft || isShareDraft
+    val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null || requiresTimeSelection || draftCategoryId != null || isChecklistMode || isVoiceDraft || isShareDraft
     LaunchedEffect(showDatePicker) {
         if (!showDatePicker && refocus) { refocus = false; inputFocus.requestFocus(); keyboard?.show() }
     }
@@ -610,6 +635,9 @@ private fun ReminderListScreen(
             }
             isVoiceDraft -> {
                 isVoiceDraft = false
+                requiresTimeSelection = false
+                pendingDateHintEpochDay = null
+                pendingTimeOfDay = null
                 onDraftChange("")
                 onAlertChange(null, RecurrenceRule.NONE)
                 draftCategoryId = if (customCategory != null) customCategory.id else null
@@ -945,9 +973,18 @@ private fun ReminderListScreen(
         BottomFade(Modifier.align(Alignment.BottomCenter).height(composerHeight + bottomGap + 46.dp))
         GlassComposer(
             value = draft, onValueChange = onDraftChange,
-            alertAt = alertAt, repeatRule = repeatRule, saving = saving,
+            alertAt = alertAt, repeatRule = repeatRule,
+            requiresTimeSelection = requiresTimeSelection,
+            dateHint = pendingDateHintEpochDay?.let { LocalDate.ofEpochDay(it) },
+            timeOfDay = pendingTimeOfDay,
+            saving = saving,
             onPickDate = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showDatePicker = true },
-            onClearDate = { onAlertChange(null, RecurrenceRule.NONE) },
+            onClearDate = {
+                onAlertChange(null, RecurrenceRule.NONE)
+                requiresTimeSelection = false
+                pendingDateHintEpochDay = null
+                pendingTimeOfDay = null
+            },
             customCategories = customCategories,
             selectedCategoryId = draftCategoryId,
             onPickCategory = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showCategoryPicker = true },
@@ -1051,14 +1088,45 @@ private fun ReminderListScreen(
                 designStyle = designStyle
             )
         }
-        AnimatedDateTimePickerOverlay(visible = showDatePicker, initial = alertAt,
+        val pickerInitialMillis = alertAt ?: run {
+            if (pendingDateHintEpochDay != null) {
+                val hintDate = LocalDate.ofEpochDay(pendingDateHintEpochDay!!)
+                val defaultHour = when (pendingTimeOfDay) {
+                    TimeOfDay.Morning -> 9
+                    TimeOfDay.Noon -> 13
+                    TimeOfDay.Evening -> 19
+                    TimeOfDay.Night -> 22
+                    null -> {
+                        val now = java.time.LocalTime.now(java.time.ZoneId.systemDefault())
+                        if (hintDate == LocalDate.now(java.time.ZoneId.systemDefault())) {
+                            (now.hour + 1).coerceIn(0, 23)
+                        } else {
+                            12
+                        }
+                    }
+                }
+                hintDate.atTime(defaultHour, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            } else null
+        }
+        AnimatedDateTimePickerOverlay(
+            visible = showDatePicker,
+            initial = pickerInitialMillis,
             initialRepeatRule = repeatRule,
+            initialTimeTab = (requiresTimeSelection && alertAt == null),
             backdrop = scene, backdropPosition = { scenePosition },
             designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
             onDismiss = { showDatePicker = false },
-            onConfirm = { at, rule -> onAlertChange(at, rule); refocus = true; showDatePicker = false },
-            exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms)
+            onConfirm = { at, rule ->
+                onAlertChange(at, rule)
+                requiresTimeSelection = false
+                pendingDateHintEpochDay = null
+                pendingTimeOfDay = null
+                refocus = true
+                showDatePicker = false
+            },
+            exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms
+        )
         if (showCreateCategoryDialog) {
             CreateCategoryDialog(
                 initialCategory = null,

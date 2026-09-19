@@ -2,6 +2,9 @@ package com.cagri.bigboscagri.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -306,5 +309,12 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         private const val PREFERENCES_NAME = "big_bos_cagri_reminders"
         private const val KEY_REMINDERS = "reminders"
         val ACCENT_RANGE = 0..9
+
+        private val _updates = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val updates: SharedFlow<Unit> = _updates.asSharedFlow()
+
+        fun notifyChanged() {
+            _updates.tryEmit(Unit)
+        }
     }
 }

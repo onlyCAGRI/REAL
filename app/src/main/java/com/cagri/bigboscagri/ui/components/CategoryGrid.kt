@@ -261,19 +261,20 @@ private fun CustomCategoryCard(
     val borderWidth = if (isSelected) 1.5.dp else 0.75.dp
 
     Column(
-        modifier = modifier.combinedClickable(
-            role = Role.Button,
-            onClickLabel = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç") else category.name,
-            onLongClickLabel = if (!isSelectionMode) "Kategorileri seç" else null,
-            onLongClick = onLongClick,
-            onClick = onClick
-        )
+        modifier = modifier
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(82.dp)
                 .clip(shape)
+                .combinedClickable(
+                    role = Role.Button,
+                    onClickLabel = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç") else category.name,
+                    onLongClickLabel = if (!isSelectionMode) "Kategorileri seç" else null,
+                    onLongClick = onLongClick,
+                    onClick = onClick
+                )
                 .drawWithCache {
                     val topLight = Brush.radialGradient(
                         colors = listOf(startColor.copy(alpha = 0.85f), Color.Transparent),

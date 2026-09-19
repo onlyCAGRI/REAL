@@ -2,9 +2,12 @@ package com.cagri.bigboscagri.speech
 
 import com.cagri.bigboscagri.data.RecurrenceRule
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
@@ -12,7 +15,10 @@ data class ParsedVoiceReminder(
     val originalText: String,
     val text: String,
     val alertAt: Long?,
-    val repeatRule: RecurrenceRule = RecurrenceRule.NONE
+    val repeatRule: RecurrenceRule = RecurrenceRule.NONE,
+    val requiresTimeSelection: Boolean = false,
+    val dateHint: LocalDate? = null,
+    val timeOfDay: TimeOfDay? = null
 )
 
 enum class TimeOfDay { Morning, Noon, Evening, Night }
@@ -460,22 +466,27 @@ object VoiceReminderParser {
         val finalHour = if (rawHour != null) {
             if (isExplicit24h) rawHour else interpretHour(rawHour, timeOfDay)
         } else {
-            // Only date or recurrence was mentioned -> default to 09:00
-            9
+            0
         }
         val finalMinute = rawMinute ?: 0
 
         // Determine final target date
-        val resolvedDate: LocalDate = when {
+        val resolvedDate: LocalDate? = when {
             targetDate != null -> {
                 var d = targetDate
-                val candidate = d.atTime(finalHour, finalMinute).atZone(now.zone)
-                if (!candidate.isAfter(now)) {
-                    // Candidate is in the past! Advance by 1 day or 1 year
-                    d = if (specificDateMatch != null) {
-                        d.plusYears(1)
-                    } else {
-                        d.plusDays(1)
+                if (rawHour != null) {
+                    val candidate = d.atTime(finalHour, finalMinute).atZone(now.zone)
+                    if (!candidate.isAfter(now)) {
+                        // Candidate is in the past! Advance by 1 day or 1 year
+                        d = if (specificDateMatch != null) {
+                            d.plusYears(1)
+                        } else {
+                            d.plusDays(1)
+                        }
+                    }
+                } else {
+                    if (d.isBefore(now.toLocalDate())) {
+                        d = if (specificDateMatch != null) d.plusYears(1) else d.plusDays(1)
                     }
                 }
                 d
@@ -483,41 +494,96 @@ object VoiceReminderParser {
             targetDayOfMonth != null -> {
                 var d = runCatching { LocalDate.of(now.year, now.monthValue, targetDayOfMonth) }.getOrNull()
                     ?: now.toLocalDate()
-                val candidate = d.atTime(finalHour, finalMinute).atZone(now.zone)
-                if (!candidate.isAfter(now)) {
-                    d = d.plusMonths(1)
+                if (rawHour != null) {
+                    val candidate = d.atTime(finalHour, finalMinute).atZone(now.zone)
+                    if (!candidate.isAfter(now)) {
+                        d = d.plusMonths(1)
+                    }
+                } else {
+                    if (d.isBefore(now.toLocalDate())) {
+                        d = d.plusMonths(1)
+                    }
                 }
                 d
             }
             targetWeekday != null -> {
                 var daysAhead = (targetWeekday.value - now.dayOfWeek.value + 7) % 7
                 if (daysAhead == 0) {
-                    val candidateToday = now.toLocalDate().atTime(finalHour, finalMinute).atZone(now.zone)
-                    if (!candidateToday.isAfter(now)) {
-                        daysAhead = 7
+                    if (rawHour != null) {
+                        val candidateToday = now.toLocalDate().atTime(finalHour, finalMinute).atZone(now.zone)
+                        if (!candidateToday.isAfter(now)) {
+                            daysAhead = 7
+                        }
+                    } else {
+                        // If no hour was specified, but today is the target weekday:
+                        // "Her cuma" / "cuma": if today is Friday, today is Friday unless the day has effectively ended
+                        if (now.toLocalTime().isAfter(LocalTime.of(22, 0))) {
+                            daysAhead = 7
+                        }
                     }
                 }
                 now.toLocalDate().plusDays(daysAhead.toLong())
             }
+            repeatRule == RecurrenceRule.DAILY -> {
+                if (rawHour != null) {
+                    val candidateToday = now.toLocalDate().atTime(finalHour, finalMinute).atZone(now.zone)
+                    if (candidateToday.isAfter(now)) {
+                        now.toLocalDate()
+                    } else {
+                        now.toLocalDate().plusDays(1)
+                    }
+                } else {
+                    now.toLocalDate()
+                }
+            }
+            repeatRule == RecurrenceRule.WEEKLY -> {
+                // "Her hafta" without specific weekday -> dateHint remains null
+                null
+            }
             else -> {
                 // No date mentioned, only time: e.g. "saat 5te annemi ara"
-                val candidateToday = now.toLocalDate().atTime(finalHour, finalMinute).atZone(now.zone)
-                if (candidateToday.isAfter(now)) {
-                    now.toLocalDate()
+                if (rawHour != null) {
+                    val candidateToday = now.toLocalDate().atTime(finalHour, finalMinute).atZone(now.zone)
+                    if (candidateToday.isAfter(now)) {
+                        now.toLocalDate()
+                    } else {
+                        now.toLocalDate().plusDays(1)
+                    }
                 } else {
-                    now.toLocalDate().plusDays(1)
+                    null
                 }
             }
         }
 
-        val targetZoned = resolvedDate.atTime(finalHour, finalMinute).atZone(now.zone)
-        val alertAt = targetZoned.toInstant().toEpochMilli()
+        val alertAt: Long?
+        val requiresTimeSelection: Boolean
+        val dateHint: LocalDate?
+
+        if (rawHour != null && resolvedDate != null) {
+            val targetZoned = resolvedDate.atTime(finalHour, finalMinute).atZone(now.zone)
+            alertAt = targetZoned.toInstant().toEpochMilli()
+            requiresTimeSelection = false
+            dateHint = resolvedDate
+        } else {
+            // No exact hour was provided, or no resolved date -> do NOT invent 09:00!
+            alertAt = null
+            requiresTimeSelection = true
+            dateHint = resolvedDate
+        }
 
         // Clean text by removing matched date/daypart/time/recurrence ranges
         val cleaned = cleanReminderText(original, rangesToRemove)
         val finalText = cleaned.ifEmpty { "Hatırlatıcı" }
 
-        return ParsedVoiceReminder(original, finalText, alertAt, repeatRule)
+        return ParsedVoiceReminder(
+            originalText = original,
+            text = finalText,
+            alertAt = alertAt,
+            repeatRule = repeatRule,
+            requiresTimeSelection = requiresTimeSelection,
+            dateHint = dateHint,
+            timeOfDay = timeOfDay
+        )
     }
 
     private fun maskRange(input: String, range: IntRange): String {
@@ -598,5 +664,134 @@ object VoiceReminderParser {
         } else {
             ""
         }
+    }
+
+    fun formatPendingScheduleLabel(
+        dateHint: LocalDate?,
+        repeatRule: RecurrenceRule,
+        timeOfDay: TimeOfDay? = null,
+        now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault())
+    ): String = com.cagri.bigboscagri.speech.formatPendingScheduleLabel(dateHint, repeatRule, timeOfDay, now)
+
+    fun formatComposerScheduleLabel(
+        alertAt: Long,
+        repeatRule: RecurrenceRule,
+        now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault())
+    ): String = com.cagri.bigboscagri.speech.formatComposerScheduleLabel(alertAt, repeatRule, now)
+}
+
+fun formatPendingScheduleLabel(
+    dateHint: LocalDate?,
+    repeatRule: RecurrenceRule,
+    timeOfDay: TimeOfDay? = null,
+    now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault())
+): String {
+    val today = now.toLocalDate()
+    val trLocale = Locale.forLanguageTag("tr-TR")
+
+    val daypartStr = when (timeOfDay) {
+        TimeOfDay.Morning -> "sabah"
+        TimeOfDay.Noon -> "öğlen"
+        TimeOfDay.Evening -> "akşam"
+        TimeOfDay.Night -> "gece"
+        null -> null
+    }
+
+    val schedulePart: String = when {
+        repeatRule == RecurrenceRule.DAILY -> {
+            if (daypartStr != null) "Her $daypartStr" else "Her gün"
+        }
+        repeatRule == RecurrenceRule.WEEKLY && dateHint != null -> {
+            val weekdayName = when (dateHint.dayOfWeek) {
+                DayOfWeek.MONDAY -> "Pazartesi"
+                DayOfWeek.TUESDAY -> "Salı"
+                DayOfWeek.WEDNESDAY -> "Çarşamba"
+                DayOfWeek.THURSDAY -> "Perşembe"
+                DayOfWeek.FRIDAY -> "Cuma"
+                DayOfWeek.SATURDAY -> "Cumartesi"
+                DayOfWeek.SUNDAY -> "Pazar"
+                null -> ""
+            }
+            if (daypartStr != null) "$weekdayName $daypartStr" else weekdayName
+        }
+        repeatRule == RecurrenceRule.WEEKLY -> {
+            return "Her hafta · Tarih ve saat seç"
+        }
+        repeatRule == RecurrenceRule.MONTHLY && dateHint != null -> {
+            if (daypartStr != null) "Her ayın ${dateHint.dayOfMonth}'i $daypartStr" else "Her ayın ${dateHint.dayOfMonth}'i"
+        }
+        repeatRule == RecurrenceRule.MONTHLY -> {
+            return "Her ay · Tarih ve saat seç"
+        }
+        dateHint != null -> {
+            val dateLabel = when (dateHint) {
+                today -> "Bugün"
+                today.plusDays(1) -> "Yarın"
+                else -> {
+                    val days = ChronoUnit.DAYS.between(today, dateHint)
+                    if (days in 2..6) {
+                        when (dateHint.dayOfWeek) {
+                            DayOfWeek.MONDAY -> "Pazartesi"
+                            DayOfWeek.TUESDAY -> "Salı"
+                            DayOfWeek.WEDNESDAY -> "Çarşamba"
+                            DayOfWeek.THURSDAY -> "Perşembe"
+                            DayOfWeek.FRIDAY -> "Cuma"
+                            DayOfWeek.SATURDAY -> "Cumartesi"
+                            DayOfWeek.SUNDAY -> "Pazar"
+                        }
+                    } else {
+                        dateHint.format(DateTimeFormatter.ofPattern("d MMMM", trLocale))
+                    }
+                }
+            }
+            if (daypartStr != null) "$dateLabel $daypartStr" else dateLabel
+        }
+        else -> ""
+    }
+
+    return if (schedulePart.isNotBlank()) {
+        "$schedulePart · Saat seç"
+    } else {
+        "Saat seç"
+    }
+}
+
+fun formatComposerScheduleLabel(
+    alertAt: Long,
+    repeatRule: RecurrenceRule,
+    now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault())
+): String {
+    val zdt = Instant.ofEpochMilli(alertAt).atZone(now.zone)
+    val today = now.toLocalDate()
+    val trLocale = Locale.forLanguageTag("tr-TR")
+    val timeStr = String.format(trLocale, "%02d:%02d", zdt.hour, zdt.minute)
+
+    val dateStr = when (zdt.toLocalDate()) {
+        today -> "Bugün"
+        today.plusDays(1) -> "Yarın"
+        else -> {
+            if (repeatRule == RecurrenceRule.WEEKLY) {
+                when (zdt.dayOfWeek) {
+                    DayOfWeek.MONDAY -> "Pazartesi"
+                    DayOfWeek.TUESDAY -> "Salı"
+                    DayOfWeek.WEDNESDAY -> "Çarşamba"
+                    DayOfWeek.THURSDAY -> "Perşembe"
+                    DayOfWeek.FRIDAY -> "Cuma"
+                    DayOfWeek.SATURDAY -> "Cumartesi"
+                    DayOfWeek.SUNDAY -> "Pazar"
+                    null -> ""
+                }
+            } else {
+                zdt.format(DateTimeFormatter.ofPattern("d MMM", trLocale))
+            }
+        }
+    }
+
+    return when (repeatRule) {
+        RecurrenceRule.NONE -> "$dateStr $timeStr"
+        RecurrenceRule.DAILY -> "$dateStr $timeStr · Her gün"
+        RecurrenceRule.WEEKLY -> "$dateStr $timeStr · Her hafta"
+        RecurrenceRule.MONTHLY -> "$dateStr $timeStr · Her ay"
+        RecurrenceRule.YEARLY -> "$dateStr $timeStr · Her yıl"
     }
 }

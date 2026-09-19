@@ -74,7 +74,8 @@ fun AnimatedDateTimePickerOverlay(
     reduceAnimations: Boolean,
     exactAlarmsAllowed: Boolean,
     onRequestExactAlarms: () -> Unit,
-    initialRepeatRule: RecurrenceRule = RecurrenceRule.NONE
+    initialRepeatRule: RecurrenceRule = RecurrenceRule.NONE,
+    initialTimeTab: Boolean = false
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -94,7 +95,8 @@ fun AnimatedDateTimePickerOverlay(
             reduceAnimations = reduceAnimations,
             exactAlarmsAllowed = exactAlarmsAllowed,
             onRequestExactAlarms = onRequestExactAlarms,
-            initialRepeatRule = initialRepeatRule
+            initialRepeatRule = initialRepeatRule,
+            initialTimeTab = initialTimeTab
         )
     }
 }
@@ -142,7 +144,8 @@ fun DateTimePickerOverlay(
     reduceAnimations: Boolean = false,
     exactAlarmsAllowed: Boolean,
     onRequestExactAlarms: () -> Unit,
-    initialRepeatRule: RecurrenceRule = RecurrenceRule.NONE
+    initialRepeatRule: RecurrenceRule = RecurrenceRule.NONE,
+    initialTimeTab: Boolean = false
 ) {
     val zone = ZoneId.systemDefault()
     val seed = remember { Instant.ofEpochMilli(initial ?: (System.currentTimeMillis() + 3_600_000)).atZone(zone) }
@@ -151,8 +154,8 @@ fun DateTimePickerOverlay(
     var year by rememberSaveable { mutableIntStateOf(seed.year) }
     var hour by rememberSaveable { mutableIntStateOf(seed.hour) }
     var minute by rememberSaveable { mutableIntStateOf(seed.minute) }
-    var includeYear by rememberSaveable { mutableStateOf(initial != null) }
-    var timeTab by rememberSaveable { mutableStateOf(false) }
+    var includeYear by rememberSaveable { mutableStateOf(initial != null && !initialTimeTab) }
+    var timeTab by rememberSaveable { mutableStateOf(initialTimeTab) }
     var currentSubScreen by rememberSaveable { mutableStateOf(PickerSubScreen.Main) }
     var selectedRepeatRule by rememberSaveable { mutableStateOf(initialRepeatRule) }
     var dateAnimatedOnce by remember { mutableStateOf(false) }

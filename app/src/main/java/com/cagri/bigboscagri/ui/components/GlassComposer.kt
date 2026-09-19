@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.text.style.TextOverflow
 import com.cagri.bigboscagri.ui.reminderDate
+import java.time.LocalDate
+import com.cagri.bigboscagri.speech.TimeOfDay
+import com.cagri.bigboscagri.speech.formatPendingScheduleLabel
+import com.cagri.bigboscagri.speech.formatComposerScheduleLabel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -20,6 +24,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -81,6 +88,9 @@ fun GlassComposer(
     value: String,
     alertAt: Long? = null,
     repeatRule: RecurrenceRule = RecurrenceRule.NONE,
+    requiresTimeSelection: Boolean = false,
+    dateHint: LocalDate? = null,
+    timeOfDay: TimeOfDay? = null,
     saving: Boolean = false,
     onPickDate: () -> Unit = {},
     onClearDate: () -> Unit = {},
@@ -472,30 +482,64 @@ fun GlassComposer(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     val hasAlert = alertAt != null
-                    IconButton(
-                        onClick = onPickDate,
-                        enabled = !recording && !saving,
-                        modifier = Modifier.size(40.dp).semantics {
-                            contentDescription = if (hasAlert) {
-                                val dateStr = reminderDate(alertAt)
-                                if (repeatRule != RecurrenceRule.NONE) "Tarih ve saat: $dateStr, ${repeatRule.displayName}" else "Tarih ve saat: $dateStr"
-                            } else "Tarih ve saat ekle"
-                        }
-                    ) {
-                        ActionIcon(
-                            ActionGlyph.Calendar,
-                            Modifier.size(21.dp),
-                            if (hasAlert) Color(0xFF91B9FF) else Color(0xFFBABAC3)
-                        )
-                    }
+                    val hasPendingTime = requiresTimeSelection && alertAt == null
+                    val isScheduled = hasAlert || hasPendingTime
 
-                    if (hasAlert) {
+                    if (isScheduled) {
+                        val scheduleLabel = if (hasPendingTime) {
+                            formatPendingScheduleLabel(dateHint, repeatRule, timeOfDay)
+                        } else {
+                            formatComposerScheduleLabel(alertAt!!, repeatRule)
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (hasPendingTime) Color(0xFF3B82F6).copy(alpha = 0.18f)
+                                    else Color(0xFF91B9FF).copy(alpha = 0.14f)
+                                )
+                                .clickable(enabled = !recording && !saving, onClick = onPickDate)
+                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                                .semantics {
+                                    contentDescription = if (hasPendingTime) "Zamanlama: $scheduleLabel" else "Tarih ve saat: $scheduleLabel"
+                                }
+                        ) {
+                            ActionIcon(
+                                ActionGlyph.Calendar,
+                                Modifier.size(16.dp),
+                                if (hasPendingTime) Color(0xFF60A5FA) else Color(0xFF91B9FF)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = scheduleLabel,
+                                color = if (hasPendingTime) Color(0xFF93C5FD) else Color(0xFFE2E8F0),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
                         IconButton(
                             onClick = onClearDate,
                             enabled = !saving,
                             modifier = Modifier.size(28.dp).semantics { contentDescription = "Tarih ve saati kaldır" }
                         ) {
                             ActionIcon(ActionGlyph.Close, Modifier.size(13.dp), Color(0xFFAAAAB4))
+                        }
+                    } else {
+                        IconButton(
+                            onClick = onPickDate,
+                            enabled = !recording && !saving,
+                            modifier = Modifier.size(40.dp).semantics {
+                                contentDescription = "Tarih ve saat ekle"
+                            }
+                        ) {
+                            ActionIcon(
+                                ActionGlyph.Calendar,
+                                Modifier.size(21.dp),
+                                Color(0xFFBABAC3)
+                            )
                         }
                     }
 
@@ -543,7 +587,7 @@ fun GlassComposer(
                         )
                     }
 
-                    if (alertAt == null) {
+                    if (alertAt == null && !hasPendingTime) {
                         IconButton(
                             onClick = onToggleImmediateNotification,
                             enabled = !recording && !saving,

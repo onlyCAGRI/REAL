@@ -6,11 +6,14 @@ import com.cagri.bigboscagri.speech.VoiceReminderParser
 import com.cagri.bigboscagri.speech.interpretHour
 import com.cagri.bigboscagri.speech.normalizeVerb
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -378,16 +381,14 @@ class VoiceReminderParserTest {
     }
 
     @Test
-    fun monthlyRecurrenceWithDayOfMonth() {
+    fun monthlyRecurrenceWithDayOfMonthNoHour() {
         val input = "her ayın 5inde faturayı öde"
         val parsed = VoiceReminderParser.parse(input, baseFridayNow)
         assertEquals("Faturayı öde", parsed.text)
         assertEquals(RecurrenceRule.MONTHLY, parsed.repeatRule)
-        assertNotNull(parsed.alertAt)
-
-        // Sept 5 is in the past relative to baseFridayNow (Sept 18), so rolls to Oct 5, 2026 at 09:00
-        val expected = ZonedDateTime.of(2026, 10, 5, 9, 0, 0, 0, istanbulZone)
-        assertEquals(expected.toInstant().toEpochMilli(), parsed.alertAt)
+        assertNull(parsed.alertAt)
+        assertTrue(parsed.requiresTimeSelection)
+        assertEquals(LocalDate.of(2026, 10, 5), parsed.dateHint)
     }
 
     @Test
@@ -424,5 +425,74 @@ class VoiceReminderParserTest {
         // 14:00 passed 08:00 today, rolls to tomorrow
         val expected = ZonedDateTime.of(2026, 9, 19, 8, 0, 0, 0, istanbulZone)
         assertEquals(expected.toInstant().toEpochMilli(), parsed.alertAt)
+    }
+
+    @Test
+    fun herCumaHaliSahaVarDoesNotInventNineAm() {
+        val input = "Her cuma halı saha var"
+        val parsed = VoiceReminderParser.parse(input, baseFridayNow)
+        assertEquals("Halı saha var", parsed.text)
+        assertEquals(RecurrenceRule.WEEKLY, parsed.repeatRule)
+        assertNull(parsed.alertAt) // 09:00 uydurulmadı!
+        assertTrue(parsed.requiresTimeSelection)
+        assertEquals(DayOfWeek.FRIDAY, parsed.dateHint?.dayOfWeek)
+        assertEquals("Cuma · Saat seç", VoiceReminderParser.formatPendingScheduleLabel(parsed.dateHint, parsed.repeatRule, parsed.timeOfDay, now = baseFridayNow))
+    }
+
+    @Test
+    fun herCumaSaatSekizdeHaliSahaVarPreservesExistingBehavior() {
+        val input = "her cuma saat 8'de halı saha var"
+        val parsed = VoiceReminderParser.parse(input, baseFridayNow)
+        assertEquals("Halı saha var", parsed.text)
+        assertEquals(RecurrenceRule.WEEKLY, parsed.repeatRule)
+        assertNotNull(parsed.alertAt)
+        assertFalse(parsed.requiresTimeSelection)
+    }
+
+    @Test
+    fun yarinDoktoraGitNoExactHour() {
+        val input = "Yarın doktora git"
+        val parsed = VoiceReminderParser.parse(input, baseFridayNow)
+        assertEquals("Doktora git", parsed.text)
+        assertEquals(RecurrenceRule.NONE, parsed.repeatRule)
+        assertNull(parsed.alertAt)
+        assertTrue(parsed.requiresTimeSelection)
+        assertEquals(baseFridayNow.toLocalDate().plusDays(1), parsed.dateHint)
+        assertEquals("Yarın · Saat seç", VoiceReminderParser.formatPendingScheduleLabel(parsed.dateHint, parsed.repeatRule, parsed.timeOfDay, now = baseFridayNow))
+    }
+
+    @Test
+    fun herAksamIlacAlPreservesEveningDaypart() {
+        val input = "Her akşam ilaç al"
+        val parsed = VoiceReminderParser.parse(input, baseFridayNow)
+        assertEquals("İlaç al", parsed.text)
+        assertEquals(RecurrenceRule.DAILY, parsed.repeatRule)
+        assertNull(parsed.alertAt)
+        assertTrue(parsed.requiresTimeSelection)
+        assertEquals(TimeOfDay.Evening, parsed.timeOfDay)
+        assertEquals("Her akşam · Saat seç", VoiceReminderParser.formatPendingScheduleLabel(parsed.dateHint, parsed.repeatRule, parsed.timeOfDay, now = baseFridayNow))
+    }
+
+    @Test
+    fun herHaftaToplantiNoWeekdayOrDateUydurma() {
+        val input = "Her hafta toplantı"
+        val parsed = VoiceReminderParser.parse(input, baseFridayNow)
+        assertEquals("Toplantı", parsed.text)
+        assertEquals(RecurrenceRule.WEEKLY, parsed.repeatRule)
+        assertNull(parsed.alertAt)
+        assertTrue(parsed.requiresTimeSelection)
+        assertNull(parsed.dateHint) // dateHint uydurulmadı!
+        assertEquals("Her hafta · Tarih ve saat seç", VoiceReminderParser.formatPendingScheduleLabel(parsed.dateHint, parsed.repeatRule, parsed.timeOfDay, now = baseFridayNow))
+    }
+
+    @Test
+    fun annemiAraUnscheduledNoTimeRequired() {
+        val input = "annemi ara"
+        val parsed = VoiceReminderParser.parse(input, baseFridayNow)
+        assertEquals("Annemi ara", parsed.text)
+        assertEquals(RecurrenceRule.NONE, parsed.repeatRule)
+        assertNull(parsed.alertAt)
+        assertFalse(parsed.requiresTimeSelection)
+        assertNull(parsed.dateHint)
     }
 }

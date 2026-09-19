@@ -2,6 +2,7 @@ package com.cagri.bigboscagri.speech
 
 import com.cagri.bigboscagri.data.ChecklistItem
 import com.cagri.bigboscagri.data.RecurrenceRule
+import java.time.LocalDate
 
 object VoiceDraftCoordinator {
 
@@ -9,7 +10,10 @@ object VoiceDraftCoordinator {
         val text: String,
         val alertAt: Long?,
         val repeatRule: RecurrenceRule,
-        val sendImmediateNotification: Boolean
+        val sendImmediateNotification: Boolean,
+        val requiresTimeSelection: Boolean = false,
+        val dateHint: LocalDate? = null,
+        val timeOfDay: TimeOfDay? = null
     )
 
     fun finalizeVoice(
@@ -26,13 +30,16 @@ object VoiceDraftCoordinator {
         } else {
             currentRepeatRule
         }
-        val resolvedSendImmediate = if (resolvedAlertAt != null) false else currentSendImmediateNotification
+        val resolvedSendImmediate = if (resolvedAlertAt != null || parsed.requiresTimeSelection) false else currentSendImmediateNotification
 
         return FinalizeResult(
             text = resolvedText,
             alertAt = resolvedAlertAt,
             repeatRule = resolvedRepeatRule,
-            sendImmediateNotification = resolvedSendImmediate
+            sendImmediateNotification = resolvedSendImmediate,
+            requiresTimeSelection = parsed.requiresTimeSelection,
+            dateHint = parsed.dateHint,
+            timeOfDay = parsed.timeOfDay
         )
     }
 }
@@ -50,6 +57,9 @@ class VoiceDraftSession(
     var customCategoryId: Long? = initialCategoryId
     var sendImmediateNotification: Boolean = initialSendImmediate
     var isVoiceDraft: Boolean = false
+    var requiresTimeSelection: Boolean = false
+    var dateHint: LocalDate? = null
+    var timeOfDay: TimeOfDay? = null
 
     fun onVoiceFinalize(rawVoiceText: String): VoiceDraftCoordinator.FinalizeResult {
         val result = VoiceDraftCoordinator.finalizeVoice(
@@ -63,6 +73,9 @@ class VoiceDraftSession(
         repeatRule = result.repeatRule
         sendImmediateNotification = result.sendImmediateNotification
         isVoiceDraft = true
+        requiresTimeSelection = result.requiresTimeSelection
+        dateHint = result.dateHint
+        timeOfDay = result.timeOfDay
         return result
     }
 
@@ -78,6 +91,7 @@ class VoiceDraftSession(
         ) -> Boolean
     ): Boolean {
         if (text.isBlank()) return false
+        if (requiresTimeSelection && alertAt == null) return false
         val success = onAdd(
             text.trim(),
             alertAt,
@@ -111,6 +125,9 @@ class VoiceDraftSession(
         customCategoryId = null
         sendImmediateNotification = true
         isVoiceDraft = false
+        requiresTimeSelection = false
+        dateHint = null
+        timeOfDay = null
     }
 
     enum class BackResult { DismissKeyboard, CancelDraft, Unhandled }
