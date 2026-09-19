@@ -45,6 +45,9 @@ fun TopGlassOverlay(
     val fadeStart = with(density) { statusHeight.toPx() / (statusHeight + 18.dp).toPx() }
     var position by remember { mutableStateOf(Offset.Zero) }
     val dynamic = Build.VERSION.SDK_INT >= 31 && !reduceDynamicBlur
+    val fadeBrush = remember(fadeStart) {
+        Brush.verticalGradient(0f to Color.White, fadeStart to Color.White, 1f to Color.Transparent)
+    }
     Box(
         modifier.fillMaxWidth().height(statusHeight + 18.dp)
             .onGloballyPositioned { position = it.positionInRoot() }
@@ -52,7 +55,7 @@ fun TopGlassOverlay(
             .drawWithContent {
                 drawContent()
                 drawRect(
-                    brush = Brush.verticalGradient(0f to Color.White, fadeStart to Color.White, 1f to Color.Transparent),
+                    brush = fadeBrush,
                     blendMode = BlendMode.DstIn
                 )
             }

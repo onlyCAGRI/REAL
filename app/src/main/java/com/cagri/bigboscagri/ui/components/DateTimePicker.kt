@@ -60,6 +60,14 @@ private enum class PickerSubScreen {
     Repeat
 }
 
+private val DAYS_CACHE = (28..31).associateWith { len -> (1..len).toList() }
+private fun daysForMonthLength(length: Int): List<Int> =
+    DAYS_CACHE[length] ?: (1..length).toList()
+
+private val MONTH_VALUES = (1..12).toList()
+private val HOUR_VALUES = (0..23).toList()
+private val MINUTE_VALUES = (0..59).toList()
+
 /** Keeps the picker composed through its exit so both opening and closing stay smooth. */
 @Composable
 fun AnimatedDateTimePickerOverlay(
@@ -289,7 +297,7 @@ fun DateTimePickerOverlay(
                                         }
 
                                         NumberWheel(
-                                            "Gün", (1..date.lengthOfMonth()).toList(), date.dayOfMonth, { it.toString() },
+                                            "Gün", daysForMonthLength(date.lengthOfMonth()), date.dayOfMonth, { it.toString() },
                                             { day = it; error = null }, { scrollChanged("day", it) },
                                             Modifier.weight(1f),
                                             animateInitial = shouldAnimateDate,
@@ -298,7 +306,7 @@ fun DateTimePickerOverlay(
                                             initialScrollDurationMs = 480
                                         )
                                         NumberWheel(
-                                            "Ay", (1..12).toList(), month, { months[it - 1] }, {
+                                            "Ay", MONTH_VALUES, month, { months[it - 1] }, {
                                                 month = it; day = clampedDate(year, it, day).dayOfMonth; error = null
                                             }, { scrollChanged("month", it) },
                                             Modifier.weight(1.2f),
@@ -324,7 +332,7 @@ fun DateTimePickerOverlay(
                                         }
 
                                         NumberWheel(
-                                            "Saat", (0..23).toList(), hour, { it.toString().padStart(2, '0') },
+                                            "Saat", HOUR_VALUES, hour, { it.toString().padStart(2, '0') },
                                             { hour = it; error = null }, { scrollChanged("hour", it) },
                                             Modifier.weight(1f),
                                             animateInitial = shouldAnimateTime,
@@ -335,7 +343,7 @@ fun DateTimePickerOverlay(
                                             modifier = Modifier.align(Alignment.CenterVertically)
                                         )
                                         NumberWheel(
-                                            "Dakika", (0..59).toList(), minute, { it.toString().padStart(2, '0') },
+                                            "Dakika", MINUTE_VALUES, minute, { it.toString().padStart(2, '0') },
                                             { minute = it; error = null }, { scrollChanged("minute", it) },
                                             Modifier.weight(1f),
                                             animateInitial = shouldAnimateTime,

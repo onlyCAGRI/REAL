@@ -89,6 +89,11 @@ class CategoryRepository(private val preferences: SharedPreferences) {
         load().filterNot { it.id == id }.also(::save)
     }
 
+    fun deleteAll(categoryIds: Set<Long>): List<CustomCategory> = synchronized(mutationLock) {
+        if (categoryIds.isEmpty()) return@synchronized load()
+        load().filterNot { it.id in categoryIds }.also(::save)
+    }
+
     fun restore(items: List<CustomCategory>): List<CustomCategory> = synchronized(mutationLock) {
         save(items)
         items
@@ -157,13 +162,9 @@ fun deleteCategoriesWithRollback(
         val reminderSnapshot = reminderRepository.load()
         val categorySnapshot = categoryRepository.load()
         try {
-            var reminders = reminderSnapshot
-            categoryIds.forEach { catId ->
-                reminders = reminderRepository.unassignCategory(catId)
-                categoryRepository.delete(catId)
-            }
-            val updatedCategories = categoryRepository.load()
-            reminders to updatedCategories
+            val updatedReminders = reminderRepository.unassignCategories(categoryIds)
+            val updatedCategories = categoryRepository.deleteAll(categoryIds)
+            updatedReminders to updatedCategories
         } catch (e: Exception) {
             try {
                 reminderRepository.restore(reminderSnapshot)

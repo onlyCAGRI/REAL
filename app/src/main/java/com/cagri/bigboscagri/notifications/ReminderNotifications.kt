@@ -65,7 +65,7 @@ object ReminderNotifications {
             manager.getNotificationChannel(channelId)?.importance != NotificationManager.IMPORTANCE_NONE
     }
 
-    fun show(context: Context, reminder: ReminderItem, alerting: Boolean = false): Boolean {
+    fun show(context: Context, reminder: ReminderItem, alerting: Boolean = false, categoryRepository: CategoryRepository? = null): Boolean {
         if (reminder.isCompleted) return false
         if (reminder.isChecklist && reminder.alertAt == null && !alerting) return false
         if (reminder.alertAt == null && !reminder.sendImmediateNotification && !alerting && !reminder.shouldPinNotification) return false
@@ -93,7 +93,7 @@ object ReminderNotifications {
             else -> null
         }
 
-        val categoryRepo = CategoryRepository(context)
+        val categoryRepo = categoryRepository ?: CategoryRepository(context)
         val metadata = resolveNotificationMetadata(
             reminder = reminder,
             categoryRepository = categoryRepo,
@@ -206,8 +206,9 @@ object ReminderNotifications {
         // Reconcile with saved notes if the process stopped between a save and cancellation.
         visible.filter { it !in savedIds }.forEach { manager.cancel(it) }
         if (!canNotify(context, PINNED_CHANNEL_ID)) return
+        val categoryRepo = CategoryRepository(context)
         saved.filter { it.id.hashCode() !in visible }.forEach {
-            show(context, it)
+            show(context, it, categoryRepository = categoryRepo)
         }
     }
 

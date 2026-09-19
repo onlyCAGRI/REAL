@@ -191,9 +191,11 @@ fun CategoryGrid(
     }
 }
 
+private val CategoryCardShape = RoundedCornerShape(18.dp)
+
 @Composable
 private fun CategoryCard(category: CategoryStyle, onClick: () -> Unit, modifier: Modifier) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = CategoryCardShape
     Column(
         // Only the image is rounded: clipping this column also clips label glyphs.
         modifier = modifier.clickable(
@@ -248,7 +250,7 @@ private fun CustomCategoryCard(
     onLongClick: () -> Unit,
     modifier: Modifier
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = CategoryCardShape
     val startColor = ReminderColorChoices.getOrNull(category.accentStart)?.color ?: Color(0xFF233F73)
     val endColor = category.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
     val icon = CategoryIcon.fromKey(category.iconKey)

@@ -673,6 +673,8 @@ private fun ReminderListScreen(
     }
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
+    val customCategoriesById = remember(customCategories) { customCategories.associateBy { it.id } }
+
     DisposableEffect(category, customCategory) {
         if (category != null || customCategory != null) {
             showAccountMenu = false
@@ -868,8 +870,8 @@ private fun ReminderListScreen(
             }
             items(active, key = { it.id }, contentType = { "reminder" }) { reminder ->
                 val isSelected = reminder.id in selectedIds
-                val reminderCategory = remember(reminder.customCategoryId, customCategories, customCategory) {
-                    customCategories.firstOrNull { it.id == reminder.customCategoryId }
+                val reminderCategory = remember(reminder.customCategoryId, customCategoriesById, customCategory) {
+                    reminder.customCategoryId?.let { customCategoriesById[it] }
                         ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
                 }
                 ReminderCard(
@@ -904,8 +906,8 @@ private fun ReminderListScreen(
                 }
                 items(completed, key = { it.id }, contentType = { "reminder" }) { reminder ->
                     val isSelected = reminder.id in selectedIds
-                    val reminderCategory = remember(reminder.customCategoryId, customCategories, customCategory) {
-                        customCategories.firstOrNull { it.id == reminder.customCategoryId }
+                    val reminderCategory = remember(reminder.customCategoryId, customCategoriesById, customCategory) {
+                        reminder.customCategoryId?.let { customCategoriesById[it] }
                             ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
                     }
                     ReminderCard(
@@ -1217,7 +1219,10 @@ private fun SectionTitle(text: String) {
 
 @Composable
 fun BottomFade(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxWidth().background(Brush.verticalGradient(
-        0f to Color.Transparent, 0.6f to Color.Black.copy(alpha = 0.2f), 1f to Color.Black.copy(alpha = 0.92f)
-    )))
+    val brush = remember {
+        Brush.verticalGradient(
+            0f to Color.Transparent, 0.6f to Color.Black.copy(alpha = 0.2f), 1f to Color.Black.copy(alpha = 0.92f)
+        )
+    }
+    Box(modifier.fillMaxWidth().background(brush))
 }

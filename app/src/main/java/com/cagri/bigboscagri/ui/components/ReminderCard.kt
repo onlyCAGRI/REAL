@@ -54,6 +54,8 @@ fun resolveCategoryStripeColors(category: CustomCategory): Pair<Color, Color> {
     }
 }
 
+private val ReminderCardShape = RoundedCornerShape(22.dp)
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun ReminderCard(
@@ -70,7 +72,7 @@ fun ReminderCard(
     customCategory: CustomCategory? = null,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = ReminderCardShape
     val accentBrush = remember(reminder.accentStart, reminder.accentEnd, reminder.isCompleted) {
         reminderAccentBrush(reminder.accentStart, reminder.accentEnd, reminder.isCompleted)
     }

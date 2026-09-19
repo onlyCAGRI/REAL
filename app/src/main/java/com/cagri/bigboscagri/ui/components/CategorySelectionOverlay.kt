@@ -188,6 +188,8 @@ fun CategorySelectionOverlay(
     }
 }
 
+private val CategoryOptionShape = RoundedCornerShape(14.dp)
+
 @Composable
 private fun CategoryOptionItem(
     title: String,
@@ -198,7 +200,7 @@ private fun CategoryOptionItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(CategoryOptionShape)
             .clickable(onClick = onClick)
             .background(if (isSelected) Color.White.copy(alpha = 0.08f) else Color.Transparent)
             .padding(horizontal = 10.dp, vertical = 9.dp),

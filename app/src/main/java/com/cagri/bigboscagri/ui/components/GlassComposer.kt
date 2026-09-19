@@ -544,7 +544,9 @@ fun GlassComposer(
                     }
 
                     if (customCategories.isNotEmpty()) {
-                        val selectedCategory = customCategories.firstOrNull { it.id == selectedCategoryId }
+                        val selectedCategory = remember(customCategories, selectedCategoryId) {
+                            customCategories.firstOrNull { it.id == selectedCategoryId }
+                        }
                         val isCatSelected = selectedCategory != null
                         val catColor = if (isCatSelected) {
                             ReminderColorChoices.getOrNull(selectedCategory!!.accentStart)?.color ?: Color(0xFF91B9FF)

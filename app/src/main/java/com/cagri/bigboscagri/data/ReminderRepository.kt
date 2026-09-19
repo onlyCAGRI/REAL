@@ -251,6 +251,17 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         items
     }
 
+    fun unassignCategories(categoryIds: Set<Long>): List<ReminderItem> = synchronized(mutationLock) {
+        if (categoryIds.isEmpty()) return@synchronized load()
+        val now = System.currentTimeMillis()
+        val items = load().map {
+            if (it.customCategoryId in categoryIds) it.copy(customCategoryId = null, updatedAt = now)
+            else it
+        }
+        save(items)
+        items
+    }
+
     fun restore(items: List<ReminderItem>): List<ReminderItem> = synchronized(mutationLock) {
         save(items)
         items
