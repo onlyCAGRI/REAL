@@ -148,3 +148,34 @@ fun deleteCategoryWithRollback(
     }
 }
 
+fun deleteCategoriesWithRollback(
+    categoryIds: Set<Long>,
+    reminderRepository: ReminderRepository,
+    categoryRepository: CategoryRepository
+): Pair<List<ReminderItem>, List<CustomCategory>> = synchronized(ReminderRepository.mutationLock) {
+    synchronized(CategoryRepository.mutationLock) {
+        val reminderSnapshot = reminderRepository.load()
+        val categorySnapshot = categoryRepository.load()
+        try {
+            var reminders = reminderSnapshot
+            categoryIds.forEach { catId ->
+                reminders = reminderRepository.unassignCategory(catId)
+                categoryRepository.delete(catId)
+            }
+            val updatedCategories = categoryRepository.load()
+            reminders to updatedCategories
+        } catch (e: Exception) {
+            try {
+                reminderRepository.restore(reminderSnapshot)
+                categoryRepository.restore(categorySnapshot)
+            } catch (rollbackError: Exception) {
+                try {
+                    android.util.Log.e("Real", "Categories rollback failed", rollbackError)
+                } catch (_: Throwable) { }
+            }
+            throw e
+        }
+    }
+}
+
+

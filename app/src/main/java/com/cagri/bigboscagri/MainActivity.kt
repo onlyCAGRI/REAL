@@ -153,6 +153,11 @@ class MainActivity : ComponentActivity() {
                             deleteCategoryWithRollback(id, repository, categoryRepository)
                         }
                     },
+                    onDeleteCategories = { ids ->
+                        mutateCategory("Kategoriler silinemedi. Yeniden deneyebilirsin.") {
+                            deleteCategoriesWithRollback(ids, repository, categoryRepository)
+                        }
+                    },
                     pendingShareDraft = pendingShareDraft,
                     onShareDraftHandled = { pendingShareDraft = null }
                 )

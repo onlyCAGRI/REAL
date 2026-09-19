@@ -150,7 +150,9 @@ object ReminderNotifications {
         ).build()
 
         builder.addAction(completeAction)
-        builder.addAction(snoozeAction)
+        if (alerting) {
+            builder.addAction(snoozeAction)
+        }
 
         if (!reminder.isChecklist && needsBigTextStyle(metadata.text)) {
             builder.setStyle(android.app.Notification.BigTextStyle().bigText(metadata.text))

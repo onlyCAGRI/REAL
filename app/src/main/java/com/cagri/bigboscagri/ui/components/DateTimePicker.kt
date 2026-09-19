@@ -342,30 +342,39 @@ fun DateTimePickerOverlay(
                                 }
                             }
                             if (!timeTab) {
-                                Row(
-                                    Modifier.fillMaxWidth().toggleable(
-                                        value = includeYear,
-                                        role = Role.Checkbox,
-                                        enabled = moving.isEmpty(),
-                                        onValueChange = { enabled ->
-                                            includeYear = enabled
-                                            if (enabled) year = inferredYear
-                                            day = clampedDate(if (enabled) year else inferredYear, month, day).dayOfMonth
-                                            error = null
-                                        }
-                                    ).padding(top = 14.dp, bottom = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 10.dp, bottom = 2.dp)
                                 ) {
-                                    Box(
-                                        Modifier.size(23.dp)
-                                            .background(if (includeYear) Color(0xFF6EA8FF) else Color.Transparent, RoundedCornerShape(12.dp))
-                                            .border(1.4.dp, if (includeYear) Color.Transparent else Color(0xFF777780), RoundedCornerShape(12.dp)),
-                                        contentAlignment = Alignment.Center
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .toggleable(
+                                                value = includeYear,
+                                                role = Role.Checkbox,
+                                                enabled = moving.isEmpty(),
+                                                onValueChange = { enabled ->
+                                                    includeYear = enabled
+                                                    if (enabled) year = inferredYear
+                                                    day = clampedDate(if (enabled) year else inferredYear, month, day).dayOfMonth
+                                                    error = null
+                                                }
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        if (includeYear) ActionIcon(ActionGlyph.Check, Modifier.size(15.dp), Color(0xFF111216))
+                                        Box(
+                                            Modifier.size(23.dp)
+                                                .background(if (includeYear) Color(0xFF6EA8FF) else Color.Transparent, RoundedCornerShape(12.dp))
+                                                .border(1.4.dp, if (includeYear) Color.Transparent else Color(0xFF777780), RoundedCornerShape(12.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (includeYear) ActionIcon(ActionGlyph.Check, Modifier.size(15.dp), Color(0xFF111216))
+                                        }
+                                        Text("Yıl gir", color = Color(0xFFE7E7EB), fontSize = 15.sp,
+                                            modifier = Modifier.padding(start = 10.dp, end = 6.dp))
                                     }
-                                    Text("Yıl gir", color = Color(0xFFE7E7EB), fontSize = 15.sp,
-                                        modifier = Modifier.padding(start = 10.dp))
                                 }
                             }
 

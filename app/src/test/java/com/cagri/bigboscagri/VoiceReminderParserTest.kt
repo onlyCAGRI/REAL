@@ -402,13 +402,26 @@ class VoiceReminderParserTest {
     }
 
     @Test
-    fun morningBareWordHourWithoutSaatOrSuffix() {
-        val input = "sabah sekiz doktora git"
+    fun eveningRecurrenceWithTrailingHatirlatAndColloquialVerb() {
+        val input = "Her akşam saat 8 de ilaçlarımı alacağım hatırlat"
         val parsed = VoiceReminderParser.parse(input, baseFridayNow)
-        assertEquals("Doktora git", parsed.text)
+        assertEquals("İlaçlarımı al", parsed.text)
+        assertEquals(RecurrenceRule.DAILY, parsed.repeatRule)
         assertNotNull(parsed.alertAt)
 
-        // It is 14:00 today, so 08:00 has passed today -> rolls to tomorrow morning 08:00
+        val expected = ZonedDateTime.of(2026, 9, 18, 20, 0, 0, 0, istanbulZone)
+        assertEquals(expected.toInstant().toEpochMilli(), parsed.alertAt)
+    }
+
+    @Test
+    fun morningRecurrenceWithBanaHatirlat() {
+        val input = "her sabah 8 yürüyüş yap bana hatırlat"
+        val parsed = VoiceReminderParser.parse(input, baseFridayNow)
+        assertEquals("Yürüyüş yap", parsed.text)
+        assertEquals(RecurrenceRule.DAILY, parsed.repeatRule)
+        assertNotNull(parsed.alertAt)
+
+        // 14:00 passed 08:00 today, rolls to tomorrow
         val expected = ZonedDateTime.of(2026, 9, 19, 8, 0, 0, 0, istanbulZone)
         assertEquals(expected.toInstant().toEpochMilli(), parsed.alertAt)
     }

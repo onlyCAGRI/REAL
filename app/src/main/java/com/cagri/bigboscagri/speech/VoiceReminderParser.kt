@@ -205,13 +205,33 @@ object VoiceReminderParser {
 
         // 0. Recurrence extraction
         var repeatRule = RecurrenceRule.NONE
+        var timeOfDay: TimeOfDay? = null
+
+        // Her sabah / her öğlen / her akşam / her gece -> DAILY + daypart
+        val dailyDaypartRegex = Regex("""\bher\s+(sabahleyin|sabah|öğleden sonra|ogleden sonra|öğleyin|ogleyin|öğlen|oglen|öğle|ogle|akşamleyin|aksamleyin|akşam|aksam|geceleyin|gece)\b""")
+        val dailyDaypartMatch = dailyDaypartRegex.find(masked)
+        if (dailyDaypartMatch != null) {
+            repeatRule = RecurrenceRule.DAILY
+            val word = dailyDaypartMatch.groupValues[1]
+            timeOfDay = when {
+                word.startsWith("sabah") -> TimeOfDay.Morning
+                word.startsWith("öğl") || word.startsWith("ogl") -> TimeOfDay.Noon
+                word.startsWith("akş") || word.startsWith("aks") -> TimeOfDay.Evening
+                word.startsWith("gece") -> TimeOfDay.Night
+                else -> null
+            }
+            rangesToRemove.add(dailyDaypartMatch.range)
+            masked = maskRange(masked, dailyDaypartMatch.range)
+        }
 
         // Her gün / hergun
-        val dailyRegex = Regex("""\b(?:her\s+gün|hergun)\b""")
-        dailyRegex.find(masked)?.let { m ->
-            repeatRule = RecurrenceRule.DAILY
-            rangesToRemove.add(m.range)
-            masked = maskRange(masked, m.range)
+        if (repeatRule == RecurrenceRule.NONE) {
+            val dailyRegex = Regex("""\b(?:her\s+gün|hergun)\b""")
+            dailyRegex.find(masked)?.let { m ->
+                repeatRule = RecurrenceRule.DAILY
+                rangesToRemove.add(m.range)
+                masked = maskRange(masked, m.range)
+            }
         }
 
         // Her hafta
@@ -311,20 +331,21 @@ object VoiceReminderParser {
         }
 
         // 2. Daypart extraction (sabah, öğlen, akşam, gece)
-        var timeOfDay: TimeOfDay? = null
-        val daypartRegex = Regex("""\b(öğleden sonra|ogleden sonra|öğleyin|ogleyin|öğlen|oglen|öğle|ogle|sabahleyin|sabah|akşamleyin|aksamleyin|akşam|aksam|geceleyin|gece)\b""")
-        val daypartMatch = daypartRegex.find(masked)
-        if (daypartMatch != null) {
-            val word = daypartMatch.groupValues[1]
-            timeOfDay = when {
-                word.startsWith("sabah") -> TimeOfDay.Morning
-                word.startsWith("öğl") || word.startsWith("ogl") -> TimeOfDay.Noon
-                word.startsWith("akş") || word.startsWith("aks") -> TimeOfDay.Evening
-                word.startsWith("gece") -> TimeOfDay.Night
-                else -> null
+        if (timeOfDay == null) {
+            val daypartRegex = Regex("""\b(öğleden sonra|ogleden sonra|öğleyin|ogleyin|öğlen|oglen|öğle|ogle|sabahleyin|sabah|akşamleyin|aksamleyin|akşam|aksam|geceleyin|gece)\b""")
+            val daypartMatch = daypartRegex.find(masked)
+            if (daypartMatch != null) {
+                val word = daypartMatch.groupValues[1]
+                timeOfDay = when {
+                    word.startsWith("sabah") -> TimeOfDay.Morning
+                    word.startsWith("öğl") || word.startsWith("ogl") -> TimeOfDay.Noon
+                    word.startsWith("akş") || word.startsWith("aks") -> TimeOfDay.Evening
+                    word.startsWith("gece") -> TimeOfDay.Night
+                    else -> null
+                }
+                rangesToRemove.add(daypartMatch.range)
+                masked = maskRange(masked, daypartMatch.range)
             }
-            rangesToRemove.add(daypartMatch.range)
-            masked = maskRange(masked, daypartMatch.range)
         }
 
         // 3. Time extraction
@@ -548,6 +569,17 @@ object VoiceReminderParser {
             .trim(',', '.', ';', ':', '-', '’', '\'')
             .replace(Regex("""\s+"""), " ")
             .trim()
+
+        // Strip trailing commands: e.g. "bana hatırlat", "hatırlat", "hatirlat"
+        clean = clean.replace(Regex("""(?i)\s*(?:bana\s+)?(?:hatırlat|hatirlat)\s*[.!]?$"""), "").trim()
+            .trim(',', '.', ';', ':', '-', '’', '\'')
+
+        // Strip standalone residual 'her' / 'Her'
+        clean = clean.replace(Regex("""(?i)\bher\b"""), "").trim()
+            .trim(',', '.', ';', ':', '-', '’', '\'')
+
+        // Re-clean whitespace
+        clean = clean.replace(Regex("""\s+"""), " ").trim()
 
         // Verb normalization on the last word if applicable
         val words = clean.split(" ").filter { it.isNotBlank() }

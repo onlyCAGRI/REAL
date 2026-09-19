@@ -106,11 +106,13 @@ fun GlassComposer(
     onChecklistItemChange: (Int, String) -> Unit = { _, _ -> },
     onAddChecklistItem: () -> Unit = {},
     onRemoveChecklistItem: (Int) -> Unit = {},
-    sendImmediateNotification: Boolean = true,
+    sendImmediateNotification: Boolean = false,
     onToggleImmediateNotification: () -> Unit = {},
     voiceCommittedText: String = "",
     voicePartialText: String = "",
     onVoiceLineCountChange: (Int) -> Unit = {},
+    textLineCount: Int = 1,
+    onTextLineCountChange: (Int) -> Unit = {},
     isVoiceDraft: Boolean = false,
     isShareDraft: Boolean = false,
     modifier: Modifier = Modifier
@@ -199,6 +201,13 @@ fun GlassComposer(
     }
 
     val voiceScrollState = rememberScrollState()
+    val textScrollState = rememberScrollState()
+
+    LaunchedEffect(value, expanded) {
+        if (expanded && !isChecklistMode && textLineCount > 4) {
+            textScrollState.scrollTo(textScrollState.maxValue)
+        }
+    }
 
     val (effectiveCommitted, effectivePartial) = remember(value, voiceCommittedText, voicePartialText) {
         VoiceTranscriptFormatter.splitCommittedAndPartial(value, voiceCommittedText, voicePartialText)
@@ -267,6 +276,12 @@ fun GlassComposer(
                     .fillMaxWidth()
                     .padding(start = 22.dp, end = 9.dp)
                     .weight(1f)
+            } else if (expanded && !isChecklistMode) {
+                val extraLines = (textLineCount - 1).coerceIn(0, 3)
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 22.dp, end = 9.dp)
+                    .height((48 + extraLines * 27).dp)
             } else {
                 Modifier
                     .fillMaxWidth()
@@ -275,7 +290,7 @@ fun GlassComposer(
             }
             Row(
                 modifier = inputRowModifier,
-                verticalAlignment = if (recording) Alignment.Bottom else Alignment.CenterVertically
+                verticalAlignment = if (recording) Alignment.Bottom else if (expanded && !isChecklistMode) Alignment.Bottom else Alignment.CenterVertically
             ) {
                 if (recording) {
                     Box(
@@ -313,46 +328,69 @@ fun GlassComposer(
                         }
                     }
                 } else {
-                    BasicTextField(
-                        value = value,
-                        onValueChange = { onValueChange(it.replace("\r", "").replace("\n", " ")) },
+                    Box(
                         modifier = Modifier
                             .weight(1f)
                             .padding(end = 6.dp)
-                            .focusRequester(focusRequester)
-                            .onFocusChanged { onFocusChanged(it.isFocused) }
-                            .semantics { contentDescription = if (isChecklistMode) "Başlık" else "Hatırlatıcı metni" },
-                        readOnly = saving,
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = Color(0xFFF7F7F8),
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp,
-                            fontWeight = if (isChecklistMode) FontWeight.SemiBold else FontWeight.Normal
-                        ),
-                        cursorBrush = SolidColor(Color(0xFF9AB9FF)),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Sentences,
-                            imeAction = if (isChecklistMode) ImeAction.Next else ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onNext = { pendingFocusIndex = 0 },
-                            onDone = { onSubmit() }
-                        ),
-                        decorationBox = { field ->
-                            Box(Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.CenterStart) {
-                                if (value.isEmpty()) {
-                                    Text(
-                                        if (isChecklistMode) "Başlık"
-                                        else "Hatırlatıcı ekle",
-                                        color = Color(0xFFB8B8BF),
-                                        fontSize = 16.sp
-                                    )
+                            .then(
+                                if (expanded && !isChecklistMode) {
+                                    Modifier
+                                        .fillMaxHeight()
+                                        .verticalScroll(textScrollState)
+                                } else {
+                                    Modifier
                                 }
-                                field()
+                            ),
+                        contentAlignment = if (expanded && !isChecklistMode && textLineCount > 1) Alignment.BottomStart else Alignment.CenterStart
+                    ) {
+                        BasicTextField(
+                            value = value,
+                            onValueChange = { onValueChange(it.replace("\r", "").replace("\n", " ")) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester)
+                                .onFocusChanged { onFocusChanged(it.isFocused) }
+                                .semantics { contentDescription = if (isChecklistMode) "Başlık" else "Hatırlatıcı metni" },
+                            readOnly = saving,
+                            singleLine = isChecklistMode,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                color = Color(0xFFF7F7F8),
+                                fontSize = 16.sp,
+                                lineHeight = 22.sp,
+                                fontWeight = if (isChecklistMode) FontWeight.SemiBold else FontWeight.Normal
+                            ),
+                            cursorBrush = SolidColor(Color(0xFF9AB9FF)),
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences,
+                                imeAction = if (isChecklistMode) ImeAction.Next else ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onNext = { pendingFocusIndex = 0 },
+                                onDone = { onSubmit() }
+                            ),
+                            onTextLayout = { textLayoutResult ->
+                                if (!isChecklistMode) {
+                                    onTextLineCountChange(textLayoutResult.lineCount)
+                                }
+                            },
+                            decorationBox = { field ->
+                                Box(
+                                    Modifier.padding(vertical = if (expanded && !isChecklistMode) 12.dp else 12.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (value.isEmpty()) {
+                                        Text(
+                                            if (isChecklistMode) "Başlık"
+                                            else "Hatırlatıcı ekle",
+                                            color = Color(0xFFB8B8BF),
+                                            fontSize = 16.sp
+                                        )
+                                    }
+                                    field()
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
 
                 if (isChecklistMode) {
@@ -381,7 +419,9 @@ fun GlassComposer(
                     IconButton(
                         onClick = onSubmit,
                         enabled = canSubmit && !saving,
-                        modifier = Modifier.size(36.dp).semantics { contentDescription = "Hatırlatıcıyı kaydet" }
+                        modifier = Modifier.size(36.dp)
+                            .then(if (expanded && !isChecklistMode) Modifier.padding(bottom = 6.dp) else Modifier)
+                            .semantics { contentDescription = "Hatırlatıcıyı kaydet" }
                     ) {
                         Box(
                             Modifier.size(30.dp).background(

@@ -155,6 +155,7 @@ fun ReminderScreen(
     onCreateCategory: (String, String, Int, Int?) -> Unit = { _, _, _, _ -> },
     onEditCategory: (Long, String, String, Int, Int?) -> Unit = { _, _, _, _, _ -> },
     onDeleteCategory: (Long) -> Unit = {},
+    onDeleteCategories: (Set<Long>) -> Unit = { ids -> ids.forEach { onDeleteCategory(it) } },
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
     pendingShareDraft: com.cagri.bigboscagri.data.SharedPayload? = null,
     onShareDraftHandled: () -> Unit = {}
@@ -332,37 +333,38 @@ fun ReminderScreen(
                                     customCategories = customCategories,
                                     onCreateCategory = onCreateCategory,
                                     onEditCategory = onEditCategory,
-                                    onDeleteCategory = { id ->
-                                        onDeleteCategory(id)
-                                        customCategoryId = null
-                                    },
-                                    onOpenCustomCategory = { customCategoryItem ->
-                                        category = null
-                                        customCategoryId = customCategoryItem.id
-                                        onOpenCustomCategory(customCategoryItem)
-                                    },
-                                    onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl ->
-                                        val saved = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl)
-                                        if (saved) {
-                                            draft = ""; draftAlertAt = null; draftRepeatRule = RecurrenceRule.NONE; draftReferenceUrl = null; isShareDraft = false
-                                            if (category != null) {
-                                                if (catId != null) {
-                                                    category = null
-                                                    customCategoryId = catId
-                                                } else {
-                                                    category = if (at == null) ReminderCategory.NoAlert else ReminderCategory.Planned
-                                                }
-                                            }
-                                        }
-                                        saved
-                                    },
-                                    isShareDraft = isShareDraft,
-                                    onShareDraftChange = { isShareDraft = it },
-                                    draftReferenceUrl = draftReferenceUrl,
-                                    onDraftReferenceUrlChange = { draftReferenceUrl = it },
-                                    sharedTransitionScope = this@SharedTransitionLayout,
-                                    animatedVisibilityScope = this@AnimatedContent
-                                )
+                                     onDeleteCategory = { id ->
+                                         onDeleteCategory(id)
+                                         customCategoryId = null
+                                     },
+                                     onDeleteCategories = onDeleteCategories,
+                                     onOpenCustomCategory = { customCategoryItem ->
+                                         category = null
+                                         customCategoryId = customCategoryItem.id
+                                         onOpenCustomCategory(customCategoryItem)
+                                     },
+                                     onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl ->
+                                         val saved = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl)
+                                         if (saved) {
+                                             draft = ""; draftAlertAt = null; draftRepeatRule = RecurrenceRule.NONE; draftReferenceUrl = null; isShareDraft = false
+                                             if (category != null) {
+                                                 if (catId != null) {
+                                                     category = null
+                                                     customCategoryId = catId
+                                                 } else {
+                                                     category = if (at == null) ReminderCategory.NoAlert else ReminderCategory.Planned
+                                                 }
+                                             }
+                                         }
+                                         saved
+                                     },
+                                     isShareDraft = isShareDraft,
+                                     onShareDraftChange = { isShareDraft = it },
+                                     draftReferenceUrl = draftReferenceUrl,
+                                     onDraftReferenceUrlChange = { draftReferenceUrl = it },
+                                     sharedTransitionScope = this@SharedTransitionLayout,
+                                     animatedVisibilityScope = this@AnimatedContent
+                                 )
                             }
                         }
                     }
@@ -382,6 +384,7 @@ private fun ReminderListScreen(
     onOpenCategory: (ReminderCategory) -> Unit, onOpenReminder: (Long) -> Unit,
     onToggleCompleted: (Long) -> Unit,
     onDeleteReminders: (Set<Long>) -> Unit = {},
+    onDeleteCategories: (Set<Long>) -> Unit = {},
     reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean, designStyle: DesignStyle,
     onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Boolean,
@@ -402,7 +405,7 @@ private fun ReminderListScreen(
     var isChecklistMode by rememberSaveable { mutableStateOf(false) }
     var isVoiceDraft by rememberSaveable { mutableStateOf(false) }
     var checklistDraftItems by rememberSaveable { mutableStateOf(listOf("")) }
-    var sendImmediateNotification by rememberSaveable { mutableStateOf(true) }
+    var sendImmediateNotification by rememberSaveable { mutableStateOf(false) }
     var draftCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
@@ -433,7 +436,9 @@ private fun ReminderListScreen(
     var headerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var selectedCategoryIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     val isSelectionMode = category == null && customCategory == null && selectedIds.isNotEmpty()
+    val isCategorySelectionMode = category == null && customCategory == null && selectedCategoryIds.isNotEmpty()
 
     val isTargetReady = shouldAnimateColdStart &&
         containerCoordinates?.isAttached == true &&
@@ -479,7 +484,7 @@ private fun ReminderListScreen(
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
                                 isChecklistMode = false
                                 checklistDraftItems = listOf("")
-                                sendImmediateNotification = true
+                                sendImmediateNotification = false
                                 onDraftChange("")
                                 isVoiceDraft = false
                                 onShareDraftChange(false)
@@ -502,7 +507,7 @@ private fun ReminderListScreen(
                         try {
                             if (onAddReminder(text.trim(), alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl)) {
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
-                                sendImmediateNotification = true
+                                sendImmediateNotification = false
                                 onDraftChange("")
                                 isVoiceDraft = false
                                 onShareDraftChange(false)
@@ -539,6 +544,12 @@ private fun ReminderListScreen(
             voiceLineCount = 1
         }
     }
+    var textLineCount by remember { mutableIntStateOf(1) }
+    LaunchedEffect(draft) {
+        if (draft.isEmpty()) {
+            textLineCount = 1
+        }
+    }
     val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null || draftCategoryId != null || isChecklistMode || isVoiceDraft || isShareDraft
     LaunchedEffect(showDatePicker) {
         if (!showDatePicker && refocus) { refocus = false; inputFocus.requestFocus(); keyboard?.show() }
@@ -549,7 +560,10 @@ private fun ReminderListScreen(
             val extraLines = (voiceLineCount - 1).coerceIn(0, 3)
             (118 + extraLines * 27).dp
         }
-        expanded -> 118.dp
+        expanded -> {
+            val extraLines = (textLineCount - 1).coerceIn(0, 3)
+            (118 + extraLines * 27).dp
+        }
         else -> 58.dp
     }
     val composerHeight by animateDpAsState(
@@ -571,16 +585,18 @@ private fun ReminderListScreen(
             keyboardWasVisible = false
         }
     }
-    BackHandler(enabled = isSelectionMode) { selectedIds = emptySet() }
-    BackHandler(enabled = showAccountMenu && !isSelectionMode) { showAccountMenu = false }
-    BackHandler(enabled = showCategoryPicker && !isSelectionMode) { showCategoryPicker = false }
-    BackHandler(enabled = isChecklistMode && !showAccountMenu && !showDatePicker && !showCategoryPicker && !isSelectionMode) {
+    val anySelectionMode = isSelectionMode || isCategorySelectionMode
+    BackHandler(enabled = isCategorySelectionMode) { selectedCategoryIds = emptySet() }
+    BackHandler(enabled = isSelectionMode && !isCategorySelectionMode) { selectedIds = emptySet() }
+    BackHandler(enabled = showAccountMenu && !anySelectionMode) { showAccountMenu = false }
+    BackHandler(enabled = showCategoryPicker && !anySelectionMode) { showCategoryPicker = false }
+    BackHandler(enabled = isChecklistMode && !showAccountMenu && !showDatePicker && !showCategoryPicker && !anySelectionMode) {
         isChecklistMode = false
         checklistDraftItems = listOf("")
         focusManager.clearFocus()
         keyboard?.hide()
     }
-    BackHandler(enabled = (editing || voice.phase != VoicePhase.Idle || isVoiceDraft || isShareDraft) && !isChecklistMode && !showAccountMenu && !showDatePicker && !showCategoryPicker && !isSelectionMode) {
+    BackHandler(enabled = (editing || voice.phase != VoicePhase.Idle || isVoiceDraft || isShareDraft) && !isChecklistMode && !showAccountMenu && !showDatePicker && !showCategoryPicker && !anySelectionMode) {
         when {
             voice.phase != VoicePhase.Idle -> {
                 voice.cancel()
@@ -633,6 +649,7 @@ private fun ReminderListScreen(
         if (category != null || customCategory != null) {
             showAccountMenu = false
             selectedIds = emptySet()
+            selectedCategoryIds = emptySet()
         }
         onDispose { }
     }
@@ -772,9 +789,32 @@ private fun ReminderListScreen(
                 item(key = "categories") {
                     CategoryGrid(
                         customCategories = customCategories,
-                        onOpenCategory = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenCategory(it) },
-                        onOpenCustomCategory = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenCustomCategory(it) },
-                        onAddCategory = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showCreateCategoryDialog = true },
+                        onOpenCategory = {
+                            if (!anySelectionMode) {
+                                voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenCategory(it)
+                            }
+                        },
+                        onOpenCustomCategory = {
+                            if (!anySelectionMode) {
+                                voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenCustomCategory(it)
+                            }
+                        },
+                        onAddCategory = {
+                            if (!anySelectionMode) {
+                                voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showCreateCategoryDialog = true
+                            }
+                        },
+                        selectedCategoryIds = selectedCategoryIds,
+                        onToggleSelectCategory = { id ->
+                            selectedCategoryIds = if (id in selectedCategoryIds) selectedCategoryIds - id else selectedCategoryIds + id
+                        },
+                        onLongClickCategory = { id ->
+                            if (category == null && customCategory == null) {
+                                voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
+                                selectedIds = emptySet()
+                                selectedCategoryIds = if (id in selectedCategoryIds) selectedCategoryIds - id else selectedCategoryIds + id
+                            }
+                        },
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     Spacer(Modifier.height(24.dp))
@@ -814,8 +854,9 @@ private fun ReminderListScreen(
                     isSelected = isSelected,
                     customCategory = reminderCategory,
                     onLongClick = {
-                        if (category == null && customCategory == null) {
+                        if (category == null && customCategory == null && !isCategorySelectionMode) {
                             voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
+                            selectedCategoryIds = emptySet()
                             selectedIds = selectedIds + reminder.id
                         }
                     },
@@ -849,8 +890,9 @@ private fun ReminderListScreen(
                         isSelected = isSelected,
                         customCategory = reminderCategory,
                         onLongClick = {
-                            if (category == null && customCategory == null) {
+                            if (category == null && customCategory == null && !isCategorySelectionMode) {
                                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
+                                selectedCategoryIds = emptySet()
                                 selectedIds = selectedIds + reminder.id
                             }
                         },
@@ -873,7 +915,7 @@ private fun ReminderListScreen(
             reduceDynamicBlur = reduceDynamicBlur
         )
         val selectionProgress by animateFloatAsState(
-            targetValue = if (isSelectionMode) 1f else 0f,
+            targetValue = if (isSelectionMode || isCategorySelectionMode) 1f else 0f,
             animationSpec = if (reduceAnimations) snap() else tween(270, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
             label = "selectionBottomTransition"
         )
@@ -943,6 +985,8 @@ private fun ReminderListScreen(
             voiceCommittedText = voice.committedText,
             voicePartialText = voice.partialText,
             onVoiceLineCountChange = { voiceLineCount = it },
+            textLineCount = textLineCount,
+            onTextLineCountChange = { textLineCount = it },
             isVoiceDraft = isVoiceDraft,
             isShareDraft = isShareDraft,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
@@ -964,16 +1008,26 @@ private fun ReminderListScreen(
             reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations
         )
-        if (selectionProgress > 0f || isSelectionMode) {
+        if (selectionProgress > 0f || isSelectionMode || isCategorySelectionMode) {
+            val count = if (isCategorySelectionMode) selectedCategoryIds.size else selectedIds.size
             SelectionActionButtons(
-                selectedCount = selectedIds.size,
-                onCancel = { selectedIds = emptySet() },
-                onDelete = {
-                    val toDelete = selectedIds
-                    selectedIds = emptySet()
-                    onDeleteReminders(toDelete)
+                selectedCount = count,
+                onCancel = {
+                    if (isCategorySelectionMode) selectedCategoryIds = emptySet()
+                    else selectedIds = emptySet()
                 },
-                enabled = isSelectionMode,
+                onDelete = {
+                    if (isCategorySelectionMode) {
+                        val toDelete = selectedCategoryIds
+                        selectedCategoryIds = emptySet()
+                        onDeleteCategories(toDelete)
+                    } else {
+                        val toDelete = selectedIds
+                        selectedIds = emptySet()
+                        onDeleteReminders(toDelete)
+                    }
+                },
+                enabled = isSelectionMode || isCategorySelectionMode,
                 backdrop = scene,
                 backdropPosition = { scenePosition },
                 reduceDynamicBlur = reduceDynamicBlur,

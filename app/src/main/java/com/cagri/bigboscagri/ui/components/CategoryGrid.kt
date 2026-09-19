@@ -1,9 +1,11 @@
 package com.cagri.bigboscagri.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,8 +79,12 @@ fun CategoryGrid(
     onOpenCategory: (ReminderCategory) -> Unit,
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
     onAddCategory: () -> Unit,
+    selectedCategoryIds: Set<Long> = emptySet(),
+    onToggleSelectCategory: (Long) -> Unit = {},
+    onLongClickCategory: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val isSelectionMode = selectedCategoryIds.isNotEmpty()
     val allItems = remember(customCategories) {
         buildList<GridItem> {
             systemCategories.forEach { (style, cat) ->
@@ -115,17 +121,23 @@ fun CategoryGrid(
                         when (item) {
                             is GridItem.System -> CategoryCard(
                                 category = item.style,
-                                onClick = { onOpenCategory(item.category) },
+                                onClick = { if (!isSelectionMode) onOpenCategory(item.category) },
                                 modifier = Modifier.weight(1f)
                             )
                             is GridItem.Custom -> CustomCategoryCard(
                                 category = item.category,
-                                onClick = { onOpenCustomCategory(item.category) },
+                                isSelectionMode = isSelectionMode,
+                                isSelected = item.category.id in selectedCategoryIds,
+                                onClick = {
+                                    if (isSelectionMode) onToggleSelectCategory(item.category.id)
+                                    else onOpenCustomCategory(item.category)
+                                },
+                                onLongClick = { onLongClickCategory(item.category.id) },
                                 modifier = Modifier.weight(1f)
                             )
                             is GridItem.Add -> CategoryCard(
                                 category = addCategoryStyle,
-                                onClick = onAddCategory,
+                                onClick = { if (!isSelectionMode) onAddCategory() },
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -141,17 +153,23 @@ fun CategoryGrid(
                             when (item) {
                                 is GridItem.System -> CategoryCard(
                                     category = item.style,
-                                    onClick = { onOpenCategory(item.category) },
+                                    onClick = { if (!isSelectionMode) onOpenCategory(item.category) },
                                     modifier = Modifier.weight(1f)
                                 )
                                 is GridItem.Custom -> CustomCategoryCard(
                                     category = item.category,
-                                    onClick = { onOpenCustomCategory(item.category) },
+                                    isSelectionMode = isSelectionMode,
+                                    isSelected = item.category.id in selectedCategoryIds,
+                                    onClick = {
+                                        if (isSelectionMode) onToggleSelectCategory(item.category.id)
+                                        else onOpenCustomCategory(item.category)
+                                    },
+                                    onLongClick = { onLongClickCategory(item.category.id) },
                                     modifier = Modifier.weight(1f)
                                 )
                                 is GridItem.Add -> CategoryCard(
                                     category = addCategoryStyle,
-                                    onClick = onAddCategory,
+                                    onClick = { if (!isSelectionMode) onAddCategory() },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -220,10 +238,14 @@ private fun CategoryCard(category: CategoryStyle, onClick: () -> Unit, modifier:
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CustomCategoryCard(
     category: CustomCategory,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier
 ) {
     val shape = RoundedCornerShape(18.dp)
@@ -231,9 +253,20 @@ private fun CustomCategoryCard(
     val endColor = category.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
     val icon = CategoryIcon.fromKey(category.iconKey)
 
+    val borderColor = when {
+        isSelected -> Color(0xFF3B82F6)
+        isSelectionMode -> Color.White.copy(alpha = 0.20f)
+        else -> Color.White.copy(alpha = 0.07f)
+    }
+    val borderWidth = if (isSelected) 1.5.dp else 0.75.dp
+
     Column(
-        modifier = modifier.clickable(
-            role = Role.Button, onClickLabel = category.name, onClick = onClick
+        modifier = modifier.combinedClickable(
+            role = Role.Button,
+            onClickLabel = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç") else category.name,
+            onLongClickLabel = if (!isSelectionMode) "Kategorileri seç" else null,
+            onLongClick = onLongClick,
+            onClick = onClick
         )
     ) {
         Box(
@@ -258,10 +291,39 @@ private fun CustomCategoryCard(
                         drawRect(bottomLight)
                     }
                 }
-                .border(0.75.dp, Color.White.copy(alpha = 0.07f), shape),
+                .border(borderWidth, borderColor, shape),
             contentAlignment = Alignment.Center
         ) {
             CategoryIconGlyph(icon, Modifier.size(32.dp), color = Color.White)
+
+            if (isSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 6.dp, end = 6.dp)
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) Color(0xFF3B82F6) else Color.Black.copy(alpha = 0.4f))
+                        .border(
+                            1.dp,
+                            if (isSelected) Color(0xFF3B82F6) else Color.White.copy(alpha = 0.45f),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Canvas(modifier = Modifier.size(10.dp)) {
+                            val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                            val path = Path().apply {
+                                moveTo(size.width * 0.2f, size.height * 0.5f)
+                                lineTo(size.width * 0.45f, size.height * 0.75f)
+                                lineTo(size.width * 0.85f, size.height * 0.25f)
+                            }
+                            drawPath(path, Color.White, style = stroke)
+                        }
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(7.dp))
         Text(
