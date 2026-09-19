@@ -8,12 +8,17 @@ import com.cagri.bigboscagri.data.ReminderRepository
 import com.cagri.bigboscagri.data.categoryCounts
 import com.cagri.bigboscagri.data.deleteCategoryWithRollback
 import com.cagri.bigboscagri.data.inCategory
+import com.cagri.bigboscagri.data.ChecklistItem
+import com.cagri.bigboscagri.notifications.canShowImmediateNotification
 import com.cagri.bigboscagri.notifications.needsBigTextStyle
 import com.cagri.bigboscagri.notifications.resolveNotificationMetadata
 import com.cagri.bigboscagri.speech.VoiceDraft
 import com.cagri.bigboscagri.ui.isStandaloneCategoryInDetail
 import com.cagri.bigboscagri.ui.reminderDetailStatusText
 import com.cagri.bigboscagri.ui.shouldShowNoAlertInDetail
+import androidx.compose.ui.graphics.Color
+import com.cagri.bigboscagri.ui.components.ReminderColorChoices
+import com.cagri.bigboscagri.ui.components.resolveCategoryStripeColors
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -732,6 +737,302 @@ class ReminderRulesTest {
         val multilineText = "İlk satır\nİkinci satır"
         assertTrue(multilineText.length < 80)
         assertTrue(needsBigTextStyle(multilineText))
+    }
+
+    @Test fun legacyReminderLoadsAsChecklistFalseAndEmptyItems() {
+        val prefs = FakeSharedPreferences()
+        val legacyJson = """[{"id":100,"text":"Eski Not","createdAt":1000,"updatedAt":1000}]"""
+        prefs.edit().putString("reminders", legacyJson).commit()
+
+        val repo = ReminderRepository(prefs)
+        val loaded = repo.load()
+        assertEquals(1, loaded.size)
+        val item = loaded.first()
+        assertFalse(item.isChecklist)
+        assertTrue(item.checklistItems.isEmpty())
+    }
+
+    @Test fun checklistPersistenceRoundtrip() {
+        val prefs = FakeSharedPreferences()
+        val repo = ReminderRepository(prefs)
+        val items = listOf(
+            ChecklistItem(id = 1L, text = "Süt"),
+            ChecklistItem(id = 2L, text = "Yumurta")
+        )
+        val saved = repo.add(
+            text = "Alışveriş",
+            isChecklist = true,
+            checklistItems = items
+        )
+        val savedItem = saved.first()
+        assertTrue(savedItem.isChecklist)
+        assertEquals(2, savedItem.checklistItems.size)
+        assertEquals("Süt", savedItem.checklistItems[0].text)
+        assertEquals("Yumurta", savedItem.checklistItems[1].text)
+        assertFalse(savedItem.checklistItems[0].isCompleted)
+
+        // Reload fresh from prefs
+        val freshRepo = ReminderRepository(prefs)
+        val reloaded = freshRepo.load().first()
+        assertTrue(reloaded.isChecklist)
+        assertEquals(2, reloaded.checklistItems.size)
+        assertEquals("Süt", reloaded.checklistItems[0].text)
+        assertEquals("Yumurta", reloaded.checklistItems[1].text)
+        assertEquals(savedItem.checklistItems[0].id, reloaded.checklistItems[0].id)
+    }
+
+    @Test fun checklistItemTogglePersistenceAndDoesNotCompleteReminder() {
+        val prefs = FakeSharedPreferences()
+        val repo = ReminderRepository(prefs)
+        val saved = repo.add(
+            text = "Alışveriş",
+            isChecklist = true,
+            checklistItems = listOf(ChecklistItem(id = 1L, text = "Süt"), ChecklistItem(id = 2L, text = "Yumurta"))
+        ).first()
+
+        val reminderId = saved.id
+        val itemId = saved.checklistItems[0].id
+
+        val updated = repo.toggleChecklistItem(reminderId, itemId)
+        val updatedReminder = updated.first { it.id == reminderId }
+
+        // Item is completed
+        val toggledItem = updatedReminder.checklistItems.first { it.id == itemId }
+        assertTrue(toggledItem.isCompleted)
+        assertNotNull(toggledItem.completedAt)
+
+        // Other item is not completed
+        val otherItem = updatedReminder.checklistItems.first { it.id != itemId }
+        assertFalse(otherItem.isCompleted)
+
+        // Crucial rule: reminder completion status remains UNCHANGED
+        assertFalse(updatedReminder.isCompleted)
+        assertNull(updatedReminder.completedAt)
+
+        // Verify persistence roundtrip for toggled item
+        val freshRepo = ReminderRepository(prefs)
+        val loadedReminder = freshRepo.load().first { it.id == reminderId }
+        assertTrue(loadedReminder.checklistItems.first { it.id == itemId }.isCompleted)
+        assertFalse(loadedReminder.isCompleted)
+    }
+
+    @Test fun checklistWithNoAlertDoesNotAllowImmediateNotification() {
+        val checklistNoAlert = ReminderItem(
+            id = 1L,
+            text = "Alışveriş",
+            createdAt = 1000L,
+            alertAt = null,
+            isChecklist = true,
+            checklistItems = listOf(ChecklistItem(id = 10L, text = "Süt"))
+        )
+        assertFalse(canShowImmediateNotification(checklistNoAlert))
+
+        val normalNoAlert = ReminderItem(
+            id = 2L,
+            text = "Normal Not",
+            createdAt = 1000L,
+            alertAt = null,
+            isChecklist = false
+        )
+        assertTrue(canShowImmediateNotification(normalNoAlert))
+    }
+
+    @Test fun checklistWithScheduledAlertShowsOnlyTitleInNotification() {
+        val checklistScheduled = ReminderItem(
+            id = 1L,
+            text = "Alışveriş",
+            createdAt = 1000L,
+            alertAt = System.currentTimeMillis() + 60000L,
+            isChecklist = true,
+            checklistItems = listOf(
+                ChecklistItem(id = 10L, text = "Süt"),
+                ChecklistItem(id = 11L, text = "Yumurta"),
+                ChecklistItem(id = 12L, text = "Motor yağı")
+            )
+        )
+        assertTrue(canShowImmediateNotification(checklistScheduled))
+
+        val metadata = resolveNotificationMetadata(checklistScheduled, categoryRepository = null, fallbackTitle = "Real")
+        assertEquals("Real", metadata.title)
+        assertEquals("Alışveriş", metadata.text)
+
+        // Verify items are NOT part of the notification metadata
+        assertFalse(metadata.text.contains("Süt"))
+        assertFalse(metadata.text.contains("Yumurta"))
+        assertFalse(metadata.text.contains("Motor yağı"))
+        assertFalse(needsBigTextStyle(metadata.text))
+    }
+
+    @Test fun customCategoryWithChecklistPreservesCategoryTitleAndChecklistTitle() {
+        val prefs = FakeSharedPreferences()
+        val catRepo = CategoryRepository(prefs)
+        catRepo.add("Araba", "car", 1, null)
+        val category = catRepo.load().first()
+
+        val checklistWithCat = ReminderItem(
+            id = 1L,
+            text = "Alışveriş",
+            createdAt = 1000L,
+            alertAt = System.currentTimeMillis() + 60000L,
+            customCategoryId = category.id,
+            isChecklist = true,
+            checklistItems = listOf(ChecklistItem(id = 10L, text = "Motor yağı"))
+        )
+
+        val metadata = resolveNotificationMetadata(checklistWithCat, categoryRepository = catRepo, fallbackTitle = "Real")
+        assertEquals("Araba", metadata.title)
+        assertEquals("Alışveriş", metadata.text)
+        assertFalse(metadata.text.contains("Motor yağı"))
+    }
+
+    @Test fun checklistWithExplicitTitlePreservesTitleAndItems() {
+        val prefs = FakeSharedPreferences()
+        val repository = ReminderRepository(prefs)
+        val items = listOf(
+            ChecklistItem(id = 0L, text = "Süt"),
+            ChecklistItem(id = 0L, text = "Yumurta"),
+            ChecklistItem(id = 0L, text = "Kahve")
+        )
+        val reminders = repository.add(
+            text = "Alışveriş",
+            isChecklist = true,
+            checklistItems = items
+        )
+        val reminder = reminders.first()
+        assertTrue(reminder.isChecklist)
+        assertEquals("Alışveriş", reminder.text)
+        assertEquals(3, reminder.checklistItems.size)
+        assertEquals("Süt", reminder.checklistItems[0].text)
+        assertEquals("Yumurta", reminder.checklistItems[1].text)
+        assertEquals("Kahve", reminder.checklistItems[2].text)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun checklistWithBlankTitleFailsValidation() {
+        val prefs = FakeSharedPreferences()
+        val repository = ReminderRepository(prefs)
+        val items = listOf(
+            ChecklistItem(id = 0L, text = "Ekmek"),
+            ChecklistItem(id = 0L, text = "Peynir")
+        )
+        repository.add(
+            text = "   ",
+            isChecklist = true,
+            checklistItems = items
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun checklistWithoutAnyItemsFailsValidation() {
+        val prefs = FakeSharedPreferences()
+        val repository = ReminderRepository(prefs)
+        repository.add(
+            text = "Alışveriş",
+            isChecklist = true,
+            checklistItems = emptyList()
+        )
+    }
+
+    @Test fun normalReminderNoAlertImmediateOnAllowsImmediateNotification() {
+        val reminder = ReminderItem(
+            id = 1L,
+            text = "Evi temizle",
+            createdAt = 1000L,
+            alertAt = null,
+            isChecklist = false,
+            sendImmediateNotification = true
+        )
+        assertTrue(canShowImmediateNotification(reminder))
+    }
+
+    @Test fun normalReminderNoAlertImmediateOffSuppressesImmediateNotification() {
+        val reminder = ReminderItem(
+            id = 2L,
+            text = "Sessiz not",
+            createdAt = 1000L,
+            alertAt = null,
+            isChecklist = false,
+            sendImmediateNotification = false
+        )
+        assertFalse(canShowImmediateNotification(reminder))
+    }
+
+    @Test fun normalReminderWithAlertSetDoesNotUseImmediatePath() {
+        val futureAlert = System.currentTimeMillis() + 3600000L
+        val scheduledReminder = ReminderItem(
+            id = 3L,
+            text = "Doktor randevusu",
+            createdAt = 1000L,
+            alertAt = futureAlert,
+            isChecklist = false,
+            sendImmediateNotification = true
+        )
+        assertNotNull(scheduledReminder.alertAt)
+        assertTrue(canShowImmediateNotification(scheduledReminder))
+    }
+
+    @Test fun checklistWithoutAlertAlwaysSuppressesImmediateNotificationRegardlessOfImmediateFlag() {
+        val checklistWithImmediateOn = ReminderItem(
+            id = 4L,
+            text = "Market",
+            createdAt = 1000L,
+            alertAt = null,
+            isChecklist = true,
+            checklistItems = listOf(ChecklistItem(1L, "Ekmek")),
+            sendImmediateNotification = true
+        )
+        assertFalse(canShowImmediateNotification(checklistWithImmediateOn))
+
+        val checklistWithImmediateOff = checklistWithImmediateOn.copy(sendImmediateNotification = false)
+        assertFalse(canShowImmediateNotification(checklistWithImmediateOff))
+    }
+
+    @Test fun singleColorCategoryStripeColorLogic() {
+        val singleCat = CustomCategory(
+            id = 10L,
+            name = "Kişisel",
+            iconKey = "PERSON",
+            accentStart = 0,
+            accentEnd = null
+        )
+        val (c1, c2) = resolveCategoryStripeColors(singleCat)
+        val expectedColor = ReminderColorChoices[0].color
+        assertEquals(expectedColor, c1)
+        assertEquals(expectedColor.copy(alpha = 0.55f), c2)
+    }
+
+    @Test fun twoColorCategoryStripeColorLogic() {
+        val dualCat = CustomCategory(
+            id = 11L,
+            name = "İş ve Proje",
+            iconKey = "WORK",
+            accentStart = 1,
+            accentEnd = 3
+        )
+        val (c1, c2) = resolveCategoryStripeColors(dualCat)
+        val startColor = ReminderColorChoices[1].color
+        val endColor = ReminderColorChoices[3].color
+        assertEquals(startColor, c1)
+        assertEquals(endColor, c2)
+    }
+
+    @Test fun reminderRepositoryPersistsSendImmediateNotificationFlag() {
+        val prefs = FakeSharedPreferences()
+        val repo = ReminderRepository(prefs)
+        repo.add(
+            text = "Bildirimsiz not",
+            sendImmediateNotification = false
+        )
+        val reloaded = repo.load().first()
+        assertFalse(reloaded.sendImmediateNotification)
+
+        val repo2 = ReminderRepository(prefs)
+        repo2.add(
+            text = "Bildirimli not",
+            sendImmediateNotification = true
+        )
+        val reloaded2 = repo2.load().first { it.text == "Bildirimli not" }
+        assertTrue(reloaded2.sendImmediateNotification)
     }
 }
 

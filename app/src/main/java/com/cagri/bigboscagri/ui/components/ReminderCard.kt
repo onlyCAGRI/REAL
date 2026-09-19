@@ -36,8 +36,23 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.Brush
+import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.ui.reminderDate
+
+fun resolveCategoryStripeColors(category: CustomCategory): Pair<Color, Color> {
+    val startColor = ReminderColorChoices.getOrNull(category.accentStart)?.color ?: Color(0xFF233F73)
+    val endColor = category.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color }
+    return if (endColor != null && endColor != startColor) {
+        startColor to endColor
+    } else {
+        startColor to startColor.copy(alpha = 0.55f)
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
@@ -52,11 +67,17 @@ fun ReminderCard(
     isSelected: Boolean = false,
     onLongClick: () -> Unit = {},
     onSelectToggle: () -> Unit = {},
+    customCategory: CustomCategory? = null,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(22.dp)
     val accentBrush = remember(reminder.accentStart, reminder.accentEnd, reminder.isCompleted) {
         reminderAccentBrush(reminder.accentStart, reminder.accentEnd, reminder.isCompleted)
+    }
+    val categoryStripeColors = remember(reminder.customCategoryId, customCategory) {
+        if (reminder.customCategoryId != null && customCategory != null) {
+            resolveCategoryStripeColors(customCategory)
+        } else null
     }
     val textColor by animateColorAsState(
         if (reminder.isCompleted) Color(0xFF808089) else Color(0xFFF3F3F5),
@@ -83,7 +104,7 @@ fun ReminderCard(
     val borderWidth = if (isSelected) 1.25.dp else 0.75.dp
     val selectionOverlay = if (isSelected) Color(0xFF94B8F7).copy(alpha = 0.07f) else Color.Transparent
 
-    Row(
+    Box(
         modifier
             .then(sharedBoundsModifier)
             .fillMaxWidth()
@@ -102,11 +123,44 @@ fun ReminderCard(
                     if (isSelectionMode) onSelectToggle() else onOpen()
                 }
             )
-            .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.Top
     ) {
-        Box(
-            Modifier.size(48.dp).clip(CircleShape)
+        if (categoryStripeColors != null) {
+            val (stripeColor1, stripeColor2) = categoryStripeColors
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .padding(end = 9.dp)
+            ) {
+                Row(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(),
+                    horizontalArrangement = Arrangement.spacedBy(3.5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxHeight()
+                            .width(5.dp)
+                            .background(stripeColor1)
+                    )
+                    Box(
+                        Modifier
+                            .fillMaxHeight()
+                            .width(5.dp)
+                            .background(stripeColor2)
+                    )
+                }
+            }
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = if (categoryStripeColors != null) 32.dp else 16.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape)
                 .then(
                     if (isSelectionMode) {
                         Modifier.clickable(role = Role.Checkbox, onClick = onSelectToggle)
@@ -135,6 +189,18 @@ fun ReminderCard(
                 textDecoration = if (reminder.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
                 maxLines = 3, overflow = TextOverflow.Ellipsis
             )
+            if (reminder.isChecklist && reminder.checklistItems.isNotEmpty()) {
+                val total = reminder.checklistItems.size
+                val completedCount = reminder.checklistItems.count { it.isCompleted }
+                val summary = if (completedCount > 0) "$total madde • $completedCount tamamlandı" else "$total madde"
+                Text(
+                    summary,
+                    color = Color(0xFFA5A5B0),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(top = 3.dp)
+                )
+            }
             if (!reminder.isCompleted) reminder.alertAt?.let {
                 val isOverdue = it < System.currentTimeMillis()
                 val dateColor = if (isOverdue) Color(0xFFF87171) else Color(0xFF94B8F7)
@@ -173,4 +239,5 @@ fun ReminderCard(
             }
         }
     }
+}
 }

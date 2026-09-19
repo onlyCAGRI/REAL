@@ -7,12 +7,15 @@ import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
 import com.cagri.bigboscagri.ui.components.RealWordmark
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -59,6 +62,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -89,10 +93,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.R
 import com.cagri.bigboscagri.data.RecurrenceRule
+import com.cagri.bigboscagri.data.ChecklistItem
 import com.cagri.bigboscagri.data.ReminderCategory
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.data.inCategory
 import com.cagri.bigboscagri.speech.VoicePhase
+import com.cagri.bigboscagri.speech.VoiceReminderParser
+import com.cagri.bigboscagri.speech.VoiceDraftCoordinator
 import com.cagri.bigboscagri.speech.rememberVoiceInput
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.ui.components.AccountMenuOverlay
@@ -126,12 +133,13 @@ private data class ReminderRoute(val category: ReminderCategory?, val customCate
 @Composable
 fun ReminderScreen(
     reminders: List<ReminderItem>,
-    onAddReminder: suspend (String, Long?, RecurrenceRule, Long?) -> Boolean,
+    onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Boolean,
     onToggleCompleted: (Long) -> Unit,
     onToggleImportant: (Long) -> Unit,
     onEditReminder: (Long, String, Int?, Int?, Long?) -> Unit,
     onDeleteReminder: (Long) -> Unit,
     onSetAlert: (Long, Long?, RecurrenceRule) -> Unit,
+    onToggleChecklistItem: (Long, Long) -> Unit = { _, _ -> },
     onDeleteReminders: (Set<Long>) -> Unit = { ids -> ids.forEach { onDeleteReminder(it) } },
     exactAlarmsAllowed: Boolean = true,
     onRequestExactAlarms: () -> Unit = {},
@@ -147,7 +155,9 @@ fun ReminderScreen(
     onCreateCategory: (String, String, Int, Int?) -> Unit = { _, _, _, _ -> },
     onEditCategory: (Long, String, String, Int, Int?) -> Unit = { _, _, _, _, _ -> },
     onDeleteCategory: (Long) -> Unit = {},
-    onOpenCustomCategory: (CustomCategory) -> Unit = {}
+    onOpenCustomCategory: (CustomCategory) -> Unit = {},
+    pendingShareDraft: com.cagri.bigboscagri.data.SharedPayload? = null,
+    onShareDraftHandled: () -> Unit = {}
 ) {
     var category by rememberSaveable { mutableStateOf<ReminderCategory?>(null) }
     var customCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -156,12 +166,24 @@ fun ReminderScreen(
     var draft by rememberSaveable { mutableStateOf("") }
     var draftAlertAt by rememberSaveable { mutableStateOf<Long?>(null) }
     var draftRepeatRule by rememberSaveable { mutableStateOf(RecurrenceRule.NONE) }
+    var isShareDraft by rememberSaveable { mutableStateOf(false) }
+    var draftReferenceUrl by rememberSaveable { mutableStateOf<String?>(null) }
     val stateHolder = rememberSaveableStateHolder()
     LaunchedEffect(requestedReminderId) {
         if (requestedReminderId != null) {
             ColdStartTracker.markExecuted()
             if (reminders.any { it.id == requestedReminderId }) { detailId = requestedReminderId; showSettings = false }
             onRequestHandled()
+        }
+    }
+    LaunchedEffect(pendingShareDraft) {
+        if (pendingShareDraft != null) {
+            draft = pendingShareDraft.title
+            draftReferenceUrl = pendingShareDraft.url
+            isShareDraft = true
+            detailId = null
+            showSettings = false
+            onShareDraftHandled()
         }
     }
     BackHandler(enabled = !showSettings && (detailId != null || category != null || customCategoryId != null)) {
@@ -276,6 +298,7 @@ fun ReminderScreen(
                                     onBack = { detailId = null },
                                     onToggleCompleted = { onToggleCompleted(reminder.id); detailId = null },
                                     onToggleImportant = { onToggleImportant(reminder.id) },
+                                    onToggleChecklistItem = onToggleChecklistItem,
                                     onSave = { text, accentStart, accentEnd, customCatId ->
                                         onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId)
                                     },
@@ -318,10 +341,10 @@ fun ReminderScreen(
                                         customCategoryId = customCategoryItem.id
                                         onOpenCustomCategory(customCategoryItem)
                                     },
-                                    onAddReminder = { text, at, rule, catId ->
-                                        val saved = onAddReminder(text, at, rule, catId)
+                                    onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl ->
+                                        val saved = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl)
                                         if (saved) {
-                                            draft = ""; draftAlertAt = null; draftRepeatRule = RecurrenceRule.NONE
+                                            draft = ""; draftAlertAt = null; draftRepeatRule = RecurrenceRule.NONE; draftReferenceUrl = null; isShareDraft = false
                                             if (category != null) {
                                                 if (catId != null) {
                                                     category = null
@@ -333,6 +356,10 @@ fun ReminderScreen(
                                         }
                                         saved
                                     },
+                                    isShareDraft = isShareDraft,
+                                    onShareDraftChange = { isShareDraft = it },
+                                    draftReferenceUrl = draftReferenceUrl,
+                                    onDraftReferenceUrlChange = { draftReferenceUrl = it },
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = this@AnimatedContent
                                 )
@@ -357,7 +384,11 @@ private fun ReminderListScreen(
     onDeleteReminders: (Set<Long>) -> Unit = {},
     reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean, designStyle: DesignStyle,
-    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?) -> Boolean,
+    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Boolean,
+    isShareDraft: Boolean = false,
+    onShareDraftChange: (Boolean) -> Unit = {},
+    draftReferenceUrl: String? = null,
+    onDraftReferenceUrlChange: (String?) -> Unit = {},
     customCategories: List<CustomCategory> = emptyList(),
     customCategory: CustomCategory? = null,
     onCreateCategory: (String, String, Int, Int?) -> Unit = { _, _, _, _ -> },
@@ -368,6 +399,10 @@ private fun ReminderListScreen(
     animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     var editing by remember { mutableStateOf(false) }
+    var isChecklistMode by rememberSaveable { mutableStateOf(false) }
+    var isVoiceDraft by rememberSaveable { mutableStateOf(false) }
+    var checklistDraftItems by rememberSaveable { mutableStateOf(listOf("")) }
+    var sendImmediateNotification by rememberSaveable { mutableStateOf(true) }
     var draftCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
@@ -428,32 +463,98 @@ private fun ReminderListScreen(
         }
     }
     val submit: (String) -> Unit = { text ->
-        if (text.isNotBlank() && !saving) {
-            if (alertAt != null && alertAt <= System.currentTimeMillis()) {
-                Toast.makeText(context, "Gelecekte bir tarih ve saat seç.", Toast.LENGTH_LONG).show()
-                showDatePicker = true
-            } else {
-                saving = true
-                scope.launch {
-                    try {
-                        if (onAddReminder(text.trim(), alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId)) {
-                            draftCategoryId = if (customCategory != null) customCategory.id else null
-                            focusManager.clearFocus(); keyboard?.hide()
-                            if (reduceAnimations) listState.scrollToItem(0) else listState.animateScrollToItem(0)
-                        }
-                    } finally { saving = false }
+        if (isChecklistMode) {
+            val validItems = checklistDraftItems.map { it.trim() }.filter { it.isNotEmpty() }
+            if (text.isNotBlank() && validItems.isNotEmpty() && !saving) {
+                if (alertAt != null && alertAt <= System.currentTimeMillis()) {
+                    Toast.makeText(context, "Gelecekte bir tarih ve saat seç.", Toast.LENGTH_LONG).show()
+                    showDatePicker = true
+                } else {
+                    saving = true
+                    scope.launch {
+                        try {
+                            val items = validItems.mapIndexed { idx, itmText -> ChecklistItem(id = 0L, text = itmText) }
+                            val resolvedTitle = text.trim()
+                            if (onAddReminder(resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl)) {
+                                draftCategoryId = if (customCategory != null) customCategory.id else null
+                                isChecklistMode = false
+                                checklistDraftItems = listOf("")
+                                sendImmediateNotification = true
+                                onDraftChange("")
+                                isVoiceDraft = false
+                                onShareDraftChange(false)
+                                onDraftReferenceUrlChange(null)
+                                focusManager.clearFocus(); keyboard?.hide()
+                                if (reduceAnimations) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+                            }
+                        } finally { saving = false }
+                    }
+                }
+            }
+        } else {
+            if (text.isNotBlank() && !saving) {
+                if (alertAt != null && alertAt <= System.currentTimeMillis()) {
+                    Toast.makeText(context, "Gelecekte bir tarih ve saat seç.", Toast.LENGTH_LONG).show()
+                    showDatePicker = true
+                } else {
+                    saving = true
+                    scope.launch {
+                        try {
+                            if (onAddReminder(text.trim(), alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl)) {
+                                draftCategoryId = if (customCategory != null) customCategory.id else null
+                                sendImmediateNotification = true
+                                onDraftChange("")
+                                isVoiceDraft = false
+                                onShareDraftChange(false)
+                                onDraftReferenceUrlChange(null)
+                                focusManager.clearFocus(); keyboard?.hide()
+                                if (reduceAnimations) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+                            }
+                        } finally { saving = false }
+                    }
                 }
             }
         }
     }
-    val voice = rememberVoiceInput(draft, onDraftChange, submit, observeLevel = !reduceAnimations)
-    val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null || draftCategoryId != null
+    val onVoiceFinalize: (String) -> Unit = { rawVoiceText ->
+        val result = VoiceDraftCoordinator.finalizeVoice(
+            rawVoiceText = rawVoiceText,
+            currentAlertAt = alertAt,
+            currentRepeatRule = repeatRule,
+            currentSendImmediateNotification = sendImmediateNotification
+        )
+        onDraftChange(result.text)
+        if (result.alertAt != null) {
+            onAlertChange(result.alertAt, result.repeatRule)
+            sendImmediateNotification = false
+        } else if (result.repeatRule != RecurrenceRule.NONE) {
+            onAlertChange(alertAt, result.repeatRule)
+        }
+        isVoiceDraft = true
+    }
+    val voice = rememberVoiceInput(draft, onDraftChange, onVoiceFinalize, observeLevel = !reduceAnimations)
+    var voiceLineCount by remember { mutableIntStateOf(1) }
+    LaunchedEffect(voice.phase) {
+        if (voice.phase == VoicePhase.Idle) {
+            voiceLineCount = 1
+        }
+    }
+    val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null || draftCategoryId != null || isChecklistMode || isVoiceDraft || isShareDraft
     LaunchedEffect(showDatePicker) {
         if (!showDatePicker && refocus) { refocus = false; inputFocus.requestFocus(); keyboard?.show() }
     }
+    val targetComposerHeight = when {
+        isChecklistMode -> 280.dp
+        voice.phase != VoicePhase.Idle -> {
+            val extraLines = (voiceLineCount - 1).coerceIn(0, 3)
+            (118 + extraLines * 27).dp
+        }
+        expanded -> 118.dp
+        else -> 58.dp
+    }
     val composerHeight by animateDpAsState(
-        if (expanded) 128.dp else 58.dp,
-        if (reduceAnimations) snap() else tween(250),
+        targetComposerHeight,
+        if (reduceAnimations) snap() else tween(220),
         label = "composerHeight"
     )
     val bottomGap by animateDpAsState(
@@ -473,10 +574,43 @@ private fun ReminderListScreen(
     BackHandler(enabled = isSelectionMode) { selectedIds = emptySet() }
     BackHandler(enabled = showAccountMenu && !isSelectionMode) { showAccountMenu = false }
     BackHandler(enabled = showCategoryPicker && !isSelectionMode) { showCategoryPicker = false }
-    BackHandler(enabled = (editing || voice.phase != VoicePhase.Idle) && !showAccountMenu && !showDatePicker && !showCategoryPicker && !isSelectionMode) {
-        voice.cancel()
+    BackHandler(enabled = isChecklistMode && !showAccountMenu && !showDatePicker && !showCategoryPicker && !isSelectionMode) {
+        isChecklistMode = false
+        checklistDraftItems = listOf("")
         focusManager.clearFocus()
         keyboard?.hide()
+    }
+    BackHandler(enabled = (editing || voice.phase != VoicePhase.Idle || isVoiceDraft || isShareDraft) && !isChecklistMode && !showAccountMenu && !showDatePicker && !showCategoryPicker && !isSelectionMode) {
+        when {
+            voice.phase != VoicePhase.Idle -> {
+                voice.cancel()
+                focusManager.clearFocus()
+                keyboard?.hide()
+            }
+            editing -> {
+                focusManager.clearFocus()
+                keyboard?.hide()
+                editing = false
+            }
+            isVoiceDraft -> {
+                isVoiceDraft = false
+                onDraftChange("")
+                onAlertChange(null, RecurrenceRule.NONE)
+                draftCategoryId = if (customCategory != null) customCategory.id else null
+                voice.cancel()
+                focusManager.clearFocus()
+                keyboard?.hide()
+            }
+            isShareDraft -> {
+                onShareDraftChange(false)
+                onDraftReferenceUrlChange(null)
+                onDraftChange("")
+                onAlertChange(null, RecurrenceRule.NONE)
+                draftCategoryId = if (customCategory != null) customCategory.id else null
+                focusManager.clearFocus()
+                keyboard?.hide()
+            }
+        }
     }
     val today = rememberReminderDay()
     val active = remember(reminders, category, customCategory, today) {
@@ -666,6 +800,10 @@ private fun ReminderListScreen(
             }
             items(active, key = { it.id }, contentType = { "reminder" }) { reminder ->
                 val isSelected = reminder.id in selectedIds
+                val reminderCategory = remember(reminder.customCategoryId, customCategories, customCategory) {
+                    customCategories.firstOrNull { it.id == reminder.customCategoryId }
+                        ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
+                }
                 ReminderCard(
                     reminder, onToggle = { onToggleCompleted(reminder.id) },
                     onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
@@ -674,6 +812,7 @@ private fun ReminderListScreen(
                     animatedVisibilityScope = animatedVisibilityScope,
                     isSelectionMode = isSelectionMode,
                     isSelected = isSelected,
+                    customCategory = reminderCategory,
                     onLongClick = {
                         if (category == null && customCategory == null) {
                             voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
@@ -696,6 +835,10 @@ private fun ReminderListScreen(
                 }
                 items(completed, key = { it.id }, contentType = { "reminder" }) { reminder ->
                     val isSelected = reminder.id in selectedIds
+                    val reminderCategory = remember(reminder.customCategoryId, customCategories, customCategory) {
+                        customCategories.firstOrNull { it.id == reminder.customCategoryId }
+                            ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
+                    }
                     ReminderCard(
                         reminder, onToggle = { onToggleCompleted(reminder.id) },
                         onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
@@ -704,6 +847,7 @@ private fun ReminderListScreen(
                         animatedVisibilityScope = animatedVisibilityScope,
                         isSelectionMode = isSelectionMode,
                         isSelected = isSelected,
+                        customCategory = reminderCategory,
                         onLongClick = {
                             if (category == null && customCategory == null) {
                                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
@@ -736,6 +880,26 @@ private fun ReminderListScreen(
         val density = LocalDensity.current
         val bottomSlideOffsetPx = with(density) { (composerHeight + bottomGap + 80.dp).toPx() }
 
+        AnimatedVisibility(
+            visible = isChecklistMode,
+            enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)),
+            exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(140))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            isChecklistMode = false
+                            checklistDraftItems = listOf("")
+                            focusManager.clearFocus()
+                            keyboard?.hide()
+                        }
+                    }
+            )
+        }
+
         BottomFade(Modifier.align(Alignment.BottomCenter).height(composerHeight + bottomGap + 46.dp))
         GlassComposer(
             value = draft, onValueChange = onDraftChange,
@@ -753,6 +917,34 @@ private fun ReminderListScreen(
             reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
             designStyle = designStyle,
+            isChecklistMode = isChecklistMode,
+            onToggleChecklistMode = {
+                isChecklistMode = !isChecklistMode
+                if (!isChecklistMode) {
+                    checklistDraftItems = listOf("")
+                }
+            },
+            checklistDraftItems = checklistDraftItems,
+            onChecklistItemChange = { index, newText ->
+                checklistDraftItems = checklistDraftItems.toMutableList().also {
+                    if (index in it.indices) it[index] = newText
+                }
+            },
+            onAddChecklistItem = {
+                checklistDraftItems = checklistDraftItems + ""
+            },
+            onRemoveChecklistItem = { index ->
+                if (checklistDraftItems.size > 1 && index in checklistDraftItems.indices) {
+                    checklistDraftItems = checklistDraftItems.toMutableList().also { it.removeAt(index) }
+                }
+            },
+            sendImmediateNotification = sendImmediateNotification,
+            onToggleImmediateNotification = { sendImmediateNotification = !sendImmediateNotification },
+            voiceCommittedText = voice.committedText,
+            voicePartialText = voice.partialText,
+            onVoiceLineCountChange = { voiceLineCount = it },
+            isVoiceDraft = isVoiceDraft,
+            isShareDraft = isShareDraft,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = bottomGap).height(composerHeight)
                 .graphicsLayer {

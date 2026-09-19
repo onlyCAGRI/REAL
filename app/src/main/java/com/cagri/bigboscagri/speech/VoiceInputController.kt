@@ -17,7 +17,8 @@ class VoiceInputController(
     private val onText: (String) -> Unit,
     private val onState: (VoicePhase, Float) -> Unit,
     private val onSubmit: (String) -> Unit,
-    private val onErrorMessage: (String) -> Unit
+    private val onErrorMessage: (String) -> Unit,
+    private val onDraftChange: ((committed: String, partial: String) -> Unit)? = null
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
@@ -27,6 +28,16 @@ class VoiceInputController(
     private var round = 0L
     private var roundRunning = false
     private var busyRetries = 0
+
+    private fun notifyDraft() {
+        val d = draft
+        if (d != null) {
+            onText(d.text)
+            onDraftChange?.invoke(d.committed, d.partial)
+        } else {
+            onDraftChange?.invoke("", "")
+        }
+    }
 
     fun start(initialText: String) {
         if (phase != VoicePhase.Idle) return
@@ -39,6 +50,7 @@ class VoiceInputController(
         busyRetries = 0
         phase = VoicePhase.Listening
         onState(phase, 0f)
+        notifyDraft()
         startRound(generation)
     }
 
@@ -91,15 +103,15 @@ class VoiceInputController(
                 override fun onPartialResults(partialResults: Bundle?) {
                     if (!valid()) return
                     bestText(partialResults)?.let { draft?.updatePartial(it) }
-                    draft?.text?.let(onText)
+                    notifyDraft()
                 }
                 override fun onResults(results: Bundle?) {
                     if (!valid()) return
                     roundRunning = false
                     draft?.commitResult(bestText(results))
-                    draft?.text?.let(onText)
+                    notifyDraft()
                     releaseRecognizer()
-                    if (phase == VoicePhase.Finishing) submitOnce() else nextRound(session, 300L)
+                    if (phase == VoicePhase.Finishing) submitOnce() else nextRound(session, 120L)
                 }
                 override fun onError(error: Int) {
                     if (!valid()) return
@@ -110,8 +122,8 @@ class VoiceInputController(
                     } else when (error) {
                         SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
                             draft?.commitResult(null)
-                            draft?.text?.let(onText)
-                            nextRound(session, 500L)
+                            notifyDraft()
+                            nextRound(session, 300L)
                         }
                         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
                             if (busyRetries++ < 2) nextRound(session, 800L)
@@ -129,8 +141,11 @@ class VoiceInputController(
             speech.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "tr-TR")
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
             })
         } catch (_: SecurityException) {
             fail("Sesle yazmak için mikrofon izni gerekiyor.")
@@ -175,5 +190,6 @@ class VoiceInputController(
         releaseRecognizer()
         draft = null
         onState(VoicePhase.Idle, 0f)
+        notifyDraft()
     }
 }

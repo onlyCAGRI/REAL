@@ -67,6 +67,8 @@ object ReminderNotifications {
 
     fun show(context: Context, reminder: ReminderItem, alerting: Boolean = false): Boolean {
         if (reminder.isCompleted) return false
+        if (reminder.isChecklist && reminder.alertAt == null && !alerting) return false
+        if (reminder.alertAt == null && !reminder.sendImmediateNotification && !alerting && !reminder.shouldPinNotification) return false
         val id = reminder.id
         val text = reminder.text
         val pinned = reminder.shouldPinNotification
@@ -111,7 +113,46 @@ object ReminderNotifications {
             .setOnlyAlertOnce(!alerting)
             .setWhen(if (alerting) reminder.alertAt ?: reminder.createdAt else reminder.createdAt)
 
-        if (needsBigTextStyle(metadata.text)) {
+        val completeIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_COMPLETE
+            data = Uri.parse("bigboscagri://reminder/$id/complete")
+            putExtra(EXTRA_REMINDER_ID, id)
+        }
+        val completePendingIntent = PendingIntent.getBroadcast(
+            context,
+            id.hashCode() * 31 + 1,
+            completeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val snoozeIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_SNOOZE_10
+            data = Uri.parse("bigboscagri://reminder/$id/snooze_10")
+            putExtra(EXTRA_REMINDER_ID, id)
+        }
+        val snoozePendingIntent = PendingIntent.getBroadcast(
+            context,
+            id.hashCode() * 31 + 2,
+            snoozeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val completeAction = android.app.Notification.Action.Builder(
+            null,
+            "Tamamla",
+            completePendingIntent
+        ).build()
+
+        val snoozeAction = android.app.Notification.Action.Builder(
+            null,
+            "10 dk ertele",
+            snoozePendingIntent
+        ).build()
+
+        builder.addAction(completeAction)
+        builder.addAction(snoozeAction)
+
+        if (!reminder.isChecklist && needsBigTextStyle(metadata.text)) {
             builder.setStyle(android.app.Notification.BigTextStyle().bigText(metadata.text))
         }
 
@@ -172,6 +213,11 @@ object ReminderNotifications {
 }
 
 fun needsBigTextStyle(text: String): Boolean = text.length > 80 || text.contains('\n')
+
+fun canShowImmediateNotification(reminder: ReminderItem): Boolean =
+    !reminder.isCompleted &&
+    (!reminder.isChecklist || reminder.alertAt != null) &&
+    (reminder.alertAt != null || reminder.sendImmediateNotification)
 
 data class ReminderNotificationMetadata(
     val title: String,

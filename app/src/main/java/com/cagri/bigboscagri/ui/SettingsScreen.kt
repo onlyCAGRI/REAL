@@ -1,102 +1,348 @@
 package com.cagri.bigboscagri.ui
 
-import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.*
-import androidx.compose.ui.draw.*
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.layout.*
-import androidx.compose.ui.semantics.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.*
-import com.cagri.bigboscagri.ui.components.*
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.cagri.bigboscagri.ui.components.ActionGlyph
+import com.cagri.bigboscagri.ui.components.ActionIcon
 
 @Composable
-fun SettingsScreen(reduceDynamicBlur: Boolean, onReduceDynamicBlurChange: (Boolean) -> Unit,
-    reduceAnimations: Boolean, onReduceAnimationsChange: (Boolean) -> Unit,
-    designStyle: DesignStyle, onDesignStyleChange: (DesignStyle) -> Unit, onBack: () -> Unit,
-    exactAlarmsAllowed: Boolean = true, onRequestExactAlarms: () -> Unit = {}) {
+fun SettingsScreen(
+    reduceDynamicBlur: Boolean,
+    onReduceDynamicBlurChange: (Boolean) -> Unit,
+    reduceAnimations: Boolean,
+    onReduceAnimationsChange: (Boolean) -> Unit,
+    designStyle: DesignStyle,
+    onDesignStyleChange: (DesignStyle) -> Unit,
+    onBack: () -> Unit,
+    exactAlarmsAllowed: Boolean = true,
+    onRequestExactAlarms: () -> Unit = {}
+) {
     BackHandler(onBack = onBack)
-    Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().navigationBarsPadding()
-        .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Geri" }) {
-                ActionIcon(ActionGlyph.Back, Modifier.size(24.dp))
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        // Top App Bar: Only "Ayarlar" centered with back button
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .semantics { contentDescription = "Geri" }
+            ) {
+                ActionIcon(ActionGlyph.Back, Modifier.size(24.dp), color = Color.White)
             }
-            Text("Ayarlar", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Ayarlar",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Center)
+            )
         }
-        SettingsGroup("Tasarım") {
-            Text("AMOLED siyah", color = Color(0xFFA3A3AC), fontSize = 13.sp)
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Color(0xFF27272B)).padding(4.dp)) {
-                DesignStyle.entries.forEach { style ->
-                    TextButton(onClick = { onDesignStyleChange(style) }, modifier = Modifier.weight(1f)
-                        .background(if (style == designStyle) Color(0xFF45454B) else Color.Transparent, RoundedCornerShape(24.dp))) {
-                        Text(if (style == DesignStyle.Ice) "Buz" else "Glass", color = Color.White)
+
+        Spacer(Modifier.height(16.dp))
+
+        // Section Title: GÖRÜNÜM
+        Text(
+            "GÖRÜNÜM",
+            color = Color(0xFFA3A3AB),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.6.sp,
+            modifier = Modifier.padding(start = 6.dp, bottom = 8.dp)
+        )
+
+        // Large Premium Glass Card
+        val cardShape = RoundedCornerShape(26.dp)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(cardShape)
+                .background(Color(0xFF18181B))
+                .border(0.75.dp, Color.White.copy(alpha = 0.08f), cardShape)
+        ) {
+            // Item 1: Tema with Segmented Control (Sistem | Açık | Koyu - Koyu sabit, diğerleri disabled)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    ActionIcon(ActionGlyph.Theme, Modifier.size(22.dp), color = Color.White)
+                    Text(
+                        "Tema",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF27272B))
+                        .padding(3.dp)
+                ) {
+                    val themeOptions = listOf("Sistem", "Açık", "Koyu")
+                    themeOptions.forEach { option ->
+                        val isSelected = option == "Koyu"
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) Color.White else Color.Transparent)
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = option,
+                                color = if (isSelected) Color.Black else Color.White.copy(alpha = 0.28f),
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                        }
                     }
                 }
             }
-            DesignPreview(designStyle, reduceDynamicBlur)
+
+            HorizontalDivider(
+                color = Color(0xFF26262B),
+                thickness = 0.75.dp,
+                modifier = Modifier.padding(start = 52.dp, end = 16.dp)
+            )
+
+            // Item 2: Görünüm stili (Glass | Buz)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    ActionIcon(ActionGlyph.LiquidGlass, Modifier.size(22.dp), color = Color.White)
+                    Text(
+                        "Görünüm stili",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF27272B))
+                        .padding(3.dp)
+                ) {
+                    val styles = listOf(
+                        "Glass" to DesignStyle.Glass,
+                        "Buz" to DesignStyle.Ice
+                    )
+                    styles.forEach { (label, style) ->
+                        val isSelected = designStyle == style
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) Color.White else Color.Transparent)
+                                .clickable { onDesignStyleChange(style) }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) Color.Black else Color(0xFFA3A3AB),
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color = Color(0xFF26262B),
+                thickness = 0.75.dp,
+                modifier = Modifier.padding(start = 52.dp, end = 16.dp)
+            )
+
+            // Item 3: Animasyonu azalt
+            SettingsRow(
+                icon = ActionGlyph.MotionOff,
+                title = "Animasyonu azalt",
+                subtitle = "Ana oynatıcının gradyanını kaymak yerine dondurur",
+                checked = reduceAnimations,
+                onCheckedChange = onReduceAnimationsChange
+            )
+
+            HorizontalDivider(
+                color = Color(0xFF26262B),
+                thickness = 0.75.dp,
+                modifier = Modifier.padding(start = 52.dp, end = 16.dp)
+            )
+
+            // Item 4: Dinamik bulanıklığı azalt
+            SettingsRow(
+                icon = ActionGlyph.BlurOff,
+                title = "Dinamik bulanıklığı azalt",
+                subtitle = "Uygulama genelinde buzlu camı düz dolgularla değiştirir",
+                checked = reduceDynamicBlur,
+                onCheckedChange = onReduceDynamicBlurChange
+            )
         }
-        SettingsGroup("Performans") {
-            SettingsToggle("Animasyonu azalt", "Ekran geçişlerini ve mikrofon hareketini azaltır.", reduceAnimations, onReduceAnimationsChange)
-            HorizontalDivider(color = Color(0xFF303036))
-            SettingsToggle("Dinamik bulanıklığı azalt", "Cam yüzeyleri düz koyu dolguya çevirir.", reduceDynamicBlur, onReduceDynamicBlurChange)
-        }
-        SettingsGroup("Bildirimler") {
-            Text("Zamanlı hatırlatıcılar", color = Color.White, fontSize = 16.sp)
-            Text(if (exactAlarmsAllowed) "Tam saatinde hatırlatma izni açık." else "Android'in bildirim saatini geciktirmemesi için Alarmlar ve hatırlatıcılar iznini açabilirsin.",
-                color = Color(0xFFA5A5AF), fontSize = 13.sp, lineHeight = 19.sp)
-            if (!exactAlarmsAllowed) TextButton(onClick = onRequestExactAlarms) { Text("İzni aç", color = Color(0xFF91B9FF)) }
+
+        Spacer(Modifier.height(20.dp))
+
+        // BİLDİRİMLER Section
+        Text(
+            "BİLDİRİMLER",
+            color = Color(0xFFA3A3AB),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.6.sp,
+            modifier = Modifier.padding(start = 6.dp, bottom = 8.dp)
+        )
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(cardShape)
+                .background(Color(0xFF18181B))
+                .border(0.75.dp, Color.White.copy(alpha = 0.08f), cardShape)
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ActionIcon(ActionGlyph.Bell, Modifier.size(22.dp), color = Color.White)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Zamanlı hatırlatıcılar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Normal)
+                    Text(
+                        if (exactAlarmsAllowed) "Tam saatinde hatırlatma izni açık."
+                        else "Android'in bildirim saatini geciktirmemesi için Alarmlar ve hatırlatıcılar iznini açabilirsin.",
+                        color = Color(0xFFA5A5AF),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+            if (!exactAlarmsAllowed) {
+                TextButton(
+                    onClick = onRequestExactAlarms,
+                    modifier = Modifier.align(Alignment.End).padding(top = 4.dp)
+                ) {
+                    Text("İzni aç", color = Color(0xFF91B9FF))
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(title, color = Color(0xFFA3A3AB), fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp))
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Color(0xFF18181B)).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
-    }
-}
-@Composable
-private fun SettingsToggle(title: String, subtitle: String, value: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().toggleable(value, role = Role.Switch, onValueChange = onChange).padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(title, color = Color.White, fontSize = 15.sp, lineHeight = 21.sp)
-            Text(subtitle, color = Color(0xFF9797A2), fontSize = 12.sp, lineHeight = 17.sp)
+private fun SettingsRow(
+    icon: ActionGlyph,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            )
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ActionIcon(icon, Modifier.size(22.dp), color = Color.White)
+        Spacer(Modifier.width(14.dp))
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(end = 12.dp)
+        ) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Normal,
+                lineHeight = 20.sp
+            )
+            Text(
+                text = subtitle,
+                color = Color(0xFF9797A2),
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
-        Switch(checked = value, onCheckedChange = null)
-    }
-}
-@Composable
-private fun DesignPreview(style: DesignStyle, reduceBlur: Boolean) {
-    val scene = rememberGraphicsLayer()
-    var position by remember { mutableStateOf(Offset.Zero) }
-    Box(Modifier.fillMaxWidth().height(164.dp).clip(RoundedCornerShape(24.dp))) {
-        Box(Modifier.matchParentSize().onGloballyPositioned { position = it.positionInRoot() }
-            .drawWithContent {
-                if (!reduceBlur && Build.VERSION.SDK_INT >= 31) { scene.record { this@drawWithContent.drawContent() }; drawLayer(scene) }
-                else drawContent()
-            }.background(Brush.linearGradient(listOf(Color(0xFF263D51), Color(0xFF703946), Color(0xFF142C30))))) {
-            Text("Hatırlatıcılar", color = Color.White, fontSize = 25.sp, modifier = Modifier.padding(18.dp))
-        }
-        DesignPanel(scene, { position }, Modifier.align(Alignment.Center).padding(14.dp).fillMaxWidth(),
-            corners = 28.dp, designStyle = style, reduceDynamicBlur = reduceBlur) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 22.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Hatırlatıcı ekle", color = Color(0xFFE4E4EB), fontSize = 16.sp, modifier = Modifier.weight(1f))
-                ActionIcon(ActionGlyph.Mic, Modifier.size(24.dp))
-            }
-        }
+        Switch(
+            checked = checked,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = Color(0xFF3888FF),
+                uncheckedThumbColor = Color(0xFF8E8E93),
+                uncheckedTrackColor = Color(0xFF2C2C30),
+                uncheckedBorderColor = Color.Transparent
+            )
+        )
     }
 }

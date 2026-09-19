@@ -20,8 +20,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
 class VoiceInputHandle(
-    val phase: VoicePhase, val level: Float,
-    val toggle: () -> Unit, val finish: () -> Unit, val cancel: () -> Unit
+    val phase: VoicePhase,
+    val level: Float,
+    val committedText: String = "",
+    val partialText: String = "",
+    val toggle: () -> Unit,
+    val finish: () -> Unit,
+    val cancel: () -> Unit
 )
 
 @Composable
@@ -34,13 +39,19 @@ fun rememberVoiceInput(draft: String, onText: (String) -> Unit, onSubmit: (Strin
     val latestOnSubmit by rememberUpdatedState(onSubmit)
     var phase by remember { mutableStateOf(VoicePhase.Idle) }
     var level by remember { mutableFloatStateOf(0f) }
+    var committedText by remember { mutableStateOf("") }
+    var partialText by remember { mutableStateOf("") }
     var requestingPermission by remember { mutableStateOf(false) }
     val controller = remember(context) {
         VoiceInputController(
             context.applicationContext, onText = { latestOnText(it) },
             onState = { nextPhase, nextLevel -> phase = nextPhase; level = if (trackLevel) nextLevel else 0f },
             onSubmit = { latestOnSubmit(it) },
-            onErrorMessage = { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+            onErrorMessage = { Toast.makeText(context, it, Toast.LENGTH_LONG).show() },
+            onDraftChange = { committed, partial ->
+                committedText = committed
+                partialText = partial
+            }
         )
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -56,7 +67,7 @@ fun rememberVoiceInput(draft: String, onText: (String) -> Unit, onSubmit: (Strin
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer); controller.dispose() }
     }
-    return VoiceInputHandle(phase, level,
+    return VoiceInputHandle(phase, level, committedText, partialText,
         toggle = {
             when (phase) {
                 VoicePhase.Listening -> controller.finish()

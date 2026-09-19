@@ -13,6 +13,9 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
@@ -112,6 +115,7 @@ fun ReminderDetailScreen(
     reduceDynamicBlur: Boolean = false,
     designStyle: DesignStyle = DesignStyle.Glass,
     onSetAlert: (Long?, RecurrenceRule) -> Unit = { _, _ -> },
+    onToggleChecklistItem: (Long, Long) -> Unit = { _, _ -> },
     exactAlarmsAllowed: Boolean = true,
     onRequestExactAlarms: () -> Unit = {},
     sharedTransitionScope: SharedTransitionScope? = null,
@@ -237,9 +241,82 @@ fun ReminderDetailScreen(
                     )
                 } else {
                     SelectionContainer {
-                        Text(reminder.text, color = if (reminder.isCompleted) Color(0xFF9999A2) else Color(0xFFF4F4F6),
-                            fontSize = 21.sp, lineHeight = 31.sp,
-                            textDecoration = if (reminder.isCompleted) TextDecoration.LineThrough else TextDecoration.None)
+                        Text(
+                            reminder.text,
+                            color = if (reminder.isCompleted) Color(0xFF9999A2) else Color(0xFFF4F4F6),
+                            fontSize = 21.sp,
+                            lineHeight = 31.sp,
+                            textDecoration = if (reminder.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                        )
+                    }
+                    if (reminder.isChecklist && reminder.checklistItems.isNotEmpty()) {
+                        val total = reminder.checklistItems.size
+                        val completedCount = reminder.checklistItems.count { it.isCompleted }
+                        val summaryText = if (completedCount > 0) "$total madde • $completedCount tamamlandı" else "$total madde"
+                        Text(
+                            text = summaryText,
+                            color = Color(0xFFA5A5B5),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp)
+                        )
+                    }
+                }
+                if (reminder.isChecklist && reminder.checklistItems.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = if (editing) 16.dp else 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        reminder.checklistItems.forEach { item ->
+                            val itemTextColor by animateColorAsState(
+                                if (item.isCompleted) Color(0xFF6E6E77) else Color(0xFFF1F1F5),
+                                animationSpec = if (reduceAnimations) snap() else tween(200),
+                                label = "checkItemColor_${item.id}"
+                            )
+                            val itemAlpha by animateFloatAsState(
+                                if (item.isCompleted) 0.65f else 1.0f,
+                                animationSpec = if (reduceAnimations) snap() else tween(200),
+                                label = "checkItemAlpha_${item.id}"
+                            )
+                            val circleBorderColor by animateColorAsState(
+                                if (item.isCompleted) Color(0xFF686873) else Color(0xFF5E5E68),
+                                animationSpec = if (reduceAnimations) snap() else tween(200),
+                                label = "checkCircleBorder_${item.id}"
+                            )
+                            val circleBgColor by animateColorAsState(
+                                if (item.isCompleted) Color(0xFF686873) else Color.Transparent,
+                                animationSpec = if (reduceAnimations) snap() else tween(200),
+                                label = "checkCircleBg_${item.id}"
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        onToggleChecklistItem(reminder.id, item.id)
+                                    }
+                                    .padding(vertical = 8.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .background(circleBgColor, CircleShape)
+                                        .border(1.5.dp, circleBorderColor, CircleShape)
+                                )
+                                Text(
+                                    text = item.text,
+                                    color = itemTextColor,
+                                    fontSize = 17.sp,
+                                    lineHeight = 24.sp,
+                                    textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                    modifier = Modifier.weight(1f).graphicsLayer { alpha = itemAlpha }
+                                )
+                            }
+                        }
                     }
                 }
                 HorizontalDivider(Modifier.padding(top = 24.dp, bottom = 18.dp), color = Color(0xFF38383F))
@@ -317,6 +394,37 @@ fun ReminderDetailScreen(
                                 }
                             }
                         }
+                    }
+                }
+                if (!reminder.referenceUrl.isNullOrBlank()) {
+                    val displayHost = remember(reminder.referenceUrl) { formatDisplayUrl(reminder.referenceUrl) }
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 16.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF1E1E24))
+                            .border(0.8.dp, Color(0xFF363640), RoundedCornerShape(12.dp))
+                            .clickable {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(reminder.referenceUrl))
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    android.widget.Toast.makeText(context, "Bağlantı açılamadı", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ActionIcon(ActionGlyph.Share, Modifier.size(14.dp), Color(0xFF91B9FF))
+                        Text(
+                            text = displayHost,
+                            color = Color(0xFF91B9FF),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                     }
                 }
                 if (editing && !reminder.isCompleted) {
@@ -526,4 +634,13 @@ fun reminderDetailStatusText(
     reminder.isCompleted -> "Tamamlandı"
     reminder.alertAt == null -> if (!hasCategory) "Uyarı yok" else null
     else -> "Planlı"
+}
+
+fun formatDisplayUrl(url: String): String {
+    return try {
+        val uri = android.net.Uri.parse(url)
+        uri.host?.removePrefix("www.") ?: url
+    } catch (_: Exception) {
+        url
+    }
 }

@@ -20,6 +20,24 @@ class ReminderRepository(private val preferences: SharedPreferences) {
             buildList {
                 for (index in 0 until array.length()) {
                     val item = array.getJSONObject(index)
+                    val isChecklist = item.optBoolean("isChecklist", false)
+                    val checklistItems = if (item.has("checklistItems")) {
+                        val itemsArray = item.optJSONArray("checklistItems")
+                        if (itemsArray != null) {
+                            buildList {
+                                for (i in 0 until itemsArray.length()) {
+                                    val obj = itemsArray.getJSONObject(i)
+                                    add(
+                                        ChecklistItem(
+                                            id = obj.getLong("id"),
+                                            text = obj.getString("text"),
+                                            completedAt = obj.optionalTimestamp("completedAt")
+                                        )
+                                    )
+                                }
+                            }
+                        } else emptyList()
+                    } else emptyList()
                     add(
                         ReminderItem(
                             id = item.getLong("id"),
@@ -34,7 +52,11 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             accentEnd = item.optionalAccent("accentEnd"),
                             repeatRule = RecurrenceRule.fromStorage(if (item.has("repeatRule")) item.optString("repeatRule") else null),
                             anchorAlertAt = item.optionalTimestamp("anchorAlertAt") ?: item.optionalTimestamp("alertAt"),
-                            customCategoryId = item.optionalTimestamp("customCategoryId")
+                            customCategoryId = item.optionalTimestamp("customCategoryId"),
+                            isChecklist = isChecklist,
+                            checklistItems = checklistItems,
+                            sendImmediateNotification = item.optBoolean("sendImmediateNotification", true),
+                            referenceUrl = item.optString("referenceUrl").takeIf { !it.isNullOrBlank() && it != "null" }
                         )
                     )
                 }
@@ -49,29 +71,86 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         text: String,
         alertAt: Long? = null,
         repeatRule: RecurrenceRule = RecurrenceRule.NONE,
-        customCategoryId: Long? = null
+        customCategoryId: Long? = null,
+        isChecklist: Boolean = false,
+        checklistItems: List<ChecklistItem> = emptyList(),
+        sendImmediateNotification: Boolean = true,
+        referenceUrl: String? = null
     ): List<ReminderItem> = synchronized(mutationLock) {
-        require(text.isNotBlank())
+        val trimmedTitle = text.trim()
+        require(trimmedTitle.isNotBlank()) { "Başlık boş olamaz" }
+        val validItems = if (isChecklist) {
+            checklistItems.filter { it.text.isNotBlank() }
+        } else emptyList()
+        if (isChecklist) {
+            require(validItems.isNotEmpty()) { "En az bir madde olmalı" }
+        }
         val now = System.currentTimeMillis()
         require(alertAt == null || alertAt > now)
         val previous = load()
         val id = maxOf(now, (previous.maxOfOrNull { it.id } ?: 0L) + 1L)
+        val normalizedItems = validItems.mapIndexed { index, item ->
+            if (item.id > 0L) item.copy(text = item.text.trim())
+            else ChecklistItem(id = now + index + 1L, text = item.text.trim(), completedAt = item.completedAt)
+        }
         val newItem = ReminderItem(
             id = id,
-            text = text.trim(),
+            text = trimmedTitle,
             createdAt = now,
             alertAt = alertAt,
             repeatRule = if (alertAt != null) repeatRule else RecurrenceRule.NONE,
             anchorAlertAt = alertAt,
-            customCategoryId = customCategoryId
+            customCategoryId = customCategoryId,
+            isChecklist = isChecklist,
+            checklistItems = normalizedItems,
+            sendImmediateNotification = sendImmediateNotification,
+            referenceUrl = referenceUrl?.trim()?.takeIf { it.isNotBlank() }
         )
         val updated = listOf(newItem) + previous
         save(updated)
         updated
     }
 
+    fun toggleChecklistItem(reminderId: Long, itemId: Long): List<ReminderItem> = update(reminderId) { reminder ->
+        if (!reminder.isChecklist) reminder
+        else {
+            val now = System.currentTimeMillis()
+            val updatedItems = reminder.checklistItems.map { item ->
+                if (item.id == itemId) item.toggleCompleted(now) else item
+            }
+            reminder.copy(checklistItems = updatedItems, updatedAt = now)
+        }
+    }
+
     fun toggleCompleted(id: Long): List<ReminderItem> = update(id) {
         it.toggleCompleted(System.currentTimeMillis())
+    }
+
+    fun completeFromNotification(id: Long): List<ReminderItem> = update(id) { item ->
+        if (item.isCompleted) item
+        else if (item.hasRepeat) {
+            // Recurring reminder: alertAt already advanced in deliverDue.
+            // Do not set completedAt or break the recurrence cycle.
+            item
+        } else {
+            item.copy(
+                completedAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis()
+            )
+        }
+    }
+
+    fun snooze(id: Long, snoozeUntil: Long): List<ReminderItem> = update(id) { item ->
+        if (item.isCompleted) item
+        else {
+            val now = System.currentTimeMillis()
+            item.copy(
+                alertAt = snoozeUntil,
+                notifiedAlertAt = null,
+                anchorAlertAt = item.anchorAlertAt ?: item.alertAt,
+                updatedAt = now
+            )
+        }
     }
 
     fun toggleImportant(id: Long): List<ReminderItem> = update(id) {
@@ -195,6 +274,19 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                     .put("repeatRule", reminder.repeatRule.storageKey)
                     .put("anchorAlertAt", reminder.anchorAlertAt ?: JSONObject.NULL)
                     .put("customCategoryId", reminder.customCategoryId ?: JSONObject.NULL)
+                    .put("isChecklist", reminder.isChecklist)
+                    .put("sendImmediateNotification", reminder.sendImmediateNotification)
+                    .put("referenceUrl", reminder.referenceUrl ?: JSONObject.NULL)
+                    .put("checklistItems", JSONArray().apply {
+                        reminder.checklistItems.forEach { checkItem ->
+                            put(
+                                JSONObject()
+                                    .put("id", checkItem.id)
+                                    .put("text", checkItem.text)
+                                    .put("completedAt", checkItem.completedAt ?: JSONObject.NULL)
+                            )
+                        }
+                    })
             )
         }
         val raw = array.toString()

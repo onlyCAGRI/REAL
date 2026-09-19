@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 
-enum class ActionGlyph { Calendar, Back, Check, Undo, Edit, Share, Delete, Star, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, Minus }
+enum class ActionGlyph { Calendar, Back, Check, Undo, Edit, Share, Delete, Star, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass }
 
 @Composable
 fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.White, filled: Boolean = false) {
@@ -116,11 +116,16 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     )
                 }
                 ActionGlyph.Theme -> {
-                    drawCircle(color, radius = 7.2f, center = Offset(12f, 12f), style = stroke)
-                    drawPath(Path().apply {
-                        moveTo(12f, 4.8f); cubicTo(16.2f, 6.2f, 17.8f, 9.6f, 17.8f, 12f)
-                        cubicTo(17.8f, 15.4f, 15.4f, 18.2f, 12f, 19.2f); close()
-                    }, color, style = Fill)
+                    drawCircle(color, radius = 4.2f, center = Offset(12f, 12f), style = stroke)
+                    val angles = floatArrayOf(0f, 45f, 90f, 135f, 180f, 225f, 270f, 315f)
+                    for (deg in angles) {
+                        val rad = Math.toRadians(deg.toDouble())
+                        val cos = Math.cos(rad).toFloat()
+                        val sin = Math.sin(rad).toFloat()
+                        val start = Offset(12f + 6.8f * cos, 12f + 6.8f * sin)
+                        val end = Offset(12f + 9.5f * cos, 12f + 9.5f * sin)
+                        drawLine(color, start, end, strokeWidth = 2f, cap = StrokeCap.Round)
+                    }
                 }
                 ActionGlyph.BlurOff -> {
                     listOf(
@@ -131,14 +136,32 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     drawLine(color, Offset(4f, 4f), Offset(20f, 20f), strokeWidth = 2f, cap = StrokeCap.Round)
                 }
                 ActionGlyph.MotionOff -> {
-                    drawCircle(color, radius = 7f, center = Offset(12f, 12f), style = stroke)
                     drawPath(Path().apply {
-                        moveTo(8.2f, 12.2f)
-                        cubicTo(9.6f, 9.4f, 12.2f, 8.2f, 15.8f, 9.1f)
-                        moveTo(8.7f, 15.5f)
-                        cubicTo(11.5f, 16.9f, 14.6f, 16.1f, 16.4f, 13.8f)
+                        moveTo(4f, 12f)
+                        cubicTo(7f, 6.8f, 17f, 6.8f, 20f, 12f)
+                        cubicTo(17f, 17.2f, 7f, 17.2f, 4f, 12f)
+                        close()
                     }, color, style = stroke)
+                    drawCircle(color, radius = 2.6f, center = Offset(12f, 12f), style = stroke)
                     drawLine(color, Offset(4f, 4f), Offset(20f, 20f), strokeWidth = 2f, cap = StrokeCap.Round)
+                }
+                ActionGlyph.LiquidGlass -> {
+                    drawPath(Path().apply {
+                        moveTo(9f, 5f)
+                        cubicTo(9f, 9f, 10f, 13f, 15f, 13f)
+                        cubicTo(10f, 13f, 9f, 17f, 9f, 21f)
+                        cubicTo(9f, 17f, 8f, 13f, 3f, 13f)
+                        cubicTo(8f, 13f, 9f, 9f, 9f, 5f)
+                        close()
+                    }, color, style = Fill)
+                    drawPath(Path().apply {
+                        moveTo(17.5f, 4f)
+                        cubicTo(17.5f, 6.2f, 18.2f, 7.8f, 21f, 7.8f)
+                        cubicTo(18.2f, 7.8f, 17.5f, 9.4f, 17.5f, 11.6f)
+                        cubicTo(17.5f, 9.4f, 16.8f, 7.8f, 14f, 7.8f)
+                        cubicTo(16.8f, 7.8f, 17.5f, 6.2f, 17.5f, 4f)
+                        close()
+                    }, color, style = Fill)
                 }
                 ActionGlyph.ChevronRight -> {
                     line(9f, 6f, 15f, 12f)
@@ -169,8 +192,32 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     }, color, style = stroke)
                     drawArc(color, 0f, 180f, false, Offset(10f, 17.5f), Size(4f, 3.5f), style = stroke)
                 }
+                ActionGlyph.BellOff -> {
+                    drawPath(Path().apply {
+                        moveTo(12f, 3.5f)
+                        lineTo(12f, 5f)
+                        moveTo(12f, 5f)
+                        cubicTo(9f, 5.5f, 6.5f, 8f, 6.5f, 12f)
+                        lineTo(5f, 16.5f)
+                        lineTo(19f, 16.5f)
+                        lineTo(17.5f, 12f)
+                        cubicTo(17.5f, 8f, 15f, 5.5f, 12f, 5f)
+                    }, color, style = stroke)
+                    drawArc(color, 0f, 180f, false, Offset(10f, 17.5f), Size(4f, 3.5f), style = stroke)
+                    line(4.5f, 4.5f, 19.5f, 19.5f)
+                }
                 ActionGlyph.Minus -> {
                     line(5f, 12f, 19f, 12f)
+                }
+                ActionGlyph.Checklist -> {
+                    drawRoundRect(color, Offset(4f, 5.5f), Size(4.5f, 4.5f), CornerRadius(1.2f, 1.2f), style = stroke)
+                    line(11.5f, 7.75f, 20f, 7.75f)
+
+                    drawRoundRect(color, Offset(4f, 11.5f), Size(4.5f, 4.5f), CornerRadius(1.2f, 1.2f), style = stroke)
+                    line(11.5f, 13.75f, 20f, 13.75f)
+
+                    drawRoundRect(color, Offset(4f, 17.5f), Size(4.5f, 4.5f), CornerRadius(1.2f, 1.2f), style = stroke)
+                    line(11.5f, 19.75f, 20f, 19.75f)
                 }
             }
         }

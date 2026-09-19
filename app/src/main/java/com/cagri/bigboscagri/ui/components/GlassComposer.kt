@@ -14,9 +14,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import com.cagri.bigboscagri.speech.VoiceTranscriptFormatter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -47,13 +57,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.data.RecurrenceRule
 import com.cagri.bigboscagri.speech.VoicePhase
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.ui.DesignStyle
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GlassComposer(
     value: String,
@@ -78,6 +100,19 @@ fun GlassComposer(
     reduceDynamicBlur: Boolean = false,
     reduceAnimations: Boolean = false,
     designStyle: DesignStyle = DesignStyle.Glass,
+    isChecklistMode: Boolean = false,
+    onToggleChecklistMode: () -> Unit = {},
+    checklistDraftItems: List<String> = emptyList(),
+    onChecklistItemChange: (Int, String) -> Unit = { _, _ -> },
+    onAddChecklistItem: () -> Unit = {},
+    onRemoveChecklistItem: (Int) -> Unit = {},
+    sendImmediateNotification: Boolean = true,
+    onToggleImmediateNotification: () -> Unit = {},
+    voiceCommittedText: String = "",
+    voicePartialText: String = "",
+    onVoiceLineCountChange: (Int) -> Unit = {},
+    isVoiceDraft: Boolean = false,
+    isShareDraft: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val corners by animateDpAsState(
@@ -107,36 +142,150 @@ fun GlassComposer(
         label = "micLevel"
     )
 
+    val keyboard = LocalSoftwareKeyboardController.current
+    val itemFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
+    fun getItemFocusRequester(index: Int): FocusRequester =
+        itemFocusRequesters.getOrPut(index) { FocusRequester() }
+
+    var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(isChecklistMode) {
+        if (isChecklistMode) {
+            delay(60)
+            try {
+                if (value.isBlank()) {
+                    focusRequester.requestFocus()
+                } else {
+                    getItemFocusRequester(0).requestFocus()
+                }
+                keyboard?.show()
+            } catch (_: Exception) {}
+        }
+    }
+
+    LaunchedEffect(pendingFocusIndex, checklistDraftItems.size) {
+        val target = pendingFocusIndex
+        if (target != null && target in checklistDraftItems.indices) {
+            delay(40)
+            try {
+                getItemFocusRequester(target).requestFocus()
+                keyboard?.show()
+            } catch (_: Exception) {}
+            pendingFocusIndex = null
+        }
+    }
+
+    DisposableEffect(isChecklistMode) {
+        onDispose {
+            itemFocusRequesters.clear()
+            pendingFocusIndex = null
+        }
+    }
+
+    val handleChecklistEnter: (Int) -> Unit = { index ->
+        val currentText = checklistDraftItems.getOrElse(index) { "" }
+        if (currentText.isNotBlank()) {
+            if (index == checklistDraftItems.lastIndex) {
+                onAddChecklistItem()
+                pendingFocusIndex = index + 1
+            } else {
+                pendingFocusIndex = index + 1
+            }
+        } else {
+            if (index < checklistDraftItems.lastIndex) {
+                pendingFocusIndex = index + 1
+            }
+        }
+    }
+
+    val voiceScrollState = rememberScrollState()
+
+    val (effectiveCommitted, effectivePartial) = remember(value, voiceCommittedText, voicePartialText) {
+        VoiceTranscriptFormatter.splitCommittedAndPartial(value, voiceCommittedText, voicePartialText)
+    }
+
+    val styledVoiceText = remember(value, effectiveCommitted, effectivePartial) {
+        if (value.isEmpty()) {
+            AnnotatedString("")
+        } else {
+            buildAnnotatedString {
+                append(value)
+                if (effectiveCommitted.isNotEmpty() && effectivePartial.isNotEmpty()) {
+                    val committedLen = effectiveCommitted.length.coerceAtMost(value.length)
+                    addStyle(
+                        SpanStyle(color = Color(0xFFF7F7F8)),
+                        start = 0,
+                        end = committedLen
+                    )
+                    val partialStart = value.lastIndexOf(effectivePartial).takeIf { it >= 0 } ?: committedLen
+                    addStyle(
+                        SpanStyle(color = Color(0xFF91B9FF)),
+                        start = partialStart,
+                        end = value.length
+                    )
+                } else if (effectivePartial.isNotEmpty()) {
+                    addStyle(
+                        SpanStyle(color = Color(0xFF91B9FF)),
+                        start = 0,
+                        end = value.length
+                    )
+                } else {
+                    addStyle(
+                        SpanStyle(color = Color(0xFFF7F7F8)),
+                        start = 0,
+                        end = value.length
+                    )
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(value, recording) {
+        if (recording && value.isNotEmpty()) {
+            voiceScrollState.scrollTo(voiceScrollState.maxValue)
+        }
+    }
+
     val panelContent: @Composable BoxScope.() -> Unit = {
         Box(
             Modifier.align(Alignment.TopCenter).padding(top = 10.dp).size(width = 36.dp, height = 3.dp)
                 .graphicsLayer { alpha = handleAlpha }
                 .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(2.dp))
         )
-        // Keep the text field mounted during all focus, permission and mic changes.
-        Row(
-            Modifier.fillMaxSize().padding(start = 22.dp, end = 9.dp, top = textInset, bottom = if (expanded) 42.dp else 0.dp),
-            verticalAlignment = Alignment.CenterVertically
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) { detectTapGestures { /* consume panel tap */ } }
+                .padding(
+                    top = if (expanded) 16.dp else textInset,
+                    bottom = if (expanded) 6.dp else 0.dp
+                )
         ) {
-            BasicTextField(
-                value = value,
-                onValueChange = { onValueChange(it.replace("\r", "").replace("\n", " ")) },
-                modifier = Modifier.weight(1f).padding(end = 6.dp)
-                    .focusRequester(focusRequester)
-                    .onFocusChanged { onFocusChanged(it.isFocused) }
-                    .semantics { contentDescription = "Hatırlatıcı metni" },
-                readOnly = recording || saving,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(
-                    color = Color(0xFFF7F7F8), fontSize = 16.sp, lineHeight = 22.sp
-                ),
-                cursorBrush = SolidColor(Color(0xFF9AB9FF)),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(onDone = { onSubmit() }),
-                decorationBox = { field ->
-                    Box(Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.CenterStart) {
+            val inputRowModifier = if (recording) {
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 22.dp, end = 9.dp)
+                    .weight(1f)
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 22.dp, end = 9.dp)
+                    .height(if (expanded) 48.dp else 58.dp)
+            }
+            Row(
+                modifier = inputRowModifier,
+                verticalAlignment = if (recording) Alignment.Bottom else Alignment.CenterVertically
+            ) {
+                if (recording) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 6.dp, top = 6.dp, bottom = 6.dp)
+                            .fillMaxHeight()
+                            .verticalScroll(voiceScrollState),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
                         if (value.isEmpty()) {
                             Text(
                                 when (voicePhase) {
@@ -144,108 +293,323 @@ fun GlassComposer(
                                     VoicePhase.Listening -> "Türkçe dinleniyor…"
                                     VoicePhase.Finishing -> "Metin hazırlanıyor…"
                                 },
-                                color = if (recording) Color(0xFFA2C7FF) else Color(0xFFB8B8BF), fontSize = 16.sp
+                                color = Color(0xFFA2C7FF),
+                                fontSize = 16.sp,
+                                lineHeight = 22.sp
+                            )
+                        } else {
+                            Text(
+                                text = styledVoiceText,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = 16.sp,
+                                    lineHeight = 22.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                onTextLayout = { textLayoutResult ->
+                                    onVoiceLineCountChange(textLayoutResult.lineCount)
+                                },
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
-                        field()
                     }
+                } else {
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { onValueChange(it.replace("\r", "").replace("\n", " ")) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 6.dp)
+                            .focusRequester(focusRequester)
+                            .onFocusChanged { onFocusChanged(it.isFocused) }
+                            .semantics { contentDescription = if (isChecklistMode) "Başlık" else "Hatırlatıcı metni" },
+                        readOnly = saving,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = Color(0xFFF7F7F8),
+                            fontSize = 16.sp,
+                            lineHeight = 22.sp,
+                            fontWeight = if (isChecklistMode) FontWeight.SemiBold else FontWeight.Normal
+                        ),
+                        cursorBrush = SolidColor(Color(0xFF9AB9FF)),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            imeAction = if (isChecklistMode) ImeAction.Next else ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { pendingFocusIndex = 0 },
+                            onDone = { onSubmit() }
+                        ),
+                        decorationBox = { field ->
+                            Box(Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.CenterStart) {
+                                if (value.isEmpty()) {
+                                    Text(
+                                        if (isChecklistMode) "Başlık"
+                                        else "Hatırlatıcı ekle",
+                                        color = Color(0xFFB8B8BF),
+                                        fontSize = 16.sp
+                                    )
+                                }
+                                field()
+                            }
+                        }
+                    )
                 }
-            )
-            if (!expanded) IconButton(onClick = onPickDate, enabled = !recording && !saving,
-                modifier = Modifier.size(42.dp).semantics { contentDescription = "Tarih ve saat ekle" }) {
-                ActionIcon(ActionGlyph.Calendar, Modifier.size(21.dp), Color(0xFFBABAC3))
-            }
-            IconButton(
-                onClick = onMicClick,
-                enabled = voicePhase != VoicePhase.Finishing && !saving,
-                modifier = Modifier.size(48.dp).semantics {
-                    contentDescription = if (recording) "Dinlemeyi bitir ve kaydet" else "Türkçe sesle yaz"
-                    stateDescription = when (voicePhase) {
-                        VoicePhase.Idle -> "Mikrofon kapalı"
-                        VoicePhase.Listening -> "Türkçe dinleniyor"
-                        VoicePhase.Finishing -> "Metin hazırlanıyor"
-                    }
-                }
-            ) {
-                Box(
-                    Modifier.size(40.dp).graphicsLayer { scaleX = micScale; scaleY = micScale }
-                        .background(if (recording) Color(0xFF2D6099).copy(alpha = 0.32f + voiceLevel * 0.15f) else Color.Transparent, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (voicePhase == VoicePhase.Finishing && !reduceAnimations) {
-                        CircularProgressIndicator(Modifier.size(23.dp), color = micColor, strokeWidth = 2.dp)
-                    } else ActionIcon(ActionGlyph.Mic, Modifier.size(24.dp), micColor)
-                }
-            }
-        }
-        if (expanded) Row(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .padding(start = 16.dp, end = 10.dp, bottom = 6.dp).height(40.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                Modifier.weight(1f).clickable(enabled = !recording && !saving, onClick = onPickDate).padding(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ActionIcon(ActionGlyph.Calendar, Modifier.size(18.dp), Color(0xFF91B9FF))
-                val dateLabel = if (alertAt != null) {
-                    val dateStr = reminderDate(alertAt)
-                    if (repeatRule != RecurrenceRule.NONE) "$dateStr • ${repeatRule.displayName}" else dateStr
-                } else "Tarih ve saat ekle"
-                Text(
-                    dateLabel, color = Color(0xFFBFCDE6), fontSize = 12.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 9.dp)
-                )
-            }
-            if (alertAt != null) IconButton(
-                onClick = onClearDate, enabled = !saving,
-                modifier = Modifier.size(36.dp).semantics { contentDescription = "Tarih ve saati kaldır" }
-            ) {
-                ActionIcon(ActionGlyph.Close, Modifier.size(16.dp), Color(0xFFAAAAB4))
-            }
 
-            if (customCategories.isNotEmpty()) {
-                val selectedCategory = customCategories.firstOrNull { it.id == selectedCategoryId }
-                Row(
-                    modifier = Modifier
-                        .padding(start = 4.dp, end = 2.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(enabled = !recording && !saving, onClick = onPickCategory)
-                        .background(if (selectedCategory != null) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.05f))
-                        .border(
-                            0.6.dp,
-                            if (selectedCategory != null) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.12f),
-                            RoundedCornerShape(12.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (selectedCategory != null) {
-                        val startColor = ReminderColorChoices.getOrNull(selectedCategory.accentStart)?.color ?: Color(0xFF233F73)
-                        val endColor = selectedCategory.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
+                if (isChecklistMode) {
+                    val canSubmit = value.isNotBlank() && checklistDraftItems.any { it.isNotBlank() }
+                    IconButton(
+                        onClick = onSubmit,
+                        enabled = canSubmit && !saving,
+                        modifier = Modifier.size(36.dp).semantics { contentDescription = "Listeyi kaydet" }
+                    ) {
                         Box(
-                            Modifier.size(15.dp).clip(CircleShape)
-                                .background(Brush.linearGradient(listOf(startColor, endColor))),
+                            Modifier.size(30.dp).background(
+                                if (canSubmit) Color(0xFF295799) else Color(0xFF1E1E24),
+                                CircleShape
+                            ),
                             contentAlignment = Alignment.Center
                         ) {
-                            CategoryIconGlyph(CategoryIcon.fromKey(selectedCategory.iconKey), Modifier.size(9.dp), Color.White)
+                            ActionIcon(
+                                ActionGlyph.Check,
+                                Modifier.size(15.dp),
+                                if (canSubmit) Color.White else Color(0xFF6B6B74)
+                            )
                         }
-                        Text(
-                            selectedCategory.name,
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(start = 5.dp)
+                    }
+                } else if ((isVoiceDraft || isShareDraft) && !recording) {
+                    val canSubmit = value.isNotBlank()
+                    IconButton(
+                        onClick = onSubmit,
+                        enabled = canSubmit && !saving,
+                        modifier = Modifier.size(36.dp).semantics { contentDescription = "Hatırlatıcıyı kaydet" }
+                    ) {
+                        Box(
+                            Modifier.size(30.dp).background(
+                                if (canSubmit) Color(0xFF295799) else Color(0xFF1E1E24),
+                                CircleShape
+                            ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            ActionIcon(
+                                ActionGlyph.Check,
+                                Modifier.size(15.dp),
+                                if (canSubmit) Color.White else Color(0xFF6B6B74)
+                            )
+                        }
+                    }
+                }
+
+                IconButton(
+                    onClick = onMicClick,
+                    enabled = voicePhase != VoicePhase.Finishing && !saving,
+                    modifier = Modifier.size(48.dp).semantics {
+                        contentDescription = if (recording) "Dinlemeyi bitir" else "Türkçe sesle yaz"
+                        stateDescription = when (voicePhase) {
+                            VoicePhase.Idle -> "Mikrofon kapalı"
+                            VoicePhase.Listening -> "Türkçe dinleniyor"
+                            VoicePhase.Finishing -> "Metin hazırlanıyor"
+                        }
+                    }
+                ) {
+                    Box(
+                        Modifier.size(40.dp).graphicsLayer { scaleX = micScale; scaleY = micScale }
+                            .background(if (recording) Color(0xFF2D6099).copy(alpha = 0.32f + voiceLevel * 0.15f) else Color.Transparent, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (voicePhase == VoicePhase.Finishing && !reduceAnimations) {
+                            CircularProgressIndicator(Modifier.size(23.dp), color = micColor, strokeWidth = 2.dp)
+                        } else ActionIcon(ActionGlyph.Mic, Modifier.size(24.dp), micColor)
+                    }
+                }
+            }
+
+            if (expanded) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val hasAlert = alertAt != null
+                    IconButton(
+                        onClick = onPickDate,
+                        enabled = !recording && !saving,
+                        modifier = Modifier.size(40.dp).semantics {
+                            contentDescription = if (hasAlert) {
+                                val dateStr = reminderDate(alertAt)
+                                if (repeatRule != RecurrenceRule.NONE) "Tarih ve saat: $dateStr, ${repeatRule.displayName}" else "Tarih ve saat: $dateStr"
+                            } else "Tarih ve saat ekle"
+                        }
+                    ) {
+                        ActionIcon(
+                            ActionGlyph.Calendar,
+                            Modifier.size(21.dp),
+                            if (hasAlert) Color(0xFF91B9FF) else Color(0xFFBABAC3)
                         )
-                    } else {
-                        ActionIcon(ActionGlyph.Note, Modifier.size(13.dp), Color(0xFF9EA3B0))
+                    }
+
+                    if (hasAlert) {
+                        IconButton(
+                            onClick = onClearDate,
+                            enabled = !saving,
+                            modifier = Modifier.size(28.dp).semantics { contentDescription = "Tarih ve saati kaldır" }
+                        ) {
+                            ActionIcon(ActionGlyph.Close, Modifier.size(13.dp), Color(0xFFAAAAB4))
+                        }
+                    }
+
+                    if (customCategories.isNotEmpty()) {
+                        val selectedCategory = customCategories.firstOrNull { it.id == selectedCategoryId }
+                        val isCatSelected = selectedCategory != null
+                        val catColor = if (isCatSelected) {
+                            ReminderColorChoices.getOrNull(selectedCategory!!.accentStart)?.color ?: Color(0xFF91B9FF)
+                        } else Color(0xFFBABAC3)
+
+                        IconButton(
+                            onClick = onPickCategory,
+                            enabled = !recording && !saving,
+                            modifier = Modifier.size(40.dp).semantics {
+                                contentDescription = if (isCatSelected) "Kategori: ${selectedCategory!!.name}" else "Kategori seç"
+                            }
+                        ) {
+                            if (isCatSelected) {
+                                CategoryIconGlyph(
+                                    CategoryIcon.fromKey(selectedCategory!!.iconKey),
+                                    Modifier.size(21.dp),
+                                    catColor
+                                )
+                            } else {
+                                ActionIcon(
+                                    ActionGlyph.Note,
+                                    Modifier.size(21.dp),
+                                    catColor
+                                )
+                            }
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onToggleChecklistMode,
+                        enabled = !recording && !saving,
+                        modifier = Modifier.size(40.dp).semantics {
+                            contentDescription = if (isChecklistMode) "Liste modunu kapat" else "Liste modu"
+                        }
+                    ) {
+                        ActionIcon(
+                            ActionGlyph.Checklist,
+                            Modifier.size(21.dp),
+                            if (isChecklistMode) Color(0xFF91B9FF) else Color(0xFFBABAC3)
+                        )
+                    }
+
+                    if (alertAt == null) {
+                        IconButton(
+                            onClick = onToggleImmediateNotification,
+                            enabled = !recording && !saving,
+                            modifier = Modifier.size(40.dp).semantics {
+                                contentDescription = if (sendImmediateNotification) "Anlık bildirim açık" else "Anlık bildirim kapalı"
+                            }
+                        ) {
+                            ActionIcon(
+                                if (sendImmediateNotification) ActionGlyph.Bell else ActionGlyph.BellOff,
+                                Modifier.size(21.dp),
+                                if (sendImmediateNotification) Color(0xFF91B9FF) else Color(0xFFBABAC3)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (expanded && isChecklistMode) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    checklistDraftItems.forEachIndexed { index, itemText ->
+                        val requester = getItemFocusRequester(index)
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 2.dp, horizontal = 18.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                Modifier.size(16.dp).border(1.2.dp, Color(0xFF5A5A66), CircleShape)
+                            )
+                            BasicTextField(
+                                value = itemText,
+                                onValueChange = { input ->
+                                    if (input.contains('\n') || input.contains('\r')) {
+                                        val cleaned = input.replace("\r", "").replace("\n", "")
+                                        onChecklistItemChange(index, cleaned)
+                                        handleChecklistEnter(index)
+                                    } else {
+                                        onChecklistItemChange(index, input)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 10.dp)
+                                    .focusRequester(requester)
+                                    .onFocusChanged { onFocusChanged(it.isFocused) },
+                                readOnly = saving,
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    color = Color(0xFFEEEEF2), fontSize = 14.sp
+                                ),
+                                cursorBrush = SolidColor(Color(0xFF9AB9FF)),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Sentences,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { handleChecklistEnter(index) }
+                                ),
+                                decorationBox = { field ->
+                                    Box(contentAlignment = Alignment.CenterStart) {
+                                        if (itemText.isEmpty()) {
+                                            Text("Madde ${index + 1}", color = Color(0xFF6C6C76), fontSize = 14.sp)
+                                        }
+                                        field()
+                                    }
+                                }
+                            )
+                            if (checklistDraftItems.size > 1) {
+                                IconButton(
+                                    onClick = { onRemoveChecklistItem(index) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    ActionIcon(ActionGlyph.Close, Modifier.size(12.dp), Color(0xFF7A7A85))
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        Modifier
+                            .padding(horizontal = 18.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = !saving) {
+                                val lastItem = checklistDraftItems.lastOrNull() ?: ""
+                                if (lastItem.isNotBlank() || checklistDraftItems.isEmpty()) {
+                                    onAddChecklistItem()
+                                    pendingFocusIndex = checklistDraftItems.size
+                                } else {
+                                    pendingFocusIndex = checklistDraftItems.lastIndex
+                                }
+                            }
+                            .padding(vertical = 6.dp, horizontal = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ActionIcon(ActionGlyph.Add, Modifier.size(13.dp), Color(0xFF91B9FF))
                         Text(
-                            "Kategori",
-                            color = Color(0xFFB8B8C2),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(start = 5.dp)
+                            "Madde ekle",
+                            color = Color(0xFF91B9FF),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(start = 6.dp)
                         )
                     }
                 }

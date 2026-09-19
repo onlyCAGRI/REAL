@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
     private var loadFailed by mutableStateOf(false)
     private var exactAllowed by mutableStateOf(false)
     private var openedReminderId by mutableStateOf<Long?>(null)
+    private var pendingShareDraft by mutableStateOf<SharedPayload?>(null)
     private val operations = Mutex()
     private val waiting = mutableSetOf<Long>() // Accessed only under mutationLock on IO.
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
         ready = true
         com.cagri.bigboscagri.ui.components.prewarmRealWordmark(applicationContext)
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
+        handleShareIntent(intent)
         val preferences = getSharedPreferences("bigbos_ui", MODE_PRIVATE)
         setContent {
             BigBosTheme {
@@ -77,10 +79,24 @@ class MainActivity : ComponentActivity() {
                     }
                 } else ReminderScreen(
                     reminders = reminders,
-                    onAddReminder = { text, alertAt, repeatRule, customCategoryId ->
+                    onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl ->
                         perform(warnIfBlocked = true) {
-                            val newest = repository.add(text, alertAt, repeatRule, customCategoryId).first()
-                            if (alertAt == null && !ReminderNotifications.show(this@MainActivity, newest)) waiting.add(newest.id)
+                            val newest = repository.add(
+                                text = text,
+                                alertAt = alertAt,
+                                repeatRule = repeatRule,
+                                customCategoryId = customCategoryId,
+                                isChecklist = isChecklist,
+                                checklistItems = checklistItems,
+                                sendImmediateNotification = sendImmediateNotification,
+                                referenceUrl = referenceUrl
+                            ).first()
+                            if (alertAt == null && canShowImmediateNotification(newest) && !ReminderNotifications.show(this@MainActivity, newest)) waiting.add(newest.id)
+                        }
+                    },
+                    onToggleChecklistItem = { reminderId, itemId ->
+                        mutate {
+                            repository.toggleChecklistItem(reminderId, itemId)
                         }
                     },
                     onToggleCompleted = { id -> mutate {
@@ -136,7 +152,9 @@ class MainActivity : ComponentActivity() {
                         mutateCategory("Kategori silinemedi. Yeniden deneyebilirsin.") {
                             deleteCategoryWithRollback(id, repository, categoryRepository)
                         }
-                    }
+                    },
+                    pendingShareDraft = pendingShareDraft,
+                    onShareDraftHandled = { pendingShareDraft = null }
                 )
             }
         }
@@ -153,6 +171,16 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
+        handleShareIntent(intent)
+    }
+
+    private fun handleShareIntent(intent: Intent?) {
+        ShareParser.parse(intent)?.let { payload ->
+            pendingShareDraft = payload
+            intent?.removeExtra(Intent.EXTRA_TEXT)
+            intent?.removeExtra(Intent.EXTRA_SUBJECT)
+            intent?.removeExtra(Intent.EXTRA_TITLE)
+        }
     }
     private fun mutate(action: () -> Unit) { lifecycleScope.launch { perform(action = action) } }
 

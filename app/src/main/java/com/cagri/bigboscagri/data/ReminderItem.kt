@@ -13,7 +13,11 @@ data class ReminderItem(
     val accentEnd: Int? = null,
     val repeatRule: RecurrenceRule = RecurrenceRule.NONE,
     val anchorAlertAt: Long? = alertAt,
-    val customCategoryId: Long? = null
+    val customCategoryId: Long? = null,
+    val isChecklist: Boolean = false,
+    val checklistItems: List<ChecklistItem> = emptyList(),
+    val sendImmediateNotification: Boolean = true,
+    val referenceUrl: String? = null
 ) {
     val isCompleted: Boolean get() = completedAt != null
     val shouldPinNotification: Boolean get() = isImportant && !isCompleted
