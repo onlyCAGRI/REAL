@@ -1,6 +1,9 @@
 package com.cagri.bigboscagri.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -8,6 +11,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.text.style.TextOverflow
 import com.cagri.bigboscagri.ui.reminderDate
 import java.time.LocalDate
@@ -69,6 +79,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -81,6 +92,7 @@ import com.cagri.bigboscagri.ui.DesignStyle
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -125,6 +137,7 @@ fun GlassComposer(
     onTextLineCountChange: (Int) -> Unit = {},
     isVoiceDraft: Boolean = false,
     isShareDraft: Boolean = false,
+    isHomeReady: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val corners by animateDpAsState(
@@ -160,6 +173,33 @@ fun GlassComposer(
         itemFocusRequesters.getOrPut(index) { FocusRequester() }
 
     var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
+    var isComposerFocused by remember { mutableStateOf(false) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+    val isResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+
+    val shouldShimmer = isResumed && isHomeReady && !reduceAnimations && !expanded && !isComposerFocused && !isChecklistMode && !recording && value.isEmpty()
+    val shimmerProgress = remember { Animatable(0f) }
+
+    LaunchedEffect(shouldShimmer) {
+        if (shouldShimmer) {
+            delay(800)
+            while (isActive && shouldShimmer) {
+                shimmerProgress.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(
+                        durationMillis = 1600,
+                        easing = LinearEasing
+                    )
+                )
+                shimmerProgress.snapTo(0f)
+                delay(5000)
+            }
+        } else {
+            shimmerProgress.snapTo(0f)
+        }
+    }
 
     LaunchedEffect(isChecklistMode) {
         if (isChecklistMode) {
@@ -389,12 +429,64 @@ fun GlassComposer(
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     if (value.isEmpty()) {
-                                        Text(
-                                            if (isChecklistMode) "Başlık"
-                                            else "Hatırlatıcı ekle",
-                                            color = Color(0xFFB8B8BF),
-                                            fontSize = 16.sp
-                                        )
+                                        if (isChecklistMode) {
+                                            Text(
+                                                text = "Başlık",
+                                                color = Color(0xFFB8B8BF),
+                                                fontSize = 16.sp
+                                            )
+                                        } else {
+                                            var placeholderTextWidthPx by remember { mutableFloatStateOf(0f) }
+
+                                            // 1. Base Layer: Calm Grey Text (bone-grey for high contrast)
+                                            Text(
+                                                text = "Hatırlatıcı ekle",
+                                                color = Color(0xFF8E8E96),
+                                                fontSize = 16.sp,
+                                                onTextLayout = { layoutResult ->
+                                                    placeholderTextWidthPx = layoutResult.size.width.toFloat()
+                                                }
+                                            )
+
+                                            // 2. Shimmer Layer: Pure White Text masked with moving wide gradient mask
+                                            val progress = shimmerProgress.value
+                                            if (progress > 0.001f && progress < 0.999f) {
+                                                val textWidth = if (placeholderTextWidthPx > 0f) placeholderTextWidthPx else 100f
+                                                val bandWidth = textWidth * 0.65f
+                                                val startX = -bandWidth + progress * (textWidth + bandWidth)
+                                                val endX = startX + bandWidth
+                                                Text(
+                                                    text = "Hatırlatıcı ekle",
+                                                    color = Color.White,
+                                                    fontSize = 16.sp,
+                                                    modifier = Modifier
+                                                        .graphicsLayer {
+                                                            compositingStrategy = CompositingStrategy.Offscreen
+                                                        }
+                                                        .drawWithContent {
+                                                            drawContent()
+                                                            val maskBrush = Brush.linearGradient(
+                                                                0.00f to Color.Transparent,
+                                                                0.15f to Color.White.copy(alpha = 0.30f),
+                                                                0.28f to Color.White.copy(alpha = 0.70f),
+                                                                0.40f to Color.White.copy(alpha = 0.95f),
+                                                                0.46f to Color.White,
+                                                                0.54f to Color.White,
+                                                                0.60f to Color.White.copy(alpha = 0.95f),
+                                                                0.72f to Color.White.copy(alpha = 0.70f),
+                                                                0.85f to Color.White.copy(alpha = 0.30f),
+                                                                1.00f to Color.Transparent,
+                                                                start = Offset(startX, 0f),
+                                                                end = Offset(endX, 0f)
+                                                            )
+                                                            drawRect(
+                                                                brush = maskBrush,
+                                                                blendMode = BlendMode.DstIn
+                                                            )
+                                                        }
+                                                )
+                                            }
+                                        }
                                     }
                                     field()
                                 }

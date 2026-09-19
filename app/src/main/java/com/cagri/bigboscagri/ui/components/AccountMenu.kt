@@ -53,6 +53,7 @@ fun AccountMenuOverlay(
     reduceDynamicBlur: Boolean = false,
     reduceAnimations: Boolean = false,
     designStyle: DesignStyle = DesignStyle.Glass,
+    userName: String = "",
     modifier: Modifier = Modifier
 ) {
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -107,7 +108,7 @@ fun AccountMenuOverlay(
                 ) {
                     GuestAvatar(Modifier.size(44.dp))
                     Text(
-                        text = "Çağrı Gül",
+                        text = userName.trim().ifBlank { "Kullanıcı" },
                         color = Color(0xFFF7F7F8),
                         fontSize = 16.sp,
                         lineHeight = 20.sp,

@@ -50,6 +50,8 @@ fun SettingsScreen(
     designStyle: DesignStyle,
     onDesignStyleChange: (DesignStyle) -> Unit,
     onBack: () -> Unit,
+    notificationsAllowed: Boolean = true,
+    onRequestNotifications: () -> Unit = {},
     exactAlarmsAllowed: Boolean = true,
     onRequestExactAlarms: () -> Unit = {}
 ) {
@@ -265,13 +267,69 @@ fun SettingsScreen(
                 .border(0.75.dp, Color.White.copy(alpha = 0.08f), cardShape)
                 .padding(16.dp)
         ) {
+            // Item 1: Bildirim izni
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ActionIcon(ActionGlyph.Bell, Modifier.size(22.dp), color = Color.White)
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Zamanlı hatırlatıcılar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Normal)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Bildirim izni", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Normal)
+                        Text(
+                            if (notificationsAllowed) "Açık" else "Kapalı",
+                            color = if (notificationsAllowed) Color(0xFF91B9FF) else Color(0xFFA5A5AF),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                     Text(
-                        if (exactAlarmsAllowed) "Tam saatinde hatırlatma izni açık."
+                        if (notificationsAllowed) "Hatırlatıcı bildirimleri bu cihazda gösterilebilir."
+                        else "Hatırlatıcı bildirimlerini alabilmek için bildirim iznini açabilirsin.",
+                        color = Color(0xFFA5A5AF),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+            if (!notificationsAllowed) {
+                TextButton(
+                    onClick = onRequestNotifications,
+                    modifier = Modifier.align(Alignment.End).padding(top = 4.dp)
+                ) {
+                    Text("İzni aç", color = Color(0xFF91B9FF))
+                }
+            }
+
+            HorizontalDivider(
+                color = Color(0xFF26262B),
+                thickness = 0.75.dp,
+                modifier = Modifier.padding(start = 36.dp, end = 0.dp, top = 12.dp, bottom = 12.dp)
+            )
+
+            // Item 2: Tam saatinde hatırlatma
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ActionIcon(ActionGlyph.Calendar, Modifier.size(22.dp), color = Color.White)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Tam saatinde hatırlatma", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Normal)
+                        Text(
+                            if (exactAlarmsAllowed) "Açık" else "Kapalı",
+                            color = if (exactAlarmsAllowed) Color(0xFF91B9FF) else Color(0xFFA5A5AF),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Text(
+                        if (exactAlarmsAllowed) "Alarmlar tam zamanında çalacak şekilde ayarlandı."
                         else "Android'in bildirim saatini geciktirmemesi için Alarmlar ve hatırlatıcılar iznini açabilirsin.",
                         color = Color(0xFFA5A5AF),
                         fontSize = 12.sp,

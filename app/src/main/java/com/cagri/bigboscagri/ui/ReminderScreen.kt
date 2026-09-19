@@ -1,11 +1,18 @@
 package com.cagri.bigboscagri.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import java.time.LocalDate
 import com.cagri.bigboscagri.speech.TimeOfDay
 import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
+import com.cagri.bigboscagri.ui.components.NotificationPermissionSheet
+import com.cagri.bigboscagri.ui.components.MicrophonePermissionSheet
 import com.cagri.bigboscagri.ui.components.RealWordmark
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -20,10 +27,12 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -36,6 +45,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.util.lerp
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -160,7 +170,13 @@ fun ReminderScreen(
     onDeleteCategories: (Set<Long>) -> Unit = { ids -> ids.forEach { onDeleteCategory(it) } },
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
     pendingShareDraft: com.cagri.bigboscagri.data.SharedPayload? = null,
-    onShareDraftHandled: () -> Unit = {}
+    onShareDraftHandled: () -> Unit = {},
+    userName: String = "",
+    notificationsAllowed: Boolean = true,
+    onRequestNotifications: () -> Unit = {},
+    onRequestNotificationPermission: () -> Unit = {},
+    isFirstHomeIntro: Boolean = false,
+    onFirstHomeIntroComplete: () -> Unit = {}
 ) {
     var category by rememberSaveable { mutableStateOf<ReminderCategory?>(null) }
     var customCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -233,6 +249,8 @@ fun ReminderScreen(
                     onReduceAnimationsChange = onReduceAnimationsChange,
                     designStyle = designStyle,
                     onDesignStyleChange = onDesignStyleChange,
+                    notificationsAllowed = notificationsAllowed,
+                    onRequestNotifications = onRequestNotifications,
                     exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
                     onBack = { showSettings = false }
                 )
@@ -310,6 +328,8 @@ fun ReminderScreen(
                                     reduceAnimations = reduceAnimations, reduceDynamicBlur = reduceDynamicBlur,
                                     designStyle = designStyle, onSetAlert = { at, rule -> onSetAlert(reminder.id, at, rule) },
                                     exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
+                                    notificationsAllowed = notificationsAllowed,
+                                    onRequestNotificationPermission = onRequestNotificationPermission,
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = this@AnimatedContent
                                 )
@@ -322,6 +342,8 @@ fun ReminderScreen(
                                     alertAt = draftAlertAt, repeatRule = draftRepeatRule,
                                     onAlertChange = { at, rule -> draftAlertAt = at; draftRepeatRule = rule },
                                     exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
+                                    notificationsAllowed = notificationsAllowed,
+                                    onRequestNotificationPermission = onRequestNotificationPermission,
                                     onDraftChange = { draft = it },
                                     onBack = { category = null; customCategoryId = null },
                                     onOpenCategory = { category = it; customCategoryId = null },
@@ -365,7 +387,10 @@ fun ReminderScreen(
                                      draftReferenceUrl = draftReferenceUrl,
                                      onDraftReferenceUrlChange = { draftReferenceUrl = it },
                                      sharedTransitionScope = this@SharedTransitionLayout,
-                                     animatedVisibilityScope = this@AnimatedContent
+                                     animatedVisibilityScope = this@AnimatedContent,
+                                     userName = userName,
+                                     isFirstHomeIntro = isFirstHomeIntro,
+                                     onFirstHomeIntroComplete = onFirstHomeIntroComplete
                                  )
                             }
                         }
@@ -374,6 +399,12 @@ fun ReminderScreen(
             }
         }
     }
+}
+
+enum class PendingNotificationAction {
+    NONE,
+    ENABLE_BELL,
+    OPEN_DATE_PICKER
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -400,8 +431,13 @@ private fun ReminderListScreen(
     onEditCategory: (Long, String, String, Int, Int?) -> Unit = { _, _, _, _, _ -> },
     onDeleteCategory: (Long) -> Unit = {},
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
+    notificationsAllowed: Boolean = true,
+    onRequestNotificationPermission: () -> Unit = {},
     sharedTransitionScope: SharedTransitionScope? = null,
-    animatedVisibilityScope: AnimatedVisibilityScope? = null
+    animatedVisibilityScope: AnimatedVisibilityScope? = null,
+    userName: String = "",
+    isFirstHomeIntro: Boolean = false,
+    onFirstHomeIntroComplete: () -> Unit = {}
 ) {
     var editing by remember { mutableStateOf(false) }
     var isChecklistMode by rememberSaveable { mutableStateOf(false) }
@@ -414,6 +450,22 @@ private fun ReminderListScreen(
     var draftCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var showNotificationPermissionSheet by rememberSaveable { mutableStateOf(false) }
+    var pendingNotificationAction by rememberSaveable { mutableStateOf(PendingNotificationAction.NONE) }
+    var showMicrophonePermissionSheet by rememberSaveable { mutableStateOf(false) }
+    var pendingMicrophoneAction by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(notificationsAllowed) {
+        if (notificationsAllowed && pendingNotificationAction != PendingNotificationAction.NONE) {
+            when (pendingNotificationAction) {
+                PendingNotificationAction.ENABLE_BELL -> sendImmediateNotification = true
+                PendingNotificationAction.OPEN_DATE_PICKER -> showDatePicker = true
+                PendingNotificationAction.NONE -> {}
+            }
+            pendingNotificationAction = PendingNotificationAction.NONE
+        }
+    }
+
     var showCreateCategoryDialog by rememberSaveable { mutableStateOf(false) }
     var showEditCategoryDialog by rememberSaveable { mutableStateOf(false) }
     var refocus by remember { mutableStateOf(false) }
@@ -423,6 +475,21 @@ private fun ReminderListScreen(
     val inputFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+
+    val requestPermissionForAction: (PendingNotificationAction) -> Unit = { action ->
+        focusManager.clearFocus()
+        keyboard?.hide()
+        if (!notificationsAllowed) {
+            pendingNotificationAction = action
+            showNotificationPermissionSheet = true
+        } else {
+            when (action) {
+                PendingNotificationAction.ENABLE_BELL -> sendImmediateNotification = true
+                PendingNotificationAction.OPEN_DATE_PICKER -> showDatePicker = true
+                PendingNotificationAction.NONE -> {}
+            }
+        }
+    }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val scene = rememberGraphicsLayer()
@@ -434,11 +501,60 @@ private fun ReminderListScreen(
         }
     }
 
+    val density = LocalDensity.current
     val shouldAnimateColdStart = remember { category == null && customCategory == null && ColdStartTracker.isEligible(reduceAnimations) }
     var isColdStarting by remember { mutableStateOf(shouldAnimateColdStart) }
     val coldStartProgress = remember { Animatable(if (shouldAnimateColdStart) 0f else 1f) }
     var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var headerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+    val shouldAnimateFirstHomeIntro = remember { isFirstHomeIntro && !reduceAnimations && category == null && customCategory == null }
+    var isFirstHomeIntroPlaying by remember { mutableStateOf(shouldAnimateFirstHomeIntro) }
+    val catAlphas = remember { List(6) { Animatable(if (shouldAnimateFirstHomeIntro) 0f else 1f) } }
+    val catOffsetsY = remember { List(6) { Animatable(if (shouldAnimateFirstHomeIntro) 24f else 0f) } }
+    val composerIntroAlpha = remember { Animatable(if (shouldAnimateFirstHomeIntro) 0f else 1f) }
+    val composerIntroOffsetY = remember { Animatable(if (shouldAnimateFirstHomeIntro) 32f else 0f) }
+    var isHomeReadyForShimmer by remember { mutableStateOf(!shouldAnimateColdStart && !shouldAnimateFirstHomeIntro) }
+
+    LaunchedEffect(shouldAnimateFirstHomeIntro) {
+        if (shouldAnimateFirstHomeIntro) {
+            for (i in 0 until 6) {
+                launch {
+                    catOffsetsY[i].animateTo(
+                        0f,
+                        animationSpec = tween(280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                    )
+                }
+                launch {
+                    catAlphas[i].animateTo(
+                        1f,
+                        animationSpec = tween(280, easing = LinearOutSlowInEasing)
+                    )
+                }
+                delay(45)
+            }
+            delay(60)
+            launch {
+                composerIntroOffsetY.animateTo(
+                    0f,
+                    animationSpec = tween(340, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                )
+            }
+            composerIntroAlpha.animateTo(
+                1f,
+                animationSpec = tween(340, easing = LinearOutSlowInEasing)
+            )
+            isFirstHomeIntroPlaying = false
+            onFirstHomeIntroComplete()
+            isHomeReadyForShimmer = true
+        }
+    }
+
+    LaunchedEffect(isColdStarting) {
+        if (!isColdStarting && !isFirstHomeIntroPlaying) {
+            isHomeReadyForShimmer = true
+        }
+    }
 
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var selectedCategoryIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
@@ -475,7 +591,7 @@ private fun ReminderListScreen(
     val submit: (String) -> Unit = { text ->
         if (requiresTimeSelection && alertAt == null) {
             Toast.makeText(context, "Lütfen bir saat seç.", Toast.LENGTH_SHORT).show()
-            showDatePicker = true
+            requestPermissionForAction(PendingNotificationAction.OPEN_DATE_PICKER)
         } else if (isChecklistMode) {
             val validItems = checklistDraftItems.map { it.trim() }.filter { it.isNotEmpty() }
             if (text.isNotBlank() && validItems.isNotEmpty() && !saving) {
@@ -563,6 +679,12 @@ private fun ReminderListScreen(
         isVoiceDraft = true
     }
     val voice = rememberVoiceInput(draft, onDraftChange, onVoiceFinalize, observeLevel = !reduceAnimations)
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted && pendingMicrophoneAction) {
+            voice.start()
+        }
+        pendingMicrophoneAction = false
+    }
     var voiceLineCount by remember { mutableIntStateOf(1) }
     LaunchedEffect(voice.phase) {
         if (voice.phase == VoicePhase.Idle) {
@@ -666,10 +788,16 @@ private fun ReminderListScreen(
     }
     val completed = remember(reminders, category, customCategory) {
         when {
-            category == null && customCategory == null -> reminders.inCategory(ReminderCategory.Completed)
+            category == null && customCategory == null ->
+                reminders.inCategory(ReminderCategory.Completed)
+                    .sortedByDescending { it.completedAt ?: it.createdAt }
+                    .take(20)
             customCategory != null -> reminders.filter { it.customCategoryId == customCategory.id && it.isCompleted }.sortedByDescending { it.completedAt ?: it.createdAt }
             else -> emptyList()
         }
+    }
+    val totalCompletedCount = remember(reminders) {
+        reminders.inCategory(ReminderCategory.Completed).size
     }
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -845,6 +973,8 @@ private fun ReminderListScreen(
                                 selectedCategoryIds = if (id in selectedCategoryIds) selectedCategoryIds - id else selectedCategoryIds + id
                             }
                         },
+                        itemEntranceAlphas = if (isFirstHomeIntroPlaying) catAlphas.map { it.value } else null,
+                        itemEntranceOffsetsY = if (isFirstHomeIntroPlaying) catOffsetsY.map { it.value } else null,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     Spacer(Modifier.height(24.dp))
@@ -936,6 +1066,40 @@ private fun ReminderListScreen(
                             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                     )
                 }
+                if (category == null && customCategory == null && totalCompletedCount > 20) {
+                    item(key = "show_all_completed") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 12.dp)
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.White.copy(alpha = 0.04f))
+                                .border(0.75.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                                .clickable {
+                                    voice.cancel()
+                                    focusManager.clearFocus()
+                                    keyboard?.hide()
+                                    onOpenCategory(ReminderCategory.Completed)
+                                }
+                                .padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Tümünü göster",
+                                color = Color(0xFFA4A4AD),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            ActionIcon(
+                                ActionGlyph.ChevronRight,
+                                Modifier.size(14.dp),
+                                Color(0xFF8E8E98)
+                            )
+                        }
+                    }
+                }
             }
         }
         TopGlassOverlay(
@@ -980,7 +1144,9 @@ private fun ReminderListScreen(
             dateHint = pendingDateHintEpochDay?.let { LocalDate.ofEpochDay(it) },
             timeOfDay = pendingTimeOfDay,
             saving = saving,
-            onPickDate = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showDatePicker = true },
+            onPickDate = {
+                requestPermissionForAction(PendingNotificationAction.OPEN_DATE_PICKER)
+            },
             onClearDate = {
                 onAlertChange(null, RecurrenceRule.NONE)
                 requiresTimeSelection = false
@@ -994,7 +1160,24 @@ private fun ReminderListScreen(
             expanded = expanded, onFocusChanged = { editing = it }, focusRequester = inputFocus,
             backdrop = scene, backdropPosition = { scenePosition },
             voicePhase = voice.phase, voiceLevel = voice.level,
-            onMicClick = { focusManager.clearFocus(); keyboard?.hide(); voice.toggle() },
+            onMicClick = {
+                focusManager.clearFocus()
+                keyboard?.hide()
+                if (voice.phase == VoicePhase.Listening) {
+                    voice.toggle()
+                } else if (voice.phase == VoicePhase.Idle) {
+                    val hasMicPermission = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (hasMicPermission) {
+                        voice.toggle()
+                    } else {
+                        pendingMicrophoneAction = true
+                        showMicrophonePermissionSheet = true
+                    }
+                }
+            },
             reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
             designStyle = designStyle,
@@ -1020,7 +1203,13 @@ private fun ReminderListScreen(
                 }
             },
             sendImmediateNotification = sendImmediateNotification,
-            onToggleImmediateNotification = { sendImmediateNotification = !sendImmediateNotification },
+            onToggleImmediateNotification = {
+                if (!sendImmediateNotification) {
+                    requestPermissionForAction(PendingNotificationAction.ENABLE_BELL)
+                } else {
+                    sendImmediateNotification = false
+                }
+            },
             voiceCommittedText = voice.committedText,
             voicePartialText = voice.partialText,
             onVoiceLineCountChange = { voiceLineCount = it },
@@ -1028,11 +1217,22 @@ private fun ReminderListScreen(
             onTextLineCountChange = { textLineCount = it },
             isVoiceDraft = isVoiceDraft,
             isShareDraft = isShareDraft,
+            isHomeReady = isHomeReadyForShimmer,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = bottomGap).height(composerHeight)
                 .graphicsLayer {
-                    translationY = selectionProgress * bottomSlideOffsetPx
-                    alpha = if (isColdStarting) coldStartProgress.value else (1f - selectionProgress)
+                    translationY = if (isFirstHomeIntroPlaying) {
+                        with(density) { composerIntroOffsetY.value.dp.toPx() }
+                    } else {
+                        selectionProgress * bottomSlideOffsetPx
+                    }
+                    alpha = if (isFirstHomeIntroPlaying) {
+                        composerIntroAlpha.value
+                    } else if (isColdStarting) {
+                        coldStartProgress.value
+                    } else {
+                        (1f - selectionProgress)
+                    }
                 }
         )
         CategorySelectionOverlay(
@@ -1087,7 +1287,8 @@ private fun ReminderListScreen(
                 onSettingsClick = onOpenSettings,
                 reduceDynamicBlur = reduceDynamicBlur,
                 reduceAnimations = reduceAnimations,
-                designStyle = designStyle
+                designStyle = designStyle,
+                userName = userName
             )
         }
         val pickerInitialMillis = alertAt ?: run {
@@ -1128,6 +1329,30 @@ private fun ReminderListScreen(
                 showDatePicker = false
             },
             exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms
+        )
+        NotificationPermissionSheet(
+            visible = showNotificationPermissionSheet,
+            onAllow = {
+                showNotificationPermissionSheet = false
+                onRequestNotificationPermission()
+            },
+            onLater = {
+                showNotificationPermissionSheet = false
+                pendingNotificationAction = PendingNotificationAction.NONE
+            },
+            reduceAnimations = reduceAnimations
+        )
+        MicrophonePermissionSheet(
+            visible = showMicrophonePermissionSheet,
+            onAllow = {
+                showMicrophonePermissionSheet = false
+                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            },
+            onLater = {
+                showMicrophonePermissionSheet = false
+                pendingMicrophoneAction = false
+            },
+            reduceAnimations = reduceAnimations
         )
         if (showCreateCategoryDialog) {
             CreateCategoryDialog(

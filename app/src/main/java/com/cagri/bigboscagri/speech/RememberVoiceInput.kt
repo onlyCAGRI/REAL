@@ -25,6 +25,7 @@ class VoiceInputHandle(
     val committedText: String = "",
     val partialText: String = "",
     val toggle: () -> Unit,
+    val start: () -> Unit = {},
     val finish: () -> Unit,
     val cancel: () -> Unit
 )
@@ -83,6 +84,13 @@ fun rememberVoiceInput(draft: String, onText: (String) -> Unit, onSubmit: (Strin
                     }
                 }
             }
-        }, finish = controller::finish, cancel = controller::cancel
+        },
+        start = {
+            if (phase == VoicePhase.Idle && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                controller.start(latestDraft)
+            }
+        },
+        finish = controller::finish,
+        cancel = controller::cancel
     )
 }

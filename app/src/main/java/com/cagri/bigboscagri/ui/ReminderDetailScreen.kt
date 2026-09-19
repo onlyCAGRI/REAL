@@ -3,6 +3,7 @@ package com.cagri.bigboscagri.ui
 import android.os.Build
 import com.cagri.bigboscagri.ui.components.DesignPanel
 import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
+import com.cagri.bigboscagri.ui.components.NotificationPermissionSheet
 import androidx.compose.material3.TextButton
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -56,6 +57,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -118,6 +120,8 @@ fun ReminderDetailScreen(
     onToggleChecklistItem: (Long, Long) -> Unit = { _, _ -> },
     exactAlarmsAllowed: Boolean = true,
     onRequestExactAlarms: () -> Unit = {},
+    notificationsAllowed: Boolean = true,
+    onRequestNotificationPermission: () -> Unit = {},
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
@@ -129,12 +133,34 @@ fun ReminderDetailScreen(
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var showNotificationPermissionSheet by rememberSaveable { mutableStateOf(false) }
+    var pendingDetailDatePicker by rememberSaveable(reminder.id) { mutableStateOf(false) }
+
+    LaunchedEffect(notificationsAllowed) {
+        if (notificationsAllowed && pendingDetailDatePicker) {
+            showDatePicker = true
+            pendingDetailDatePicker = false
+        }
+    }
+
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
     val scene = rememberGraphicsLayer()
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     var scenePosition by remember { mutableStateOf(Offset.Zero) }
+
+    val requestPermissionForDatePicker: () -> Unit = {
+        focusManager.clearFocus()
+        keyboard?.hide()
+        if (!notificationsAllowed) {
+            pendingDetailDatePicker = true
+            showNotificationPermissionSheet = true
+        } else {
+            showDatePicker = true
+        }
+    }
+
     val finishEditing: () -> Unit = {
         editing = false
         selectedCategoryId = reminder.customCategoryId
@@ -429,11 +455,7 @@ fun ReminderDetailScreen(
                 }
                 if (editing && !reminder.isCompleted) {
                     Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = {
-                            focusManager.clearFocus()
-                            keyboard?.hide()
-                            showDatePicker = true
-                        }, modifier = Modifier.weight(1f)) {
+                        TextButton(onClick = requestPermissionForDatePicker, modifier = Modifier.weight(1f)) {
                             val label = if (reminder.alertAt != null) {
                                 val dateStr = reminderDate(reminder.alertAt)
                                 if (reminder.hasRepeat) "$dateStr • ${reminder.repeatRule.displayName}" else dateStr
@@ -581,6 +603,18 @@ fun ReminderDetailScreen(
             onConfirm = { at, rule -> onSetAlert(at, rule); showDatePicker = false },
             exactAlarmsAllowed = exactAlarmsAllowed,
             onRequestExactAlarms = onRequestExactAlarms)
+        NotificationPermissionSheet(
+            visible = showNotificationPermissionSheet,
+            onAllow = {
+                showNotificationPermissionSheet = false
+                onRequestNotificationPermission()
+            },
+            onLater = {
+                showNotificationPermissionSheet = false
+                pendingDetailDatePicker = false
+            },
+            reduceAnimations = reduceAnimations
+        )
         CategorySelectionOverlay(
             visible = showCategoryPicker,
             customCategories = customCategories,

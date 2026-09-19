@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -82,8 +83,11 @@ fun CategoryGrid(
     selectedCategoryIds: Set<Long> = emptySet(),
     onToggleSelectCategory: (Long) -> Unit = {},
     onLongClickCategory: (Long) -> Unit = {},
+    itemEntranceAlphas: List<Float>? = null,
+    itemEntranceOffsetsY: List<Float>? = null,
     modifier: Modifier = Modifier
 ) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
     val isSelectionMode = selectedCategoryIds.isNotEmpty()
     val allItems = remember(customCategories) {
         buildList<GridItem> {
@@ -110,6 +114,19 @@ fun CategoryGrid(
             val row1 = pageItems.take(3)
             val row2 = pageItems.drop(3).take(3)
 
+            fun getItemModifier(index: Int): Modifier {
+                val base = Modifier.weight(1f)
+                if (page == 0 && itemEntranceAlphas != null && itemEntranceOffsetsY != null) {
+                    val a = itemEntranceAlphas.getOrNull(index) ?: 1f
+                    val offY = itemEntranceOffsetsY.getOrNull(index) ?: 0f
+                    return base.graphicsLayer {
+                        alpha = a
+                        translationY = with(density) { offY.dp.toPx() }
+                    }
+                }
+                return base
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -117,12 +134,13 @@ fun CategoryGrid(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row1.forEach { item ->
+                    row1.forEachIndexed { colIndex, item ->
+                        val mod = getItemModifier(colIndex)
                         when (item) {
                             is GridItem.System -> CategoryCard(
                                 category = item.style,
                                 onClick = { if (!isSelectionMode) onOpenCategory(item.category) },
-                                modifier = Modifier.weight(1f)
+                                modifier = mod
                             )
                             is GridItem.Custom -> CustomCategoryCard(
                                 category = item.category,
@@ -133,12 +151,12 @@ fun CategoryGrid(
                                     else onOpenCustomCategory(item.category)
                                 },
                                 onLongClick = { onLongClickCategory(item.category.id) },
-                                modifier = Modifier.weight(1f)
+                                modifier = mod
                             )
                             is GridItem.Add -> CategoryCard(
                                 category = addCategoryStyle,
                                 onClick = { if (!isSelectionMode) onAddCategory() },
-                                modifier = Modifier.weight(1f)
+                                modifier = mod
                             )
                         }
                     }
@@ -149,12 +167,13 @@ fun CategoryGrid(
 
                 if (row2.isNotEmpty()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        row2.forEach { item ->
+                        row2.forEachIndexed { colIndex, item ->
+                            val mod = getItemModifier(3 + colIndex)
                             when (item) {
                                 is GridItem.System -> CategoryCard(
                                     category = item.style,
                                     onClick = { if (!isSelectionMode) onOpenCategory(item.category) },
-                                    modifier = Modifier.weight(1f)
+                                    modifier = mod
                                 )
                                 is GridItem.Custom -> CustomCategoryCard(
                                     category = item.category,
@@ -165,12 +184,12 @@ fun CategoryGrid(
                                         else onOpenCustomCategory(item.category)
                                     },
                                     onLongClick = { onLongClickCategory(item.category.id) },
-                                    modifier = Modifier.weight(1f)
+                                    modifier = mod
                                 )
                                 is GridItem.Add -> CategoryCard(
                                     category = addCategoryStyle,
                                     onClick = { if (!isSelectionMode) onAddCategory() },
-                                    modifier = Modifier.weight(1f)
+                                    modifier = mod
                                 )
                             }
                         }
