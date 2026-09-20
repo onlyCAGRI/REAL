@@ -133,8 +133,9 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         if (item.isCompleted) item
         else if (item.hasRepeat) {
             // Recurring reminder: alertAt already advanced in deliverDue.
+            // Acknowledging the delivered occurrence clears notifiedAlertAt.
             // Do not set completedAt or break the recurrence cycle.
-            item
+            item.copy(notifiedAlertAt = null, updatedAt = System.currentTimeMillis())
         } else {
             item.copy(
                 completedAt = System.currentTimeMillis(),
@@ -216,11 +217,11 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                     } else null
 
                     item = if (nextOccurrence != null) {
-                        // Advance to next cycle: reset notification tracking for new cycle
+                        // Advance to next cycle: preserve delivered occurrence in notifiedAlertAt
                         item.copy(
                             alertAt = nextOccurrence,
                             anchorAlertAt = anchor ?: item.alertAt,
-                            notifiedAlertAt = null,
+                            notifiedAlertAt = item.alertAt,
                             updatedAt = now
                         )
                     } else {

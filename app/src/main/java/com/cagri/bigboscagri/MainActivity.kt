@@ -145,7 +145,8 @@ class MainActivity : ComponentActivity() {
                             },
                             onToggleCompleted = { id -> mutate {
                                 val item = repository.toggleCompleted(id).firstOrNull { it.id == id }
-                                if (item?.isCompleted == true) { ReminderNotifications.cancel(this, id); waiting.remove(id) }
+                                ReminderNotifications.cancel(this, id)
+                                waiting.remove(id)
                             } },
                             onToggleImportant = { id -> mutate {
                                 val item = repository.toggleImportant(id).firstOrNull { it.id == id }

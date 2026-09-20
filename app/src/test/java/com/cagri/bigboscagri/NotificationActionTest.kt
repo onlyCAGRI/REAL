@@ -199,4 +199,188 @@ class NotificationActionTest {
         val updated = items.map { if (it.id == deletedId) it.copy(completedAt = 2000L) else it }
         assertEquals(items, updated)
     }
+
+    @Test
+    fun sequenceA_dailyReminderToday18_uiCompleteAt14_advancesToTomorrow18() {
+        val zone = ZoneId.of("Europe/Istanbul")
+        val today14 = LocalDate.of(2026, 9, 19).atTime(14, 0).atZone(zone).toInstant().toEpochMilli()
+        val today18 = LocalDate.of(2026, 9, 19).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+        val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+
+        val reminder = ReminderItem(
+            id = 100L,
+            text = "Günlük vitamin",
+            createdAt = 1000L,
+            alertAt = today18,
+            anchorAlertAt = today18,
+            repeatRule = RecurrenceRule.DAILY
+        )
+
+        // UI complete at 14:00 before occurrence has fired
+        val afterComplete = reminder.toggleCompleted(now = today14)
+
+        assertFalse(afterComplete.isCompleted)
+        assertNull(afterComplete.completedAt)
+        assertNull(afterComplete.notifiedAlertAt)
+        assertEquals(tomorrow18, afterComplete.alertAt)
+        assertEquals(today18, afterComplete.anchorAlertAt)
+
+        val next = listOf(afterComplete).nextAlertAfter(today14)
+        assertEquals(tomorrow18, next)
+    }
+
+    @Test
+    fun sequenceB_today18Fires_deliverDueAdvances_notificationComplete_keepsTomorrow18() {
+        val zone = ZoneId.of("Europe/Istanbul")
+        val today18 = LocalDate.of(2026, 9, 19).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+        val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+
+        // deliverDue at 18:00 advances alertAt to tomorrow 18:00 and preserves delivered occurrence in notifiedAlertAt
+        val delivered = ReminderItem(
+            id = 101L,
+            text = "Günlük vitamin",
+            createdAt = 1000L,
+            alertAt = tomorrow18,
+            anchorAlertAt = today18,
+            notifiedAlertAt = today18,
+            repeatRule = RecurrenceRule.DAILY
+        )
+
+        // Notification action Complete (simulating repository.completeFromNotification)
+        val afterComplete = if (!delivered.isCompleted && delivered.hasRepeat) {
+            delivered.copy(notifiedAlertAt = null, updatedAt = today18)
+        } else delivered.copy(completedAt = today18)
+
+        assertFalse(afterComplete.isCompleted)
+        assertNull(afterComplete.completedAt)
+        assertNull(afterComplete.notifiedAlertAt)
+        // Still tomorrow 18:00, NOT day after tomorrow
+        assertEquals(tomorrow18, afterComplete.alertAt)
+
+        val next = listOf(afterComplete).nextAlertAfter(today18)
+        assertEquals(tomorrow18, next)
+    }
+
+    @Test
+    fun sequenceC_today18Fires_userDismissesNotification_laterCompletesFromUi_noAccidentalDoubleAdvance() {
+        val zone = ZoneId.of("Europe/Istanbul")
+        val today18 = LocalDate.of(2026, 9, 19).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+        val today1830 = today18 + 30 * 60 * 1000L
+        val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+
+        // deliverDue at 18:00 ran. User manually swiped away / dismissed notification.
+        // Persisted state retains notifiedAlertAt = today18
+        val reminder = ReminderItem(
+            id = 102L,
+            text = "Günlük vitamin",
+            createdAt = 1000L,
+            alertAt = tomorrow18,
+            anchorAlertAt = today18,
+            notifiedAlertAt = today18,
+            repeatRule = RecurrenceRule.DAILY
+        )
+
+        // Later at 18:30 user completes from app UI
+        val afterComplete = reminder.toggleCompleted(now = today1830)
+
+        assertFalse(afterComplete.isCompleted)
+        assertNull(afterComplete.completedAt)
+        assertNull(afterComplete.notifiedAlertAt)
+        // Must stay tomorrow 18:00, no double advance
+        assertEquals(tomorrow18, afterComplete.alertAt)
+
+        val next = listOf(afterComplete).nextAlertAfter(today1830)
+        assertEquals(tomorrow18, next)
+    }
+
+    @Test
+    fun sequenceD_today18Fires_processRecreated_thenCompletesFromUi_deterministicResult() {
+        val zone = ZoneId.of("Europe/Istanbul")
+        val today18 = LocalDate.of(2026, 9, 19).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+        val today1900 = today18 + 60 * 60 * 1000L
+        val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+
+        // After process death/reboot, state reloaded from storage with notifiedAlertAt
+        val reloadedReminder = ReminderItem(
+            id = 103L,
+            text = "Günlük vitamin",
+            createdAt = 1000L,
+            alertAt = tomorrow18,
+            anchorAlertAt = today18,
+            notifiedAlertAt = today18,
+            repeatRule = RecurrenceRule.DAILY
+        )
+
+        val afterComplete = reloadedReminder.toggleCompleted(now = today1900)
+
+        assertFalse(afterComplete.isCompleted)
+        assertNull(afterComplete.completedAt)
+        assertNull(afterComplete.notifiedAlertAt)
+        assertEquals(tomorrow18, afterComplete.alertAt)
+
+        val next = listOf(afterComplete).nextAlertAfter(today1900)
+        assertEquals(tomorrow18, next)
+    }
+
+    @Test
+    fun sequenceE_afterPreviousOccurrenceAcknowledged_tomorrowAt14UiComplete_skipsTomorrow18ToFollowing() {
+        val zone = ZoneId.of("Europe/Istanbul")
+        val today18 = LocalDate.of(2026, 9, 19).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+        val tomorrow14 = LocalDate.of(2026, 9, 20).atTime(14, 0).atZone(zone).toInstant().toEpochMilli()
+        val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+        val dayAfterTomorrow18 = LocalDate.of(2026, 9, 21).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+
+        // Previous occurrence was acknowledged (notifiedAlertAt is null), currently scheduled for tomorrow 18:00
+        val reminder = ReminderItem(
+            id = 104L,
+            text = "Günlük vitamin",
+            createdAt = 1000L,
+            alertAt = tomorrow18,
+            anchorAlertAt = today18,
+            notifiedAlertAt = null,
+            repeatRule = RecurrenceRule.DAILY
+        )
+
+        // At tomorrow 14:00 user completes in UI (early skip of tomorrow 18:00)
+        val afterComplete = reminder.toggleCompleted(now = tomorrow14)
+
+        assertFalse(afterComplete.isCompleted)
+        assertNull(afterComplete.completedAt)
+        assertNull(afterComplete.notifiedAlertAt)
+        // Strictly advances beyond tomorrow 18:00 to the following occurrence
+        assertEquals(dayAfterTomorrow18, afterComplete.alertAt)
+
+        val next = listOf(afterComplete).nextAlertAfter(tomorrow14)
+        assertEquals(dayAfterTomorrow18, next)
+    }
+
+    @Test
+    fun sequenceF_legacyRecurringItemWithCompletedAtNotNull_undo_becomesActiveSafely() {
+        val zone = ZoneId.of("Europe/Istanbul")
+        val today18 = LocalDate.of(2026, 9, 19).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+        val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
+
+        // Legacy recurring reminder previously marked completed by old buggy code
+        val legacyCompleted = ReminderItem(
+            id = 105L,
+            text = "Eski tamamlanmış tekrarlı not",
+            createdAt = 1000L,
+            completedAt = today18,
+            alertAt = tomorrow18,
+            anchorAlertAt = today18,
+            repeatRule = RecurrenceRule.DAILY
+        )
+        assertTrue(legacyCompleted.isCompleted)
+
+        // User clicks Undo (toggleCompleted)
+        val restored = legacyCompleted.toggleCompleted(now = today18 + 1000L)
+
+        assertFalse(restored.isCompleted)
+        assertNull(restored.completedAt)
+        assertNull(restored.notifiedAlertAt)
+        assertEquals(tomorrow18, restored.alertAt)
+
+        val next = listOf(restored).nextAlertAfter(today18)
+        assertEquals(tomorrow18, next)
+    }
 }
