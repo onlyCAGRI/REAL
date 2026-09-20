@@ -1,4 +1,5 @@
 #!/bin/sh
+# Real 0.5.0 — Gradle wrapper launcher
 
 #
 # Copyright © 2015-2021 the original authors.
