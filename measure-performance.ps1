@@ -1,3 +1,4 @@
+# Real 0.5.0 — device frame timing helper
 param(
     [string]$Adb = "adb",
     [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$Label = "real"
