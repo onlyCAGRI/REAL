@@ -82,7 +82,7 @@ try {
 
 $variantDir = if ($Optimized) { "optimized" } else { "debug" }
 $builtApk = Join-Path $projectRoot "app\build\outputs\apk\$variantDir\app-$variantDir.apk"
-$outputName = if ($Optimized) { "Real-optimized.apk" } else { "BigBosCagri-debug.apk" }
+$outputName = if ($Optimized) { "Real-optimized.apk" } else { "Real-debug.apk" }
 $outputApk = Join-Path $projectRoot $outputName
 Copy-Item $builtApk $outputApk -Force
 Write-Host ""
