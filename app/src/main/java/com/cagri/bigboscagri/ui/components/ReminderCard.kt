@@ -252,7 +252,11 @@ fun ReminderCard(
                             indication = null,
                             role = Role.Checkbox,
                             onValueChange = {
-                                RealHaptics.success(view)
+                                if (!reminder.isCompleted) {
+                                    RealHaptics.success(view)
+                                } else {
+                                    RealHaptics.toggle(view, on = false)
+                                }
                                 onToggle()
                             }
                         )

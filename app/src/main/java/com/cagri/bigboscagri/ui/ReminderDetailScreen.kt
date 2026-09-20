@@ -239,7 +239,7 @@ fun ReminderDetailScreen(
                 )
                 IconButton(
                     onClick = {
-                        RealHaptics.toggle(view)
+                        RealHaptics.toggle(view, on = !reminder.isImportant)
                         onToggleImportant()
                     },
                     modifier = Modifier
@@ -368,7 +368,7 @@ fun ReminderDetailScreen(
                                         interactionSource = checkItemInteractionSource,
                                         indication = LocalIndication.current,
                                         onClick = {
-                                            RealHaptics.toggle(view)
+                                            RealHaptics.toggle(view, on = !item.isCompleted)
                                             onToggleChecklistItem(reminder.id, item.id)
                                         }
                                     )
@@ -634,7 +634,11 @@ fun ReminderDetailScreen(
                         DetailAction(if (reminder.isCompleted) "Geri al" else "Tamamla",
                             if (reminder.isCompleted) ActionGlyph.Undo else ActionGlyph.Check,
                             Modifier.weight(1f), enabled = !deleting, onClick = {
-                                RealHaptics.success(view)
+                                if (!reminder.isCompleted) {
+                                    RealHaptics.success(view)
+                                } else {
+                                    RealHaptics.toggle(view, on = false)
+                                }
                                 onToggleCompleted()
                             })
                         DetailAction("Düzenle", ActionGlyph.Edit, Modifier.weight(1f), enabled = !deleting, onClick = {

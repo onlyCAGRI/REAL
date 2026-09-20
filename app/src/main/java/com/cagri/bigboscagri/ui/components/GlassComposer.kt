@@ -526,7 +526,6 @@ fun GlassComposer(
                     val canSubmit = value.isNotBlank() && checklistDraftItems.any { it.isNotBlank() }
                     IconButton(
                         onClick = {
-                            RealHaptics.success(view)
                             onSubmit()
                         },
                         interactionSource = submitInteractionSource,
@@ -554,7 +553,6 @@ fun GlassComposer(
                     val canSubmit = value.isNotBlank()
                     IconButton(
                         onClick = {
-                            RealHaptics.success(view)
                             onSubmit()
                         },
                         interactionSource = submitInteractionSource,
