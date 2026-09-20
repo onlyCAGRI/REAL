@@ -3,6 +3,15 @@
 **/build/
 build/
 
+# Keep only the Gradle wrapper under /gradle
+gradle/*
+!gradle/wrapper/
+!gradle/wrapper/**
+
+# Kotlin / local build caches
+.kotlin/
+kotlin/
+
 # Local machine configuration
 local.properties
 
