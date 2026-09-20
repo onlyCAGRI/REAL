@@ -18,6 +18,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import com.cagri.bigboscagri.ui.reminderDate
 import java.time.LocalDate
@@ -86,6 +88,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.ui.DesignStyle
@@ -174,6 +177,29 @@ fun GlassComposer(
 
     var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
     var isComposerFocused by remember { mutableStateOf(false) }
+    val view = LocalView.current
+    val submitInteractionSource = remember { MutableInteractionSource() }
+    val micInteractionSource = remember { MutableInteractionSource() }
+
+    val voiceArrivalProgress = remember(isVoiceDraft) {
+        Animatable(if (isVoiceDraft && !reduceAnimations) 0f else 1f)
+    }
+    LaunchedEffect(isVoiceDraft) {
+        if (isVoiceDraft && !reduceAnimations) {
+            voiceArrivalProgress.snapTo(0f)
+            voiceArrivalProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(180, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+            )
+        }
+    }
+    val density = LocalDensity.current
+    val voiceArrivalModifier = if (isVoiceDraft && !reduceAnimations) {
+        Modifier.graphicsLayer {
+            alpha = voiceArrivalProgress.value
+            translationY = (1f - voiceArrivalProgress.value) * density.run { 5.dp.toPx() }
+        }
+    } else Modifier
 
     val lifecycleOwner = LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
@@ -398,6 +424,7 @@ fun GlassComposer(
                             onValueChange = { onValueChange(it.replace("\r", "").replace("\n", " ")) },
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .then(voiceArrivalModifier)
                                 .focusRequester(focusRequester)
                                 .onFocusChanged { onFocusChanged(it.isFocused) }
                                 .semantics { contentDescription = if (isChecklistMode) "Başlık" else "Hatırlatıcı metni" },
@@ -498,15 +525,22 @@ fun GlassComposer(
                 if (isChecklistMode) {
                     val canSubmit = value.isNotBlank() && checklistDraftItems.any { it.isNotBlank() }
                     IconButton(
-                        onClick = onSubmit,
+                        onClick = {
+                            RealHaptics.success(view)
+                            onSubmit()
+                        },
+                        interactionSource = submitInteractionSource,
                         enabled = canSubmit && !saving,
                         modifier = Modifier.size(36.dp).semantics { contentDescription = "Listeyi kaydet" }
                     ) {
                         Box(
-                            Modifier.size(30.dp).background(
-                                if (canSubmit) Color(0xFF295799) else Color(0xFF1E1E24),
-                                CircleShape
-                            ),
+                            Modifier
+                                .pressScale(submitInteractionSource, enabled = canSubmit && !saving, targetScale = 0.90f)
+                                .size(30.dp)
+                                .background(
+                                    if (canSubmit) Color(0xFF295799) else Color(0xFF1E1E24),
+                                    CircleShape
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             ActionIcon(
@@ -519,17 +553,24 @@ fun GlassComposer(
                 } else if ((isVoiceDraft || isShareDraft) && !recording) {
                     val canSubmit = value.isNotBlank()
                     IconButton(
-                        onClick = onSubmit,
+                        onClick = {
+                            RealHaptics.success(view)
+                            onSubmit()
+                        },
+                        interactionSource = submitInteractionSource,
                         enabled = canSubmit && !saving,
                         modifier = Modifier.size(36.dp)
                             .then(if (expanded && !isChecklistMode) Modifier.padding(bottom = 6.dp) else Modifier)
                             .semantics { contentDescription = "Hatırlatıcıyı kaydet" }
                     ) {
                         Box(
-                            Modifier.size(30.dp).background(
-                                if (canSubmit) Color(0xFF295799) else Color(0xFF1E1E24),
-                                CircleShape
-                            ),
+                            Modifier
+                                .pressScale(submitInteractionSource, enabled = canSubmit && !saving, targetScale = 0.90f)
+                                .size(30.dp)
+                                .background(
+                                    if (canSubmit) Color(0xFF295799) else Color(0xFF1E1E24),
+                                    CircleShape
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             ActionIcon(
@@ -543,6 +584,7 @@ fun GlassComposer(
 
                 IconButton(
                     onClick = onMicClick,
+                    interactionSource = micInteractionSource,
                     enabled = voicePhase != VoicePhase.Finishing && !saving,
                     modifier = Modifier.size(48.dp).semantics {
                         contentDescription = if (recording) "Dinlemeyi bitir" else "Türkçe sesle yaz"
@@ -554,7 +596,10 @@ fun GlassComposer(
                     }
                 ) {
                     Box(
-                        Modifier.size(40.dp).graphicsLayer { scaleX = micScale; scaleY = micScale }
+                        Modifier
+                            .pressScale(micInteractionSource, enabled = voicePhase != VoicePhase.Finishing && !saving, targetScale = 0.92f)
+                            .size(40.dp)
+                            .graphicsLayer { scaleX = micScale; scaleY = micScale }
                             .background(if (recording) Color(0xFF2D6099).copy(alpha = 0.32f + voiceLevel * 0.15f) else Color.Transparent, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {

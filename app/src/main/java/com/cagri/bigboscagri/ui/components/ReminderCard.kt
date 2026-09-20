@@ -4,9 +4,13 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,11 +28,16 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,6 +49,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.platform.LocalView
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.ui.reminderDate
@@ -70,9 +82,32 @@ fun ReminderCard(
     onLongClick: () -> Unit = {},
     onSelectToggle: () -> Unit = {},
     customCategory: CustomCategory? = null,
+    isNewlyCreated: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val density = LocalDensity.current
     val shape = ReminderCardShape
+    val arrivalProgress = remember(reminder.id, isNewlyCreated) {
+        Animatable(if (isNewlyCreated && !reduceAnimations) 0f else 1f)
+    }
+    LaunchedEffect(isNewlyCreated) {
+        if (isNewlyCreated && !reduceAnimations) {
+            arrivalProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 200,
+                    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                )
+            )
+        }
+    }
+    val arrivalModifier = if (!reduceAnimations && isNewlyCreated) {
+        Modifier.graphicsLayer {
+            alpha = arrivalProgress.value
+            translationY = with(density) { ((1f - arrivalProgress.value) * 10.dp.toPx()) }
+        }
+    } else Modifier
+
     val accentBrush = remember(reminder.accentStart, reminder.accentEnd, reminder.isCompleted) {
         reminderAccentBrush(reminder.accentStart, reminder.accentEnd, reminder.isCompleted)
     }
@@ -86,6 +121,38 @@ fun ReminderCard(
         if (reduceAnimations) snap() else tween(200),
         label = "completionColor"
     )
+
+    val circleBgColor by animateColorAsState(
+        targetValue = if (reminder.isCompleted) Color(0xFF808089) else Color.Transparent,
+        animationSpec = if (reduceAnimations) snap() else tween(120),
+        label = "circleBg"
+    )
+    val circleBorderColor by animateColorAsState(
+        targetValue = if (reminder.isCompleted) Color.Transparent else Color(0xFF626269),
+        animationSpec = if (reduceAnimations) snap() else tween(120),
+        label = "circleBorder"
+    )
+    val circlePulse = remember { Animatable(1f) }
+    LaunchedEffect(reminder.isCompleted) {
+        if (reminder.isCompleted && !reduceAnimations) {
+            circlePulse.animateTo(1.08f, tween(110))
+            circlePulse.animateTo(1.0f, tween(130, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)))
+        }
+    }
+    val strikethroughProgress = remember(reminder.id) {
+        Animatable(if (reminder.isCompleted) 1f else 0f)
+    }
+    LaunchedEffect(reminder.isCompleted) {
+        if (!reduceAnimations) {
+            strikethroughProgress.animateTo(
+                targetValue = if (reminder.isCompleted) 1f else 0f,
+                animationSpec = tween(180, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+            )
+        } else {
+            strikethroughProgress.snapTo(if (reminder.isCompleted) 1f else 0f)
+        }
+    }
+    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     val sharedBoundsModifier = if (!reduceAnimations && sharedTransitionScope != null && animatedVisibilityScope != null) {
         with(sharedTransitionScope) {
@@ -105,16 +172,23 @@ fun ReminderCard(
     }
     val borderWidth = if (isSelected) 1.25.dp else 0.75.dp
     val selectionOverlay = if (isSelected) Color(0xFF94B8F7).copy(alpha = 0.07f) else Color.Transparent
+    val cardInteractionSource = remember { MutableInteractionSource() }
+    val circleInteractionSource = remember { MutableInteractionSource() }
+    val view = LocalView.current
 
     Box(
         modifier
             .then(sharedBoundsModifier)
+            .then(arrivalModifier)
             .fillMaxWidth()
+            .pressScale(cardInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.985f)
             .clip(shape)
             .then(if (accentBrush == null) Modifier.background(Color(0xFF141416)) else Modifier.background(accentBrush))
             .then(if (isSelected) Modifier.background(selectionOverlay) else Modifier)
             .border(borderWidth, borderColor, shape)
             .combinedClickable(
+                interactionSource = cardInteractionSource,
+                indication = LocalIndication.current,
                 role = Role.Button,
                 onClickLabel = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç") else "Hatırlatıcıyı aç",
                 onLongClickLabel = if (!isSelectionMode) "Çoklu seçim" else null,
@@ -165,9 +239,23 @@ fun ReminderCard(
                 Modifier.size(48.dp).clip(CircleShape)
                 .then(
                     if (isSelectionMode) {
-                        Modifier.clickable(role = Role.Checkbox, onClick = onSelectToggle)
+                        Modifier.clickable(
+                            interactionSource = circleInteractionSource,
+                            indication = null,
+                            role = Role.Checkbox,
+                            onClick = onSelectToggle
+                        )
                     } else {
-                        Modifier.toggleable(value = reminder.isCompleted, role = Role.Checkbox, onValueChange = { onToggle() })
+                        Modifier.toggleable(
+                            value = reminder.isCompleted,
+                            interactionSource = circleInteractionSource,
+                            indication = null,
+                            role = Role.Checkbox,
+                            onValueChange = {
+                                RealHaptics.success(view)
+                                onToggle()
+                            }
+                        )
                     }
                 )
                 .semantics {
@@ -178,8 +266,13 @@ fun ReminderCard(
         ) {
             Box(
                 Modifier.size(20.dp)
-                    .background(if (reminder.isCompleted) Color(0xFF808089) else Color.Transparent, CircleShape)
-                    .border(1.5.dp, if (reminder.isCompleted) Color.Transparent else Color(0xFF626269), CircleShape),
+                    .graphicsLayer {
+                        scaleX = circlePulse.value
+                        scaleY = circlePulse.value
+                    }
+                    .pressScale(circleInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.90f)
+                    .background(circleBgColor, CircleShape)
+                    .border(1.5.dp, circleBorderColor, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (reminder.isCompleted) ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color(0xFF1B1B1F))
@@ -187,9 +280,40 @@ fun ReminderCard(
         }
         Column(Modifier.weight(1f).padding(top = 11.dp, bottom = 10.dp, start = 2.dp)) {
             Text(
-                reminder.text, color = textColor, fontSize = 16.sp, lineHeight = 23.sp,
-                textDecoration = if (reminder.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-                maxLines = 3, overflow = TextOverflow.Ellipsis
+                text = reminder.text,
+                color = textColor,
+                fontSize = 16.sp,
+                lineHeight = 23.sp,
+                textDecoration = if (reduceAnimations && reminder.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { textLayoutResult = it },
+                modifier = Modifier.drawWithContent {
+                    drawContent()
+                    val progress = strikethroughProgress.value
+                    if (progress > 0.001f && !reduceAnimations) {
+                        val layout = textLayoutResult
+                        if (layout != null) {
+                            val lineCount = layout.lineCount
+                            for (lineIndex in 0 until lineCount) {
+                                val lineLeft = layout.getLineLeft(lineIndex)
+                                val lineRight = layout.getLineRight(lineIndex)
+                                val lineTop = layout.getLineTop(lineIndex)
+                                val lineBottom = layout.getLineBottom(lineIndex)
+                                val lineY = (lineTop + lineBottom) / 2f
+                                val strikeEnd = lineLeft + (lineRight - lineLeft) * progress
+                                if (strikeEnd > lineLeft) {
+                                    drawLine(
+                                        color = textColor,
+                                        start = Offset(lineLeft, lineY),
+                                        end = Offset(strikeEnd, lineY),
+                                        strokeWidth = 1.5.dp.toPx()
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             )
             if (reminder.isChecklist && reminder.checklistItems.isNotEmpty()) {
                 val total = reminder.checklistItems.size

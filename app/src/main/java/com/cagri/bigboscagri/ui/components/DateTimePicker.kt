@@ -3,11 +3,13 @@ package com.cagri.bigboscagri.ui.components
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -40,6 +42,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -613,11 +616,15 @@ private fun NumberWheel(
         }
     }
 
+    val view = LocalView.current
     LaunchedEffect(state, values) {
         var wasMoving = false
         snapshotFlow { state.isScrollInProgress }.distinctUntilChanged().collect { scrolling ->
             if (initialScrollDone && !scrolling && wasMoving && state.layoutInfo.visibleItemsInfo.isNotEmpty()) {
-                values.getOrNull(centered)?.takeIf { it != latestValue }?.let(latestOnValue)
+                values.getOrNull(centered)?.takeIf { it != latestValue }?.let { newValue ->
+                    RealHaptics.tick(view)
+                    latestOnValue(newValue)
+                }
             }
             wasMoving = scrolling
             latestMoving(scrolling)
@@ -641,13 +648,28 @@ private fun NumberWheel(
         }
     ) {
         itemsIndexed(values, key = { _, item -> item }) { index, item ->
+            val isCentered = index == centered
+            val itemColor by animateColorAsState(
+                targetValue = if (isCentered) Color.White else Color(0xFF6B6B70),
+                animationSpec = tween(140),
+                label = "wheelItemColor"
+            )
+            val itemScale by animateFloatAsState(
+                targetValue = if (isCentered) 1.05f else 0.94f,
+                animationSpec = tween(140, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                label = "wheelItemScale"
+            )
             Box(Modifier.fillMaxWidth().height(rowHeight).clickable { onValue(item) }, contentAlignment = Alignment.Center) {
                 Text(
                     format(item),
-                    color = if (index == centered) Color.White else Color(0xFF727277),
+                    color = itemColor,
                     fontSize = if (label == "Yıl") 26.sp else 28.sp,
                     maxLines = 1,
-                    fontWeight = if (index == centered) FontWeight.Bold else FontWeight.Normal
+                    fontWeight = if (isCentered) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = itemScale
+                        scaleY = itemScale
+                    }
                 )
             }
         }

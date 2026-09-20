@@ -20,9 +20,15 @@ import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -215,11 +221,18 @@ private val CategoryCardShape = RoundedCornerShape(18.dp)
 @Composable
 private fun CategoryCard(category: CategoryStyle, onClick: () -> Unit, modifier: Modifier) {
     val shape = CategoryCardShape
+    val interactionSource = remember { MutableInteractionSource() }
     Column(
         // Only the image is rounded: clipping this column also clips label glyphs.
-        modifier = modifier.clickable(
-            role = Role.Button, onClickLabel = category.label, onClick = onClick
-        )
+        modifier = modifier
+            .pressScale(interactionSource, targetScale = 0.97f)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClickLabel = category.label,
+                onClick = onClick
+            )
     ) {
         Box(
             modifier = Modifier
@@ -274,12 +287,31 @@ private fun CustomCategoryCard(
     val endColor = category.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
     val icon = CategoryIcon.fromKey(category.iconKey)
 
-    val borderColor = when {
-        isSelected -> Color(0xFF3B82F6)
-        isSelectionMode -> Color.White.copy(alpha = 0.20f)
-        else -> Color.White.copy(alpha = 0.07f)
-    }
-    val borderWidth = if (isSelected) 1.5.dp else 0.75.dp
+    val animatedBorderColor by animateColorAsState(
+        targetValue = when {
+            isSelected -> Color(0xFF3B82F6)
+            isSelectionMode -> Color.White.copy(alpha = 0.20f)
+            else -> Color.White.copy(alpha = 0.07f)
+        },
+        animationSpec = tween(180),
+        label = "categoryBorderColor"
+    )
+    val animatedBorderWidth by animateDpAsState(
+        targetValue = if (isSelected) 1.5.dp else 0.75.dp,
+        animationSpec = tween(180),
+        label = "categoryBorderWidth"
+    )
+    val checkBgColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFF3B82F6) else Color.Black.copy(alpha = 0.4f),
+        animationSpec = tween(150),
+        label = "checkBgColor"
+    )
+    val checkBorderColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFF3B82F6) else Color.White.copy(alpha = 0.45f),
+        animationSpec = tween(150),
+        label = "checkBorderColor"
+    )
+    val interactionSource = remember { MutableInteractionSource() }
 
     Column(
         modifier = modifier
@@ -288,8 +320,11 @@ private fun CustomCategoryCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(82.dp)
+                .pressScale(interactionSource, targetScale = 0.97f)
                 .clip(shape)
                 .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = LocalIndication.current,
                     role = Role.Button,
                     onClickLabel = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç") else category.name,
                     onLongClickLabel = if (!isSelectionMode) "Kategorileri seç" else null,
@@ -313,7 +348,7 @@ private fun CustomCategoryCard(
                         drawRect(bottomLight)
                     }
                 }
-                .border(borderWidth, borderColor, shape),
+                .border(animatedBorderWidth, animatedBorderColor, shape),
             contentAlignment = Alignment.Center
         ) {
             CategoryIconGlyph(icon, Modifier.size(32.dp), color = Color.White)
@@ -325,12 +360,8 @@ private fun CustomCategoryCard(
                         .padding(top = 6.dp, end = 6.dp)
                         .size(20.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) Color(0xFF3B82F6) else Color.Black.copy(alpha = 0.4f))
-                        .border(
-                            1.dp,
-                            if (isSelected) Color(0xFF3B82F6) else Color.White.copy(alpha = 0.45f),
-                            CircleShape
-                        ),
+                        .background(checkBgColor)
+                        .border(1.dp, checkBorderColor, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isSelected) {

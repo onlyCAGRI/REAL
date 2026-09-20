@@ -46,6 +46,8 @@ import androidx.compose.ui.util.lerp
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.cagri.bigboscagri.ui.components.pressScale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -96,6 +98,8 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import com.cagri.bigboscagri.ui.components.RealHaptics
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -454,11 +458,15 @@ private fun ReminderListScreen(
     var pendingNotificationAction by rememberSaveable { mutableStateOf(PendingNotificationAction.NONE) }
     var showMicrophonePermissionSheet by rememberSaveable { mutableStateOf(false) }
     var pendingMicrophoneAction by rememberSaveable { mutableStateOf(false) }
+    var refocus by remember { mutableStateOf(false) }
 
     LaunchedEffect(notificationsAllowed) {
         if (notificationsAllowed && pendingNotificationAction != PendingNotificationAction.NONE) {
             when (pendingNotificationAction) {
-                PendingNotificationAction.ENABLE_BELL -> sendImmediateNotification = true
+                PendingNotificationAction.ENABLE_BELL -> {
+                    sendImmediateNotification = true
+                    refocus = true
+                }
                 PendingNotificationAction.OPEN_DATE_PICKER -> showDatePicker = true
                 PendingNotificationAction.NONE -> {}
             }
@@ -468,24 +476,30 @@ private fun ReminderListScreen(
 
     var showCreateCategoryDialog by rememberSaveable { mutableStateOf(false) }
     var showEditCategoryDialog by rememberSaveable { mutableStateOf(false) }
-    var refocus by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val view = LocalView.current
     var showAccountMenu by rememberSaveable { mutableStateOf(false) }
     val inputFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
 
     val requestPermissionForAction: (PendingNotificationAction) -> Unit = { action ->
-        focusManager.clearFocus()
-        keyboard?.hide()
         if (!notificationsAllowed) {
+            focusManager.clearFocus()
+            keyboard?.hide()
             pendingNotificationAction = action
             showNotificationPermissionSheet = true
         } else {
             when (action) {
-                PendingNotificationAction.ENABLE_BELL -> sendImmediateNotification = true
-                PendingNotificationAction.OPEN_DATE_PICKER -> showDatePicker = true
+                PendingNotificationAction.ENABLE_BELL -> {
+                    sendImmediateNotification = true
+                }
+                PendingNotificationAction.OPEN_DATE_PICKER -> {
+                    focusManager.clearFocus()
+                    keyboard?.hide()
+                    showDatePicker = true
+                }
                 PendingNotificationAction.NONE -> {}
             }
         }
@@ -556,6 +570,21 @@ private fun ReminderListScreen(
         }
     }
 
+    var newlyCreatedReminderId by remember { mutableStateOf<Long?>(null) }
+    var pendingNewItemSubmission by remember { mutableStateOf(false) }
+
+    LaunchedEffect(reminders) {
+        if (pendingNewItemSubmission) {
+            val newest = reminders.firstOrNull()
+            if (newest != null) {
+                newlyCreatedReminderId = newest.id
+            }
+            pendingNewItemSubmission = false
+            delay(350)
+            newlyCreatedReminderId = null
+        }
+    }
+
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var selectedCategoryIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     val isSelectionMode = category == null && customCategory == null && selectedIds.isNotEmpty()
@@ -604,7 +633,9 @@ private fun ReminderListScreen(
                         try {
                             val items = validItems.mapIndexed { idx, itmText -> ChecklistItem(id = 0L, text = itmText) }
                             val resolvedTitle = text.trim()
+                            pendingNewItemSubmission = true
                             if (onAddReminder(resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl)) {
+                                RealHaptics.success(view)
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
                                 isChecklistMode = false
                                 checklistDraftItems = listOf("")
@@ -632,7 +663,9 @@ private fun ReminderListScreen(
                     saving = true
                     scope.launch {
                         try {
+                            pendingNewItemSubmission = true
                             if (onAddReminder(text.trim(), alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl)) {
+                                RealHaptics.success(view)
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
                                 sendImmediateNotification = false
                                 onDraftChange("")
@@ -697,9 +730,9 @@ private fun ReminderListScreen(
             textLineCount = 1
         }
     }
-    val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null || requiresTimeSelection || draftCategoryId != null || isChecklistMode || isVoiceDraft || isShareDraft
-    LaunchedEffect(showDatePicker) {
-        if (!showDatePicker && refocus) { refocus = false; inputFocus.requestFocus(); keyboard?.show() }
+    val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null || requiresTimeSelection || draftCategoryId != null || isChecklistMode || isVoiceDraft || isShareDraft || sendImmediateNotification || pendingNotificationAction != PendingNotificationAction.NONE
+    LaunchedEffect(showDatePicker, showNotificationPermissionSheet, refocus) {
+        if (!showDatePicker && !showNotificationPermissionSheet && refocus) { refocus = false; inputFocus.requestFocus(); keyboard?.show() }
     }
     val targetComposerHeight = when {
         isChecklistMode -> 280.dp
@@ -1000,6 +1033,7 @@ private fun ReminderListScreen(
             }
             items(active, key = { it.id }, contentType = { "reminder" }) { reminder ->
                 val isSelected = reminder.id in selectedIds
+                val isNewlyCreated = reminder.id == newlyCreatedReminderId
                 val reminderCategory = remember(reminder.customCategoryId, customCategoriesById, customCategory) {
                     reminder.customCategoryId?.let { customCategoriesById[it] }
                         ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
@@ -1012,6 +1046,7 @@ private fun ReminderListScreen(
                     animatedVisibilityScope = animatedVisibilityScope,
                     isSelectionMode = isSelectionMode,
                     isSelected = isSelected,
+                    isNewlyCreated = isNewlyCreated,
                     customCategory = reminderCategory,
                     onLongClick = {
                         if (category == null && customCategory == null && !isCategorySelectionMode) {
@@ -1026,7 +1061,15 @@ private fun ReminderListScreen(
                         }
                     },
                     modifier = Modifier
-                        .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
+                        .then(if (reduceAnimations) Modifier else Modifier.animateItem(
+                            placementSpec = tween(
+                                durationMillis = 260,
+                                delayMillis = if (reminder.isCompleted) 280 else 0,
+                                easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                            ),
+                            fadeInSpec = tween(200),
+                            fadeOutSpec = tween(200)
+                        ))
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                 )
             }
@@ -1062,12 +1105,13 @@ private fun ReminderListScreen(
                             }
                         },
                         modifier = Modifier
-                            .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(350), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
+                            .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
                             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                     )
                 }
                 if (category == null && customCategory == null && totalCompletedCount > 20) {
                     item(key = "show_all_completed") {
+                        val showAllInteractionSource = remember { MutableInteractionSource() }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1076,7 +1120,11 @@ private fun ReminderListScreen(
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(Color.White.copy(alpha = 0.04f))
                                 .border(0.75.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-                                .clickable {
+                                .pressScale(showAllInteractionSource, targetScale = 0.98f, reduceAnimations = reduceAnimations)
+                                .clickable(
+                                    interactionSource = showAllInteractionSource,
+                                    indication = null
+                                ) {
                                     voice.cancel()
                                     focusManager.clearFocus()
                                     keyboard?.hide()
@@ -1205,7 +1253,11 @@ private fun ReminderListScreen(
             sendImmediateNotification = sendImmediateNotification,
             onToggleImmediateNotification = {
                 if (!sendImmediateNotification) {
-                    requestPermissionForAction(PendingNotificationAction.ENABLE_BELL)
+                    if (notificationsAllowed) {
+                        sendImmediateNotification = true
+                    } else {
+                        requestPermissionForAction(PendingNotificationAction.ENABLE_BELL)
+                    }
                 } else {
                     sendImmediateNotification = false
                 }
@@ -1339,6 +1391,7 @@ private fun ReminderListScreen(
             onLater = {
                 showNotificationPermissionSheet = false
                 pendingNotificationAction = PendingNotificationAction.NONE
+                refocus = true
             },
             reduceAnimations = reduceAnimations
         )
