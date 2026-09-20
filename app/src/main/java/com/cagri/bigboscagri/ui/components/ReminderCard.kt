@@ -133,24 +133,36 @@ fun ReminderCard(
         animationSpec = if (reduceAnimations) snap() else tween(120),
         label = "circleBorder"
     )
-    val circlePulse = remember { Animatable(1f) }
+    val circlePulse = remember(reminder.id) { Animatable(1f) }
+    var hasRenderedInitialCircle by remember(reminder.id) { mutableStateOf(false) }
     LaunchedEffect(reminder.isCompleted) {
+        if (!hasRenderedInitialCircle) {
+            hasRenderedInitialCircle = true
+            return@LaunchedEffect
+        }
         if (reminder.isCompleted && !reduceAnimations) {
             circlePulse.animateTo(1.05f, tween(100))
             circlePulse.animateTo(1.0f, tween(120, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)))
+        } else {
+            circlePulse.snapTo(1.0f)
         }
     }
-    var recurringAcknowledged by remember { mutableStateOf(false) }
-    val recurringAckAlpha = remember { Animatable(0f) }
+    var recurringAcknowledged by remember(reminder.id) { mutableStateOf(false) }
+    val recurringAckAlpha = remember(reminder.id) { Animatable(0f) }
     LaunchedEffect(recurringAcknowledged) {
         if (recurringAcknowledged && !reduceAnimations) {
-            launch {
-                circlePulse.animateTo(1.05f, tween(80))
-                circlePulse.animateTo(1.0f, tween(100, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)))
+            try {
+                launch {
+                    circlePulse.animateTo(1.05f, tween(80))
+                    circlePulse.animateTo(1.0f, tween(100, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)))
+                }
+                recurringAckAlpha.animateTo(1f, tween(60))
+                recurringAckAlpha.animateTo(0f, tween(140))
+            } finally {
+                recurringAckAlpha.snapTo(0f)
+                circlePulse.snapTo(1f)
+                recurringAcknowledged = false
             }
-            recurringAckAlpha.animateTo(1f, tween(60))
-            recurringAckAlpha.animateTo(0f, tween(140))
-            recurringAcknowledged = false
         }
     }
     val strikethroughProgress = remember(reminder.id) {
@@ -186,8 +198,8 @@ fun ReminderCard(
     }
     val borderWidth = if (isSelected) 1.25.dp else 0.75.dp
     val selectionOverlay = if (isSelected) Color(0xFF94B8F7).copy(alpha = 0.07f) else Color.Transparent
-    val cardInteractionSource = remember { MutableInteractionSource() }
-    val circleInteractionSource = remember { MutableInteractionSource() }
+    val cardInteractionSource = remember(reminder.id) { MutableInteractionSource() }
+    val circleInteractionSource = remember(reminder.id) { MutableInteractionSource() }
     val view = LocalView.current
 
     Box(
@@ -296,7 +308,7 @@ fun ReminderCard(
                         scaleX = circlePulse.value
                         scaleY = circlePulse.value
                     }
-                    .pressScale(circleInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.90f)
+                    .pressScale(circleInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.95f)
                     .background(
                         when {
                             reminder.isCompleted -> circleBgColor

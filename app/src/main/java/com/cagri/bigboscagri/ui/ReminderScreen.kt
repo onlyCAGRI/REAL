@@ -1075,7 +1075,8 @@ private fun ReminderListScreen(
                         },
                         itemEntranceAlphas = if (isFirstHomeIntroPlaying) catAlphas.map { it.value } else null,
                         itemEntranceOffsetsY = if (isFirstHomeIntroPlaying) catOffsetsY.map { it.value } else null,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        reduceAnimations = reduceAnimations
                     )
                     Spacer(Modifier.height(24.dp))
                     SectionTitle("Hatırlatıcılar")

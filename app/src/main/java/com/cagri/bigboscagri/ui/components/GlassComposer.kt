@@ -165,8 +165,12 @@ fun GlassComposer(
         label = "micColor"
     )
     val micScale by animateFloatAsState(
-        if (recording && !reduceAnimations) 1f + voiceLevel * 0.1f else 1f,
-        if (reduceAnimations) snap() else tween(100),
+        if (voicePhase == VoicePhase.Listening && !reduceAnimations) {
+            1f + (voiceLevel * 0.05f).coerceIn(0f, 0.05f)
+        } else {
+            1f
+        },
+        if (reduceAnimations) snap() else tween(120),
         label = "micLevel"
     )
 
@@ -534,7 +538,7 @@ fun GlassComposer(
                     ) {
                         Box(
                             Modifier
-                                .pressScale(submitInteractionSource, enabled = canSubmit && !saving, targetScale = 0.90f)
+                                .pressScale(submitInteractionSource, enabled = canSubmit && !saving, targetScale = 0.95f, reduceAnimations = reduceAnimations)
                                 .size(30.dp)
                                 .background(
                                     if (canSubmit) Color(0xFF295799) else Color(0xFF1E1E24),
@@ -563,7 +567,7 @@ fun GlassComposer(
                     ) {
                         Box(
                             Modifier
-                                .pressScale(submitInteractionSource, enabled = canSubmit && !saving, targetScale = 0.90f)
+                                .pressScale(submitInteractionSource, enabled = canSubmit && !saving, targetScale = 0.95f, reduceAnimations = reduceAnimations)
                                 .size(30.dp)
                                 .background(
                                     if (canSubmit) Color(0xFF295799) else Color(0xFF1E1E24),
@@ -595,15 +599,35 @@ fun GlassComposer(
                 ) {
                     Box(
                         Modifier
-                            .pressScale(micInteractionSource, enabled = voicePhase != VoicePhase.Finishing && !saving, targetScale = 0.92f)
+                            .pressScale(micInteractionSource, enabled = voicePhase != VoicePhase.Finishing && !saving, targetScale = 0.95f, reduceAnimations = reduceAnimations)
                             .size(40.dp)
                             .graphicsLayer { scaleX = micScale; scaleY = micScale }
-                            .background(if (recording) Color(0xFF2D6099).copy(alpha = 0.32f + voiceLevel * 0.15f) else Color.Transparent, CircleShape),
+                            .background(
+                                if (recording) {
+                                    Color(0xFF2D6099).copy(
+                                        alpha = if (reduceAnimations) 0.32f else (0.32f + voiceLevel.coerceIn(0f, 1f) * 0.12f)
+                                    )
+                                } else {
+                                    Color.Transparent
+                                },
+                                CircleShape
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (voicePhase == VoicePhase.Finishing && !reduceAnimations) {
-                            CircularProgressIndicator(Modifier.size(23.dp), color = micColor, strokeWidth = 2.dp)
-                        } else ActionIcon(ActionGlyph.Mic, Modifier.size(24.dp), micColor)
+                        if (voicePhase == VoicePhase.Finishing) {
+                            if (!reduceAnimations) {
+                                CircularProgressIndicator(Modifier.size(23.dp), color = micColor, strokeWidth = 2.dp)
+                            } else {
+                                Box(
+                                    Modifier.size(22.dp).border(2.dp, micColor.copy(alpha = 0.55f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    ActionIcon(ActionGlyph.Mic, Modifier.size(13.dp), micColor)
+                                }
+                            }
+                        } else {
+                            ActionIcon(ActionGlyph.Mic, Modifier.size(24.dp), micColor)
+                        }
                     }
                 }
             }

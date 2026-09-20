@@ -91,7 +91,8 @@ fun CategoryGrid(
     onLongClickCategory: (Long) -> Unit = {},
     itemEntranceAlphas: List<Float>? = null,
     itemEntranceOffsetsY: List<Float>? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    reduceAnimations: Boolean = false
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val isSelectionMode = selectedCategoryIds.isNotEmpty()
@@ -146,7 +147,8 @@ fun CategoryGrid(
                             is GridItem.System -> CategoryCard(
                                 category = item.style,
                                 onClick = { if (!isSelectionMode) onOpenCategory(item.category) },
-                                modifier = mod
+                                modifier = mod,
+                                reduceAnimations = reduceAnimations
                             )
                             is GridItem.Custom -> CustomCategoryCard(
                                 category = item.category,
@@ -157,12 +159,14 @@ fun CategoryGrid(
                                     else onOpenCustomCategory(item.category)
                                 },
                                 onLongClick = { onLongClickCategory(item.category.id) },
-                                modifier = mod
+                                modifier = mod,
+                                reduceAnimations = reduceAnimations
                             )
                             is GridItem.Add -> CategoryCard(
                                 category = addCategoryStyle,
                                 onClick = { if (!isSelectionMode) onAddCategory() },
-                                modifier = mod
+                                modifier = mod,
+                                reduceAnimations = reduceAnimations
                             )
                         }
                     }
@@ -179,7 +183,8 @@ fun CategoryGrid(
                                 is GridItem.System -> CategoryCard(
                                     category = item.style,
                                     onClick = { if (!isSelectionMode) onOpenCategory(item.category) },
-                                    modifier = mod
+                                    modifier = mod,
+                                    reduceAnimations = reduceAnimations
                                 )
                                 is GridItem.Custom -> CustomCategoryCard(
                                     category = item.category,
@@ -190,12 +195,14 @@ fun CategoryGrid(
                                         else onOpenCustomCategory(item.category)
                                     },
                                     onLongClick = { onLongClickCategory(item.category.id) },
-                                    modifier = mod
+                                    modifier = mod,
+                                    reduceAnimations = reduceAnimations
                                 )
                                 is GridItem.Add -> CategoryCard(
                                     category = addCategoryStyle,
                                     onClick = { if (!isSelectionMode) onAddCategory() },
-                                    modifier = mod
+                                    modifier = mod,
+                                    reduceAnimations = reduceAnimations
                                 )
                             }
                         }
@@ -219,26 +226,31 @@ fun CategoryGrid(
 private val CategoryCardShape = RoundedCornerShape(18.dp)
 
 @Composable
-private fun CategoryCard(category: CategoryStyle, onClick: () -> Unit, modifier: Modifier) {
+private fun CategoryCard(
+    category: CategoryStyle,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    reduceAnimations: Boolean = false
+) {
     val shape = CategoryCardShape
-    val interactionSource = remember { MutableInteractionSource() }
+    val interactionSource = remember(category.label) { MutableInteractionSource() }
     Column(
         // Only the image is rounded: clipping this column also clips label glyphs.
         modifier = modifier
-            .pressScale(interactionSource, targetScale = 0.97f)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = LocalIndication.current,
-                role = Role.Button,
-                onClickLabel = category.label,
-                onClick = onClick
-            )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(82.dp)
+                .pressScale(interactionSource, targetScale = 0.97f, reduceAnimations = reduceAnimations)
                 .clip(shape)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = LocalIndication.current,
+                    role = Role.Button,
+                    onClickLabel = category.label,
+                    onClick = onClick
+                )
                 .drawWithCache {
                     val topLight = Brush.radialGradient(
                         colors = listOf(category.upper, Color.Transparent),
@@ -280,7 +292,8 @@ private fun CustomCategoryCard(
     isSelected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    modifier: Modifier
+    modifier: Modifier,
+    reduceAnimations: Boolean = false
 ) {
     val shape = CategoryCardShape
     val startColor = ReminderColorChoices.getOrNull(category.accentStart)?.color ?: Color(0xFF233F73)
@@ -311,7 +324,7 @@ private fun CustomCategoryCard(
         animationSpec = tween(150),
         label = "checkBorderColor"
     )
-    val interactionSource = remember { MutableInteractionSource() }
+    val interactionSource = remember(category.id) { MutableInteractionSource() }
 
     Column(
         modifier = modifier
@@ -320,7 +333,7 @@ private fun CustomCategoryCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(82.dp)
-                .pressScale(interactionSource, targetScale = 0.97f)
+                .pressScale(interactionSource, targetScale = 0.97f, reduceAnimations = reduceAnimations)
                 .clip(shape)
                 .combinedClickable(
                     interactionSource = interactionSource,

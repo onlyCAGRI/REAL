@@ -95,6 +95,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.key
+import com.cagri.bigboscagri.data.ChecklistItem
 import com.cagri.bigboscagri.data.RecurrenceRule
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.data.repeatSummary
@@ -141,7 +143,7 @@ fun ReminderDetailScreen(
     var showNotificationPermissionSheet by rememberSaveable { mutableStateOf(false) }
     var pendingDetailDatePicker by rememberSaveable(reminder.id) { mutableStateOf(false) }
     val view = LocalView.current
-    val starInteractionSource = remember { MutableInteractionSource() }
+    val starInteractionSource = remember(reminder.id) { MutableInteractionSource() }
 
     LaunchedEffect(notificationsAllowed) {
         if (notificationsAllowed && pendingDetailDatePicker) {
@@ -225,11 +227,18 @@ fun ReminderDetailScreen(
                     Text(if (editing) "Düzenle" else "Hatırlatıcı", color = Color(0xFFAAAAB3), fontSize = 13.sp,
                         fontWeight = FontWeight.Medium)
                 }
-                val starSettleScale = remember { Animatable(1f) }
+                val starSettleScale = remember(reminder.id) { Animatable(1f) }
+                var hasRenderedInitialStar by remember(reminder.id) { mutableStateOf(false) }
                 LaunchedEffect(reminder.isImportant) {
+                    if (!hasRenderedInitialStar) {
+                        hasRenderedInitialStar = true
+                        return@LaunchedEffect
+                    }
                     if (reminder.isImportant && !reduceAnimations) {
-                        starSettleScale.snapTo(1.18f)
+                        starSettleScale.snapTo(1.06f)
                         starSettleScale.animateTo(1.0f, tween(160, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)))
+                    } else {
+                        starSettleScale.snapTo(1.0f)
                     }
                 }
                 val starColor by animateColorAsState(
@@ -242,8 +251,9 @@ fun ReminderDetailScreen(
                         RealHaptics.toggle(view, on = !reminder.isImportant)
                         onToggleImportant()
                     },
+                    interactionSource = starInteractionSource,
                     modifier = Modifier
-                        .pressScale(starInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.90f)
+                        .pressScale(starInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.95f)
                         .background(Color(0xFF161619), CircleShape)
                         .semantics { contentDescription = if (reminder.isImportant) "Önemli işaretini kaldır" else "Önemli olarak işaretle" }
                 ) {
@@ -331,73 +341,11 @@ fun ReminderDetailScreen(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         reminder.checklistItems.forEach { item ->
-                            val itemTextColor by animateColorAsState(
-                                if (item.isCompleted) Color(0xFF6E6E77) else Color(0xFFF1F1F5),
-                                animationSpec = if (reduceAnimations) snap() else tween(180),
-                                label = "checkItemColor_${item.id}"
-                            )
-                            val itemAlpha by animateFloatAsState(
-                                if (item.isCompleted) 0.65f else 1.0f,
-                                animationSpec = if (reduceAnimations) snap() else tween(180),
-                                label = "checkItemAlpha_${item.id}"
-                            )
-                            val circleBorderColor by animateColorAsState(
-                                if (item.isCompleted) Color.Transparent else Color(0xFF5E5E68),
-                                animationSpec = if (reduceAnimations) snap() else tween(120),
-                                label = "checkCircleBorder_${item.id}"
-                            )
-                            val circleBgColor by animateColorAsState(
-                                if (item.isCompleted) Color(0xFF686873) else Color.Transparent,
-                                animationSpec = if (reduceAnimations) snap() else tween(120),
-                                label = "checkCircleBg_${item.id}"
-                            )
-                            val checkItemInteractionSource = remember { MutableInteractionSource() }
-                            val checkSettle = remember { Animatable(1f) }
-                            LaunchedEffect(item.isCompleted) {
-                                if (item.isCompleted && !reduceAnimations) {
-                                    checkSettle.snapTo(1.10f)
-                                    checkSettle.animateTo(1.0f, tween(140, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)))
-                                }
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .pressScale(checkItemInteractionSource, targetScale = 0.98f)
-                                    .clickable(
-                                        interactionSource = checkItemInteractionSource,
-                                        indication = LocalIndication.current,
-                                        onClick = {
-                                            RealHaptics.toggle(view, on = !item.isCompleted)
-                                            onToggleChecklistItem(reminder.id, item.id)
-                                        }
-                                    )
-                                    .padding(vertical = 8.dp, horizontal = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .graphicsLayer {
-                                            scaleX = checkSettle.value
-                                            scaleY = checkSettle.value
-                                        }
-                                        .background(circleBgColor, CircleShape)
-                                        .border(1.5.dp, circleBorderColor, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (item.isCompleted) {
-                                        ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color(0xFF1B1B1F))
-                                    }
-                                }
-                                Text(
-                                    text = item.text,
-                                    color = itemTextColor,
-                                    fontSize = 17.sp,
-                                    lineHeight = 24.sp,
-                                    textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-                                    modifier = Modifier.weight(1f).graphicsLayer { alpha = itemAlpha }
+                            key(item.id) {
+                                ChecklistItemRow(
+                                    item = item,
+                                    reduceAnimations = reduceAnimations,
+                                    onToggle = { onToggleChecklistItem(reminder.id, item.id) }
                                 )
                             }
                         }
@@ -623,9 +571,9 @@ fun ReminderDetailScreen(
             DesignPanel(scene, { scenePosition }, modifier = Modifier.fillMaxWidth(), corners = 36.dp, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (editing) {
-                        DetailAction("Vazgeç", ActionGlyph.Close, Modifier.weight(1f), onClick = finishEditing)
+                        DetailAction("Vazgeç", ActionGlyph.Close, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = finishEditing)
                         DetailAction("Kaydet", ActionGlyph.Check, Modifier.weight(1f), enabled = editedText.isNotBlank(),
-                            color = Color(0xFF91B9FF), onClick = {
+                            color = Color(0xFF91B9FF), reduceAnimations = reduceAnimations, onClick = {
                                 RealHaptics.success(view)
                                 onSave(editedText.trim(), accentStart, accentEnd, selectedCategoryId)
                                 finishEditing()
@@ -633,7 +581,7 @@ fun ReminderDetailScreen(
                     } else {
                         DetailAction(if (reminder.isCompleted) "Geri al" else "Tamamla",
                             if (reminder.isCompleted) ActionGlyph.Undo else ActionGlyph.Check,
-                            Modifier.weight(1f), enabled = !deleting, onClick = {
+                            Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
                                 if (!reminder.isCompleted) {
                                     RealHaptics.success(view)
                                 } else {
@@ -641,7 +589,7 @@ fun ReminderDetailScreen(
                                 }
                                 onToggleCompleted()
                             })
-                        DetailAction("Düzenle", ActionGlyph.Edit, Modifier.weight(1f), enabled = !deleting, onClick = {
+                        DetailAction("Düzenle", ActionGlyph.Edit, Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
                             focusManager.clearFocus()
                             keyboard?.hide()
                             editedText = reminder.text
@@ -650,12 +598,12 @@ fun ReminderDetailScreen(
                             selectedCategoryId = reminder.customCategoryId
                             editing = true
                         })
-                        DetailAction("Paylaş", ActionGlyph.Share, Modifier.weight(1f), enabled = !deleting, onClick = {
+                        DetailAction("Paylaş", ActionGlyph.Share, Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
                             context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"; putExtra(Intent.EXTRA_TEXT, reminder.text)
                             }, "Hatırlatıcıyı paylaş"))
                         })
-                        DetailAction("Sil", ActionGlyph.Delete, Modifier.weight(1f), onClick = { deleting = !deleting })
+                        DetailAction("Sil", ActionGlyph.Delete, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = { deleting = !deleting })
                     }
                 }
             }
@@ -697,15 +645,102 @@ fun ReminderDetailScreen(
 }
 
 @Composable
+private fun ChecklistItemRow(
+    item: ChecklistItem,
+    reduceAnimations: Boolean,
+    onToggle: () -> Unit
+) {
+    val view = LocalView.current
+    val itemTextColor by animateColorAsState(
+        if (item.isCompleted) Color(0xFF6E6E77) else Color(0xFFF1F1F5),
+        animationSpec = if (reduceAnimations) snap() else tween(180),
+        label = "checkItemColor_${item.id}"
+    )
+    val itemAlpha by animateFloatAsState(
+        if (item.isCompleted) 0.65f else 1.0f,
+        animationSpec = if (reduceAnimations) snap() else tween(180),
+        label = "checkItemAlpha_${item.id}"
+    )
+    val circleBorderColor by animateColorAsState(
+        if (item.isCompleted) Color.Transparent else Color(0xFF5E5E68),
+        animationSpec = if (reduceAnimations) snap() else tween(120),
+        label = "checkCircleBorder_${item.id}"
+    )
+    val circleBgColor by animateColorAsState(
+        if (item.isCompleted) Color(0xFF686873) else Color.Transparent,
+        animationSpec = if (reduceAnimations) snap() else tween(120),
+        label = "checkCircleBg_${item.id}"
+    )
+    val checkItemInteractionSource = remember(item.id) { MutableInteractionSource() }
+    val checkSettle = remember(item.id) { Animatable(1f) }
+    var hasRenderedInitialCheck by remember(item.id) { mutableStateOf(false) }
+    LaunchedEffect(item.isCompleted) {
+        if (!hasRenderedInitialCheck) {
+            hasRenderedInitialCheck = true
+            return@LaunchedEffect
+        }
+        if (item.isCompleted && !reduceAnimations) {
+            checkSettle.snapTo(1.05f)
+            checkSettle.animateTo(1.0f, tween(140, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)))
+        } else {
+            checkSettle.snapTo(1.0f)
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .pressScale(checkItemInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.98f)
+            .clickable(
+                interactionSource = checkItemInteractionSource,
+                indication = LocalIndication.current,
+                onClick = {
+                    RealHaptics.toggle(view, on = !item.isCompleted)
+                    onToggle()
+                }
+            )
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .graphicsLayer {
+                    scaleX = checkSettle.value
+                    scaleY = checkSettle.value
+                }
+                .background(circleBgColor, CircleShape)
+                .border(1.5.dp, circleBorderColor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (item.isCompleted) {
+                ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color(0xFF1B1B1F))
+            }
+        }
+        Text(
+            text = item.text,
+            color = itemTextColor,
+            fontSize = 17.sp,
+            lineHeight = 24.sp,
+            textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+            modifier = Modifier.weight(1f).graphicsLayer { alpha = itemAlpha }
+        )
+    }
+}
+
+@Composable
 private fun DetailAction(
     label: String, glyph: ActionGlyph, modifier: Modifier,
-    enabled: Boolean = true, color: Color = Color(0xFFF0F0F4), onClick: () -> Unit
+    enabled: Boolean = true, color: Color = Color(0xFFF0F0F4),
+    reduceAnimations: Boolean = false,
+    onClick: () -> Unit
 ) {
     val tint = if (enabled) color else color.copy(alpha = 0.35f)
     val interactionSource = remember { MutableInteractionSource() }
     Column(
         modifier
-            .pressScale(interactionSource, enabled = enabled, targetScale = 0.94f)
+            .pressScale(interactionSource, enabled = enabled, targetScale = 0.96f, reduceAnimations = reduceAnimations)
             .clip(RoundedCornerShape(28.dp))
             .clickable(
                 enabled = enabled,
