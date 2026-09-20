@@ -1,53 +1,88 @@
-# Real 1.8.5 — Kontrol raporu
+# Real 0.5.0 — Kontrol Raporu
 
-Kaynak: 1.8 reinstall (versionCode 11). Güncel paket: versionCode 16.
+Bu rapor, güncel `antigravity-work` branch'indeki Real 0.5.0 kaynak ağacını özetler.
 
-1.8.5'te `Düzenle` eyleminin otomatik odak ve klavye davranışı kaldırıldı.
-Cam renk seçicideki iki kategori tonu notla birlikte saklanıyor ve ana liste
-kartında gradient olarak kullanılıyor. Renk alanları isteğe bağlı olduğundan
-eski kayıtlar değiştirilmeden açılmaya devam ediyor.
+## Güncel durum
 
-1.8.4'te tarih–saat paneline uygulamadaki diğer yüzeylerle uyumlu giriş/çıkış
-animasyonu eklendi. Detay ekranındaki tarih alanı yalnızca düzenleme modunda
-gösteriliyor.
+- Uygulama adı: Real
+- Sürüm: 0.5.0
+- compileSdk / targetSdk: 36
+- minSdk: 26
+- JDK: 17
+- Gradle: 8.11.1
+- Aktif geliştirme branch'i: `antigravity-work`
 
-Eski klasörün üstüne çıkarıldığında kalabilen `ScheduledReminderReceiver.kt`
-dosyası, güncel `ReminderAlarmReceiver` sistemine yönlenen uyumluluk sınıfıyla değiştirildi.
+## Mevcut ana özellikler
 
-1.8.3'te tarih–saat penceresi seçili Glass/Buz yüzeyine bağlandı, bulanıklık
-azaltıldığında aynı düzenin düz koyu karşılığı korunuyor. İsteğe bağlı `Yıl gir`
-seçimi ve yıl seçilmediğinde en yakın gelecek tarihi kullanma davranışı eklendi.
-Kategori kartlarındaki sayaçlar kaldırıldı.
+- Metin tabanlı reminder oluşturma
+- Tarih / saat seçimi
+- Tekrarlayan reminder mimarisi
+- Türkçe voice reminder parser
+- Checklist reminder
+- Özel kategori sistemi
+- Reminder card renk / gradient desteği
+- Tamamlananlar geçmişi
+- Yıldızlı / önemli reminder ve pinned notification
+- Notification Tamamla / 10 dk ertele aksiyonları
+- Notification -> reminder detail açılışı
+- Share to Real
+- Contextual notification ve microphone permission sheet
+- Glass / Buz tasarım sistemi
+- Reduce Animations desteği
+- Motion Language v1 mikro-etkileşimleri
 
-## Değişiklikler
+## Zamanlama ve recurrence
 
-- Kayıt işlemleri ana arayüz iş parçacığından taşındı; arka plan alıcılarıyla aynı kilidi kullanıyor. Bozuk verinin boş liste sayılıp üzerine yazılması önlendi.
-- Dinamik bulanıklık kapalıyken sahne kaydı atlanıyor. Panel örneği yarım çözünürlükte; ekranın tamamına büyük bulanıklık uygulanmıyor.
-- Logo küçük çözünürlükte açılıp önbelleğe alınıyor. Mikrofon seviyesi en fazla 80 ms'de bir güncelleniyor; animasyon azaltıldığında hareket devre dışı.
-- Buz tasarımı menü, giriş, detay eylemleri ve silme onayında tutarlı. Ayarlar kaydırılabilir ve canlı önizlemeli.
-- Tarih/saat seçimi, ay sonu ve artık yıl düzeltmesi, geçmiş saat ve yaz saati boşluğu kontrolü eklendi.
-- Tek sonraki alarm kullanılıyor. Gönderilen tarihin kaydı, uygulamayı açınca aynı alarmın tekrar gönderilmesini önlüyor. Tamamlanan/silinen/yeniden planlanan notlar güncel kayıt üzerinden değerlendirilir.
-- Açılış, yeniden başlatma, uygulama güncellemesi, saat ve alarm izni değişiminde planlar yenilenir. Sürekli çalışan servis yok.
+Tek sonraki alarm yaklaşımı kullanılır. Tekrarlayan hatırlatıcılarda `anchorAlertAt` korunarak ay sonu ve leap-year drift riskleri azaltılır.
 
-## Doğrulama
+Recurring reminder teslim edildiğinde bir sonraki occurrence hesaplanır; reminder normal tamamlanan geçmişine yanlışlıkla taşınmaz.
 
-XML kaynakları ve dosya kodlamaları kontrol edildi.
+## Bildirimler
 
-- 1.8.2 tabanı Gradle 8.11.1, JDK 17 ve Android SDK 36 ile `:app:testDebugUnitTest :app:assembleOptimized`: **BUILD SUCCESSFUL**.
-- **20 test geçti; 0 hata, 0 başarısız test.** Tarih/zamanlama kuralları için 10; mevcut not, kategori ve ses metni davranışları için 10 test.
-- Debug ve optimize Kotlin derlemesi başarılı. R8 küçültmesi, kaynak optimizasyonu, lintVital kontrolü ve optimize APK paketlemesi başarılı.
-- Derlemeyi engellemeyen uyarılar: eski status-bar contrast API'si ve üçüncü taraf grafik kitaplığının sembollerinin ayıklanmaması.
+Normal reminder bildirimleri ve pinned önemli bildirimler ayrı notification channel kullanır.
 
-Kullanıcının isteği üzerine 1.8.5 için tam Gradle/optimized build çalıştırılmadı.
-Kotlin/KTS sözdizimi, XML, çağrı imzaları ve ZIP içeriği statik olarak kontrol edildi;
-son derleme Windows'taki `build.ps1` ile kullanıcı tarafından yapılacaktır.
+Notification action receiver üzerinden:
 
-Bu ortamın imzası telefonundaki kurulumla farklı olabileceğinden APK yerine kendi bilgisayarında derleyeceğin kaynak proje teslim edilir.
+- Tamamla
+- 10 dk ertele
 
-Fiziksel Samsung A53 üzerinde görsel, ses tanıma, alarm teslimi ve FPS ölçümü bu ortamda yapılmadı. Yarım çözünürlük örneklemesi ölçülmüş FPS artışı anlamına gelmez. Dahil edilen ölçüm betiği kare süresi raporu üretir.
+aksiyonları desteklenir.
 
-## Teknik kaynaklar
+Pinned notification, yıldız kaldırıldığında veya reminder tamamlandığında/silindiğinde kaldırılır.
 
-Arka planda zamanlama ve alarm izni: [Android alarm rehberi](https://developer.android.com/develop/background-work/services/alarms).
+## Motion Language v1
 
-Liste anahtarları ve yeniden hesaplamayı azaltma: [Compose performans rehberi](https://developer.android.com/develop/ui/compose/performance/bestpractices).
+Güncel motion sistemi şunları içerir:
+
+- gesture tüketmeyen `pressScale`
+- yeni reminder için hedefli arrival animation
+- completion circle fill / pulse / progressive strikethrough
+- star ve checklist settle motion
+- date/time picker center-item emphasis
+- voice draft arrival
+- custom category selected-state transition
+- route geçişleri
+- composer placeholder shimmer
+
+`reduceAnimations` açıkken dekoratif animasyonlar atlanır.
+
+## Son doğrulamalar
+
+Son geliştirme turunda:
+
+- `:app:compileDebugKotlin` başarılı
+- `:app:compileOptimizedKotlin` başarılı
+- Debug unit testleri başarılı
+- 22 test geçti, 0 failure
+
+## Bilinen inceleme alanları
+
+0.5.0 için hâlâ cihaz üzerinde gözlemlenmesi gereken başlıklar:
+
+- UI haptic feedback gerçek cihaz davranışı
+- notification vibration davranışı
+- motion strength ince ayarı
+- placeholder shimmer sıklığı
+- farklı Android üreticilerinde notification / haptic tutarlılığı
+
+Bu başlıklar iş mantığı hatası olarak değil, cihazlar arası UX doğrulama alanı olarak izlenmektedir.
