@@ -9,6 +9,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -135,8 +136,21 @@ fun ReminderCard(
     val circlePulse = remember { Animatable(1f) }
     LaunchedEffect(reminder.isCompleted) {
         if (reminder.isCompleted && !reduceAnimations) {
-            circlePulse.animateTo(1.08f, tween(110))
-            circlePulse.animateTo(1.0f, tween(130, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)))
+            circlePulse.animateTo(1.05f, tween(100))
+            circlePulse.animateTo(1.0f, tween(120, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)))
+        }
+    }
+    var recurringAcknowledged by remember { mutableStateOf(false) }
+    val recurringAckAlpha = remember { Animatable(0f) }
+    LaunchedEffect(recurringAcknowledged) {
+        if (recurringAcknowledged && !reduceAnimations) {
+            launch {
+                circlePulse.animateTo(1.05f, tween(80))
+                circlePulse.animateTo(1.0f, tween(100, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)))
+            }
+            recurringAckAlpha.animateTo(1f, tween(60))
+            recurringAckAlpha.animateTo(0f, tween(140))
+            recurringAcknowledged = false
         }
     }
     val strikethroughProgress = remember(reminder.id) {
@@ -252,12 +266,20 @@ fun ReminderCard(
                             indication = null,
                             role = Role.Checkbox,
                             onValueChange = {
-                                if (!reminder.isCompleted) {
+                                if (reminder.hasRepeat) {
                                     RealHaptics.success(view)
+                                    if (!reduceAnimations) {
+                                        recurringAcknowledged = true
+                                    }
+                                    onToggle()
                                 } else {
-                                    RealHaptics.toggle(view, on = false)
+                                    if (!reminder.isCompleted) {
+                                        RealHaptics.success(view)
+                                    } else {
+                                        RealHaptics.toggle(view, on = false)
+                                    }
+                                    onToggle()
                                 }
-                                onToggle()
                             }
                         )
                     }
@@ -275,11 +297,30 @@ fun ReminderCard(
                         scaleY = circlePulse.value
                     }
                     .pressScale(circleInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.90f)
-                    .background(circleBgColor, CircleShape)
-                    .border(1.5.dp, circleBorderColor, CircleShape),
+                    .background(
+                        when {
+                            reminder.isCompleted -> circleBgColor
+                            recurringAckAlpha.value > 0.01f -> Color(0xFF94B8F7).copy(alpha = 0.25f * recurringAckAlpha.value)
+                            else -> circleBgColor
+                        },
+                        CircleShape
+                    )
+                    .border(
+                        1.5.dp,
+                        when {
+                            reminder.isCompleted -> circleBorderColor
+                            recurringAckAlpha.value > 0.01f -> Color(0xFF94B8F7).copy(alpha = 0.7f * recurringAckAlpha.value + 0.3f * (1f - recurringAckAlpha.value))
+                            else -> circleBorderColor
+                        },
+                        CircleShape
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                if (reminder.isCompleted) ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color(0xFF1B1B1F))
+                if (reminder.isCompleted) {
+                    ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color(0xFF1B1B1F))
+                } else if (recurringAckAlpha.value > 0.01f) {
+                    ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color(0xFF94B8F7).copy(alpha = recurringAckAlpha.value))
+                }
             }
         }
         Column(Modifier.weight(1f).padding(top = 11.dp, bottom = 10.dp, start = 2.dp)) {

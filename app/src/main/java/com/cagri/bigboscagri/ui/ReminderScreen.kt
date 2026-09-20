@@ -136,6 +136,7 @@ import com.cagri.bigboscagri.ui.components.ReminderCard
 import com.cagri.bigboscagri.ui.components.ReminderColorChoices
 import com.cagri.bigboscagri.ui.components.SelectionActionButtons
 import com.cagri.bigboscagri.ui.components.TopGlassOverlay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -149,7 +150,7 @@ private data class ReminderRoute(val category: ReminderCategory?, val customCate
 @Composable
 fun ReminderScreen(
     reminders: List<ReminderItem>,
-    onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Boolean,
+    onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Long?,
     onToggleCompleted: (Long) -> Unit,
     onToggleImportant: (Long) -> Unit,
     onEditReminder: (Long, String, Int?, Int?, Long?) -> Unit,
@@ -192,6 +193,8 @@ fun ReminderScreen(
     var isShareDraft by rememberSaveable { mutableStateOf(false) }
     var draftReferenceUrl by rememberSaveable { mutableStateOf<String?>(null) }
     val stateHolder = rememberSaveableStateHolder()
+    val scope = rememberCoroutineScope()
+    var detailExitJob by remember { mutableStateOf<Job?>(null) }
     LaunchedEffect(requestedReminderId) {
         if (requestedReminderId != null) {
             ColdStartTracker.markExecuted()
@@ -320,8 +323,28 @@ fun ReminderScreen(
                             if (route.detailId != null && reminder != null) {
                                 ReminderDetailScreen(
                                     reminder = reminder,
-                                    onBack = { detailId = null },
-                                    onToggleCompleted = { onToggleCompleted(reminder.id); detailId = null },
+                                    onBack = {
+                                        detailExitJob?.cancel()
+                                        detailExitJob = null
+                                        detailId = null
+                                    },
+                                    onToggleCompleted = {
+                                        detailExitJob?.cancel()
+                                        detailExitJob = null
+                                        val wasCompleted = reminder.isCompleted
+                                        onToggleCompleted(reminder.id)
+                                        if (reminder.repeatRule == RecurrenceRule.NONE && !wasCompleted) {
+                                            if (reduceAnimations) {
+                                                detailId = null
+                                            } else {
+                                                detailExitJob = scope.launch {
+                                                    delay(220)
+                                                    detailId = null
+                                                    detailExitJob = null
+                                                }
+                                            }
+                                        }
+                                    },
                                     onToggleImportant = { onToggleImportant(reminder.id) },
                                     onToggleChecklistItem = onToggleChecklistItem,
                                     onSave = { text, accentStart, accentEnd, customCatId ->
@@ -372,8 +395,8 @@ fun ReminderScreen(
                                          onOpenCustomCategory(customCategoryItem)
                                      },
                                      onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl ->
-                                         val saved = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl)
-                                         if (saved) {
+                                         val createdId = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl)
+                                         if (createdId != null) {
                                              draft = ""; draftAlertAt = null; draftRepeatRule = RecurrenceRule.NONE; draftReferenceUrl = null; isShareDraft = false
                                              if (category != null) {
                                                  if (catId != null) {
@@ -384,7 +407,7 @@ fun ReminderScreen(
                                                  }
                                              }
                                          }
-                                         saved
+                                         createdId
                                      },
                                      isShareDraft = isShareDraft,
                                      onShareDraftChange = { isShareDraft = it },
@@ -424,7 +447,7 @@ private fun ReminderListScreen(
     onDeleteCategories: (Set<Long>) -> Unit = {},
     reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean, designStyle: DesignStyle,
-    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Boolean,
+    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Long?,
     isShareDraft: Boolean = false,
     onShareDraftChange: (Boolean) -> Unit = {},
     draftReferenceUrl: String? = null,
@@ -571,15 +594,9 @@ private fun ReminderListScreen(
     }
 
     var newlyCreatedReminderId by remember { mutableStateOf<Long?>(null) }
-    var pendingNewItemSubmission by remember { mutableStateOf(false) }
 
-    LaunchedEffect(reminders) {
-        if (pendingNewItemSubmission) {
-            val newest = reminders.firstOrNull()
-            if (newest != null) {
-                newlyCreatedReminderId = newest.id
-            }
-            pendingNewItemSubmission = false
+    LaunchedEffect(newlyCreatedReminderId) {
+        if (newlyCreatedReminderId != null) {
             delay(350)
             newlyCreatedReminderId = null
         }
@@ -633,8 +650,9 @@ private fun ReminderListScreen(
                         try {
                             val items = validItems.mapIndexed { idx, itmText -> ChecklistItem(id = 0L, text = itmText) }
                             val resolvedTitle = text.trim()
-                            pendingNewItemSubmission = true
-                            if (onAddReminder(resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl)) {
+                            val createdId = onAddReminder(resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl)
+                            if (createdId != null) {
+                                newlyCreatedReminderId = createdId
                                 RealHaptics.success(view)
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
                                 isChecklistMode = false
@@ -663,8 +681,9 @@ private fun ReminderListScreen(
                     saving = true
                     scope.launch {
                         try {
-                            pendingNewItemSubmission = true
-                            if (onAddReminder(text.trim(), alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl)) {
+                            val createdId = onAddReminder(text.trim(), alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl)
+                            if (createdId != null) {
+                                newlyCreatedReminderId = createdId
                                 RealHaptics.success(view)
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
                                 sendImmediateNotification = false
@@ -812,25 +831,73 @@ private fun ReminderListScreen(
         }
     }
     val today = rememberReminderDay()
-    val active = remember(reminders, category, customCategory, today) {
-        when {
-            category != null -> reminders.inCategory(category, today)
-            customCategory != null -> reminders.filter { it.customCategoryId == customCategory.id && !it.isCompleted }.sortedByDescending { it.createdAt }
-            else -> reminders.filter { !it.isCompleted }
+    var pendingExitReminderIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val pendingExitJobs = remember { mutableMapOf<Long, Job>() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            pendingExitJobs.values.forEach { it.cancel() }
+            pendingExitJobs.clear()
         }
     }
-    val completed = remember(reminders, category, customCategory) {
+
+    val handleToggleCompleted: (ReminderItem) -> Unit = { reminder ->
+        pendingExitJobs[reminder.id]?.cancel()
+        pendingExitJobs.remove(reminder.id)
+
+        if (reminder.hasRepeat) {
+            onToggleCompleted(reminder.id)
+        } else if (reminder.isCompleted) {
+            pendingExitReminderIds = pendingExitReminderIds - reminder.id
+            onToggleCompleted(reminder.id)
+        } else {
+            if (reduceAnimations) {
+                pendingExitReminderIds = pendingExitReminderIds - reminder.id
+                onToggleCompleted(reminder.id)
+            } else {
+                pendingExitReminderIds = pendingExitReminderIds + reminder.id
+                onToggleCompleted(reminder.id)
+                pendingExitJobs[reminder.id] = scope.launch {
+                    delay(240)
+                    pendingExitReminderIds = pendingExitReminderIds - reminder.id
+                    pendingExitJobs.remove(reminder.id)
+                }
+            }
+        }
+    }
+
+    val active = remember(reminders, category, customCategory, today, pendingExitReminderIds) {
+        val base = when {
+            category == ReminderCategory.Completed -> reminders.inCategory(ReminderCategory.Completed, today)
+            category != null -> {
+                val matchingIds = reminders.map { if (it.id in pendingExitReminderIds) it.copy(completedAt = null) else it }
+                    .inCategory(category, today)
+                    .map { it.id }
+                    .toSet()
+                reminders.filter { it.id in matchingIds }.sortedByDescending { it.createdAt }
+            }
+            customCategory != null -> reminders.filter {
+                it.customCategoryId == customCategory.id && (!it.isCompleted || it.id in pendingExitReminderIds)
+            }.sortedByDescending { it.createdAt }
+            else -> reminders.filter { !it.isCompleted || it.id in pendingExitReminderIds }
+        }
+        base
+    }
+    val completed = remember(reminders, category, customCategory, pendingExitReminderIds) {
         when {
             category == null && customCategory == null ->
                 reminders.inCategory(ReminderCategory.Completed)
+                    .filter { it.id !in pendingExitReminderIds }
                     .sortedByDescending { it.completedAt ?: it.createdAt }
                     .take(20)
-            customCategory != null -> reminders.filter { it.customCategoryId == customCategory.id && it.isCompleted }.sortedByDescending { it.completedAt ?: it.createdAt }
+            customCategory != null -> reminders.filter {
+                it.customCategoryId == customCategory.id && it.isCompleted && it.id !in pendingExitReminderIds
+            }.sortedByDescending { it.completedAt ?: it.createdAt }
             else -> emptyList()
         }
     }
-    val totalCompletedCount = remember(reminders) {
-        reminders.inCategory(ReminderCategory.Completed).size
+    val totalCompletedCount = remember(reminders, pendingExitReminderIds) {
+        reminders.inCategory(ReminderCategory.Completed).count { it.id !in pendingExitReminderIds }
     }
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -1039,7 +1106,7 @@ private fun ReminderListScreen(
                         ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
                 }
                 ReminderCard(
-                    reminder, onToggle = { onToggleCompleted(reminder.id) },
+                    reminder, onToggle = { handleToggleCompleted(reminder) },
                     onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                     reduceAnimations = reduceAnimations,
                     sharedTransitionScope = sharedTransitionScope,
@@ -1063,12 +1130,11 @@ private fun ReminderListScreen(
                     modifier = Modifier
                         .then(if (reduceAnimations) Modifier else Modifier.animateItem(
                             placementSpec = tween(
-                                durationMillis = 260,
-                                delayMillis = if (reminder.isCompleted) 280 else 0,
+                                durationMillis = 240,
                                 easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
                             ),
-                            fadeInSpec = tween(200),
-                            fadeOutSpec = tween(200)
+                            fadeInSpec = tween(180),
+                            fadeOutSpec = tween(180)
                         ))
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                 )
@@ -1084,7 +1150,7 @@ private fun ReminderListScreen(
                             ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
                     }
                     ReminderCard(
-                        reminder, onToggle = { onToggleCompleted(reminder.id) },
+                        reminder, onToggle = { handleToggleCompleted(reminder) },
                         onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                         reduceAnimations = reduceAnimations,
                         sharedTransitionScope = sharedTransitionScope,
@@ -1105,7 +1171,11 @@ private fun ReminderListScreen(
                             }
                         },
                         modifier = Modifier
-                            .then(if (reduceAnimations) Modifier else Modifier.animateItem(placementSpec = tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)), fadeInSpec = tween(200), fadeOutSpec = tween(200)))
+                            .then(if (reduceAnimations) Modifier else Modifier.animateItem(
+                                placementSpec = tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                                fadeInSpec = tween(180),
+                                fadeOutSpec = tween(180)
+                            ))
                             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                     )
                 }

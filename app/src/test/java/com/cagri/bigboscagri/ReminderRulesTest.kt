@@ -330,9 +330,8 @@ class ReminderRulesTest {
         val repo = ReminderRepository(prefs)
 
         val added = repo.add("Kahve satın al", customCategoryId = 42L)
-        assertEquals(1, added.size)
-        assertEquals(42L, added.first().customCategoryId)
-        assertEquals("Kahve satın al", added.first().text)
+        assertEquals(42L, added.customCategoryId)
+        assertEquals("Kahve satın al", added.text)
 
         // Verify fresh repository instance reads the persisted data from SharedPreferences
         val reloaded = ReminderRepository(prefs).load()
@@ -345,7 +344,7 @@ class ReminderRulesTest {
         val prefs = FakeSharedPreferences()
         val repo = ReminderRepository(prefs)
 
-        val item = repo.add("İlk not", customCategoryId = 10L).first()
+        val item = repo.add("İlk not", customCategoryId = 10L)
         assertEquals(10L, item.customCategoryId)
 
         // Edit custom category and text
@@ -535,8 +534,9 @@ class ReminderRulesTest {
         val reminderPrefs = FakeSharedPreferences()
         val reminderRepo = ReminderRepository(reminderPrefs)
 
-        val snapshot = reminderRepo.add("Orijinal Not", customCategoryId = 777L)
-        assertEquals(777L, snapshot.first().customCategoryId)
+        val created = reminderRepo.add("Orijinal Not", customCategoryId = 777L)
+        assertEquals(777L, created.customCategoryId)
+        val snapshot = reminderRepo.load()
 
         // Mutate by unassigning
         reminderRepo.unassignCategory(777L)
@@ -764,7 +764,7 @@ class ReminderRulesTest {
             isChecklist = true,
             checklistItems = items
         )
-        val savedItem = saved.first()
+        val savedItem = saved
         assertTrue(savedItem.isChecklist)
         assertEquals(2, savedItem.checklistItems.size)
         assertEquals("Süt", savedItem.checklistItems[0].text)
@@ -788,7 +788,7 @@ class ReminderRulesTest {
             text = "Alışveriş",
             isChecklist = true,
             checklistItems = listOf(ChecklistItem(id = 1L, text = "Süt"), ChecklistItem(id = 2L, text = "Yumurta"))
-        ).first()
+        )
 
         val reminderId = saved.id
         val itemId = saved.checklistItems[0].id
@@ -893,12 +893,11 @@ class ReminderRulesTest {
             ChecklistItem(id = 0L, text = "Yumurta"),
             ChecklistItem(id = 0L, text = "Kahve")
         )
-        val reminders = repository.add(
+        val reminder = repository.add(
             text = "Alışveriş",
             isChecklist = true,
             checklistItems = items
         )
-        val reminder = reminders.first()
         assertTrue(reminder.isChecklist)
         assertEquals("Alışveriş", reminder.text)
         assertEquals(3, reminder.checklistItems.size)
@@ -1033,6 +1032,41 @@ class ReminderRulesTest {
         )
         val reloaded2 = repo2.load().first { it.text == "Bildirimli not" }
         assertTrue(reloaded2.sendImmediateNotification)
+    }
+
+    @Test fun addReturnsCreatedItemWithGeneratedId() {
+        val prefs = FakeSharedPreferences()
+        val repository = ReminderRepository(prefs)
+        val created = repository.add(text = "Test created ID")
+        assertTrue(created.id > 0)
+        assertEquals("Test created ID", created.text)
+        val loaded = repository.load()
+        assertEquals(1, loaded.size)
+        assertEquals(created.id, loaded.first().id)
+    }
+
+    @Test fun addFailureThrowsAndDoesNotPersistOrEmitFakeId() {
+        val prefs = FakeSharedPreferences()
+        val repository = ReminderRepository(prefs)
+        try {
+            repository.add(text = "   ")
+            org.junit.Assert.fail("Expected IllegalArgumentException for blank text")
+        } catch (_: IllegalArgumentException) {}
+        assertTrue(repository.load().isEmpty())
+    }
+
+    @Test fun rapidConsecutiveAddsReturnDistinctCorrectIds() {
+        val prefs = FakeSharedPreferences()
+        val repository = ReminderRepository(prefs)
+        val first = repository.add(text = "İlk hatırlatıcı")
+        val second = repository.add(text = "İkinci hatırlatıcı")
+        assertTrue(first.id > 0)
+        assertTrue(second.id > 0)
+        org.junit.Assert.assertNotEquals(first.id, second.id)
+        val loaded = repository.load()
+        assertEquals(2, loaded.size)
+        assertTrue(loaded.any { it.id == first.id && it.text == "İlk hatırlatıcı" })
+        assertTrue(loaded.any { it.id == second.id && it.text == "İkinci hatırlatıcı" })
     }
 }
 

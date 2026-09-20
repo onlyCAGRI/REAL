@@ -79,7 +79,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         checklistItems: List<ChecklistItem> = emptyList(),
         sendImmediateNotification: Boolean = true,
         referenceUrl: String? = null
-    ): List<ReminderItem> = synchronized(mutationLock) {
+    ): ReminderItem = synchronized(mutationLock) {
         val trimmedTitle = text.trim()
         require(trimmedTitle.isNotBlank()) { "Başlık boş olamaz" }
         val validItems = if (isChecklist) {
@@ -111,7 +111,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         )
         val updated = listOf(newItem) + previous
         save(updated)
-        updated
+        newItem
     }
 
     fun toggleChecklistItem(reminderId: Long, itemId: Long): List<ReminderItem> = update(reminderId) { reminder ->

@@ -124,7 +124,8 @@ class MainActivity : ComponentActivity() {
                         ReminderScreen(
                             reminders = reminders,
                             onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl ->
-                                perform(warnIfBlocked = true) {
+                                var createdId: Long? = null
+                                val success = perform(warnIfBlocked = true) {
                                     val newest = repository.add(
                                         text = text,
                                         alertAt = alertAt,
@@ -134,9 +135,11 @@ class MainActivity : ComponentActivity() {
                                         checklistItems = checklistItems,
                                         sendImmediateNotification = sendImmediateNotification,
                                         referenceUrl = referenceUrl
-                                    ).first()
+                                    )
+                                    createdId = newest.id
                                     if (alertAt == null && canShowImmediateNotification(newest) && !ReminderNotifications.show(this@MainActivity, newest)) waiting.add(newest.id)
                                 }
+                                if (success) createdId else null
                             },
                             onToggleChecklistItem = { reminderId, itemId ->
                                 mutate {
