@@ -12,8 +12,8 @@ android {
         applicationId = "com.cagri.bigboscagri"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "0.2.1"
+        versionCode = 18
+        versionName = "0.5.0"
     }
 
     buildTypes {
