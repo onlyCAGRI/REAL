@@ -74,6 +74,9 @@ class MainActivity : ComponentActivity() {
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
         handleShareIntent(intent)
         val preferences = getSharedPreferences("bigbos_ui", MODE_PRIVATE)
+        if (preferences.getBoolean("onboarding_completed", false) && !preferences.contains("first_home_intro_completed")) {
+            preferences.edit().putBoolean("first_home_intro_completed", true).apply()
+        }
         lifecycleScope.launch {
             ReminderRepository.updates.collect {
                 perform()
@@ -86,15 +89,11 @@ class MainActivity : ComponentActivity() {
                 var style by remember { mutableStateOf(if (preferences.getString("design_style", "glass") == "ice") DesignStyle.Ice else DesignStyle.Glass) }
                 var hasCompletedOnboarding by remember { mutableStateOf(preferences.getBoolean("onboarding_completed", false)) }
                 var userName by remember { mutableStateOf(preferences.getString("user_display_name", "") ?: "") }
-                val firstHomeIntroCompleted = remember { preferences.getBoolean("first_home_intro_completed", false) }
-                if (hasCompletedOnboarding && !firstHomeIntroCompleted) {
-                    preferences.edit().putBoolean("first_home_intro_completed", true).apply()
-                }
                 var playFirstHomeIntro by remember { mutableStateOf(false) }
 
                 Crossfade(
                     targetState = hasCompletedOnboarding,
-                    animationSpec = if (reduceAnimations) snap() else tween(350),
+                    animationSpec = if (reduceAnimations) snap() else tween(240),
                     label = "onboardingCrossfade"
                 ) { completed ->
                     if (!completed) {
@@ -104,6 +103,7 @@ class MainActivity : ComponentActivity() {
                                 val firstHomeIntroAlreadyDone = preferences.getBoolean("first_home_intro_completed", false)
                                 preferences.edit()
                                     .putBoolean("onboarding_completed", true)
+                                    .putBoolean("first_home_intro_completed", true)
                                     .putString("user_display_name", enteredName)
                                     .apply()
                                 userName = enteredName

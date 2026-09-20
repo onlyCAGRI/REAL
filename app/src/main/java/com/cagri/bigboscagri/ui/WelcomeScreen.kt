@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -95,15 +96,15 @@ fun WelcomeScreen(
     var isFocused by remember { mutableStateOf(false) }
 
     val welcomeAlpha = remember { Animatable(if (reduceAnimations) 1f else 0f) }
-    val welcomeOffsetY = remember { Animatable(if (reduceAnimations) 0f else 10f) }
+    val welcomeOffsetY = remember { Animatable(if (reduceAnimations) 0f else 8f) }
     val welcomeLetterSpacing = remember { Animatable(if (reduceAnimations) 0.5f else 1.5f) }
-    val logoOffsetY = remember { Animatable(if (reduceAnimations) 0f else 14f) }
+    val logoOffsetY = remember { Animatable(if (reduceAnimations) 0f else 10f) }
     val revealProgress = remember { Animatable(if (reduceAnimations) 1f else 0f) }
     val groupShiftProgress = remember { Animatable(if (reduceAnimations) 1f else 0f) }
     val questionAlpha = remember { Animatable(if (reduceAnimations) 1f else 0f) }
-    val questionOffsetY = remember { Animatable(if (reduceAnimations) 0f else 14f) }
+    val questionOffsetY = remember { Animatable(if (reduceAnimations) 0f else 12f) }
     val inputAlpha = remember { Animatable(if (reduceAnimations) 1f else 0f) }
-    val inputOffsetY = remember { Animatable(if (reduceAnimations) 0f else 14f) }
+    val inputOffsetY = remember { Animatable(if (reduceAnimations) 0f else 12f) }
     val greetingAlpha = remember { Animatable(0f) }
 
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -124,27 +125,28 @@ fun WelcomeScreen(
             inputOffsetY.snapTo(0f)
             phase = WelcomePhase.NamePrompt
         } else {
-            // 1. Android System Splash bittikten hemen sonra başlar (yapay 280ms siyah bekleme YOK)
-            // "Welcome to" girişi: baseline/clip hissi (translationY: +10dp -> 0, alpha: 0 -> 1, letterSpacing: 1.5sp -> 0.5sp, 220ms)
+            // 1. Initial pure AMOLED black hold (~280ms)
+            delay(280)
+
+            // 2. "Welcome to" entrance: subtle 8dp offset & calm 280ms fade
             launch {
                 welcomeOffsetY.animateTo(
                     0f,
-                    animationSpec = tween(220, easing = CubicBezierEasing(0.12f, 1.0f, 0.28f, 1.0f))
+                    animationSpec = tween(280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
                 )
             }
             launch {
                 welcomeLetterSpacing.animateTo(
                     0.5f,
-                    animationSpec = tween(220, easing = CubicBezierEasing(0.12f, 1.0f, 0.28f, 1.0f))
+                    animationSpec = tween(280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
                 )
             }
             welcomeAlpha.animateTo(
                 1f,
-                animationSpec = tween(220, easing = LinearOutSlowInEasing)
+                animationSpec = tween(280, easing = LinearOutSlowInEasing)
             )
 
-            // 2. REAL – MASK REVEAL + MİKRO SETTLE (soldan sağa yumuşak feathered mask, 500ms, translationY: +14dp -> 0)
-            // KESİNLİKLE: zoom yok, blur yok, specular streak yok, light sweep yok, glow yok.
+            // 3. REAL logo – soft feathered mask reveal left-to-right (500ms, subtle 10dp settle)
             launch {
                 logoOffsetY.animateTo(
                     0f,
@@ -156,10 +158,10 @@ fun WelcomeScreen(
                 animationSpec = tween(500, easing = CubicBezierEasing(0.2f, 0.0f, 0.2f, 1.0f))
             )
 
-            // 3. KISA SAKİNLİK: Welcome + REAL final pozisyonuna geldikten sonra 220ms hiçbir hareket yapma (settled state)
+            // 4. Settled calm hold before header shift
             delay(220)
 
-            // 4. ANA İMZA HAREKETİ: Welcome + REAL tek grup halinde merkezden ~54dp yukarı kilitlenir (420ms, yüksek damping, no-bounce)
+            // 5. Header visual group shifts up by ~54dp as ONE unified unit
             phase = WelcomePhase.NamePrompt
             launch {
                 groupShiftProgress.animateTo(
@@ -168,18 +170,18 @@ fun WelcomeScreen(
                 )
             }
 
-            // 5. SORU + INPUT AYNI SAHNEDE DOĞSUN (hareketin son bölümünde ~70ms sonra doğar, 60ms micro-stagger)
+            // 6. Question & Name Input emerge smoothly in the scene
             delay(70)
             launch {
                 questionOffsetY.animateTo(
                     0f,
-                    animationSpec = tween(320, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                    animationSpec = tween(300, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
                 )
             }
             launch {
                 questionAlpha.animateTo(
                     1f,
-                    animationSpec = tween(320, easing = LinearOutSlowInEasing)
+                    animationSpec = tween(300, easing = LinearOutSlowInEasing)
                 )
             }
 
@@ -187,12 +189,12 @@ fun WelcomeScreen(
             launch {
                 inputOffsetY.animateTo(
                     0f,
-                    animationSpec = tween(320, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                    animationSpec = tween(300, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
                 )
             }
             inputAlpha.animateTo(
                 1f,
-                animationSpec = tween(320, easing = LinearOutSlowInEasing)
+                animationSpec = tween(300, easing = LinearOutSlowInEasing)
             )
         }
     }

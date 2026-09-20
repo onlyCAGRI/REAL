@@ -480,40 +480,46 @@ fun GlassComposer(
                                             )
 
                                             // 2. Shimmer Layer: Pure White Text masked with moving wide gradient mask
-                                            val progress = shimmerProgress.value
-                                            if (progress > 0.001f && progress < 0.999f) {
-                                                val textWidth = if (placeholderTextWidthPx > 0f) placeholderTextWidthPx else 100f
-                                                val bandWidth = textWidth * 0.65f
-                                                val startX = -bandWidth + progress * (textWidth + bandWidth)
-                                                val endX = startX + bandWidth
+                                            if (shouldShimmer) {
                                                 Text(
                                                     text = "Hatırlatıcı ekle",
                                                     color = Color.White,
                                                     fontSize = 16.sp,
                                                     modifier = Modifier
                                                         .graphicsLayer {
-                                                            compositingStrategy = CompositingStrategy.Offscreen
+                                                            val p = shimmerProgress.value
+                                                            if (p > 0.001f && p < 0.999f) {
+                                                                compositingStrategy = CompositingStrategy.Offscreen
+                                                                alpha = 1f
+                                                            } else {
+                                                                compositingStrategy = CompositingStrategy.Auto
+                                                                alpha = 0f
+                                                            }
                                                         }
                                                         .drawWithContent {
-                                                            drawContent()
-                                                            val maskBrush = Brush.linearGradient(
-                                                                0.00f to Color.Transparent,
-                                                                0.15f to Color.White.copy(alpha = 0.30f),
-                                                                0.28f to Color.White.copy(alpha = 0.70f),
-                                                                0.40f to Color.White.copy(alpha = 0.95f),
-                                                                0.46f to Color.White,
-                                                                0.54f to Color.White,
-                                                                0.60f to Color.White.copy(alpha = 0.95f),
-                                                                0.72f to Color.White.copy(alpha = 0.70f),
-                                                                0.85f to Color.White.copy(alpha = 0.30f),
-                                                                1.00f to Color.Transparent,
-                                                                start = Offset(startX, 0f),
-                                                                end = Offset(endX, 0f)
-                                                            )
-                                                            drawRect(
-                                                                brush = maskBrush,
-                                                                blendMode = BlendMode.DstIn
-                                                            )
+                                                            val p = shimmerProgress.value
+                                                            if (p > 0.001f && p < 0.999f) {
+                                                                drawContent()
+                                                                val textWidth = if (placeholderTextWidthPx > 0f) placeholderTextWidthPx else size.width
+                                                                val bandWidth = textWidth * 0.65f
+                                                                val startX = -bandWidth + p * (textWidth + bandWidth)
+                                                                val endX = startX + bandWidth
+                                                                val maskBrush = Brush.linearGradient(
+                                                                    0.00f to Color.Transparent,
+                                                                    0.18f to Color.White.copy(alpha = 0.20f),
+                                                                    0.35f to Color.White.copy(alpha = 0.55f),
+                                                                    0.50f to Color.White.copy(alpha = 0.82f),
+                                                                    0.65f to Color.White.copy(alpha = 0.55f),
+                                                                    0.82f to Color.White.copy(alpha = 0.20f),
+                                                                    1.00f to Color.Transparent,
+                                                                    start = Offset(startX, 0f),
+                                                                    end = Offset(endX, 0f)
+                                                                )
+                                                                drawRect(
+                                                                    brush = maskBrush,
+                                                                    blendMode = BlendMode.DstIn
+                                                                )
+                                                            }
                                                         }
                                                 )
                                             }

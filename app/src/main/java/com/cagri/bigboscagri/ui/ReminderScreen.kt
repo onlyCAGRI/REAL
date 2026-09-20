@@ -27,6 +27,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -417,7 +418,8 @@ fun ReminderScreen(
                                      animatedVisibilityScope = this@AnimatedContent,
                                      userName = userName,
                                      isFirstHomeIntro = isFirstHomeIntro,
-                                     onFirstHomeIntroComplete = onFirstHomeIntroComplete
+                                     onFirstHomeIntroComplete = onFirstHomeIntroComplete,
+                                     isSettingsOpen = showSettings
                                  )
                             }
                         }
@@ -464,7 +466,8 @@ private fun ReminderListScreen(
     animatedVisibilityScope: AnimatedVisibilityScope? = null,
     userName: String = "",
     isFirstHomeIntro: Boolean = false,
-    onFirstHomeIntroComplete: () -> Unit = {}
+    onFirstHomeIntroComplete: () -> Unit = {},
+    isSettingsOpen: Boolean = false
 ) {
     var editing by remember { mutableStateOf(false) }
     var isChecklistMode by rememberSaveable { mutableStateOf(false) }
@@ -545,45 +548,47 @@ private fun ReminderListScreen(
     var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var headerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    val shouldAnimateFirstHomeIntro = remember { isFirstHomeIntro && !reduceAnimations && category == null && customCategory == null }
+    val isFirstHome = remember { isFirstHomeIntro }
+    val shouldAnimateFirstHomeIntro = remember { isFirstHome && !reduceAnimations && category == null && customCategory == null }
     var isFirstHomeIntroPlaying by remember { mutableStateOf(shouldAnimateFirstHomeIntro) }
-    val catAlphas = remember { List(6) { Animatable(if (shouldAnimateFirstHomeIntro) 0f else 1f) } }
-    val catOffsetsY = remember { List(6) { Animatable(if (shouldAnimateFirstHomeIntro) 24f else 0f) } }
-    val composerIntroAlpha = remember { Animatable(if (shouldAnimateFirstHomeIntro) 0f else 1f) }
-    val composerIntroOffsetY = remember { Animatable(if (shouldAnimateFirstHomeIntro) 32f else 0f) }
+    val categoryEntranceProgress = remember { Animatable(if (shouldAnimateFirstHomeIntro) 0f else 1f) }
+    val composerEntranceProgress = remember { Animatable(if (shouldAnimateFirstHomeIntro) 0f else 1f) }
     var isHomeReadyForShimmer by remember { mutableStateOf(!shouldAnimateColdStart && !shouldAnimateFirstHomeIntro) }
 
-    LaunchedEffect(shouldAnimateFirstHomeIntro) {
-        if (shouldAnimateFirstHomeIntro) {
-            for (i in 0 until 6) {
+    DisposableEffect(Unit) {
+        onDispose {
+            if (isFirstHome) {
+                onFirstHomeIntroComplete()
+            }
+        }
+    }
+
+    LaunchedEffect(isFirstHome) {
+        if (isFirstHome) {
+            if (shouldAnimateFirstHomeIntro) {
+                delay(80)
                 launch {
-                    catOffsetsY[i].animateTo(
-                        0f,
-                        animationSpec = tween(280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
-                    )
-                }
-                launch {
-                    catAlphas[i].animateTo(
+                    categoryEntranceProgress.animateTo(
                         1f,
-                        animationSpec = tween(280, easing = LinearOutSlowInEasing)
+                        animationSpec = tween(505, easing = LinearEasing)
                     )
                 }
-                delay(45)
+                delay(330)
+                launch {
+                    composerEntranceProgress.animateTo(
+                        1f,
+                        animationSpec = tween(340, easing = LinearEasing)
+                    )
+                }
+                delay(340)
+                isFirstHomeIntroPlaying = false
+                isHomeReadyForShimmer = true
+                onFirstHomeIntroComplete()
+            } else {
+                isFirstHomeIntroPlaying = false
+                isHomeReadyForShimmer = true
+                onFirstHomeIntroComplete()
             }
-            delay(60)
-            launch {
-                composerIntroOffsetY.animateTo(
-                    0f,
-                    animationSpec = tween(340, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
-                )
-            }
-            composerIntroAlpha.animateTo(
-                1f,
-                animationSpec = tween(340, easing = LinearOutSlowInEasing)
-            )
-            isFirstHomeIntroPlaying = false
-            onFirstHomeIntroComplete()
-            isHomeReadyForShimmer = true
         }
     }
 
@@ -1073,8 +1078,7 @@ private fun ReminderListScreen(
                                 selectedCategoryIds = if (id in selectedCategoryIds) selectedCategoryIds - id else selectedCategoryIds + id
                             }
                         },
-                        itemEntranceAlphas = if (isFirstHomeIntroPlaying) catAlphas.map { it.value } else null,
-                        itemEntranceOffsetsY = if (isFirstHomeIntroPlaying) catOffsetsY.map { it.value } else null,
+                        itemEntranceProgress = if (isFirstHomeIntroPlaying) { { categoryEntranceProgress.value } } else null,
                         modifier = Modifier.padding(horizontal = 16.dp),
                         reduceAnimations = reduceAnimations
                     )
@@ -1340,17 +1344,20 @@ private fun ReminderListScreen(
             onTextLineCountChange = { textLineCount = it },
             isVoiceDraft = isVoiceDraft,
             isShareDraft = isShareDraft,
-            isHomeReady = isHomeReadyForShimmer,
+            isHomeReady = isHomeReadyForShimmer && category == null && customCategory == null && !isSettingsOpen,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = bottomGap).height(composerHeight)
                 .graphicsLayer {
                     translationY = if (isFirstHomeIntroPlaying) {
-                        with(density) { composerIntroOffsetY.value.dp.toPx() }
+                        val progress = composerEntranceProgress.value
+                        val motionEase = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f).transform(progress)
+                        with(density) { (32.dp * (1f - motionEase)).toPx() }
                     } else {
                         selectionProgress * bottomSlideOffsetPx
                     }
                     alpha = if (isFirstHomeIntroPlaying) {
-                        composerIntroAlpha.value
+                        val progress = composerEntranceProgress.value
+                        LinearOutSlowInEasing.transform(progress)
                     } else if (isColdStarting) {
                         coldStartProgress.value
                     } else {

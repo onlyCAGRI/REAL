@@ -21,6 +21,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
@@ -91,6 +93,7 @@ fun CategoryGrid(
     onLongClickCategory: (Long) -> Unit = {},
     itemEntranceAlphas: List<Float>? = null,
     itemEntranceOffsetsY: List<Float>? = null,
+    itemEntranceProgress: (() -> Float)? = null,
     modifier: Modifier = Modifier,
     reduceAnimations: Boolean = false
 ) {
@@ -123,6 +126,18 @@ fun CategoryGrid(
 
             fun getItemModifier(index: Int): Modifier {
                 val base = Modifier.weight(1f)
+                if (page == 0 && itemEntranceProgress != null) {
+                    return base.graphicsLayer {
+                        val progress = itemEntranceProgress()
+                        val startFraction = (index * 45f) / 505f
+                        val durationFraction = 280f / 505f
+                        val rawFraction = ((progress - startFraction) / durationFraction).coerceIn(0f, 1f)
+                        val motionEase = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f).transform(rawFraction)
+                        val alphaEase = LinearOutSlowInEasing.transform(rawFraction)
+                        alpha = alphaEase
+                        translationY = with(density) { (24.dp * (1f - motionEase)).toPx() }
+                    }
+                }
                 if (page == 0 && itemEntranceAlphas != null && itemEntranceOffsetsY != null) {
                     val a = itemEntranceAlphas.getOrNull(index) ?: 1f
                     val offY = itemEntranceOffsetsY.getOrNull(index) ?: 0f
