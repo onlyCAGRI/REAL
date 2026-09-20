@@ -164,20 +164,28 @@ class ReminderRepository(private val preferences: SharedPreferences) {
     fun edit(
         id: Long,
         text: String,
-        accentStart: Int?,
-        accentEnd: Int?,
+        accentStart: Int? = null,
+        accentEnd: Int? = null,
         customCategoryId: Long? = null,
-        updateCategory: Boolean = true
+        updateCategory: Boolean = true,
+        checklistItems: List<ChecklistItem>? = null
     ): List<ReminderItem> {
         require(text.isNotBlank())
         require(accentStart == null || accentStart in ACCENT_RANGE)
         require(accentEnd == null || accentEnd in ACCENT_RANGE)
-        return update(id) {
-            it.copy(
+        return update(id) { reminder ->
+            val updatedChecklist = if (checklistItems != null) {
+                checklistItems.filter { it.text.isNotBlank() }.mapIndexed { index, item ->
+                    if (item.id > 0L) item.copy(text = item.text.trim())
+                    else ChecklistItem(id = System.currentTimeMillis() + index + 1L, text = item.text.trim(), completedAt = item.completedAt)
+                }
+            } else reminder.checklistItems
+            reminder.copy(
                 text = text.trim(),
                 accentStart = accentStart,
                 accentEnd = accentEnd,
-                customCategoryId = if (updateCategory) customCategoryId else it.customCategoryId,
+                customCategoryId = if (updateCategory) customCategoryId else reminder.customCategoryId,
+                checklistItems = updatedChecklist,
                 updatedAt = System.currentTimeMillis()
             )
         }

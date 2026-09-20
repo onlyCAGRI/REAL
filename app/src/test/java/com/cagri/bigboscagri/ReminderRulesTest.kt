@@ -1068,6 +1068,65 @@ class ReminderRulesTest {
         assertTrue(loaded.any { it.id == first.id && it.text == "İlk hatırlatıcı" })
         assertTrue(loaded.any { it.id == second.id && it.text == "İkinci hatırlatıcı" })
     }
+
+    @Test fun checklistEditingPreservesExistingItemsAndCompletedState() {
+        val prefs = FakeSharedPreferences()
+        val repository = ReminderRepository(prefs)
+        val initialItems = listOf(
+            ChecklistItem(id = 101L, text = "Süt", completedAt = 12345L),
+            ChecklistItem(id = 102L, text = "Ekmek", completedAt = null),
+            ChecklistItem(id = 103L, text = "Yumurta", completedAt = 67890L)
+        )
+        val reminder = repository.add(
+            text = "Market Alışverişi",
+            isChecklist = true,
+            checklistItems = initialItems
+        )
+        assertEquals(3, reminder.checklistItems.size)
+
+        // User edits: modifies "Ekmek" to "Tam Buğday Ekmek", deletes "Yumurta", adds "Peynir"
+        val editedItems = listOf(
+            ChecklistItem(id = 101L, text = "Süt", completedAt = 12345L),
+            ChecklistItem(id = 102L, text = "Tam Buğday Ekmek", completedAt = null),
+            ChecklistItem(id = 0L, text = "Peynir", completedAt = null) // Newly added item
+        )
+        val updated = repository.edit(
+            id = reminder.id,
+            text = "Süpermarket",
+            checklistItems = editedItems
+        )
+        val updatedReminder = updated.first { it.id == reminder.id }
+        assertEquals("Süpermarket", updatedReminder.text)
+        assertEquals(3, updatedReminder.checklistItems.size)
+
+        // Item 101: untouched ID and completedAt preserved
+        val sutItem = updatedReminder.checklistItems.first { it.id == 101L }
+        assertEquals("Süt", sutItem.text)
+        assertEquals(12345L, sutItem.completedAt)
+
+        // Item 102: text updated, ID and completedAt preserved
+        val ekmekItem = updatedReminder.checklistItems.first { it.id == 102L }
+        assertEquals("Tam Buğday Ekmek", ekmekItem.text)
+        assertNull(ekmekItem.completedAt)
+
+        // Item 103: removed
+        assertNull(updatedReminder.checklistItems.firstOrNull { it.id == 103L })
+
+        // New item: assigned stable ID > 0
+        val peynirItem = updatedReminder.checklistItems.first { it.text == "Peynir" }
+        assertTrue(peynirItem.id > 0L)
+        assertNull(peynirItem.completedAt)
+
+        // Editing only reminder text must NOT clear or reset checklist
+        val textOnlyUpdate = repository.edit(
+            id = reminder.id,
+            text = "Haftalık Market"
+        )
+        val textOnlyReminder = textOnlyUpdate.first { it.id == reminder.id }
+        assertEquals("Haftalık Market", textOnlyReminder.text)
+        assertEquals(3, textOnlyReminder.checklistItems.size)
+        assertEquals(12345L, textOnlyReminder.checklistItems.first { it.id == 101L }.completedAt)
+    }
 }
 
 private class FakeSharedPreferences : android.content.SharedPreferences {

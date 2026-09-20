@@ -156,8 +156,8 @@ class MainActivity : ComponentActivity() {
                                 if (item?.shouldPinNotification == true) ReminderNotifications.show(this, item)
                                 else { ReminderNotifications.cancel(this, id); waiting.remove(id) }
                             } },
-                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId -> mutate {
-                                repository.edit(id, text, accentStart, accentEnd, customCategoryId).firstOrNull { it.id == id }
+                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId, checklistItems -> mutate {
+                                repository.edit(id, text, accentStart, accentEnd, customCategoryId, checklistItems = checklistItems).firstOrNull { it.id == id }
                                     ?.let { ReminderNotifications.refreshEdited(this, it) }
                             } },
                             onSetAlert = { id, at, repeatRule -> mutate {

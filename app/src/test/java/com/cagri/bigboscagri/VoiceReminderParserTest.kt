@@ -495,4 +495,112 @@ class VoiceReminderParserTest {
         assertFalse(parsed.requiresTimeSelection)
         assertNull(parsed.dateHint)
     }
+
+    @Test
+    fun dailyRecurrenceVariantsMapToDaily() {
+        // "günlük tekrar eden"
+        val p1 = VoiceReminderParser.parse("günlük tekrar eden saat 3te su iç", baseFridayNow)
+        assertEquals("Su iç", p1.text)
+        assertEquals(RecurrenceRule.DAILY, p1.repeatRule)
+        assertNotNull(p1.alertAt)
+
+        // "günlük tekrar"
+        val p2 = VoiceReminderParser.parse("günlük tekrar saat 3te su iç", baseFridayNow)
+        assertEquals("Su iç", p2.text)
+        assertEquals(RecurrenceRule.DAILY, p2.repeatRule)
+        assertNotNull(p2.alertAt)
+
+        // "her gün tekrar eden"
+        val p3 = VoiceReminderParser.parse("her gün tekrar eden saat 3te su iç", baseFridayNow)
+        assertEquals("Su iç", p3.text)
+        assertEquals(RecurrenceRule.DAILY, p3.repeatRule)
+        assertNotNull(p3.alertAt)
+
+        // "her gün tekrarla"
+        val p4 = VoiceReminderParser.parse("her gün tekrarla saat 3te su iç", baseFridayNow)
+        assertEquals("Su iç", p4.text)
+        assertEquals(RecurrenceRule.DAILY, p4.repeatRule)
+        assertNotNull(p4.alertAt)
+
+        // "günlük tekrarlayan"
+        val p5 = VoiceReminderParser.parse("günlük tekrarlayan saat 3te su iç", baseFridayNow)
+        assertEquals("Su iç", p5.text)
+        assertEquals(RecurrenceRule.DAILY, p5.repeatRule)
+        assertNotNull(p5.alertAt)
+    }
+
+    @Test
+    fun bareGunlukGuardedFromRecurrence() {
+        // "günlük tut" must NOT map to DAILY or be stripped
+        val p1 = VoiceReminderParser.parse("günlük tut", baseFridayNow)
+        assertEquals("Günlük tut", p1.text)
+        assertEquals(RecurrenceRule.NONE, p1.repeatRule)
+        assertNull(p1.alertAt)
+        assertFalse(p1.requiresTimeSelection)
+
+        // "günlük yaz"
+        val p2 = VoiceReminderParser.parse("günlük yaz", baseFridayNow)
+        assertEquals("Günlük yaz", p2.text)
+        assertEquals(RecurrenceRule.NONE, p2.repeatRule)
+
+        // "günlük gazete al"
+        val p3 = VoiceReminderParser.parse("günlük gazete al", baseFridayNow)
+        assertEquals("Günlük gazete al", p3.text)
+        assertEquals(RecurrenceRule.NONE, p3.repeatRule)
+    }
+
+    @Test
+    fun turkishFillerYaStrippedAtBoundaries() {
+        // Beginning
+        val p1 = VoiceReminderParser.parse("ya yarın saat 3 te toplantıyı hatırlat", baseFridayNow)
+        assertEquals("Toplantıyı", p1.text)
+        assertNotNull(p1.alertAt)
+
+        // End
+        val p2 = VoiceReminderParser.parse("yarın saat 3 te toplantıyı hatırlat ya", baseFridayNow)
+        assertEquals("Toplantıyı", p2.text)
+        assertNotNull(p2.alertAt)
+
+        // Both beginning and end
+        val p3 = VoiceReminderParser.parse("ya bana akşam ekmek almayı hatırlat ya", baseFridayNow)
+        assertEquals("Bana akşam ekmek almayı", p3.text)
+
+        // Both beginning and end with scheduled reminder
+        val p3b = VoiceReminderParser.parse("ya yarın akşam ekmek al ya", baseFridayNow)
+        assertEquals("Ekmek al", p3b.text)
+        assertEquals(TimeOfDay.Evening, p3b.timeOfDay)
+
+        // Case-insensitive and with punctuation
+        val p4 = VoiceReminderParser.parse("YA, yarın saat 3 te toplantıyı hatırlat ya!", baseFridayNow)
+        assertEquals("Toplantıyı", p4.text)
+        assertNotNull(p4.alertAt)
+    }
+
+    @Test
+    fun turkishWordsWithYaPreserved() {
+        // Words starting with ya
+        val p1 = VoiceReminderParser.parse("Yasin'i ara", baseFridayNow)
+        assertEquals("Yasin'i ara", p1.text)
+
+        val p2 = VoiceReminderParser.parse("yazıcıyı kontrol et", baseFridayNow)
+        assertEquals("Yazıcıyı kontrol et", p2.text)
+
+        val p3 = VoiceReminderParser.parse("yarın toplantı var", baseFridayNow)
+        assertEquals("Toplantı var", p3.text)
+        assertEquals(baseFridayNow.toLocalDate().plusDays(1), p3.dateHint)
+
+        // Words ending with ya
+        val p4 = VoiceReminderParser.parse("sinemaya git", baseFridayNow)
+        assertEquals("Sinemaya git", p4.text)
+
+        val p5 = VoiceReminderParser.parse("masaya koy", baseFridayNow)
+        assertEquals("Masaya koy", p5.text)
+
+        val p6 = VoiceReminderParser.parse("bankaya uğra", baseFridayNow)
+        assertEquals("Bankaya uğra", p6.text)
+
+        // Middle of sentence "ya da"
+        val p7 = VoiceReminderParser.parse("ya da markete git", baseFridayNow)
+        assertEquals("Ya da markete git", p7.text)
+    }
 }

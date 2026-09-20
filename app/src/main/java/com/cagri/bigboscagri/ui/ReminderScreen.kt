@@ -154,7 +154,7 @@ fun ReminderScreen(
     onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Long?,
     onToggleCompleted: (Long) -> Unit,
     onToggleImportant: (Long) -> Unit,
-    onEditReminder: (Long, String, Int?, Int?, Long?) -> Unit,
+    onEditReminder: (Long, String, Int?, Int?, Long?, List<ChecklistItem>?) -> Unit,
     onDeleteReminder: (Long) -> Unit,
     onSetAlert: (Long, Long?, RecurrenceRule) -> Unit,
     onToggleChecklistItem: (Long, Long) -> Unit = { _, _ -> },
@@ -348,8 +348,8 @@ fun ReminderScreen(
                                     },
                                     onToggleImportant = { onToggleImportant(reminder.id) },
                                     onToggleChecklistItem = onToggleChecklistItem,
-                                    onSave = { text, accentStart, accentEnd, customCatId ->
-                                        onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId)
+                                    onSave = { text, accentStart, accentEnd, customCatId, checklistItems ->
+                                        onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId, checklistItems)
                                     },
                                     onDelete = { onDeleteReminder(reminder.id); detailId = null },
                                     customCategories = customCategories,
@@ -1187,14 +1187,11 @@ private fun ReminderListScreen(
                 if (category == null && customCategory == null && totalCompletedCount > 20) {
                     item(key = "show_all_completed") {
                         val showAllInteractionSource = remember { MutableInteractionSource() }
-                        Row(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 12.dp)
                                 .height(44.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Color.White.copy(alpha = 0.04f))
-                                .border(0.75.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
                                 .pressScale(showAllInteractionSource, targetScale = 0.98f, reduceAnimations = reduceAnimations)
                                 .clickable(
                                     interactionSource = showAllInteractionSource,
@@ -1204,21 +1201,14 @@ private fun ReminderListScreen(
                                     focusManager.clearFocus()
                                     keyboard?.hide()
                                     onOpenCategory(ReminderCategory.Completed)
-                                }
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "Tümünü göster",
-                                color = Color(0xFFA4A4AD),
+                                color = Color(0xFF94B8F7),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium
-                            )
-                            ActionIcon(
-                                ActionGlyph.ChevronRight,
-                                Modifier.size(14.dp),
-                                Color(0xFF8E8E98)
                             )
                         }
                     }

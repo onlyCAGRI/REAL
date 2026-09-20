@@ -54,6 +54,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -89,6 +90,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
@@ -118,7 +120,7 @@ import com.cagri.bigboscagri.ui.theme.BigBosTheme
 @Composable
 fun ReminderDetailScreen(
     reminder: ReminderItem, onBack: () -> Unit, onToggleCompleted: () -> Unit,
-    onToggleImportant: () -> Unit, onSave: (String, Int?, Int?, Long?) -> Unit, onDelete: () -> Unit,
+    onToggleImportant: () -> Unit, onSave: (String, Int?, Int?, Long?, List<ChecklistItem>?) -> Unit, onDelete: () -> Unit,
     customCategories: List<CustomCategory> = emptyList(),
     reduceAnimations: Boolean = false,
     reduceDynamicBlur: Boolean = false,
@@ -137,6 +139,8 @@ fun ReminderDetailScreen(
     var accentStart by rememberSaveable(reminder.id) { mutableStateOf<Int?>(reminder.accentStart) }
     var accentEnd by rememberSaveable(reminder.id) { mutableStateOf<Int?>(reminder.accentEnd) }
     var selectedCategoryId by rememberSaveable(reminder.id) { mutableStateOf(reminder.customCategoryId) }
+    var editedChecklistItems by remember(reminder.id, editing) { mutableStateOf(reminder.checklistItems) }
+    var newChecklistItemText by rememberSaveable(reminder.id) { mutableStateOf("") }
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
@@ -173,6 +177,8 @@ fun ReminderDetailScreen(
     val finishEditing: () -> Unit = {
         editing = false
         selectedCategoryId = reminder.customCategoryId
+        editedChecklistItems = reminder.checklistItems
+        newChecklistItemText = ""
         focusManager.clearFocus()
         keyboard?.hide()
     }
@@ -333,20 +339,58 @@ fun ReminderDetailScreen(
                         )
                     }
                 }
-                if (reminder.isChecklist && reminder.checklistItems.isNotEmpty()) {
+                if (reminder.isChecklist && (reminder.checklistItems.isNotEmpty() || editing)) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = if (editing) 16.dp else 4.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        reminder.checklistItems.forEach { item ->
-                            key(item.id) {
-                                ChecklistItemRow(
-                                    item = item,
-                                    reduceAnimations = reduceAnimations,
-                                    onToggle = { onToggleChecklistItem(reminder.id, item.id) }
-                                )
+                        if (editing) {
+                            editedChecklistItems.forEach { item ->
+                                key(item.id) {
+                                    EditableChecklistItemRow(
+                                        item = item,
+                                        onTextChange = { newText ->
+                                            editedChecklistItems = editedChecklistItems.map {
+                                                if (it.id == item.id) it.copy(text = newText) else it
+                                            }
+                                        },
+                                        onDelete = {
+                                            editedChecklistItems = editedChecklistItems.filter { it.id != item.id }
+                                        },
+                                        onToggle = {
+                                            editedChecklistItems = editedChecklistItems.map {
+                                                if (it.id == item.id) it.toggleCompleted(System.currentTimeMillis()) else it
+                                            }
+                                        },
+                                        reduceAnimations = reduceAnimations
+                                    )
+                                }
+                            }
+                            AddChecklistItemRow(
+                                text = newChecklistItemText,
+                                onTextChange = { newChecklistItemText = it },
+                                onAdd = {
+                                    if (newChecklistItemText.trim().isNotBlank()) {
+                                        val newItem = ChecklistItem(
+                                            id = System.currentTimeMillis(),
+                                            text = newChecklistItemText.trim()
+                                        )
+                                        editedChecklistItems = editedChecklistItems + newItem
+                                        newChecklistItemText = ""
+                                    }
+                                }
+                            )
+                        } else {
+                            reminder.checklistItems.forEach { item ->
+                                key(item.id) {
+                                    ChecklistItemRow(
+                                        item = item,
+                                        reduceAnimations = reduceAnimations,
+                                        onToggle = { onToggleChecklistItem(reminder.id, item.id) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -575,7 +619,13 @@ fun ReminderDetailScreen(
                         DetailAction("Kaydet", ActionGlyph.Check, Modifier.weight(1f), enabled = editedText.isNotBlank(),
                             color = Color(0xFF91B9FF), reduceAnimations = reduceAnimations, onClick = {
                                 RealHaptics.success(view)
-                                onSave(editedText.trim(), accentStart, accentEnd, selectedCategoryId)
+                                val finalItems = if (reminder.isChecklist) {
+                                    val pending = if (newChecklistItemText.trim().isNotBlank()) {
+                                        listOf(ChecklistItem(id = System.currentTimeMillis(), text = newChecklistItemText.trim()))
+                                    } else emptyList()
+                                    editedChecklistItems + pending
+                                } else null
+                                onSave(editedText.trim(), accentStart, accentEnd, selectedCategoryId, finalItems)
                                 finishEditing()
                             })
                     } else {
@@ -596,6 +646,8 @@ fun ReminderDetailScreen(
                             accentStart = reminder.accentStart
                             accentEnd = reminder.accentEnd
                             selectedCategoryId = reminder.customCategoryId
+                            editedChecklistItems = reminder.checklistItems
+                            newChecklistItemText = ""
                             editing = true
                         })
                         DetailAction("Paylaş", ActionGlyph.Share, Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
@@ -730,6 +782,141 @@ private fun ChecklistItemRow(
 }
 
 @Composable
+private fun EditableChecklistItemRow(
+    item: ChecklistItem,
+    onTextChange: (String) -> Unit,
+    onDelete: () -> Unit,
+    onToggle: () -> Unit,
+    reduceAnimations: Boolean
+) {
+    val view = LocalView.current
+    val circleBorderColor = if (item.isCompleted) Color.Transparent else Color(0xFF5E5E68)
+    val circleBgColor = if (item.isCompleted) Color(0xFF686873) else Color.Transparent
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .padding(vertical = 4.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(circleBgColor, CircleShape)
+                .border(1.5.dp, circleBorderColor, CircleShape)
+                .clickable {
+                    RealHaptics.toggle(view, on = !item.isCompleted)
+                    onToggle()
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            if (item.isCompleted) {
+                ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color(0xFF1B1B1F))
+            }
+        }
+
+        BasicTextField(
+            value = item.text,
+            onValueChange = onTextChange,
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 4.dp)
+                .semantics { contentDescription = "Madde metni" },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = if (item.isCompleted) Color(0xFF8E8E98) else Color(0xFFF1F1F5),
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+                textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+            ),
+            cursorBrush = SolidColor(Color(0xFF82B3FF)),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done)
+        )
+
+        IconButton(
+            onClick = onDelete,
+            modifier = Modifier
+                .size(28.dp)
+                .semantics { contentDescription = "Maddeyi sil" }
+        ) {
+            ActionIcon(ActionGlyph.Close, Modifier.size(16.dp), Color(0xFF8E8E98))
+        }
+    }
+}
+
+@Composable
+private fun AddChecklistItemRow(
+    text: String,
+    onTextChange: (String) -> Unit,
+    onAdd: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .padding(vertical = 4.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .border(1.5.dp, Color(0xFF5E5E68), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            ActionIcon(ActionGlyph.Add, Modifier.size(12.dp), Color(0xFF8E8E98))
+        }
+
+        BasicTextField(
+            value = text,
+            onValueChange = onTextChange,
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 4.dp)
+                .semantics { contentDescription = "Yeni madde ekle" },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = Color.White,
+                fontSize = 16.sp,
+                lineHeight = 22.sp
+            ),
+            cursorBrush = SolidColor(Color(0xFF82B3FF)),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Sentences,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    if (text.isNotBlank()) onAdd()
+                }
+            ),
+            decorationBox = { innerTextField ->
+                if (text.isEmpty()) {
+                    Text(
+                        "Yeni madde ekle...",
+                        color = Color(0xFF6E6E77),
+                        fontSize = 16.sp
+                    )
+                }
+                innerTextField()
+            }
+        )
+
+        if (text.isNotBlank()) {
+            IconButton(
+                onClick = onAdd,
+                modifier = Modifier
+                    .size(28.dp)
+                    .semantics { contentDescription = "Maddeyi kaydet" }
+            ) {
+                ActionIcon(ActionGlyph.Check, Modifier.size(16.dp), Color(0xFF91B9FF))
+            }
+        }
+    }
+}
+
+@Composable
 private fun DetailAction(
     label: String, glyph: ActionGlyph, modifier: Modifier,
     enabled: Boolean = true, color: Color = Color(0xFFF0F0F4),
@@ -762,7 +949,7 @@ private fun DetailAction(
 @Composable
 private fun DetailPreview() {
     BigBosTheme {
-        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _ -> }, {})
+        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _, _ -> }, {})
     }
 }
 

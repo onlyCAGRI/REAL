@@ -124,13 +124,34 @@ fun normalizeVerb(word: String): String {
     return VERB_NORMALIZATIONS[clean] ?: word
 }
 
+fun stripBoundaryFillerYa(text: String): String {
+    var result = text.trim()
+    if (result.isEmpty()) return ""
+
+    // Strip leading standalone "ya", optionally preceded/followed by punctuation or spaces.
+    // Must NOT be followed by a letter (so "Yasin", "yarın", "yazıcı" are NOT stripped).
+    // Must NOT be followed by "da" / "de" (so "ya da" is NOT stripped).
+    val leadingYaRegex = Regex("""(?i)^\s*[,\s;:!?.…—–-]*ya(?!\p{L})(?!\s+(?:da|de)(?!\p{L}))[,\s;:!?.…—–-]*""")
+    result = leadingYaRegex.replace(result, "")
+
+    // Strip trailing standalone "ya", optionally preceded/followed by punctuation or spaces.
+    // Must NOT be preceded by a letter (so "sinemaya", "masaya", "bankaya" are NOT stripped).
+    val trailingYaRegex = Regex("""(?i)(?<!\p{L})ya[,\s;:!?.…—–-]*$""")
+    result = trailingYaRegex.replace(result, "")
+
+    return result.trim()
+}
+
 object VoiceReminderParser {
+
+    fun stripBoundaryFillerYa(text: String): String = com.cagri.bigboscagri.speech.stripBoundaryFillerYa(text)
 
     fun parse(
         input: String,
         now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault())
     ): ParsedVoiceReminder {
-        val trimmedInput = input.trim()
+        val normalizedInput = stripBoundaryFillerYa(input)
+        val trimmedInput = normalizedInput.trim()
         if (trimmedInput.isBlank()) {
             return ParsedVoiceReminder(input, "", null)
         }
@@ -230,9 +251,10 @@ object VoiceReminderParser {
             masked = maskRange(masked, dailyDaypartMatch.range)
         }
 
-        // Her gün / hergun
+        // Her gün / günlük recurrence
         if (repeatRule == RecurrenceRule.NONE) {
-            val dailyRegex = Regex("""\b(?:her\s+gün|hergun)\b""")
+            val recurrenceSignal = """(?:(?:düzenli\s+)?(?:olarak\s+)?(?:tekrar\s+eden|tekrarlayan|tekrarlanan|tekrar\s+etsin|tekrarla|tekrar))"""
+            val dailyRegex = Regex("""\b(?:(?:her\s+gün|hergun)(?:\s+$recurrenceSignal)?|(?:günlük|gunluk)\s+$recurrenceSignal)\b""")
             dailyRegex.find(masked)?.let { m ->
                 repeatRule = RecurrenceRule.DAILY
                 rangesToRemove.add(m.range)
@@ -653,9 +675,15 @@ object VoiceReminderParser {
             .replace(Regex("""\s+"""), " ")
             .trim()
 
+        // Strip boundary filler "ya" idempotently
+        clean = stripBoundaryFillerYa(clean)
+
         // Strip trailing commands: e.g. "bana hatırlat", "hatırlat", "hatirlat"
         clean = clean.replace(Regex("""(?i)\s*(?:bana\s+)?(?:hatırlat|hatirlat)\s*[.!]?$"""), "").trim()
             .trim(',', '.', ';', ':', '-', '’', '\'')
+
+        // Strip boundary filler "ya" again in case trailing command exposed it
+        clean = stripBoundaryFillerYa(clean)
 
         // Strip standalone residual 'her' / 'Her'
         clean = clean.replace(Regex("""(?i)\bher\b"""), "").trim()
