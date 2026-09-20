@@ -56,15 +56,44 @@ import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderCategory
 
-private enum class Glyph { Calendar, Clock, Star, Note, Completed, Add }
+enum class Glyph { Calendar, Clock, Star, Note, Completed, Add }
 
-private data class CategoryStyle(
+data class CategoryStyle(
     val label: String,
     val glyph: Glyph,
     val base: Color,
     val upper: Color,
     val lower: Color
-)
+) {
+    val tint: Color get() = upper
+}
+
+fun ReminderCategory.glyph(): Glyph = when (this) {
+    ReminderCategory.Today -> Glyph.Calendar
+    ReminderCategory.Planned -> Glyph.Clock
+    ReminderCategory.Important -> Glyph.Star
+    ReminderCategory.NoAlert -> Glyph.Note
+    ReminderCategory.Completed -> Glyph.Completed
+}
+
+fun ReminderCategory.defaultStyle(): CategoryStyle = when (this) {
+    ReminderCategory.Today -> CategoryStyle("Bugün", Glyph.Calendar, Color(0xFF141E4E), Color(0xFF23457D), Color(0xFF863D59))
+    ReminderCategory.Planned -> CategoryStyle("Planlı", Glyph.Clock, Color(0xFF202142), Color(0xFF32655E), Color(0xFF803B4D))
+    ReminderCategory.Important -> CategoryStyle("Önemli", Glyph.Star, Color(0xFF352137), Color(0xFF8E664A), Color(0xFF7B355F))
+    ReminderCategory.NoAlert -> CategoryStyle("Uyarı yok", Glyph.Note, Color(0xFF222142), Color(0xFF414E83), Color(0xFF674878))
+    ReminderCategory.Completed -> CategoryStyle("Tamamlananlar", Glyph.Completed, Color(0xFF152F35), Color(0xFF387D70), Color(0xFF333F77))
+}
+
+fun ReminderCategory.resolveStyle(colorIndex: Int?): CategoryStyle {
+    val default = defaultStyle()
+    if (colorIndex == null) return default
+    val overrideColor = ReminderColorChoices.getOrNull(colorIndex)?.color ?: return default
+    return default.copy(
+        base = Color(0xFF14151C),
+        upper = overrideColor.copy(alpha = 0.85f),
+        lower = overrideColor.copy(alpha = 0.60f)
+    )
+}
 
 private sealed interface GridItem {
     data class System(val style: CategoryStyle, val category: ReminderCategory) : GridItem
@@ -72,22 +101,16 @@ private sealed interface GridItem {
     data object Add : GridItem
 }
 
-private val systemCategories = listOf(
-    CategoryStyle("Bugün", Glyph.Calendar, Color(0xFF141E4E), Color(0xFF23457D), Color(0xFF863D59)) to ReminderCategory.Today,
-    CategoryStyle("Planlı", Glyph.Clock, Color(0xFF202142), Color(0xFF32655E), Color(0xFF803B4D)) to ReminderCategory.Planned,
-    CategoryStyle("Önemli", Glyph.Star, Color(0xFF352137), Color(0xFF8E664A), Color(0xFF7B355F)) to ReminderCategory.Important,
-    CategoryStyle("Uyarı yok", Glyph.Note, Color(0xFF222142), Color(0xFF414E83), Color(0xFF674878)) to ReminderCategory.NoAlert,
-    CategoryStyle("Tamamlananlar", Glyph.Completed, Color(0xFF152F35), Color(0xFF387D70), Color(0xFF333F77)) to ReminderCategory.Completed
-)
-
 private val addCategoryStyle = CategoryStyle("Ekle", Glyph.Add, Color(0xFF1C1C1E), Color.Transparent, Color.Transparent)
 
 @Composable
 fun CategoryGrid(
     customCategories: List<CustomCategory> = emptyList(),
+    builtInCategoryColors: Map<ReminderCategory, Int?> = emptyMap(),
     onOpenCategory: (ReminderCategory) -> Unit,
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
     onAddCategory: () -> Unit,
+    onEditBuiltInCategory: (ReminderCategory) -> Unit = {},
     selectedCategoryIds: Set<Long> = emptySet(),
     onToggleSelectCategory: (Long) -> Unit = {},
     onLongClickCategory: (Long) -> Unit = {},
@@ -99,9 +122,10 @@ fun CategoryGrid(
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val isSelectionMode = selectedCategoryIds.isNotEmpty()
-    val allItems = remember(customCategories) {
+    val allItems = remember(customCategories, builtInCategoryColors) {
         buildList<GridItem> {
-            systemCategories.forEach { (style, cat) ->
+            ReminderCategory.entries.forEach { cat ->
+                val style = cat.resolveStyle(builtInCategoryColors[cat])
                 add(GridItem.System(style, cat))
             }
             customCategories.forEach { customCat ->
@@ -162,6 +186,7 @@ fun CategoryGrid(
                             is GridItem.System -> CategoryCard(
                                 category = item.style,
                                 onClick = { if (!isSelectionMode) onOpenCategory(item.category) },
+                                onLongClick = { if (!isSelectionMode) onEditBuiltInCategory(item.category) },
                                 modifier = mod,
                                 reduceAnimations = reduceAnimations
                             )
@@ -198,6 +223,7 @@ fun CategoryGrid(
                                 is GridItem.System -> CategoryCard(
                                     category = item.style,
                                     onClick = { if (!isSelectionMode) onOpenCategory(item.category) },
+                                    onLongClick = { if (!isSelectionMode) onEditBuiltInCategory(item.category) },
                                     modifier = mod,
                                     reduceAnimations = reduceAnimations
                                 )
@@ -240,10 +266,12 @@ fun CategoryGrid(
 
 private val CategoryCardShape = RoundedCornerShape(18.dp)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CategoryCard(
     category: CategoryStyle,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier,
     reduceAnimations: Boolean = false
 ) {
@@ -259,12 +287,26 @@ private fun CategoryCard(
                 .height(82.dp)
                 .pressScale(interactionSource, targetScale = 0.97f, reduceAnimations = reduceAnimations)
                 .clip(shape)
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = LocalIndication.current,
-                    role = Role.Button,
-                    onClickLabel = category.label,
-                    onClick = onClick
+                .then(
+                    if (onLongClick != null) {
+                        Modifier.combinedClickable(
+                            interactionSource = interactionSource,
+                            indication = LocalIndication.current,
+                            role = Role.Button,
+                            onClickLabel = category.label,
+                            onLongClickLabel = "${category.label} rengini düzenle",
+                            onClick = onClick,
+                            onLongClick = onLongClick
+                        )
+                    } else {
+                        Modifier.clickable(
+                            interactionSource = interactionSource,
+                            indication = LocalIndication.current,
+                            role = Role.Button,
+                            onClickLabel = category.label,
+                            onClick = onClick
+                        )
+                    }
                 )
                 .drawWithCache {
                     val topLight = Brush.radialGradient(
@@ -420,26 +462,25 @@ private fun CustomCategoryCard(
 // Small repo-native glyphs keep the white icon style consistent without adding
 // an icon-pack dependency. Coordinates use a 24-unit drawing space.
 @Composable
-private fun CategoryGlyph(glyph: Glyph, modifier: Modifier) {
+fun CategoryGlyph(glyph: Glyph, modifier: Modifier, tint: Color = Color.White) {
     Canvas(modifier) {
         scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) {
-            val white = Color.White
             val stroke = Stroke(width = 1.9f, cap = StrokeCap.Round)
             fun line(x1: Float, y1: Float, x2: Float, y2: Float) {
-                drawLine(white, Offset(x1, y1), Offset(x2, y2), strokeWidth = 1.9f, cap = StrokeCap.Round)
+                drawLine(tint, Offset(x1, y1), Offset(x2, y2), strokeWidth = 1.9f, cap = StrokeCap.Round)
             }
             when (glyph) {
                 Glyph.Calendar -> {
-                    drawRoundRect(white, Offset(3.5f, 5f), Size(17f, 16f), CornerRadius(3f, 3f), style = stroke)
+                    drawRoundRect(tint, Offset(3.5f, 5f), Size(17f, 16f), CornerRadius(3f, 3f), style = stroke)
                     line(3.5f, 10f, 20.5f, 10f)
                     line(8f, 3f, 8f, 7f)
                     line(16f, 3f, 16f, 7f)
-                    drawCircle(white, 1.15f, Offset(8.5f, 14f))
-                    drawCircle(white, 1.15f, Offset(15.5f, 14f))
-                    drawCircle(white, 1.15f, Offset(8.5f, 17.5f))
+                    drawCircle(tint, 1.15f, Offset(8.5f, 14f))
+                    drawCircle(tint, 1.15f, Offset(15.5f, 14f))
+                    drawCircle(tint, 1.15f, Offset(8.5f, 17.5f))
                 }
                 Glyph.Clock -> {
-                    drawCircle(white, 9f, Offset(12f, 12f), style = stroke)
+                    drawCircle(tint, 9f, Offset(12f, 12f), style = stroke)
                     line(12f, 6.5f, 12f, 12.5f)
                     line(12f, 12.5f, 16.5f, 15f)
                 }
@@ -457,16 +498,16 @@ private fun CategoryGlyph(glyph: Glyph, modifier: Modifier) {
                         lineTo(9f, 8.4f)
                         close()
                     }
-                    drawPath(star, white)
+                    drawPath(star, tint)
                 }
                 Glyph.Note -> {
-                    drawRoundRect(white, Offset(5f, 3f), Size(14f, 18f), CornerRadius(2.5f, 2.5f), style = stroke)
+                    drawRoundRect(tint, Offset(5f, 3f), Size(14f, 18f), CornerRadius(2.5f, 2.5f), style = stroke)
                     line(9f, 8f, 15f, 8f)
                     line(9f, 12f, 15f, 12f)
                     line(9f, 16f, 12.5f, 16f)
                 }
                 Glyph.Completed -> {
-                    drawCircle(white, 9f, Offset(12f, 12f), style = stroke)
+                    drawCircle(tint, 9f, Offset(12f, 12f), style = stroke)
                     line(7.5f, 12f, 10.7f, 15.2f)
                     line(10.7f, 15.2f, 17f, 8.8f)
                 }

@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var categoryRepository: CategoryRepository
     private var reminders by mutableStateOf<List<ReminderItem>>(emptyList())
     private var customCategories by mutableStateOf<List<CustomCategory>>(emptyList())
+    private var builtInCategoryColors by mutableStateOf<Map<ReminderCategory, Int?>>(emptyMap())
     private var ready by mutableStateOf(false)
     private var loadFailed by mutableStateOf(false)
     private var exactAllowed by mutableStateOf(false)
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
         categoryRepository = CategoryRepository(applicationContext)
         reminders = try { repository.load() } catch (_: Exception) { emptyList() }
         customCategories = try { categoryRepository.load() } catch (_: Exception) { emptyList() }
+        builtInCategoryColors = try { categoryRepository.getBuiltInCategoryColors() } catch (_: Exception) { emptyMap() }
         ready = true
         exactAllowed = ReminderScheduler.canScheduleExact(this)
         notificationsAllowed = NotificationManagerCompat.from(this).areNotificationsEnabled()
@@ -206,6 +208,10 @@ class MainActivity : ComponentActivity() {
                                     deleteCategoriesWithRollback(ids, repository, categoryRepository)
                                 }
                             },
+                            builtInCategoryColors = builtInCategoryColors,
+                            onUpdateBuiltInCategoryColor = { cat, colorIdx ->
+                                builtInCategoryColors = categoryRepository.setBuiltInCategoryColor(cat, colorIdx)
+                            },
                             pendingShareDraft = pendingShareDraft,
                             onShareDraftHandled = { pendingShareDraft = null },
                             userName = userName,
@@ -231,6 +237,7 @@ class MainActivity : ComponentActivity() {
         if (::repository.isInitialized) lifecycleScope.launch { perform() }
         if (::categoryRepository.isInitialized) {
             customCategories = try { categoryRepository.load() } catch (_: Exception) { emptyList() }
+            builtInCategoryColors = try { categoryRepository.getBuiltInCategoryColors() } catch (_: Exception) { emptyMap() }
         }
     }
 

@@ -1127,6 +1127,113 @@ class ReminderRulesTest {
         assertEquals(3, textOnlyReminder.checklistItems.size)
         assertEquals(12345L, textOnlyReminder.checklistItems.first { it.id == 101L }.completedAt)
     }
+
+    @Test fun defaultBuiltInCategoryColorIsPreserved() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+        ReminderCategory.entries.forEach { category ->
+            assertNull(repo.getBuiltInCategoryColor(category))
+        }
+        assertTrue(repo.getBuiltInCategoryColors().isEmpty())
+    }
+
+    @Test fun customBuiltInCategoryColorPersistsAcrossInstances() {
+        val prefs = FakeSharedPreferences()
+        val repo1 = CategoryRepository(prefs)
+        repo1.setBuiltInCategoryColor(ReminderCategory.Today, 2)
+        repo1.setBuiltInCategoryColor(ReminderCategory.Planned, 4)
+
+        assertEquals(2, repo1.getBuiltInCategoryColor(ReminderCategory.Today))
+        assertEquals(4, repo1.getBuiltInCategoryColor(ReminderCategory.Planned))
+        assertNull(repo1.getBuiltInCategoryColor(ReminderCategory.Important))
+
+        val repo2 = CategoryRepository(prefs)
+        val colors = repo2.getBuiltInCategoryColors()
+        assertEquals(2, colors[ReminderCategory.Today])
+        assertEquals(4, colors[ReminderCategory.Planned])
+        assertNull(colors[ReminderCategory.Important])
+    }
+
+    @Test fun restoringDefaultRestoresOriginalColor() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+        repo.setBuiltInCategoryColor(ReminderCategory.Important, 1)
+        assertEquals(1, repo.getBuiltInCategoryColor(ReminderCategory.Important))
+
+        repo.setBuiltInCategoryColor(ReminderCategory.Important, null)
+        assertNull(repo.getBuiltInCategoryColor(ReminderCategory.Important))
+        assertFalse(repo.getBuiltInCategoryColors().containsKey(ReminderCategory.Important))
+    }
+
+    @Test fun changingCategoryColorDoesNotAffectIdentityOrFilterSemantics() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+        val now = System.currentTimeMillis()
+
+        val reminders = listOf(
+            ReminderItem(1, "Bugünlük", 100, alertAt = now),
+            ReminderItem(2, "Planlı", 100, alertAt = now + 86400000L),
+            ReminderItem(3, "Önemli", 100, isImportant = true),
+            ReminderItem(4, "Uyarısız", 100),
+            ReminderItem(5, "Tamam", 100, completedAt = now)
+        )
+
+        val todayBefore = reminders.inCategory(ReminderCategory.Today)
+        val plannedBefore = reminders.inCategory(ReminderCategory.Planned)
+        val importantBefore = reminders.inCategory(ReminderCategory.Important)
+        val noAlertBefore = reminders.inCategory(ReminderCategory.NoAlert)
+        val completedBefore = reminders.inCategory(ReminderCategory.Completed)
+        val countsBefore = reminders.categoryCounts(LocalDate.now())
+
+        ReminderCategory.entries.forEachIndexed { index, cat ->
+            repo.setBuiltInCategoryColor(cat, index)
+        }
+
+        assertEquals(todayBefore, reminders.inCategory(ReminderCategory.Today))
+        assertEquals(plannedBefore, reminders.inCategory(ReminderCategory.Planned))
+        assertEquals(importantBefore, reminders.inCategory(ReminderCategory.Important))
+        assertEquals(noAlertBefore, reminders.inCategory(ReminderCategory.NoAlert))
+        assertEquals(completedBefore, reminders.inCategory(ReminderCategory.Completed))
+        assertEquals(countsBefore, reminders.categoryCounts(LocalDate.now()))
+    }
+
+    @Test fun customCategoryCreationKeepsSelectedColor() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+        val createdList = repo.add(
+            name = "Proje",
+            iconKey = "WORK",
+            accentStart = 3,
+            accentEnd = 5
+        )
+        val created = createdList.first { it.name == "Proje" }
+        assertEquals("Proje", created.name)
+        assertEquals("WORK", created.iconKey)
+        assertEquals(3, created.accentStart)
+        assertEquals(5, created.accentEnd)
+
+        val loaded = repo.load()
+        assertEquals(1, loaded.size)
+        val first = loaded.first()
+        assertEquals("Proje", first.name)
+        assertEquals(3, first.accentStart)
+        assertEquals(5, first.accentEnd)
+    }
+
+    @Test fun cancelingEditorDoesNotPersistPendingChanges() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+        repo.setBuiltInCategoryColor(ReminderCategory.Today, 1)
+
+        var pendingColor: Int? = 3
+        val onCancel = {
+            pendingColor = repo.getBuiltInCategoryColor(ReminderCategory.Today)
+        }
+        onCancel()
+
+        assertEquals(1, repo.getBuiltInCategoryColor(ReminderCategory.Today))
+        assertEquals(1, pendingColor)
+    }
 }
 
 private class FakeSharedPreferences : android.content.SharedPreferences {

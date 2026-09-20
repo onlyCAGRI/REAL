@@ -118,10 +118,42 @@ class CategoryRepository(private val preferences: SharedPreferences) {
         cachedItems = items
     }
 
+    fun getBuiltInCategoryColor(category: ReminderCategory): Int? = synchronized(mutationLock) {
+        val raw = preferences.getString(KEY_BUILTIN_CATEGORY_COLORS, null) ?: return@synchronized null
+        val json = runCatching { JSONObject(raw) }.getOrNull() ?: return@synchronized null
+        if (!json.has(category.name) || json.isNull(category.name)) null else json.getInt(category.name)
+    }
+
+    fun setBuiltInCategoryColor(category: ReminderCategory, colorIndex: Int?): Map<ReminderCategory, Int?> = synchronized(mutationLock) {
+        val raw = preferences.getString(KEY_BUILTIN_CATEGORY_COLORS, null)
+        val json = if (raw != null) runCatching { JSONObject(raw) }.getOrNull() ?: JSONObject() else JSONObject()
+        if (colorIndex != null) {
+            json.put(category.name, colorIndex)
+        } else {
+            json.remove(category.name)
+        }
+        val newRaw = json.toString()
+        check(preferences.edit().putString(KEY_BUILTIN_CATEGORY_COLORS, newRaw).commit()) { "Kategori rengi kaydedilemedi" }
+        getBuiltInCategoryColors()
+    }
+
+    fun getBuiltInCategoryColors(): Map<ReminderCategory, Int?> = synchronized(mutationLock) {
+        val raw = preferences.getString(KEY_BUILTIN_CATEGORY_COLORS, null) ?: return@synchronized emptyMap()
+        val json = runCatching { JSONObject(raw) }.getOrNull() ?: return@synchronized emptyMap()
+        buildMap {
+            for (cat in ReminderCategory.entries) {
+                if (json.has(cat.name) && !json.isNull(cat.name)) {
+                    put(cat, json.getInt(cat.name))
+                }
+            }
+        }
+    }
+
     companion object {
         val mutationLock = Any()
         private const val PREFERENCES_NAME = "big_bos_cagri_categories"
         private const val KEY_CATEGORIES = "categories_json"
+        private const val KEY_BUILTIN_CATEGORY_COLORS = "builtin_category_colors"
     }
 }
 

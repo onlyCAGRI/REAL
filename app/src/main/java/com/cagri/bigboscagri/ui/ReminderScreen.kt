@@ -122,6 +122,8 @@ import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.ui.components.AccountMenuOverlay
 import com.cagri.bigboscagri.ui.components.ActionGlyph
 import com.cagri.bigboscagri.ui.components.ActionIcon
+import com.cagri.bigboscagri.ui.components.CategoryEditor
+import com.cagri.bigboscagri.ui.components.CategoryGlyph
 import com.cagri.bigboscagri.ui.components.CategoryGrid
 import com.cagri.bigboscagri.ui.components.CategorySelectionOverlay
 import com.cagri.bigboscagri.ui.components.CreateCategoryDialog
@@ -137,6 +139,8 @@ import com.cagri.bigboscagri.ui.components.ReminderCard
 import com.cagri.bigboscagri.ui.components.ReminderColorChoices
 import com.cagri.bigboscagri.ui.components.SelectionActionButtons
 import com.cagri.bigboscagri.ui.components.TopGlassOverlay
+import com.cagri.bigboscagri.ui.components.glyph
+import com.cagri.bigboscagri.ui.components.resolveStyle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -175,6 +179,8 @@ fun ReminderScreen(
     onDeleteCategory: (Long) -> Unit = {},
     onDeleteCategories: (Set<Long>) -> Unit = { ids -> ids.forEach { onDeleteCategory(it) } },
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
+    builtInCategoryColors: Map<ReminderCategory, Int?> = emptyMap(),
+    onUpdateBuiltInCategoryColor: (ReminderCategory, Int?) -> Unit = { _, _ -> },
     pendingShareDraft: com.cagri.bigboscagri.data.SharedPayload? = null,
     onShareDraftHandled: () -> Unit = {},
     userName: String = "",
@@ -366,6 +372,8 @@ fun ReminderScreen(
                                 ReminderListScreen(
                                     reminders = reminders, category = route.category,
                                     customCategory = currentCustomCategory,
+                                    builtInCategoryColors = builtInCategoryColors,
+                                    onUpdateBuiltInCategoryColor = onUpdateBuiltInCategoryColor,
                                     draft = draft,
                                     alertAt = draftAlertAt, repeatRule = draftRepeatRule,
                                     onAlertChange = { at, rule -> draftAlertAt = at; draftRepeatRule = rule },
@@ -456,6 +464,8 @@ private fun ReminderListScreen(
     onDraftReferenceUrlChange: (String?) -> Unit = {},
     customCategories: List<CustomCategory> = emptyList(),
     customCategory: CustomCategory? = null,
+    builtInCategoryColors: Map<ReminderCategory, Int?> = emptyMap(),
+    onUpdateBuiltInCategoryColor: (ReminderCategory, Int?) -> Unit = { _, _ -> },
     onCreateCategory: (String, String, Int, Int?) -> Unit = { _, _, _, _ -> },
     onEditCategory: (Long, String, String, Int, Int?) -> Unit = { _, _, _, _, _ -> },
     onDeleteCategory: (Long) -> Unit = {},
@@ -470,6 +480,7 @@ private fun ReminderListScreen(
     isSettingsOpen: Boolean = false
 ) {
     var editing by remember { mutableStateOf(false) }
+    var editingBuiltInCategory by rememberSaveable { mutableStateOf<ReminderCategory?>(null) }
     var isChecklistMode by rememberSaveable { mutableStateOf(false) }
     var isVoiceDraft by rememberSaveable { mutableStateOf(false) }
     var requiresTimeSelection by rememberSaveable { mutableStateOf(false) }
@@ -1036,6 +1047,9 @@ private fun ReminderListScreen(
                         }
                     }
                 } else if (category != null) {
+                    val resolvedStyle = category.resolveStyle(builtInCategoryColors[category])
+                    val badgeColor = resolvedStyle.tint
+                    val glyph = category.glyph()
                     Row(
                         Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1043,7 +1057,32 @@ private fun ReminderListScreen(
                         IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Ana sayfaya dön" }) {
                             ActionIcon(ActionGlyph.Back, Modifier.size(23.dp))
                         }
-                        Text(category.title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(badgeColor.copy(alpha = 0.2f))
+                                .border(1.dp, badgeColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CategoryGlyph(glyph, Modifier.size(20.dp), tint = badgeColor)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = category.title,
+                            color = Color.White,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = { editingBuiltInCategory = category },
+                            modifier = Modifier.semantics { contentDescription = "Kategori rengini düzenle" }
+                        ) {
+                            ActionIcon(ActionGlyph.Edit, Modifier.size(21.dp), color = Color(0xFFC0C0CB))
+                        }
                     }
                 }
                 Spacer(Modifier.height(22.dp))
@@ -1052,6 +1091,8 @@ private fun ReminderListScreen(
                 item(key = "categories") {
                     CategoryGrid(
                         customCategories = customCategories,
+                        builtInCategoryColors = builtInCategoryColors,
+                        onEditBuiltInCategory = { editingBuiltInCategory = it },
                         onOpenCategory = {
                             if (!anySelectionMode) {
                                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenCategory(it)
@@ -1475,13 +1516,30 @@ private fun ReminderListScreen(
             },
             reduceAnimations = reduceAnimations
         )
+        if (editingBuiltInCategory != null) {
+            val targetCat = editingBuiltInCategory!!
+            CategoryEditor(
+                builtInCategory = targetCat,
+                builtInColorIndex = builtInCategoryColors[targetCat],
+                backdrop = scene,
+                backdropPosition = { scenePosition },
+                onDismiss = { editingBuiltInCategory = null },
+                onSaveBuiltInColor = { cat, colorIdx ->
+                    onUpdateBuiltInCategoryColor(cat, colorIdx)
+                    editingBuiltInCategory = null
+                },
+                designStyle = designStyle,
+                reduceDynamicBlur = reduceDynamicBlur,
+                reduceAnimations = reduceAnimations
+            )
+        }
         if (showCreateCategoryDialog) {
-            CreateCategoryDialog(
-                initialCategory = null,
+            CategoryEditor(
+                customCategory = null,
                 backdrop = scene,
                 backdropPosition = { scenePosition },
                 onDismiss = { showCreateCategoryDialog = false },
-                onSave = { name, iconKey, start, end ->
+                onSaveCustomCategory = { name, iconKey, start, end ->
                     onCreateCategory(name, iconKey, start, end)
                     showCreateCategoryDialog = false
                 },
@@ -1491,16 +1549,16 @@ private fun ReminderListScreen(
             )
         }
         if (showEditCategoryDialog && customCategory != null) {
-            CreateCategoryDialog(
-                initialCategory = customCategory,
+            CategoryEditor(
+                customCategory = customCategory,
                 backdrop = scene,
                 backdropPosition = { scenePosition },
                 onDismiss = { showEditCategoryDialog = false },
-                onSave = { name, iconKey, start, end ->
+                onSaveCustomCategory = { name, iconKey, start, end ->
                     onEditCategory(customCategory.id, name, iconKey, start, end)
                     showEditCategoryDialog = false
                 },
-                onDelete = {
+                onDeleteCustomCategory = {
                     onDeleteCategory(customCategory.id)
                     showEditCategoryDialog = false
                 },
