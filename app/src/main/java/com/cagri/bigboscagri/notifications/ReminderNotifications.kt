@@ -26,11 +26,10 @@ import com.cagri.bigboscagri.data.ReminderRepository
 import com.cagri.bigboscagri.ui.components.CategoryIcon
 
 object ReminderNotifications {
-    const val CHANNEL_ID = "real_reminders_v2"
+    const val CHANNEL_ID = "real_reminders_v4"
+    // Legacy channels: "real_reminders", "real_reminders_v2", "real_reminders_v3" (retained to avoid aggressive deletion of user channel state)
     private const val PINNED_CHANNEL_ID = "important_reminders"
     const val EXTRA_REMINDER_ID = "reminder_id"
-
-    private val VIBRATION_PATTERN = longArrayOf(0, 250, 200, 250)
 
     @Volatile private var channelsCreated = false
 
@@ -44,7 +43,6 @@ object ReminderNotifications {
         ).apply {
             description = "Zamanlanmış ve anlık hatırlatıcı bildirimleri."
             enableVibration(true)
-            vibrationPattern = VIBRATION_PATTERN
         }
         manager.createNotificationChannel(channel)
         manager.createNotificationChannel(NotificationChannel(

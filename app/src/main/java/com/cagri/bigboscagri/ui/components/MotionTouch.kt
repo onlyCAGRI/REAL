@@ -47,70 +47,59 @@ fun Modifier.pressScale(
 
 /**
  * Dispatches restrained, purposeful haptic feedback for meaningful state changes.
- * Does not fire on random touch down/up, only on discrete completions, toggles, or ticks.
+ * Uses strictly View.performHapticFeedback with standard constants for safe device compatibility.
  *
  * Semantic mapping:
- * - save / completion -> CONFIRM
- * - toggle ON -> TOGGLE_ON
- * - toggle OFF -> TOGGLE_OFF
- * - picker tick -> SEGMENT_TICK
+ * - save / completion -> LONG_PRESS
+ * - toggle ON / OFF -> LONG_PRESS
+ * - picker tick (selection settles) -> LONG_PRESS
  */
 object RealHaptics {
     private const val TAG = "RealHaptics"
     private var lastTickTime = 0L
 
     /**
-     * Mechanical wheel tick when centered value changes.
-     * Uses SEGMENT_TICK on API 34+, falls back to CLOCK_TICK on < 34.
+     * Mechanical wheel tick when centered value changes and settles.
+     * Fires after scroll stops and a new value is selected.
+     * Mapped to safe standard LONG_PRESS.
      */
     fun tick(view: View) {
-        val constant = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            HapticFeedbackConstants.SEGMENT_TICK
-        } else {
-            HapticFeedbackConstants.CLOCK_TICK
-        }
-        perform(view, constant, "SEGMENT_TICK", isFrequent = true)
+        perform(
+            view = view,
+            actionName = "PICKER_TICK",
+            constant = HapticFeedbackConstants.LONG_PRESS,
+            isFrequent = true
+        )
     }
 
     /**
      * Semantic toggle feedback.
-     * Turning ON uses TOGGLE_ON (API 34+) or KEYBOARD_TAP (< 34).
-     * Turning OFF uses TOGGLE_OFF (API 34+) or CLOCK_TICK (< 34).
+     * Mapped to safe standard LONG_PRESS.
      */
     fun toggle(view: View, on: Boolean) {
-        val constant = if (on) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                HapticFeedbackConstants.TOGGLE_ON
-            } else {
-                HapticFeedbackConstants.KEYBOARD_TAP
-            }
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                HapticFeedbackConstants.TOGGLE_OFF
-            } else {
-                HapticFeedbackConstants.CLOCK_TICK
-            }
-        }
-        perform(view, constant, if (on) "TOGGLE_ON" else "TOGGLE_OFF")
+        perform(
+            view = view,
+            actionName = if (on) "TOGGLE_ON" else "TOGGLE_OFF",
+            constant = HapticFeedbackConstants.LONG_PRESS
+        )
     }
 
     /**
      * Confirmation on reminder save or completion.
-     * Uses CONFIRM on API 30+, falls back to KEYBOARD_TAP on < 30.
+     * Mapped to safe standard LONG_PRESS.
      */
     fun success(view: View) {
-        val constant = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            HapticFeedbackConstants.CONFIRM
-        } else {
-            HapticFeedbackConstants.KEYBOARD_TAP
-        }
-        perform(view, constant, "CONFIRM")
+        perform(
+            view = view,
+            actionName = "CONFIRM",
+            constant = HapticFeedbackConstants.LONG_PRESS
+        )
     }
 
     private fun perform(
         view: View,
-        feedbackConstant: Int,
         actionName: String,
+        constant: Int,
         isFrequent: Boolean = false
     ) {
         val now = System.currentTimeMillis()
@@ -119,18 +108,44 @@ object RealHaptics {
             lastTickTime = now
         }
 
-        val performed = view.performHapticFeedback(feedbackConstant)
+        // 1. Respect user's global system touch-haptic preference
+        val isSystemHapticOn = runCatching {
+            Settings.System.getInt(view.context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 0) != 0
+        }.getOrDefault(false)
+
+        if (!isSystemHapticOn) {
+            if (shouldLog) {
+                logHaptic(view, actionName, constant, performed = false, detail = "system_touch_haptic_off")
+            }
+            return
+        }
+
+        // 2. Single safe View haptic backend
+        val performed = view.performHapticFeedback(
+            constant,
+            HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+        )
 
         if (shouldLog) {
-            val isViewHapticEnabled = view.isHapticFeedbackEnabled
-            val systemHapticSetting = runCatching {
-                Settings.System.getInt(view.context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, -1)
-            }.getOrDefault(-1)
-            Log.d(
-                TAG,
-                "[$actionName] constant=$feedbackConstant performed=$performed " +
-                "viewHapticEnabled=$isViewHapticEnabled systemHapticSetting=$systemHapticSetting sdk=${Build.VERSION.SDK_INT}"
-            )
+            logHaptic(view, actionName, constant, performed, detail = "ok")
         }
+    }
+
+    private fun logHaptic(
+        view: View,
+        actionName: String,
+        constant: Int,
+        performed: Boolean,
+        detail: String
+    ) {
+        val isViewHapticEnabled = view.isHapticFeedbackEnabled
+        val systemHapticSetting = runCatching {
+            Settings.System.getInt(view.context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, -1)
+        }.getOrDefault(-1)
+        Log.d(
+            TAG,
+            "[$actionName] backend=VIEW_HAPTIC constant=$constant performed=$performed " +
+            "viewHapticEnabled=$isViewHapticEnabled systemHapticSetting=$systemHapticSetting sdk=${Build.VERSION.SDK_INT} detail=$detail"
+        )
     }
 }
