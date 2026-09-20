@@ -26,11 +26,10 @@ import com.cagri.bigboscagri.data.ReminderRepository
 import com.cagri.bigboscagri.ui.components.CategoryIcon
 
 object ReminderNotifications {
-    private const val CHANNEL_ID = "real_reminders_v2"
+    const val CHANNEL_ID = "real_reminders_v4"
+    // Legacy channels: "real_reminders", "real_reminders_v2", "real_reminders_v3" (retained to avoid aggressive deletion of user channel state)
     private const val PINNED_CHANNEL_ID = "important_reminders"
     const val EXTRA_REMINDER_ID = "reminder_id"
-
-    private val VIBRATION_PATTERN = longArrayOf(0, 250, 200, 250)
 
     @Volatile private var channelsCreated = false
 
@@ -44,7 +43,6 @@ object ReminderNotifications {
         ).apply {
             description = "Zamanlanmış ve anlık hatırlatıcı bildirimleri."
             enableVibration(true)
-            vibrationPattern = VIBRATION_PATTERN
         }
         manager.createNotificationChannel(channel)
         manager.createNotificationChannel(NotificationChannel(
@@ -55,6 +53,12 @@ object ReminderNotifications {
             setShowBadge(false)
         })
         channelsCreated = true
+    }
+
+    fun getReminderChannel(context: Context): NotificationChannel? {
+        ensureChannel(context)
+        val manager = context.getSystemService(NotificationManager::class.java)
+        return manager?.getNotificationChannel(CHANNEL_ID)
     }
 
     private fun canNotify(context: Context, channelId: String): Boolean {
@@ -115,11 +119,6 @@ object ReminderNotifications {
             .setShowWhen(true)
             .setOnlyAlertOnce(!alerting)
             .setWhen(if (alerting) reminder.alertAt ?: reminder.createdAt else reminder.createdAt)
-
-        if (!pinned) {
-            builder.setVibrate(VIBRATION_PATTERN)
-            builder.setDefaults(android.app.Notification.DEFAULT_SOUND or android.app.Notification.DEFAULT_VIBRATE)
-        }
 
         val completeIntent = Intent(context, NotificationActionReceiver::class.java).apply {
             action = NotificationActionReceiver.ACTION_COMPLETE

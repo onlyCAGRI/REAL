@@ -1,5 +1,8 @@
 package com.cagri.bigboscagri.ui
 
+import android.app.NotificationManager
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,16 +31,23 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.cagri.bigboscagri.notifications.ReminderNotifications
 import com.cagri.bigboscagri.ui.components.ActionGlyph
 import com.cagri.bigboscagri.ui.components.ActionIcon
 
@@ -56,6 +66,17 @@ fun SettingsScreen(
     onRequestExactAlarms: () -> Unit = {}
 ) {
     BackHandler(onBack = onBack)
+
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+    val isResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+
+    val reminderChannel = remember(isResumed) {
+        ReminderNotifications.getReminderChannel(context)
+    }
+    val isChannelBlocked = reminderChannel != null && reminderChannel.importance == NotificationManager.IMPORTANCE_NONE
+    val isChannelVibrationEnabled = reminderChannel != null && !isChannelBlocked && reminderChannel.shouldVibrate()
 
     Column(
         Modifier
@@ -310,7 +331,76 @@ fun SettingsScreen(
                 modifier = Modifier.padding(start = 36.dp, end = 0.dp, top = 12.dp, bottom = 12.dp)
             )
 
-            // Item 2: Tam saatinde hatırlatma
+            // Item 2: Hatırlatıcı kanalı ve titreşim durumu
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ActionIcon(ActionGlyph.Settings, Modifier.size(22.dp), color = Color.White)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Hatırlatıcı kanalı", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Normal)
+                        Text(
+                            when {
+                                isChannelBlocked -> "Kapalı"
+                                isChannelVibrationEnabled -> "Açık • Titreşimli"
+                                else -> "Açık • Titreşimsiz"
+                            },
+                            color = when {
+                                isChannelBlocked -> Color(0xFFA5A5AF)
+                                isChannelVibrationEnabled -> Color(0xFF91B9FF)
+                                else -> Color(0xFFA5A5AF)
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Text(
+                        when {
+                            isChannelBlocked -> "Hatırlatıcı bildirim kanalı sistem ayarlarından kapatılmış."
+                            isChannelVibrationEnabled -> "Bildirim geldiğinde ses ve titreşim uyarısı verilir."
+                            else -> "Kanal açık fakat titreşim sistem ayarlarından kapatılmış."
+                        },
+                        color = Color(0xFFA5A5AF),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+            TextButton(
+                onClick = {
+                    try {
+                        val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            putExtra(Settings.EXTRA_CHANNEL_ID, ReminderNotifications.CHANNEL_ID)
+                        }
+                        context.startActivity(intent)
+                    } catch (_: Exception) {
+                        try {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            // Fallback ignored
+                        }
+                    }
+                },
+                modifier = Modifier.align(Alignment.End).padding(top = 4.dp)
+            ) {
+                Text("Kanal ayarları", color = Color(0xFF91B9FF))
+            }
+
+            HorizontalDivider(
+                color = Color(0xFF26262B),
+                thickness = 0.75.dp,
+                modifier = Modifier.padding(start = 36.dp, end = 0.dp, top = 12.dp, bottom = 12.dp)
+            )
+
+            // Item 3: Tam saatinde hatırlatma
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ActionIcon(ActionGlyph.Calendar, Modifier.size(22.dp), color = Color.White)
                 Spacer(Modifier.width(14.dp))
