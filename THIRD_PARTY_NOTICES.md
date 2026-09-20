@@ -1,4 +1,4 @@
-# Yazı tipi ve tasarım referansları
+# Real 0.5.0 — Üçüncü taraf bildirimleri
 
 Bu projede **Inter** yazı tipi kullanılır. Kaynak: [Inter / Google Fonts](https://github.com/google/fonts/tree/main/ofl/inter).
 Inter Project Authors; SIL Open Font License 1.1. Lisans metni APK'nın içinde de
