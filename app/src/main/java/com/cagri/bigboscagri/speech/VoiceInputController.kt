@@ -59,7 +59,7 @@ class VoiceInputController(
         phase = VoicePhase.Finishing
         onState(phase, 0f)
         handler.removeCallbacksAndMessages(null)
-        if (!roundRunning) {
+        if (!roundRunning || recognizer == null) {
             submitOnce()
             return
         }
@@ -164,10 +164,17 @@ class VoiceInputController(
 
     private fun submitOnce() {
         if (phase != VoicePhase.Finishing) return
-        draft?.commitResult(null)
-        val text = draft?.text.orEmpty()
+        val currentDraft = draft
+        currentDraft?.commitResult(null)
+        val text = currentDraft?.text.orEmpty()
+        val hasSpoken = currentDraft?.hasSpokenText == true
         reset() // Invalidates late callbacks before saving or changing screens.
-        if (text.isNotBlank()) onSubmit(text) else onErrorMessage("Konuşma algılanmadı. Tekrar deneyebilirsin.")
+        if (hasSpoken && text.isNotBlank()) {
+            onSubmit(text)
+        } else {
+            currentDraft?.text?.let(onText)
+            onErrorMessage("Konuşma algılanmadı. Tekrar deneyebilirsin.")
+        }
     }
 
     private fun fail(message: String) {

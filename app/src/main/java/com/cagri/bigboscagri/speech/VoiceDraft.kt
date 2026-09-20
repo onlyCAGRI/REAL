@@ -6,16 +6,37 @@ class VoiceDraft(initialText: String) {
         private set
     var partial: String = ""
         private set
+    var hasSpokenText: Boolean = false
+        private set
 
     val text: String get() = join(committed, partial)
 
     fun updatePartial(words: String) {
-        if (words.isNotBlank()) partial = words.trim()
+        if (words.isNotBlank()) {
+            partial = words.trim()
+            hasSpokenText = true
+        }
     }
 
     fun commitResult(words: String?) {
         val resolved = resolveBestResult(partial, words?.trim())
-        committed = join(committed, resolved)
+        if (resolved.isNotBlank()) {
+            hasSpokenText = true
+            if (committed.isNotBlank()) {
+                val trLocale = java.util.Locale.forLanguageTag("tr-TR")
+                val cNorm = committed.trim().lowercase(trLocale)
+                val rNorm = resolved.trim().lowercase(trLocale)
+                if (cNorm == rNorm) {
+                    partial = ""
+                    return
+                } else if (rNorm.startsWith("$cNorm ")) {
+                    committed = resolved.trim()
+                    partial = ""
+                    return
+                }
+            }
+            committed = join(committed, resolved)
+        }
         partial = ""
     }
 

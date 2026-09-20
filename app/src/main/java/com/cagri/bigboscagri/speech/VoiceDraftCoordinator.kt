@@ -49,13 +49,21 @@ class VoiceDraftSession(
     initialAlertAt: Long? = null,
     initialRepeatRule: RecurrenceRule = RecurrenceRule.NONE,
     initialCategoryId: Long? = null,
-    initialSendImmediate: Boolean = true
+    initialSendImmediate: Boolean = true,
+    initialReferenceUrl: String? = null,
+    initialIsShareDraft: Boolean = false,
+    initialIsChecklistMode: Boolean = false,
+    initialChecklistItems: List<ChecklistItem> = emptyList()
 ) {
     var text: String = initialText
     var alertAt: Long? = initialAlertAt
     var repeatRule: RecurrenceRule = initialRepeatRule
     var customCategoryId: Long? = initialCategoryId
     var sendImmediateNotification: Boolean = initialSendImmediate
+    var draftReferenceUrl: String? = initialReferenceUrl
+    var isShareDraft: Boolean = initialIsShareDraft
+    var isChecklistMode: Boolean = initialIsChecklistMode
+    var checklistItems: List<ChecklistItem> = initialChecklistItems
     var isVoiceDraft: Boolean = false
     var requiresTimeSelection: Boolean = false
     var dateHint: LocalDate? = null
@@ -90,16 +98,46 @@ class VoiceDraftSession(
             sendImmediate: Boolean
         ) -> Boolean
     ): Boolean {
-        if (text.isBlank()) return false
+        if (text.isBlank() && (!isChecklistMode || checklistItems.isEmpty())) return false
         if (requiresTimeSelection && alertAt == null) return false
         val success = onAdd(
-            text.trim(),
+            text.trim().ifEmpty { if (isChecklistMode) "Yapılacaklar listesi" else "" },
             alertAt,
             if (alertAt != null) repeatRule else RecurrenceRule.NONE,
             customCategoryId,
-            false,
-            emptyList(),
+            isChecklistMode,
+            checklistItems,
             sendImmediateNotification
+        )
+        if (success) {
+            reset()
+        }
+        return success
+    }
+
+    suspend fun saveExplicitlyWithReference(
+        onAdd: suspend (
+            text: String,
+            alertAt: Long?,
+            repeatRule: RecurrenceRule,
+            categoryId: Long?,
+            isChecklist: Boolean,
+            checklistItems: List<ChecklistItem>,
+            sendImmediate: Boolean,
+            referenceUrl: String?
+        ) -> Boolean
+    ): Boolean {
+        if (text.isBlank() && (!isChecklistMode || checklistItems.isEmpty())) return false
+        if (requiresTimeSelection && alertAt == null) return false
+        val success = onAdd(
+            text.trim().ifEmpty { if (isChecklistMode) "Yapılacaklar listesi" else "" },
+            alertAt,
+            if (alertAt != null) repeatRule else RecurrenceRule.NONE,
+            customCategoryId,
+            isChecklistMode,
+            checklistItems,
+            sendImmediateNotification,
+            draftReferenceUrl
         )
         if (success) {
             reset()
@@ -124,6 +162,10 @@ class VoiceDraftSession(
         repeatRule = RecurrenceRule.NONE
         customCategoryId = null
         sendImmediateNotification = true
+        draftReferenceUrl = null
+        isShareDraft = false
+        isChecklistMode = false
+        checklistItems = emptyList()
         isVoiceDraft = false
         requiresTimeSelection = false
         dateHint = null

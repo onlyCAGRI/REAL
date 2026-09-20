@@ -140,7 +140,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private data class ReminderRoute(val category: ReminderCategory?, val customCategoryId: Long?, val detailId: Long?) {
+internal data class ReminderRoute(val category: ReminderCategory?, val customCategoryId: Long?, val detailId: Long?) {
     val key: String get() = detailId?.let { "detail_$it" }
         ?: customCategoryId?.let { "custom_cat_$it" }
         ?: category?.name
@@ -374,7 +374,7 @@ fun ReminderScreen(
                                     onDraftChange = { draft = it },
                                     onBack = { category = null; customCategoryId = null },
                                     onOpenCategory = { category = it; customCategoryId = null },
-                                    onOpenReminder = { detailId = it },
+                                    onOpenReminder = { if (detailId == null) detailId = it },
                                     onToggleCompleted = onToggleCompleted,
                                     onDeleteReminders = onDeleteReminders,
                                     reduceDynamicBlur = reduceDynamicBlur,

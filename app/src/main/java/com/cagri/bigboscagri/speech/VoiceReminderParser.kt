@@ -139,10 +139,10 @@ object VoiceReminderParser {
         val lower = trimmedInput.lowercase(trLocale)
 
         // 1. Try Relative Time
-        parseRelativeTime(trimmedInput, lower, now)?.let { return it }
+        runCatching { parseRelativeTime(trimmedInput, lower, now) }.getOrNull()?.let { return it }
 
         // 2. Try Absolute / Calendar Time
-        parseCalendarTime(trimmedInput, lower, now)?.let { return it }
+        runCatching { parseCalendarTime(trimmedInput, lower, now) }.getOrNull()?.let { return it }
 
         // 3. Fallback: No date/time found, keep text as is (clean capitalization)
         val cleaned = cleanReminderText(trimmedInput, emptyList())
@@ -364,11 +364,15 @@ object VoiceReminderParser {
         val colonTimeRegex = Regex("""\b(?:saat\s+)?(\d{1,2})[:.](\d{2})(?:\s*['’\`]?\s*(?:da|de|ta|te))?\b""")
         val colonMatch = colonTimeRegex.find(masked)
         if (colonMatch != null) {
-            rawHour = colonMatch.groupValues[1].toIntOrNull()
-            rawMinute = colonMatch.groupValues[2].toIntOrNull()
-            isExplicit24h = (rawHour != null && rawHour >= 13)
-            rangesToRemove.add(colonMatch.range)
-            masked = maskRange(masked, colonMatch.range)
+            val h = colonMatch.groupValues[1].toIntOrNull()
+            val m = colonMatch.groupValues[2].toIntOrNull()
+            if (h != null && h in 0..23 && m != null && m in 0..59) {
+                rawHour = h
+                rawMinute = m
+                isExplicit24h = (rawHour >= 13)
+                rangesToRemove.add(colonMatch.range)
+                masked = maskRange(masked, colonMatch.range)
+            }
         }
 
         // Time Pattern B: 17 30'da (space separated with suffix)
@@ -376,11 +380,15 @@ object VoiceReminderParser {
             val spaceTimeRegex = Regex("""\b(?:saat\s+)?(\d{1,2})\s+(\d{2})(?:\s*['’\`]?\s*(?:da|de|ta|te))\b""")
             val spaceMatch = spaceTimeRegex.find(masked)
             if (spaceMatch != null) {
-                rawHour = spaceMatch.groupValues[1].toIntOrNull()
-                rawMinute = spaceMatch.groupValues[2].toIntOrNull()
-                isExplicit24h = (rawHour != null && rawHour >= 13)
-                rangesToRemove.add(spaceMatch.range)
-                masked = maskRange(masked, spaceMatch.range)
+                val h = spaceMatch.groupValues[1].toIntOrNull()
+                val m = spaceMatch.groupValues[2].toIntOrNull()
+                if (h != null && h in 0..23 && m != null && m in 0..59) {
+                    rawHour = h
+                    rawMinute = m
+                    isExplicit24h = (rawHour >= 13)
+                    rangesToRemove.add(spaceMatch.range)
+                    masked = maskRange(masked, spaceMatch.range)
+                }
             }
         }
 
@@ -389,10 +397,13 @@ object VoiceReminderParser {
             val bucukRegex = Regex("""\b(?:saat\s+)?(\d{1,2})\s+(?:buçuk|bucuk)(?:['’\`]?\s*(?:ta|te|da|de))?\b""")
             val bucukMatch = bucukRegex.find(masked)
             if (bucukMatch != null) {
-                rawHour = bucukMatch.groupValues[1].toIntOrNull()
-                rawMinute = 30
-                rangesToRemove.add(bucukMatch.range)
-                masked = maskRange(masked, bucukMatch.range)
+                val h = bucukMatch.groupValues[1].toIntOrNull()
+                if (h != null && h in 0..23) {
+                    rawHour = h
+                    rawMinute = 30
+                    rangesToRemove.add(bucukMatch.range)
+                    masked = maskRange(masked, bucukMatch.range)
+                }
             }
         }
 
@@ -401,11 +412,14 @@ object VoiceReminderParser {
             val saatHourRegex = Regex("""\bsaat\s+(\d{1,2})(?:['’\`]?\s*(?:da|de|ta|te)|\s+(?:da|de|ta|te))?\b""")
             val saatMatch = saatHourRegex.find(masked)
             if (saatMatch != null) {
-                rawHour = saatMatch.groupValues[1].toIntOrNull()
-                rawMinute = 0
-                isExplicit24h = (rawHour != null && rawHour >= 13)
-                rangesToRemove.add(saatMatch.range)
-                masked = maskRange(masked, saatMatch.range)
+                val h = saatMatch.groupValues[1].toIntOrNull()
+                if (h != null && h in 0..23) {
+                    rawHour = h
+                    rawMinute = 0
+                    isExplicit24h = (rawHour >= 13)
+                    rangesToRemove.add(saatMatch.range)
+                    masked = maskRange(masked, saatMatch.range)
+                }
             }
         }
 
@@ -414,11 +428,14 @@ object VoiceReminderParser {
             val suffixedHourRegex = Regex("""\b(\d{1,2})(?:['’\`]\s*(?:da|de|ta|te)|(?:ta|te|da|de)|\s+(?:da|de|ta|te))\b""")
             val suffixedMatch = suffixedHourRegex.find(masked)
             if (suffixedMatch != null) {
-                rawHour = suffixedMatch.groupValues[1].toIntOrNull()
-                rawMinute = 0
-                isExplicit24h = (rawHour != null && rawHour >= 13)
-                rangesToRemove.add(suffixedMatch.range)
-                masked = maskRange(masked, suffixedMatch.range)
+                val h = suffixedMatch.groupValues[1].toIntOrNull()
+                if (h != null && h in 0..23) {
+                    rawHour = h
+                    rawMinute = 0
+                    isExplicit24h = (rawHour >= 13)
+                    rangesToRemove.add(suffixedMatch.range)
+                    masked = maskRange(masked, suffixedMatch.range)
+                }
             }
         }
 

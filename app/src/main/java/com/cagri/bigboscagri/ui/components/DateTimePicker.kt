@@ -10,6 +10,7 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -88,27 +89,46 @@ fun AnimatedDateTimePickerOverlay(
     initialRepeatRule: RecurrenceRule = RecurrenceRule.NONE,
     initialTimeTab: Boolean = false
 ) {
+    var sessionKey by rememberSaveable { mutableIntStateOf(0) }
+    var sessionOpen by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(visible) {
+        if (visible && !sessionOpen) {
+            sessionKey++
+            sessionOpen = true
+        } else if (!visible && sessionOpen) {
+            sessionOpen = false
+        }
+    }
+
+    val density = LocalDensity.current
+    val verticalOffsetPx = remember(density) { with(density) { 8.dp.roundToPx() } }
     AnimatedVisibility(
-        visible = visible,
+        visible = visible && sessionOpen,
         enter = if (reduceAnimations) EnterTransition.None
-        else fadeIn(tween(200)) + slideInVertically(tween(350)) { it / 10 },
+        else fadeIn(tween(200, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))) +
+                slideInVertically(tween(220, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))) { verticalOffsetPx },
         exit = if (reduceAnimations) ExitTransition.None
-        else fadeOut(tween(180)) + slideOutVertically(tween(250)) { it / 10 }
+        else fadeOut(tween(160, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))) +
+                slideOutVertically(tween(160, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))) { verticalOffsetPx }
     ) {
-        DateTimePickerOverlay(
-            initial = initial,
-            onDismiss = onDismiss,
-            onConfirm = onConfirm,
-            backdrop = backdrop,
-            backdropPosition = backdropPosition,
-            designStyle = designStyle,
-            reduceDynamicBlur = reduceDynamicBlur,
-            reduceAnimations = reduceAnimations,
-            exactAlarmsAllowed = exactAlarmsAllowed,
-            onRequestExactAlarms = onRequestExactAlarms,
-            initialRepeatRule = initialRepeatRule,
-            initialTimeTab = initialTimeTab
-        )
+        key(sessionKey) {
+            DateTimePickerOverlay(
+                initial = initial,
+                onDismiss = onDismiss,
+                onConfirm = onConfirm,
+                backdrop = backdrop,
+                backdropPosition = backdropPosition,
+                designStyle = designStyle,
+                reduceDynamicBlur = reduceDynamicBlur,
+                reduceAnimations = reduceAnimations,
+                exactAlarmsAllowed = exactAlarmsAllowed,
+                onRequestExactAlarms = onRequestExactAlarms,
+                initialRepeatRule = initialRepeatRule,
+                initialTimeTab = initialTimeTab,
+                sessionKey = sessionKey
+            )
+        }
     }
 }
 
@@ -156,19 +176,20 @@ fun DateTimePickerOverlay(
     exactAlarmsAllowed: Boolean,
     onRequestExactAlarms: () -> Unit,
     initialRepeatRule: RecurrenceRule = RecurrenceRule.NONE,
-    initialTimeTab: Boolean = false
+    initialTimeTab: Boolean = false,
+    sessionKey: Int = 0
 ) {
     val zone = ZoneId.systemDefault()
-    val seed = remember { Instant.ofEpochMilli(initial ?: (System.currentTimeMillis() + 3_600_000)).atZone(zone) }
-    var day by rememberSaveable { mutableIntStateOf(seed.dayOfMonth) }
-    var month by rememberSaveable { mutableIntStateOf(seed.monthValue) }
-    var year by rememberSaveable { mutableIntStateOf(seed.year) }
-    var hour by rememberSaveable { mutableIntStateOf(seed.hour) }
-    var minute by rememberSaveable { mutableIntStateOf(seed.minute) }
-    var includeYear by rememberSaveable { mutableStateOf(initial != null && !initialTimeTab) }
-    var timeTab by rememberSaveable { mutableStateOf(initialTimeTab) }
-    var currentSubScreen by rememberSaveable { mutableStateOf(PickerSubScreen.Main) }
-    var selectedRepeatRule by rememberSaveable { mutableStateOf(initialRepeatRule) }
+    val seed = remember(initial, sessionKey) { Instant.ofEpochMilli(initial ?: (System.currentTimeMillis() + 3_600_000)).atZone(zone) }
+    var day by rememberSaveable(sessionKey, initial) { mutableIntStateOf(seed.dayOfMonth) }
+    var month by rememberSaveable(sessionKey, initial) { mutableIntStateOf(seed.monthValue) }
+    var year by rememberSaveable(sessionKey, initial) { mutableIntStateOf(seed.year) }
+    var hour by rememberSaveable(sessionKey, initial) { mutableIntStateOf(seed.hour) }
+    var minute by rememberSaveable(sessionKey, initial) { mutableIntStateOf(seed.minute) }
+    var includeYear by rememberSaveable(sessionKey, initial) { mutableStateOf(initial != null && !initialTimeTab) }
+    var timeTab by rememberSaveable(sessionKey, initial, initialTimeTab) { mutableStateOf(initialTimeTab) }
+    var currentSubScreen by rememberSaveable(sessionKey, initial) { mutableStateOf(PickerSubScreen.Main) }
+    var selectedRepeatRule by rememberSaveable(sessionKey, initialRepeatRule) { mutableStateOf(initialRepeatRule) }
     var dateAnimatedOnce by remember { mutableStateOf(false) }
     var timeAnimatedOnce by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -187,6 +208,7 @@ fun DateTimePickerOverlay(
     val dateFormat = remember(includeYear) {
         DateTimeFormatter.ofPattern(if (includeYear) "EEE, dd/MM/yyyy" else "dd/MM", tr)
     }
+    val view = LocalView.current
     val scrollChanged: (String, Boolean) -> Unit = { key, scrolling -> moving = if (scrolling) moving + key else moving - key }
     val controlFill = when {
         reduceDynamicBlur -> Color(0xFF151518)
@@ -276,16 +298,16 @@ fun DateTimePickerOverlay(
                                     } else {
                                         val toTime = targetState
                                         val enterSpec = fadeIn(
-                                            tween(200, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                            tween(160, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
                                         ) + slideInHorizontally(
-                                            tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
-                                        ) { if (toTime) (it * 0.06f).toInt() else (-it * 0.06f).toInt() }
+                                            tween(180, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                        ) { if (toTime) (it * 0.04f).toInt() else (-it * 0.04f).toInt() }
 
                                         val exitSpec = fadeOut(
-                                            tween(140, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                            tween(130, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
                                         ) + slideOutHorizontally(
-                                            tween(180, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
-                                        ) { if (toTime) (-it * 0.06f).toInt() else (it * 0.06f).toInt() }
+                                            tween(150, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                        ) { if (toTime) (-it * 0.04f).toInt() else (it * 0.04f).toInt() }
 
                                         (enterSpec togetherWith exitSpec).using(SizeTransform(clip = false))
                                     }
@@ -306,17 +328,19 @@ fun DateTimePickerOverlay(
                                             animateInitial = shouldAnimateDate,
                                             initialScrollDelayMs = 70L,
                                             initialOffsetItems = 8,
-                                            initialScrollDurationMs = 480
+                                            initialScrollDurationMs = 480,
+                                            reduceAnimations = reduceAnimations
                                         )
                                         NumberWheel(
                                             "Ay", MONTH_VALUES, month, { months[it - 1] }, {
-                                                month = it; day = clampedDate(year, it, day).dayOfMonth; error = null
+                                                month = it; day = clampedDate(effectiveYear, it, day).dayOfMonth; error = null
                                             }, { scrollChanged("month", it) },
                                             Modifier.weight(1.2f),
                                             animateInitial = shouldAnimateDate,
                                             initialScrollDelayMs = 110L,
                                             initialOffsetItems = 4,
-                                            initialScrollDurationMs = 500
+                                            initialScrollDurationMs = 500,
+                                            reduceAnimations = reduceAnimations
                                         )
                                         if (includeYear) {
                                             NumberWheel(
@@ -325,7 +349,8 @@ fun DateTimePickerOverlay(
                                                 }, { scrollChanged("year", it) },
                                                 Modifier.weight(1.3f),
                                                 animateInitial = shouldAnimateDate,
-                                                initialScrollDelayMs = 100L
+                                                initialScrollDelayMs = 100L,
+                                                reduceAnimations = reduceAnimations
                                             )
                                         }
                                     } else {
@@ -339,7 +364,8 @@ fun DateTimePickerOverlay(
                                             { hour = it; error = null }, { scrollChanged("hour", it) },
                                             Modifier.weight(1f),
                                             animateInitial = shouldAnimateTime,
-                                            initialScrollDelayMs = 20L
+                                            initialScrollDelayMs = 20L,
+                                            reduceAnimations = reduceAnimations
                                         )
                                         Text(
                                             ":", color = Color.White, fontSize = 30.sp,
@@ -350,7 +376,8 @@ fun DateTimePickerOverlay(
                                             { minute = it; error = null }, { scrollChanged("minute", it) },
                                             Modifier.weight(1f),
                                             animateInitial = shouldAnimateTime,
-                                            initialScrollDelayMs = 60L
+                                            initialScrollDelayMs = 60L,
+                                            reduceAnimations = reduceAnimations
                                         )
                                     }
                                 }
@@ -369,6 +396,7 @@ fun DateTimePickerOverlay(
                                                 role = Role.Checkbox,
                                                 enabled = moving.isEmpty(),
                                                 onValueChange = { enabled ->
+                                                    RealHaptics.toggle(view, on = enabled)
                                                     includeYear = enabled
                                                     if (enabled) year = inferredYear
                                                     day = clampedDate(if (enabled) year else inferredYear, month, day).dayOfMonth
@@ -547,7 +575,8 @@ private fun NumberWheel(
     animateInitial: Boolean = false,
     initialScrollDelayMs: Long = 0L,
     initialOffsetItems: Int? = null,
-    initialScrollDurationMs: Int = 0
+    initialScrollDurationMs: Int = 0,
+    reduceAnimations: Boolean = false
 ) {
     val targetIndex = values.indexOf(value).coerceAtLeast(0)
     val initialIndex = remember {
@@ -610,8 +639,11 @@ private fun NumberWheel(
         }
     }
 
+    var suppressSettleHapticValue by remember { mutableStateOf<Int?>(null) }
+
     LaunchedEffect(value, values.size) {
         if (initialScrollDone && !state.isScrollInProgress) {
+            suppressSettleHapticValue = value
             state.scrollToItem(values.indexOf(value).coerceAtLeast(0))
         }
     }
@@ -621,9 +653,14 @@ private fun NumberWheel(
         var wasMoving = false
         snapshotFlow { state.isScrollInProgress }.distinctUntilChanged().collect { scrolling ->
             if (initialScrollDone && !scrolling && wasMoving && state.layoutInfo.visibleItemsInfo.isNotEmpty()) {
-                values.getOrNull(centered)?.takeIf { it != latestValue }?.let { newValue ->
-                    RealHaptics.tick(view)
-                    latestOnValue(newValue)
+                val settled = values.getOrNull(centered)
+                if (settled != null) {
+                    if (settled == suppressSettleHapticValue) {
+                        suppressSettleHapticValue = null
+                    } else if (settled != latestValue) {
+                        RealHaptics.tick(view)
+                        latestOnValue(settled)
+                    }
                 }
             }
             wasMoving = scrolling
@@ -650,16 +687,32 @@ private fun NumberWheel(
         itemsIndexed(values, key = { _, item -> item }) { index, item ->
             val isCentered = index == centered
             val itemColor by animateColorAsState(
-                targetValue = if (isCentered) Color.White else Color(0xFF6B6B70),
-                animationSpec = tween(140),
+                targetValue = if (isCentered) Color.White else Color(0xFF8E8E93),
+                animationSpec = if (reduceAnimations) snap() else tween(140),
                 label = "wheelItemColor"
             )
             val itemScale by animateFloatAsState(
-                targetValue = if (isCentered) 1.05f else 0.94f,
-                animationSpec = tween(140, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                targetValue = if (isCentered) {
+                    if (reduceAnimations) 1.0f else 1.04f
+                } else {
+                    if (reduceAnimations) 1.0f else 0.96f
+                },
+                animationSpec = if (reduceAnimations) snap() else tween(140, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
                 label = "wheelItemScale"
             )
-            Box(Modifier.fillMaxWidth().height(rowHeight).clickable { onValue(item) }, contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(rowHeight)
+                    .clickable {
+                        if (item != latestValue) {
+                            RealHaptics.tick(view)
+                            suppressSettleHapticValue = item
+                            onValue(item)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
                 Text(
                     format(item),
                     color = itemColor,
