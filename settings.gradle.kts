@@ -1,3 +1,4 @@
+// Real 0.5.0 — project settings
 pluginManagement {
     repositories {
         google()
@@ -14,5 +15,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "BigBosCagri"
+rootProject.name = "Real"
 include(":app")
