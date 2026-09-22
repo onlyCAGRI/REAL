@@ -812,7 +812,7 @@ fun GlassComposer(
                                 )
                             } else {
                                 ActionIcon(
-                                    ActionGlyph.Category,
+                                    ActionGlyph.Note,
                                     Modifier.size(20.dp),
                                     catColor
                                 )
@@ -831,7 +831,7 @@ fun GlassComposer(
                             }
                         ) {
                             ActionIcon(
-                                ActionGlyph.Note,
+                                ActionGlyph.Add,
                                 Modifier.size(20.dp),
                                 attachmentColor
                             )

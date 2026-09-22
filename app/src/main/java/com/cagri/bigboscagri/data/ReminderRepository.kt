@@ -56,6 +56,16 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             }
                         } else emptyList()
                     } else emptyList()
+                    val journal = if (item.has("journal") && !item.isNull("journal")) {
+                        val jObj = item.getJSONObject("journal")
+                        val moodKey = if (jObj.has("mood") && !jObj.isNull("mood")) jObj.getString("mood") else null
+                        ReminderJournal(
+                            mood = JournalMood.fromKey(moodKey),
+                            text = jObj.optString("text", ""),
+                            createdAt = jObj.getLong("createdAt"),
+                            updatedAt = jObj.optLong("updatedAt", jObj.getLong("createdAt"))
+                        )
+                    } else null
                     add(
                         ReminderItem(
                             id = item.getLong("id"),
@@ -79,7 +89,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                                 ?: if (item.optBoolean("isImportant", false)) Math.floorMod(item.getLong("id"), 10) else null,
                             gradientBlendFraction = item.optionalBlendFraction(),
                             customSolidColorArgb = item.optionalColorArgb("customSolidColorArgb"),
-                            attachments = attachments
+                            attachments = attachments,
+                            journal = journal
                         )
                     )
                 }
@@ -343,6 +354,21 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         items
     }
 
+    fun setJournal(id: Long, mood: JournalMood?, text: String): List<ReminderItem> = update(id) { reminder ->
+        val now = System.currentTimeMillis()
+        val journal = ReminderJournal(
+            mood = mood,
+            text = text,
+            createdAt = reminder.journal?.createdAt ?: now,
+            updatedAt = now
+        )
+        reminder.copy(journal = journal, updatedAt = now)
+    }
+
+    fun deleteJournal(id: Long): List<ReminderItem> = update(id) { reminder ->
+        reminder.copy(journal = null, updatedAt = System.currentTimeMillis())
+    }
+
     private fun update(id: Long, change: (ReminderItem) -> ReminderItem): List<ReminderItem> =
         synchronized(mutationLock) { load().map { if (it.id == id) change(it) else it }.also(::save) }
 
@@ -389,6 +415,13 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             )
                         }
                     })
+                    .put("journal", reminder.journal?.let { j ->
+                        JSONObject()
+                            .put("mood", j.mood?.persistKey ?: JSONObject.NULL)
+                            .put("text", j.text)
+                            .put("createdAt", j.createdAt)
+                            .put("updatedAt", j.updatedAt)
+                    } ?: JSONObject.NULL)
             )
         }
         val raw = array.toString()

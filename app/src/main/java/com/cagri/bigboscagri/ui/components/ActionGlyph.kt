@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 
-enum class ActionGlyph { Calendar, Back, Check, Undo, Edit, Share, Delete, Star, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass, WhatsApp, Category }
+enum class ActionGlyph { Calendar, Back, Check, Undo, Edit, Share, Delete, Star, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad }
 
 @Composable
 fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.White, filled: Boolean = false) {
@@ -256,9 +256,30 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     }
                     drawPath(phonePath, color, style = Fill)
                 }
-                ActionGlyph.Category -> {
-                    drawLine(color, Offset(12f, 4.5f), Offset(12f, 19.5f), strokeWidth = 1.6f, cap = StrokeCap.Round)
-                    drawLine(color, Offset(4.5f, 12f), Offset(19.5f, 12f), strokeWidth = 1.6f, cap = StrokeCap.Round)
+                ActionGlyph.MoodVeryGood -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    drawArc(color, 15f, 150f, false, Offset(6.5f, 5.5f), Size(11f, 11f), style = stroke)
+                    line(8f, 9.5f, 8.1f, 9.5f); line(16f, 9.5f, 16.1f, 9.5f)
+                }
+                ActionGlyph.MoodGood -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    drawArc(color, 30f, 120f, false, Offset(7f, 6.5f), Size(10f, 10f), style = stroke)
+                    line(8f, 9.5f, 8.1f, 9.5f); line(16f, 9.5f, 16.1f, 9.5f)
+                }
+                ActionGlyph.MoodNeutral -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    line(8f, 15f, 16f, 15f)
+                    line(8f, 9.5f, 8.1f, 9.5f); line(16f, 9.5f, 16.1f, 9.5f)
+                }
+                ActionGlyph.MoodHard -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    drawArc(color, 210f, 120f, false, Offset(7f, 10.5f), Size(10f, 10f), style = stroke)
+                    line(8f, 9.5f, 8.1f, 9.5f); line(16f, 9.5f, 16.1f, 9.5f)
+                }
+                ActionGlyph.MoodBad -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    drawArc(color, 195f, 150f, false, Offset(6.5f, 11.5f), Size(11f, 11f), style = stroke)
+                    line(8f, 9.5f, 8.1f, 9.5f); line(16f, 9.5f, 16.1f, 9.5f)
                 }
             }
         }

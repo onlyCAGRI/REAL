@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,6 +59,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -110,6 +112,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.key
 import com.cagri.bigboscagri.data.ChecklistItem
+import com.cagri.bigboscagri.data.JournalMood
 import com.cagri.bigboscagri.data.RecurrenceRule
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.data.buildReminderShareText
@@ -137,6 +140,8 @@ import com.cagri.bigboscagri.ui.theme.BigBosTheme
 fun ReminderDetailScreen(
     reminder: ReminderItem, onBack: () -> Unit, onToggleCompleted: () -> Unit,
     onToggleImportant: () -> Unit, onSave: (String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?) -> Unit, onDelete: () -> Unit,
+    onSaveJournal: (JournalMood?, String) -> Unit = { _, _ -> },
+    onDeleteJournal: () -> Unit = {},
     customCategories: List<CustomCategory> = emptyList(),
     reduceAnimations: Boolean = false,
     reduceDynamicBlur: Boolean = false,
@@ -171,6 +176,12 @@ fun ReminderDetailScreen(
     var showNotificationPermissionSheet by rememberSaveable { mutableStateOf(false) }
     var pendingDetailDatePicker by rememberSaveable(reminder.id) { mutableStateOf(false) }
     var editedAttachments by remember(reminder.id, editing) { mutableStateOf(reminder.attachments) }
+    var journalEditing by remember(reminder.id) { mutableStateOf(false) }
+    var journalCreating by remember(reminder.id) { mutableStateOf(false) }
+    var editedJournalMood by remember(reminder.id, journalEditing, journalCreating) { mutableStateOf(reminder.journal?.mood) }
+    var editedJournalText by remember(reminder.id, journalEditing, journalCreating) { mutableStateOf(reminder.journal?.text ?: "") }
+    var showMoodSelector by remember(reminder.id, journalEditing, journalCreating) { mutableStateOf(false) }
+
     var newlyAddedAttachments by remember(reminder.id, editing) { mutableStateOf<List<ReminderAttachment>>(emptyList()) }
     var previewAttachmentPath by rememberSaveable(reminder.id) { mutableStateOf<String?>(null) }
     val view = LocalView.current
@@ -229,6 +240,11 @@ fun ReminderDetailScreen(
             AttachmentStorage.deleteAttachmentFiles(newlyAddedAttachments)
             newlyAddedAttachments = emptyList()
         }
+        journalCreating = false
+        journalEditing = false
+        showMoodSelector = false
+        editedJournalMood = reminder.journal?.mood
+        editedJournalText = reminder.journal?.text ?: ""
         editedAttachments = reminder.attachments
         editing = false
         secondaryPanelsExpanded = true
@@ -243,10 +259,12 @@ fun ReminderDetailScreen(
         focusManager.clearFocus()
         keyboard?.hide()
     }
-    BackHandler(previewAttachmentPath != null || editing || deleting || showCategoryPicker) {
+    BackHandler(previewAttachmentPath != null || editing || deleting || showCategoryPicker || journalEditing || journalCreating || showMoodSelector) {
         if (previewAttachmentPath != null) previewAttachmentPath = null
         else if (showCategoryPicker) showCategoryPicker = false
         else if (deleting) deleting = false
+        else if (showMoodSelector) showMoodSelector = false
+        else if (journalEditing || journalCreating) finishEditing()
         else finishEditing()
     }
 
@@ -660,6 +678,240 @@ fun ReminderDetailScreen(
                     }
                 }
             }
+
+            // --- JOURNAL SECTION ---
+            val showJournalCard = reminder.journal != null || journalCreating
+            AnimatedVisibility(
+                visible = showJournalCard,
+                enter = fadeIn(tween(260)) + slideInVertically(tween(260)) { -it / 8 },
+                exit = fadeOut(tween(200)) + slideOutVertically(tween(200)) { -it / 8 }
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Visual Connector
+                    Box(
+                        modifier = Modifier
+                            .height(28.dp)
+                            .width(1.5.dp)
+                            .background(Color(0xFF38383F))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF38383F))
+                                .align(Alignment.Center)
+                        )
+                    }
+                    // Journal Card
+                    val isJournalActive = journalCreating || journalEditing
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(Color(0xFF141416))
+                            .border(0.8.dp, Color(0xFF28282C), RoundedCornerShape(22.dp))
+                            .clickable(
+                                enabled = reminder.journal != null && !isJournalActive && !editing,
+                                onClick = { journalEditing = true }
+                            )
+                            .padding(18.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Günlük",
+                                        color = Color(0xFFA5A5B0),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    if (!isJournalActive && reminder.journal?.mood != null) {
+                                        val viewMood = reminder.journal.mood
+                                        val moodIcon = when (viewMood) {
+                                            JournalMood.VERY_GOOD -> ActionGlyph.MoodVeryGood
+                                            JournalMood.GOOD -> ActionGlyph.MoodGood
+                                            JournalMood.NEUTRAL -> ActionGlyph.MoodNeutral
+                                            JournalMood.HARD -> ActionGlyph.MoodHard
+                                            JournalMood.BAD -> ActionGlyph.MoodBad
+                                        }
+                                        ActionIcon(moodIcon, Modifier.size(16.dp), Color(0xFF91B9FF))
+                                    }
+                                }
+                                if (reminder.journal != null && !isJournalActive && !editing) {
+                                    ActionIcon(ActionGlyph.Edit, Modifier.size(14.dp), Color(0xFF6B6B75))
+                                }
+                            }
+                            if (isJournalActive) {
+                                Spacer(Modifier.height(14.dp))
+                                BasicTextField(
+                                    value = editedJournalText,
+                                    onValueChange = { editedJournalText = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .semantics { contentDescription = "Günlük notu" },
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color(0xFFF4F4F6), fontSize = 16.sp, lineHeight = 22.sp),
+                                    cursorBrush = SolidColor(Color(0xFF82B3FF)),
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                                    decorationBox = { innerTextField ->
+                                        if (editedJournalText.isEmpty()) {
+                                            Text("Bir not bırak...", color = Color(0xFF6E6E77), fontSize = 16.sp)
+                                        }
+                                        innerTextField()
+                                    }
+                                )
+                                Spacer(Modifier.height(14.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    if (editedJournalMood == null) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { showMoodSelector = !showMoodSelector }
+                                                .padding(vertical = 6.dp, horizontal = 4.dp)
+                                        ) {
+                                            ActionIcon(ActionGlyph.MoodNeutral, Modifier.size(16.dp), Color(0xFF6B6B75))
+                                            Text("Mood ekle", color = Color(0xFF8E8E98), fontSize = 13.sp)
+                                        }
+                                    } else {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clickable { showMoodSelector = !showMoodSelector }
+                                                    .padding(vertical = 6.dp, horizontal = 4.dp)
+                                            ) {
+                                                val mIcon = when (editedJournalMood!!) {
+                                                    JournalMood.VERY_GOOD -> ActionGlyph.MoodVeryGood
+                                                    JournalMood.GOOD -> ActionGlyph.MoodGood
+                                                    JournalMood.NEUTRAL -> ActionGlyph.MoodNeutral
+                                                    JournalMood.HARD -> ActionGlyph.MoodHard
+                                                    JournalMood.BAD -> ActionGlyph.MoodBad
+                                                }
+                                                val mLabel = when (editedJournalMood!!) {
+                                                    JournalMood.VERY_GOOD -> "Çok iyi"
+                                                    JournalMood.GOOD -> "İyi"
+                                                    JournalMood.NEUTRAL -> "Normal"
+                                                    JournalMood.HARD -> "Zor"
+                                                    JournalMood.BAD -> "Kötü"
+                                                }
+                                                ActionIcon(mIcon, Modifier.size(16.dp), Color(0xFF91B9FF))
+                                                Text(mLabel, color = Color(0xFFD3D3D9), fontSize = 13.sp)
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    editedJournalMood = null
+                                                    showMoodSelector = false
+                                                },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                ActionIcon(ActionGlyph.Close, Modifier.size(12.dp), Color(0xFF6B6B75))
+                                            }
+                                        }
+                                    }
+                                }
+
+                                AnimatedVisibility(
+                                    visible = showMoodSelector,
+                                    enter = fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 8 },
+                                    exit = fadeOut(tween(180)) + slideOutVertically(tween(180)) { it / 8 }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        JournalMood.entries.forEach { mood ->
+                                            val isSelected = editedJournalMood == mood
+                                            val moodIcon = when (mood) {
+                                                JournalMood.VERY_GOOD -> ActionGlyph.MoodVeryGood
+                                                JournalMood.GOOD -> ActionGlyph.MoodGood
+                                                JournalMood.NEUTRAL -> ActionGlyph.MoodNeutral
+                                                JournalMood.HARD -> ActionGlyph.MoodHard
+                                                JournalMood.BAD -> ActionGlyph.MoodBad
+                                            }
+                                            val glyphColor = if (isSelected) Color(0xFF91B9FF) else Color(0xFF5E5E68)
+                                            val bgColor = if (isSelected) Color(0xFF91B9FF).copy(alpha = 0.12f) else Color.Transparent
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .clip(CircleShape)
+                                                    .background(bgColor)
+                                                    .clickable {
+                                                        editedJournalMood = mood
+                                                        showMoodSelector = false
+                                                    }
+                                                    .semantics { contentDescription = "..." },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                ActionIcon(moodIcon, Modifier.size(22.dp), glyphColor)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(16.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (journalEditing) {
+                                        TextButton(onClick = { onDeleteJournal(); journalEditing = false }) {
+                                            Text("Sil", color = Color(0xFFF87171), fontSize = 14.sp)
+                                        }
+                                        Spacer(Modifier.weight(1f))
+                                    }
+                                    TextButton(onClick = { finishEditing() }) {
+                                        Text("İptal", color = Color(0xFFA5A5B0), fontSize = 14.sp)
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            val validText = editedJournalText.trim()
+                                            onSaveJournal(editedJournalMood, validText)
+                                            journalCreating = false
+                                            journalEditing = false
+                                        },
+                                        enabled = editedJournalMood != null || editedJournalText.trim().isNotBlank()
+                                    ) {
+                                        Text("Kaydet", color = Color(0xFF91B9FF), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            } else {
+                                if (reminder.journal?.text?.isNotBlank() == true) {
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        text = reminder.journal.text,
+                                        color = Color(0xFFF4F4F6),
+                                        fontSize = 16.sp,
+                                        lineHeight = 22.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // --- END JOURNAL SECTION ---
+
             Text(
                 reminder.completedAt?.let { "Tamamlandı: ${reminderDate(it)}" }
                     ?: "Son düzenleme: ${reminderDate(reminder.updatedAt)}",
@@ -807,6 +1059,34 @@ fun ReminderDetailScreen(
                     onDismiss = { deleting = false }, onConfirm = { deleting = false; onDelete() },
                     modifier = Modifier.padding(bottom = 12.dp), designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur)
             }
+
+            AnimatedVisibility(
+                visible = reminder.isCompleted && reminder.journal == null && !editing && !journalCreating,
+                enter = fadeIn(tween(240)) + slideInVertically(tween(240)) { it / 4 },
+                exit = fadeOut(tween(160)) + slideOutVertically(tween(160)) { it / 4 }
+            ) {
+                DesignPanel(
+                    backdrop = scene, backdropPosition = { scenePosition },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    corners = 22.dp, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(22.dp))
+                            .clickable {
+                                journalCreating = true
+                            }
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Nasıl geçti?", color = Color(0xFFD3D3D9), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        ActionIcon(ActionGlyph.Add, Modifier.size(16.dp), Color(0xFF91B9FF))
+                    }
+                }
+            }
+
             DesignPanel(scene, { scenePosition }, modifier = Modifier.fillMaxWidth(), corners = 36.dp, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (editing) {

@@ -168,6 +168,12 @@ class MainActivity : ComponentActivity() {
                                 ReminderNotifications.cancel(this, id)
                                 if (item != null && (at == null || item.shouldPinNotification)) ReminderNotifications.show(this, item)
                             } },
+                            onSetJournal = { id, mood, text -> mutate {
+                                repository.setJournal(id, mood, text)
+                            } },
+                            onDeleteJournal = { id -> mutate {
+                                repository.deleteJournal(id)
+                            } },
                             onDeleteReminder = { id -> mutate {
                                 val paths = repository.getAttachmentPathsForReminders(setOf(id))
                                 AttachmentStorage.deleteAttachmentFilePaths(paths)

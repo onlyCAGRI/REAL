@@ -5,6 +5,25 @@ data class ReminderAttachment(
     val localPath: String
 )
 
+enum class JournalMood(val persistKey: String) {
+    VERY_GOOD("very_good"),
+    GOOD("good"),
+    NEUTRAL("neutral"),
+    HARD("hard"),
+    BAD("bad");
+
+    companion object {
+        fun fromKey(key: String?): JournalMood? = entries.firstOrNull { it.persistKey == key }
+    }
+}
+
+data class ReminderJournal(
+    val mood: JournalMood?,
+    val text: String,
+    val createdAt: Long,
+    val updatedAt: Long = createdAt
+)
+
 data class ReminderItem(
     val id: Long,
     val text: String,
@@ -26,7 +45,8 @@ data class ReminderItem(
     val starBorderColorIndex: Int? = null,
     val gradientBlendFraction: Float? = null,
     val customSolidColorArgb: Int? = null,
-    val attachments: List<ReminderAttachment> = emptyList()
+    val attachments: List<ReminderAttachment> = emptyList(),
+    val journal: ReminderJournal? = null
 ) {
     val gradientBlendIndex: Int?
         get() = gradientBlendFraction?.let { frac ->

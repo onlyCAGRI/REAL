@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import java.time.LocalDate
 import com.cagri.bigboscagri.data.ReminderAttachment
+import com.cagri.bigboscagri.data.JournalMood
 import com.cagri.bigboscagri.data.AttachmentStorage
 import com.cagri.bigboscagri.speech.TimeOfDay
 import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
@@ -188,6 +189,8 @@ fun ReminderScreen(
     onEditReminder: (Long, String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?) -> Unit,
     onDeleteReminder: (Long) -> Unit,
     onSetAlert: (Long, Long?, RecurrenceRule) -> Unit,
+    onSetJournal: (Long, JournalMood?, String) -> Unit,
+    onDeleteJournal: (Long) -> Unit,
     onToggleChecklistItem: (Long, Long) -> Unit = { _, _ -> },
     onDeleteReminders: (Set<Long>) -> Unit = { ids -> ids.forEach { onDeleteReminder(it) } },
     exactAlarmsAllowed: Boolean = true,
@@ -419,6 +422,8 @@ fun ReminderScreen(
                                     onSave = { text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments ->
                                         onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments)
                                     },
+                                    onSaveJournal = { mood, text -> onSetJournal(reminder.id, mood, text) },
+                                    onDeleteJournal = { onDeleteJournal(reminder.id) },
                                     onDelete = { onDeleteReminder(reminder.id); detailId = null },
                                     customCategories = customCategories,
                                     reduceAnimations = reduceAnimations, reduceDynamicBlur = reduceDynamicBlur,

@@ -22,9 +22,11 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
@@ -57,6 +59,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalView
 import com.cagri.bigboscagri.data.CustomCategory
+import com.cagri.bigboscagri.data.JournalMood
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.ui.reminderDate
 
@@ -415,17 +418,53 @@ fun ReminderCard(
                     }
                 }
             )
-            if (reminder.isChecklist && reminder.checklistItems.isNotEmpty()) {
-                val total = reminder.checklistItems.size
-                val completedCount = reminder.checklistItems.count { it.isCompleted }
-                val summary = if (completedCount > 0) "$total madde • $completedCount tamamlandı" else "$total madde"
-                Text(
-                    summary,
-                    color = Color(0xFFA5A5B0),
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                    modifier = Modifier.padding(top = 3.dp)
-                )
+            val hasChecklist = reminder.isChecklist && reminder.checklistItems.isNotEmpty()
+            val hasJournal = reminder.journal != null
+            if (hasChecklist || hasJournal) {
+                Row(
+                    modifier = Modifier.padding(top = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (hasChecklist) {
+                        val total = reminder.checklistItems.size
+                        val completedCount = reminder.checklistItems.count { it.isCompleted }
+                        val summary = if (completedCount > 0) "$total madde • $completedCount tamamlandı" else "$total madde"
+                        Text(
+                            summary,
+                            color = Color(0xFFA5A5B0),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                        if (hasJournal) {
+                            Text(
+                                " • ",
+                                color = Color(0xFFA5A5B0),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                    if (hasJournal) {
+                        Text(
+                            "Günlük",
+                            color = Color(0xFFA5A5B0),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                        val mood = reminder.journal.mood
+                        if (mood != null) {
+                            val moodIcon = when (mood) {
+                                JournalMood.VERY_GOOD -> ActionGlyph.MoodVeryGood
+                                JournalMood.GOOD -> ActionGlyph.MoodGood
+                                JournalMood.NEUTRAL -> ActionGlyph.MoodNeutral
+                                JournalMood.HARD -> ActionGlyph.MoodHard
+                                JournalMood.BAD -> ActionGlyph.MoodBad
+                            }
+                            Spacer(Modifier.width(4.dp))
+                            ActionIcon(moodIcon, Modifier.size(10.dp), Color(0xFFA5A5B0))
+                        }
+                    }
+                }
             }
             if (!reminder.isCompleted) reminder.alertAt?.let {
                 val isOverdue = it < System.currentTimeMillis()
