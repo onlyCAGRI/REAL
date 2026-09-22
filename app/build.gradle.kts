@@ -4,6 +4,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        load(FileInputStream(localPropertiesFile))
+    }
+}
+val realApiKey = localProperties.getProperty("REAL_API_KEY") ?: System.getenv("REAL_API_KEY") ?: ""
+
 android {
     namespace = "com.cagri.bigboscagri"
     compileSdk = 36
@@ -14,6 +25,8 @@ android {
         targetSdk = 36
         versionCode = 18
         versionName = "0.5.0"
+
+        buildConfigField("String", "REAL_API_KEY", "\"$realApiKey\"")
     }
 
     buildTypes {
@@ -64,6 +77,7 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cagri.bigboscagri.data.CategoryColorOverride
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderCategory
 
@@ -84,16 +85,20 @@ fun ReminderCategory.defaultStyle(): CategoryStyle = when (this) {
     ReminderCategory.Completed -> CategoryStyle("Tamamlananlar", Glyph.Completed, Color(0xFF152F35), Color(0xFF387D70), Color(0xFF333F77))
 }
 
-fun ReminderCategory.resolveStyle(colorIndex: Int?): CategoryStyle {
+fun ReminderCategory.resolveStyle(override: CategoryColorOverride?): CategoryStyle {
     val default = defaultStyle()
-    if (colorIndex == null) return default
-    val overrideColor = ReminderColorChoices.getOrNull(colorIndex)?.color ?: return default
+    if (override == null) return default
+    val startColor = ReminderColorChoices.getOrNull(override.start)?.color ?: return default
+    val endColor = override.end?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
     return default.copy(
         base = Color(0xFF14151C),
-        upper = overrideColor.copy(alpha = 0.85f),
-        lower = overrideColor.copy(alpha = 0.60f)
+        upper = startColor.copy(alpha = 0.85f),
+        lower = endColor.copy(alpha = if (override.end != null) 0.70f else 0.60f)
     )
 }
+
+fun ReminderCategory.resolveStyle(colorIndex: Int?): CategoryStyle =
+    resolveStyle(colorIndex?.let { CategoryColorOverride(it, null) })
 
 private sealed interface GridItem {
     data class System(val style: CategoryStyle, val category: ReminderCategory) : GridItem
@@ -106,7 +111,7 @@ private val addCategoryStyle = CategoryStyle("Ekle", Glyph.Add, Color(0xFF1C1C1E
 @Composable
 fun CategoryGrid(
     customCategories: List<CustomCategory> = emptyList(),
-    builtInCategoryColors: Map<ReminderCategory, Int?> = emptyMap(),
+    builtInCategoryColors: Map<ReminderCategory, CategoryColorOverride> = emptyMap(),
     onOpenCategory: (ReminderCategory) -> Unit,
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
     onAddCategory: () -> Unit,

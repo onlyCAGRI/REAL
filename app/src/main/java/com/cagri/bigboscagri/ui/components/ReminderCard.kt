@@ -9,6 +9,8 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -45,6 +47,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -69,6 +72,33 @@ fun resolveCategoryStripeColors(category: CustomCategory): Pair<Color, Color> {
 
 private val ReminderCardShape = RoundedCornerShape(22.dp)
 
+class ReminderEntryTracker(
+    private val scope: CoroutineScope? = null,
+    private val timeoutMillis: Long = 450L
+) {
+    var animatingIds by mutableStateOf<Set<Long>>(emptySet())
+        private set
+
+    fun onReminderCreated(id: Long, reduceAnimations: Boolean) {
+        if (reduceAnimations) return
+        animatingIds = animatingIds + id
+        scope?.launch {
+            delay(timeoutMillis)
+            onAnimationFinished(id)
+        }
+    }
+
+    fun onAnimationFinished(id: Long) {
+        animatingIds = animatingIds - id
+    }
+
+    fun isAnimating(id: Long): Boolean = id in animatingIds
+
+    fun clear() {
+        animatingIds = emptySet()
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun ReminderCard(
@@ -83,37 +113,44 @@ fun ReminderCard(
     onLongClick: () -> Unit = {},
     onSelectToggle: () -> Unit = {},
     customCategory: CustomCategory? = null,
+    showCategoryStripes: Boolean = true,
     isNewlyCreated: Boolean = false,
+    onEntryAnimationFinished: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
     val shape = ReminderCardShape
-    val arrivalProgress = remember(reminder.id, isNewlyCreated) {
+    val arrivalProgress = remember(reminder.id) {
         Animatable(if (isNewlyCreated && !reduceAnimations) 0f else 1f)
     }
-    LaunchedEffect(isNewlyCreated) {
+    LaunchedEffect(reminder.id, isNewlyCreated) {
         if (isNewlyCreated && !reduceAnimations) {
             arrivalProgress.animateTo(
                 targetValue = 1f,
                 animationSpec = tween(
-                    durationMillis = 200,
+                    durationMillis = 320,
                     easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
                 )
             )
+            onEntryAnimationFinished?.invoke()
         }
     }
     val arrivalModifier = if (!reduceAnimations && isNewlyCreated) {
         Modifier.graphicsLayer {
-            alpha = arrivalProgress.value
-            translationY = with(density) { ((1f - arrivalProgress.value) * 10.dp.toPx()) }
+            val p = arrivalProgress.value
+            alpha = 0.1f + 0.9f * p
+            translationY = with(density) { ((1f - p) * 32.dp.toPx()) }
+            val scale = 0.98f + 0.02f * p
+            scaleX = scale
+            scaleY = scale
         }
     } else Modifier
 
-    val accentBrush = remember(reminder.accentStart, reminder.accentEnd, reminder.isCompleted) {
-        reminderAccentBrush(reminder.accentStart, reminder.accentEnd, reminder.isCompleted)
+    val accentBrush = remember(reminder.accentStart, reminder.accentEnd, reminder.isCompleted, reminder.gradientBlendFraction, reminder.customSolidColorArgb) {
+        reminderAccentBrush(reminder.accentStart, reminder.accentEnd, reminder.isCompleted, reminder.gradientBlendFraction, reminder.customSolidColorArgb)
     }
-    val categoryStripeColors = remember(reminder.customCategoryId, customCategory) {
-        if (reminder.customCategoryId != null && customCategory != null) {
+    val categoryStripeColors = remember(reminder.customCategoryId, customCategory, showCategoryStripes) {
+        if (showCategoryStripes && reminder.customCategoryId != null && customCategory != null) {
             resolveCategoryStripeColors(customCategory)
         } else null
     }
@@ -191,12 +228,18 @@ fun ReminderCard(
         }
     } else Modifier
 
+    val starBorderColor = if (reminder.isImportant) {
+        val colorIndex = reminder.starBorderColorIndex ?: Math.floorMod(reminder.id, 10)
+        ReminderColorChoices.getOrNull(colorIndex)?.color?.copy(alpha = 0.85f)
+    } else null
+
     val borderColor = when {
         isSelected -> Color(0xFF94B8F7).copy(alpha = 0.65f)
+        starBorderColor != null -> starBorderColor
         accentBrush != null -> Color.White.copy(alpha = 0.10f)
         else -> Color(0xFF222225)
     }
-    val borderWidth = if (isSelected) 1.25.dp else 0.75.dp
+    val borderWidth = if (isSelected || starBorderColor != null) 1.25.dp else 0.75.dp
     val selectionOverlay = if (isSelected) Color(0xFF94B8F7).copy(alpha = 0.07f) else Color.Transparent
     val cardInteractionSource = remember(reminder.id) { MutableInteractionSource() }
     val circleInteractionSource = remember(reminder.id) { MutableInteractionSource() }
@@ -395,10 +438,6 @@ fun ReminderCard(
                 Text("Tamamlandı: ${reminderDate(it)}", color = Color(0xFF92929A), fontSize = 11.sp,
                     lineHeight = 16.sp, modifier = Modifier.padding(top = 5.dp))
             }
-        }
-        if (reminder.isImportant) {
-            ActionIcon(ActionGlyph.Star, Modifier.padding(start = 8.dp, top = 15.dp).size(14.dp),
-                color = Color(0xFFE8C975), filled = true)
         }
         if (isSelectionMode) {
             Box(

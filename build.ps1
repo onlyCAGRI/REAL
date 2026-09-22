@@ -50,10 +50,43 @@ function Configure-Java {
     }
 }
 
+function Set-LocalPropertySdkDir {
+    param(
+        [string]$Path,
+        [string]$SdkForGradle
+    )
+    $sdkEntry = "sdk.dir=$SdkForGradle"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+
+    if (Test-Path $Path) {
+        $lines = [System.IO.File]::ReadAllLines($Path)
+        $hasSdk = $false
+        $updated = @(
+            foreach ($line in $lines) {
+                if ($line -match '^\s*sdk\.dir\s*=') {
+                    if (-not $hasSdk) {
+                        $sdkEntry
+                        $hasSdk = $true
+                    }
+                } else {
+                    $line
+                }
+            }
+        )
+        if (-not $hasSdk) {
+            $updated += $sdkEntry
+        }
+        [System.IO.File]::WriteAllLines($Path, [string[]]$updated, $utf8NoBom)
+    } else {
+        [System.IO.File]::WriteAllLines($Path, [string[]]@($sdkEntry), $utf8NoBom)
+    }
+}
+
 Configure-Java
 $sdkPath = Find-AndroidSdk
 $sdkForGradle = $sdkPath -replace '\\', '/'
-Set-Content -Path (Join-Path $projectRoot "local.properties") -Value "sdk.dir=$sdkForGradle" -Encoding ASCII
+Set-LocalPropertySdkDir -Path (Join-Path $projectRoot "local.properties") -SdkForGradle $sdkForGradle
+
 
 if (-not (Test-Path (Join-Path $sdkPath "platforms\android-36"))) {
     throw "SDK Platform 36 bulunamadi. local.properties SDK yolunu kontrol edin veya Android 16 / API 36'yi kurun."

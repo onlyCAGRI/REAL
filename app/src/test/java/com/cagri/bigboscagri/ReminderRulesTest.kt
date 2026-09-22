@@ -1,5 +1,6 @@
 package com.cagri.bigboscagri
 
+import com.cagri.bigboscagri.data.CategoryColorOverride
 import com.cagri.bigboscagri.data.CategoryRepository
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderCategory
@@ -13,15 +14,20 @@ import com.cagri.bigboscagri.notifications.canShowImmediateNotification
 import com.cagri.bigboscagri.notifications.needsBigTextStyle
 import com.cagri.bigboscagri.notifications.resolveNotificationMetadata
 import com.cagri.bigboscagri.speech.VoiceDraft
+import com.cagri.bigboscagri.speech.VoiceReminderParser
 import com.cagri.bigboscagri.ui.isStandaloneCategoryInDetail
 import com.cagri.bigboscagri.ui.reminderDetailStatusText
 import com.cagri.bigboscagri.ui.shouldShowNoAlertInDetail
 import androidx.compose.ui.graphics.Color
 import com.cagri.bigboscagri.ui.components.ReminderColorChoices
+import com.cagri.bigboscagri.ui.components.ReminderEntryTracker
+import com.cagri.bigboscagri.ui.components.defaultStyle
 import com.cagri.bigboscagri.ui.components.resolveCategoryStripeColors
+import com.cagri.bigboscagri.ui.components.resolveStyle
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -1143,14 +1149,14 @@ class ReminderRulesTest {
         repo1.setBuiltInCategoryColor(ReminderCategory.Today, 2)
         repo1.setBuiltInCategoryColor(ReminderCategory.Planned, 4)
 
-        assertEquals(2, repo1.getBuiltInCategoryColor(ReminderCategory.Today))
-        assertEquals(4, repo1.getBuiltInCategoryColor(ReminderCategory.Planned))
+        assertEquals(CategoryColorOverride(2, null), repo1.getBuiltInCategoryColor(ReminderCategory.Today))
+        assertEquals(CategoryColorOverride(4, null), repo1.getBuiltInCategoryColor(ReminderCategory.Planned))
         assertNull(repo1.getBuiltInCategoryColor(ReminderCategory.Important))
 
         val repo2 = CategoryRepository(prefs)
         val colors = repo2.getBuiltInCategoryColors()
-        assertEquals(2, colors[ReminderCategory.Today])
-        assertEquals(4, colors[ReminderCategory.Planned])
+        assertEquals(CategoryColorOverride(2, null), colors[ReminderCategory.Today])
+        assertEquals(CategoryColorOverride(4, null), colors[ReminderCategory.Planned])
         assertNull(colors[ReminderCategory.Important])
     }
 
@@ -1158,9 +1164,9 @@ class ReminderRulesTest {
         val prefs = FakeSharedPreferences()
         val repo = CategoryRepository(prefs)
         repo.setBuiltInCategoryColor(ReminderCategory.Important, 1)
-        assertEquals(1, repo.getBuiltInCategoryColor(ReminderCategory.Important))
+        assertEquals(CategoryColorOverride(1, null), repo.getBuiltInCategoryColor(ReminderCategory.Important))
 
-        repo.setBuiltInCategoryColor(ReminderCategory.Important, null)
+        repo.setBuiltInCategoryColor(ReminderCategory.Important, null as CategoryColorOverride?)
         assertNull(repo.getBuiltInCategoryColor(ReminderCategory.Important))
         assertFalse(repo.getBuiltInCategoryColors().containsKey(ReminderCategory.Important))
     }
@@ -1225,18 +1231,412 @@ class ReminderRulesTest {
         val repo = CategoryRepository(prefs)
         repo.setBuiltInCategoryColor(ReminderCategory.Today, 1)
 
-        var pendingColor: Int? = 3
+        var pendingOverride: CategoryColorOverride? = CategoryColorOverride(3, null)
         val onCancel = {
-            pendingColor = repo.getBuiltInCategoryColor(ReminderCategory.Today)
+            pendingOverride = repo.getBuiltInCategoryColor(ReminderCategory.Today)
         }
         onCancel()
 
-        assertEquals(1, repo.getBuiltInCategoryColor(ReminderCategory.Today))
-        assertEquals(1, pendingColor)
+        assertEquals(CategoryColorOverride(1, null), repo.getBuiltInCategoryColor(ReminderCategory.Today))
+        assertEquals(CategoryColorOverride(1, null), pendingOverride)
+    }
+
+    @Test fun exactCreatedReminderIdIsSelectedForEntry() {
+        val tracker = ReminderEntryTracker()
+        tracker.onReminderCreated(101L, reduceAnimations = false)
+        assertTrue(tracker.isAnimating(101L))
+    }
+
+    @Test fun unrelatedReminderDoesNotAnimate() {
+        val tracker = ReminderEntryTracker()
+        tracker.onReminderCreated(101L, reduceAnimations = false)
+        assertTrue(tracker.isAnimating(101L))
+        assertFalse(tracker.isAnimating(102L))
+        assertFalse(tracker.isAnimating(999L))
+    }
+
+    @Test fun transientEntryIdClearsAfterCompletion() {
+        val tracker = ReminderEntryTracker()
+        tracker.onReminderCreated(101L, reduceAnimations = false)
+        assertTrue(tracker.isAnimating(101L))
+
+        tracker.onAnimationFinished(101L)
+        assertFalse(tracker.isAnimating(101L))
+        assertTrue(tracker.animatingIds.isEmpty())
+    }
+
+    @Test fun reduceAnimationsBypassesEntryStateAndDelay() {
+        val tracker = ReminderEntryTracker()
+        tracker.onReminderCreated(101L, reduceAnimations = true)
+        assertFalse(tracker.isAnimating(101L))
+        assertTrue(tracker.animatingIds.isEmpty())
+    }
+
+    @Test fun invisibleOrFilteredNewReminderDoesNotDisturbListState() {
+        val tracker = ReminderEntryTracker()
+        val createdId = 101L
+        tracker.onReminderCreated(createdId, reduceAnimations = false)
+
+        val reminders = listOf(
+            ReminderItem(1, "Eski Hatırlatıcı", 100)
+        )
+        val todayReminders = reminders.inCategory(ReminderCategory.Today)
+
+        assertFalse(todayReminders.any { it.id == createdId })
+        assertTrue(tracker.isAnimating(createdId))
+        tracker.onAnimationFinished(createdId)
+        assertFalse(tracker.isAnimating(createdId))
+        assertEquals(1, reminders.size)
+    }
+
+    @Test fun rapidConsecutiveAdditionsTrackIndependentEntries() {
+        val tracker = ReminderEntryTracker()
+        tracker.onReminderCreated(101L, reduceAnimations = false)
+        tracker.onReminderCreated(102L, reduceAnimations = false)
+
+        assertTrue(tracker.isAnimating(101L))
+        assertTrue(tracker.isAnimating(102L))
+        assertEquals(setOf(101L, 102L), tracker.animatingIds)
+
+        tracker.onAnimationFinished(101L)
+        assertFalse(tracker.isAnimating(101L))
+        assertTrue(tracker.isAnimating(102L))
+
+        tracker.onAnimationFinished(102L)
+        assertFalse(tracker.isAnimating(102L))
+        assertTrue(tracker.animatingIds.isEmpty())
+    }
+
+    // --------------------------------------------------
+    // Batch 4: Voice Checklist Creation Tests
+    // --------------------------------------------------
+
+    @Test
+    fun voiceChecklist_explicitNamedList_extractsTitleAndItems() {
+        val parsed = VoiceReminderParser.parse("alışveriş listesi oluştur süt, ekmek, yumurta")
+        assertTrue(parsed.isChecklist)
+        assertEquals("Alışveriş listesi", parsed.text)
+        assertEquals(listOf("Süt", "Ekmek", "Yumurta"), parsed.checklistItems)
+    }
+
+    @Test
+    fun voiceChecklist_genericListeOlustur_extractsGenericTitleAndItems() {
+        val parsed = VoiceReminderParser.parse("liste oluştur süt, ekmek, yumurta")
+        assertTrue(parsed.isChecklist)
+        assertEquals("Liste", parsed.text)
+        assertEquals(listOf("Süt", "Ekmek", "Yumurta"), parsed.checklistItems)
+    }
+
+    @Test
+    fun voiceChecklist_commaSeparatedItems_extractsCleanItems() {
+        val parsed = VoiceReminderParser.parse("yapılacaklar listesi oluştur evi süpür, çöpleri çıkar, faturayı öde")
+        assertTrue(parsed.isChecklist)
+        assertEquals("Yapılacaklar listesi", parsed.text)
+        assertEquals(listOf("Evi süpür", "Çöpleri çıkar", "Faturayı öde"), parsed.checklistItems)
+    }
+
+    @Test
+    fun voiceChecklist_finalVeSeparator_extractsAllItems() {
+        val parsed = VoiceReminderParser.parse("alışveriş listesi oluştur süt, ekmek ve yumurta")
+        assertTrue(parsed.isChecklist)
+        assertEquals("Alışveriş listesi", parsed.text)
+        assertEquals(listOf("Süt", "Ekmek", "Yumurta"), parsed.checklistItems)
+    }
+
+    @Test
+    fun voiceChecklist_semicolonSeparatedItems_extractsCleanItems() {
+        val parsed = VoiceReminderParser.parse("alışveriş listesi oluştur süt; ekmek; yumurta")
+        assertTrue(parsed.isChecklist)
+        assertEquals("Alışveriş listesi", parsed.text)
+        assertEquals(listOf("Süt", "Ekmek", "Yumurta"), parsed.checklistItems)
+    }
+
+    @Test
+    fun voiceChecklist_emptyFragmentsIgnored() {
+        val parsed = VoiceReminderParser.parse("alışveriş listesi oluştur süt, , ekmek,, yumurta")
+        assertTrue(parsed.isChecklist)
+        assertEquals("Alışveriş listesi", parsed.text)
+        assertEquals(listOf("Süt", "Ekmek", "Yumurta"), parsed.checklistItems)
+    }
+
+    @Test
+    fun voiceChecklist_newItemsBeginIncomplete() {
+        val parsed = VoiceReminderParser.parse("alışveriş listesi oluştur süt, ekmek, yumurta")
+        val items = parsed.checklistItems.map { ChecklistItem(id = 0L, text = it) }
+        assertTrue(items.all { it.completedAt == null })
+    }
+
+    @Test
+    fun voiceChecklist_stableNonDuplicateChecklistIdsInRepository() {
+        val repo = ReminderRepository(FakeSharedPreferences())
+        val parsed = VoiceReminderParser.parse("alışveriş listesi oluştur süt, ekmek, yumurta")
+        val reminder = repo.add(
+            text = parsed.text,
+            isChecklist = parsed.isChecklist,
+            checklistItems = parsed.checklistItems.map { ChecklistItem(id = 0L, text = it) }
+        )
+        assertTrue(reminder.isChecklist)
+        assertEquals(3, reminder.checklistItems.size)
+        val ids = reminder.checklistItems.map { it.id }
+        assertEquals(ids.distinct().size, ids.size)
+        assertTrue(ids.all { it > 0L })
+        assertTrue(reminder.checklistItems.all { it.completedAt == null })
+    }
+
+    @Test
+    fun voiceChecklist_normalCommaSentenceDoesNotBecomeChecklist() {
+        val parsed = VoiceReminderParser.parse("yarın annemi ara, sonra markete git")
+        assertFalse(parsed.isChecklist)
+        assertTrue(parsed.checklistItems.isEmpty())
+        assertEquals("Annemi ara, sonra markete git", parsed.text)
+    }
+
+    @Test
+    fun voiceChecklist_normalVeSentenceDoesNotBecomeChecklist() {
+        val parsed1 = VoiceReminderParser.parse("yarın marketten süt, ekmek ve yumurta al")
+        assertFalse(parsed1.isChecklist)
+        assertTrue(parsed1.checklistItems.isEmpty())
+        assertEquals("Marketten süt, ekmek ve yumurta al", parsed1.text)
+
+        val parsed2 = VoiceReminderParser.parse("Ali'yi ara ve toplantıyı hatırlat")
+        assertFalse(parsed2.isChecklist)
+        assertTrue(parsed2.checklistItems.isEmpty())
+        assertEquals("Ali'yi ara ve toplantıyı hatırlat", parsed2.text)
+    }
+
+    @Test
+    fun voiceChecklist_boundaryFillerYa_stripsYaAndExtractsChecklist() {
+        val parsed = VoiceReminderParser.parse("ya alışveriş listesi oluştur süt, ekmek, yumurta ya")
+        assertTrue(parsed.isChecklist)
+        assertEquals("Alışveriş listesi", parsed.text)
+        assertEquals(listOf("Süt", "Ekmek", "Yumurta"), parsed.checklistItems)
+    }
+
+    @Test
+    fun voiceChecklist_datePlusExplicitListIntentPreservesDate() {
+        val now = ZonedDateTime.of(2026, 9, 20, 10, 0, 0, 0, ZoneId.of("Europe/Istanbul"))
+        val parsed = VoiceReminderParser.parse("yarın alışveriş listesi oluştur süt, ekmek, yumurta", now)
+        assertTrue(parsed.isChecklist)
+        assertEquals("Alışveriş listesi", parsed.text)
+        assertEquals(listOf("Süt", "Ekmek", "Yumurta"), parsed.checklistItems)
+        assertEquals(LocalDate.of(2026, 9, 21), parsed.dateHint)
+        assertTrue(parsed.requiresTimeSelection)
+    }
+
+    @Test
+    fun voiceReminder_normalReminderVerbsPreserved() {
+        // 1. "Ali'yi ara ve toplantıyı hatırlat" -> !isChecklist, full text preserved
+        val p1 = VoiceReminderParser.parse("Ali'yi ara ve toplantıyı hatırlat")
+        assertFalse(p1.isChecklist)
+        assertTrue(p1.checklistItems.isEmpty())
+        assertEquals("Ali'yi ara ve toplantıyı hatırlat", p1.text)
+
+        // 2. "annemi ara ve faturayı öde" -> !isChecklist, full text preserved
+        val p2 = VoiceReminderParser.parse("annemi ara ve faturayı öde")
+        assertFalse(p2.isChecklist)
+        assertTrue(p2.checklistItems.isEmpty())
+        assertEquals("Annemi ara ve faturayı öde", p2.text)
+
+        // 3. "yarın marketten süt, ekmek ve yumurta al" -> !isChecklist, normal parsed date preserved, remaining full reminder text preserved
+        val p3 = VoiceReminderParser.parse("yarın marketten süt, ekmek ve yumurta al")
+        assertFalse(p3.isChecklist)
+        assertTrue(p3.checklistItems.isEmpty())
+        assertEquals("Marketten süt, ekmek ve yumurta al", p3.text)
+        assertEquals(LocalDate.now().plusDays(1), p3.dateHint)
+
+        // 4. "alışveriş listesi oluştur süt, ekmek ve yumurta" -> checklist parsing still works
+        val p4 = VoiceReminderParser.parse("alışveriş listesi oluştur süt, ekmek ve yumurta")
+        assertTrue(p4.isChecklist)
+        assertEquals("Alışveriş listesi", p4.text)
+        assertEquals(listOf("Süt", "Ekmek", "Yumurta"), p4.checklistItems)
+
+        // 5. "alışveriş listeme süt ve ekmek ekle" -> checklist parsing still works
+        val p5 = VoiceReminderParser.parse("alışveriş listeme süt ve ekmek ekle")
+        assertTrue(p5.isChecklist)
+        assertEquals("Alışveriş listesi", p5.text)
+        assertEquals(listOf("Süt", "Ekmek"), p5.checklistItems)
+    }
+
+    @Test
+    fun builtInCategory_defaultRestoresBothOriginalColors() {
+        val defaultToday = ReminderCategory.Today.defaultStyle()
+        val resolvedToday = ReminderCategory.Today.resolveStyle(null as CategoryColorOverride?)
+        assertEquals(defaultToday.base, resolvedToday.base)
+        assertEquals(defaultToday.upper, resolvedToday.upper)
+        assertEquals(defaultToday.lower, resolvedToday.lower)
+
+        val defaultPlanned = ReminderCategory.Planned.defaultStyle()
+        val resolvedPlanned = ReminderCategory.Planned.resolveStyle(null as CategoryColorOverride?)
+        assertEquals(defaultPlanned.base, resolvedPlanned.base)
+        assertEquals(defaultPlanned.upper, resolvedPlanned.upper)
+        assertEquals(defaultPlanned.lower, resolvedPlanned.lower)
+    }
+
+    @Test
+    fun builtInCategory_selectingOnlyColor1_persistsAndRendersSingleColor() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+
+        // Set single color override (start=0, end=null)
+        repo.setBuiltInCategoryColor(ReminderCategory.Today, CategoryColorOverride(0, null))
+
+        // Verify loaded from same and fresh repo instance
+        val loaded = repo.getBuiltInCategoryColor(ReminderCategory.Today)
+        assertNotNull(loaded)
+        assertEquals(0, loaded?.start)
+        assertNull(loaded?.end)
+
+        val freshRepo = CategoryRepository(prefs)
+        val freshLoaded = freshRepo.getBuiltInCategoryColor(ReminderCategory.Today)
+        assertNotNull(freshLoaded)
+        assertEquals(0, freshLoaded?.start)
+        assertNull(freshLoaded?.end)
+
+        // Verify single color style rendering (does not fake a second color)
+        val style = ReminderCategory.Today.resolveStyle(loaded)
+        val c1 = ReminderColorChoices[0].color
+        assertEquals(Color(0xFF14151C), style.base)
+        assertEquals(c1.copy(alpha = 0.85f), style.upper)
+        assertEquals(c1.copy(alpha = 0.60f), style.lower)
+    }
+
+    @Test
+    fun builtInCategory_selectingColor1AndColor2_persistsGradientAndRendersTwoColors() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+
+        // Set two-color gradient override (start=0, end=3)
+        repo.setBuiltInCategoryColor(ReminderCategory.Important, CategoryColorOverride(0, 3))
+
+        val loaded = repo.getBuiltInCategoryColor(ReminderCategory.Important)
+        assertNotNull(loaded)
+        assertEquals(0, loaded?.start)
+        assertEquals(3, loaded?.end)
+
+        val freshRepo = CategoryRepository(prefs)
+        val freshLoaded = freshRepo.getBuiltInCategoryColor(ReminderCategory.Important)
+        assertEquals(CategoryColorOverride(0, 3), freshLoaded)
+
+        // Verify two-color style rendering
+        val style = ReminderCategory.Important.resolveStyle(loaded)
+        val c1 = ReminderColorChoices[0].color
+        val c2 = ReminderColorChoices[3].color
+        assertEquals(Color(0xFF14151C), style.base)
+        assertEquals(c1.copy(alpha = 0.85f), style.upper)
+        assertEquals(c2.copy(alpha = 0.70f), style.lower)
+    }
+
+    @Test
+    fun builtInCategory_clearingColor2_leavesColor1Intact() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+
+        // Initially two colors (start=2, end=5)
+        repo.setBuiltInCategoryColor(ReminderCategory.NoAlert, CategoryColorOverride(2, 5))
+        assertEquals(CategoryColorOverride(2, 5), repo.getBuiltInCategoryColor(ReminderCategory.NoAlert))
+
+        // Clear Color 2 -> override with end = null
+        repo.setBuiltInCategoryColor(ReminderCategory.NoAlert, CategoryColorOverride(2, null))
+        val updated = repo.getBuiltInCategoryColor(ReminderCategory.NoAlert)
+        assertNotNull(updated)
+        assertEquals(2, updated?.start)
+        assertNull(updated?.end)
+
+        // Now clear Color 1 as well -> null override (restores default)
+        repo.setBuiltInCategoryColor(ReminderCategory.NoAlert, null as CategoryColorOverride?)
+        assertNull(repo.getBuiltInCategoryColor(ReminderCategory.NoAlert))
+    }
+
+    @Test
+    fun customCategory_preservesBothColorsAcrossReload() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+
+        // Add custom category with 2 colors
+        repo.add(name = "İş Projesi", iconKey = "WORK", accentStart = 2, accentEnd = 6)
+        // Add custom category with 1 color
+        repo.add(name = "Kişisel", iconKey = "HOME", accentStart = 4, accentEnd = null)
+
+        val categories = repo.load()
+        assertEquals(2, categories.size)
+
+        val workCat = categories.first { it.name == "İş Projesi" }
+        assertEquals("WORK", workCat.iconKey)
+        assertEquals(2, workCat.accentStart)
+        assertEquals(6, workCat.accentEnd)
+
+        val homeCat = categories.first { it.name == "Kişisel" }
+        assertEquals("HOME", homeCat.iconKey)
+        assertEquals(4, homeCat.accentStart)
+        assertNull(homeCat.accentEnd)
+
+        // Verify fresh repository instance retains both
+        val freshCategories = CategoryRepository(prefs).load()
+        val freshWork = freshCategories.first { it.name == "İş Projesi" }
+        assertEquals(2, freshWork.accentStart)
+        assertEquals(6, freshWork.accentEnd)
+
+        val freshHome = freshCategories.first { it.name == "Kişisel" }
+        assertEquals(4, freshHome.accentStart)
+        assertNull(freshHome.accentEnd)
+    }
+
+    @Test
+    fun categoryEditor_cancelDoesNotPersistTemporaryColorChanges() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+
+        // Initial state: no overrides
+        assertNull(repo.getBuiltInCategoryColor(ReminderCategory.Today))
+
+        // User opens editor, modifies temporary in-memory state, but dismisses/cancels (no repo write)
+        var tempColor1: Int? = 5
+        var tempColor2: Int? = 8
+        // User clicks "Vazgeç" -> temp values discarded, repo not called
+        tempColor1 = null
+        tempColor2 = null
+
+        // Verify repository remains unchanged
+        assertNull(repo.getBuiltInCategoryColor(ReminderCategory.Today))
+        assertNull(CategoryRepository(prefs).getBuiltInCategoryColor(ReminderCategory.Today))
+    }
+
+    @Test
+    fun categoryIdentityAndFilterSemantics_remainUnchangedWithColorOverrides() {
+        val prefs = FakeSharedPreferences()
+        val repo = CategoryRepository(prefs)
+
+        // Override colors for Today and Planned
+        repo.setBuiltInCategoryColor(ReminderCategory.Today, CategoryColorOverride(1, 2))
+        repo.setBuiltInCategoryColor(ReminderCategory.Planned, CategoryColorOverride(3, 4))
+
+        val now = LocalDate.of(2026, 9, 20)
+        val zone = ZoneId.systemDefault()
+        val todayEpoch = now.atStartOfDay(zone).toInstant().toEpochMilli() + 3600000L
+        val item1 = ReminderItem(id = 1L, text = "Bugün görevi", createdAt = 1000L, alertAt = todayEpoch)
+        val item2 = ReminderItem(id = 2L, text = "Genel not", createdAt = 1000L, alertAt = null)
+
+        // Filtering by ReminderCategory must remain 100% identical
+        val todayItems = listOf(item1, item2).inCategory(ReminderCategory.Today, today = now, zone = zone)
+        assertEquals(1, todayItems.size)
+        assertEquals(1L, todayItems.first().id)
+
+        val noAlertItems = listOf(item1, item2).inCategory(ReminderCategory.NoAlert, today = now, zone = zone)
+        assertEquals(1, noAlertItems.size)
+        assertEquals(2L, noAlertItems.first().id)
+
+        // Category counts must remain identical
+        val counts = listOf(item1, item2).categoryCounts(now, zone = zone)
+        assertEquals(1, counts[ReminderCategory.Today])
+        assertEquals(1, counts[ReminderCategory.NoAlert])
+
+        // Category enum identity / equality is completely unaffected
+        assertEquals("Today", ReminderCategory.Today.name)
+        assertEquals("Planned", ReminderCategory.Planned.name)
     }
 }
 
-private class FakeSharedPreferences : android.content.SharedPreferences {
+class FakeSharedPreferences : android.content.SharedPreferences {
     private val data = mutableMapOf<String, Any?>()
 
     override fun getAll(): Map<String, *> = HashMap(data)

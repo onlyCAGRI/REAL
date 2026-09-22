@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var categoryRepository: CategoryRepository
     private var reminders by mutableStateOf<List<ReminderItem>>(emptyList())
     private var customCategories by mutableStateOf<List<CustomCategory>>(emptyList())
-    private var builtInCategoryColors by mutableStateOf<Map<ReminderCategory, Int?>>(emptyMap())
+    private var builtInCategoryColors by mutableStateOf<Map<ReminderCategory, CategoryColorOverride>>(emptyMap())
     private var ready by mutableStateOf(false)
     private var loadFailed by mutableStateOf(false)
     private var exactAllowed by mutableStateOf(false)
@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         ReminderScreen(
                             reminders = reminders,
-                            onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl ->
+                            onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl, attachments ->
                                 var createdId: Long? = null
                                 val success = perform(warnIfBlocked = true) {
                                     val newest = repository.add(
@@ -136,7 +136,8 @@ class MainActivity : ComponentActivity() {
                                         isChecklist = isChecklist,
                                         checklistItems = checklistItems,
                                         sendImmediateNotification = sendImmediateNotification,
-                                        referenceUrl = referenceUrl
+                                        referenceUrl = referenceUrl,
+                                        attachments = attachments
                                     )
                                     createdId = newest.id
                                     if (alertAt == null && canShowImmediateNotification(newest) && !ReminderNotifications.show(this@MainActivity, newest)) waiting.add(newest.id)
@@ -158,8 +159,8 @@ class MainActivity : ComponentActivity() {
                                 if (item?.shouldPinNotification == true) ReminderNotifications.show(this, item)
                                 else { ReminderNotifications.cancel(this, id); waiting.remove(id) }
                             } },
-                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId, checklistItems -> mutate {
-                                repository.edit(id, text, accentStart, accentEnd, customCategoryId, checklistItems = checklistItems).firstOrNull { it.id == id }
+                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments -> mutate {
+                                repository.edit(id, text, accentStart, accentEnd, customCategoryId, checklistItems = checklistItems, starBorderColorIndex = starBorderColorIndex, gradientBlendFraction = gradientBlendFraction, customSolidColorArgb = customSolidColorArgb, attachments = attachments).firstOrNull { it.id == id }
                                     ?.let { ReminderNotifications.refreshEdited(this, it) }
                             } },
                             onSetAlert = { id, at, repeatRule -> mutate {
@@ -168,9 +169,13 @@ class MainActivity : ComponentActivity() {
                                 if (item != null && (at == null || item.shouldPinNotification)) ReminderNotifications.show(this, item)
                             } },
                             onDeleteReminder = { id -> mutate {
+                                val paths = repository.getAttachmentPathsForReminders(setOf(id))
+                                AttachmentStorage.deleteAttachmentFilePaths(paths)
                                 repository.delete(id); ReminderNotifications.cancel(this, id); waiting.remove(id)
                             } },
                             onDeleteReminders = { ids -> mutate {
+                                val paths = repository.getAttachmentPathsForReminders(ids)
+                                AttachmentStorage.deleteAttachmentFilePaths(paths)
                                 ids.forEach { id ->
                                     ReminderNotifications.cancel(this, id)
                                     waiting.remove(id)
@@ -209,8 +214,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             builtInCategoryColors = builtInCategoryColors,
-                            onUpdateBuiltInCategoryColor = { cat, colorIdx ->
-                                builtInCategoryColors = categoryRepository.setBuiltInCategoryColor(cat, colorIdx)
+                            onUpdateBuiltInCategoryColor = { cat, override ->
+                                builtInCategoryColors = categoryRepository.setBuiltInCategoryColor(cat, override)
                             },
                             pendingShareDraft = pendingShareDraft,
                             onShareDraftHandled = { pendingShareDraft = null },

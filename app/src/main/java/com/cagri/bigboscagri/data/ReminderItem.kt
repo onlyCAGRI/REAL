@@ -1,5 +1,10 @@
 package com.cagri.bigboscagri.data
 
+data class ReminderAttachment(
+    val id: String,
+    val localPath: String
+)
+
 data class ReminderItem(
     val id: Long,
     val text: String,
@@ -17,8 +22,16 @@ data class ReminderItem(
     val isChecklist: Boolean = false,
     val checklistItems: List<ChecklistItem> = emptyList(),
     val sendImmediateNotification: Boolean = true,
-    val referenceUrl: String? = null
+    val referenceUrl: String? = null,
+    val starBorderColorIndex: Int? = null,
+    val gradientBlendFraction: Float? = null,
+    val customSolidColorArgb: Int? = null,
+    val attachments: List<ReminderAttachment> = emptyList()
 ) {
+    val gradientBlendIndex: Int?
+        get() = gradientBlendFraction?.let { frac ->
+            GRADIENT_BLEND_FRACTIONS.indices.minByOrNull { kotlin.math.abs(GRADIENT_BLEND_FRACTIONS[it] - frac) }
+        }
     val isCompleted: Boolean get() = completedAt != null
     val shouldPinNotification: Boolean get() = isImportant && !isCompleted
     val hasRepeat: Boolean get() = repeatRule != RecurrenceRule.NONE
@@ -54,4 +67,76 @@ data class ReminderItem(
         }
         return copy(completedAt = now, updatedAt = now)
     }
+}
+
+enum class ReminderSortOrder {
+    RECENTLY_ADDED,
+    REMINDER_TIME
+}
+
+const val COLOR_FILTER_DEFAULT = -1
+
+fun filterAndSortReminders(
+    reminders: List<ReminderItem>,
+    colorFilter: Int? = null,
+    sortOrder: ReminderSortOrder = ReminderSortOrder.RECENTLY_ADDED
+): List<ReminderItem> {
+    var result = reminders
+    if (colorFilter != null) {
+        result = if (colorFilter == COLOR_FILTER_DEFAULT) {
+            result.filter { it.accentStart == null }
+        } else {
+            result.filter { it.accentStart == colorFilter }
+        }
+    }
+    result = when (sortOrder) {
+        ReminderSortOrder.RECENTLY_ADDED -> {
+            result.sortedByDescending { it.createdAt }
+        }
+        ReminderSortOrder.REMINDER_TIME -> {
+            result.sortedWith(
+                compareBy<ReminderItem> { it.alertAt == null }
+                    .thenBy { it.alertAt }
+                    .thenByDescending { it.createdAt }
+            )
+        }
+    }
+    return result
+}
+
+const val HOME_COMPLETED_PREVIEW_LIMIT = 8
+const val HOME_COMPLETED_GLASS_HEIGHT_DP = 108f
+
+fun isHomeCompletedGlassActive(completedCount: Int): Boolean =
+    completedCount >= HOME_COMPLETED_PREVIEW_LIMIT
+
+fun buildReminderShareText(reminder: ReminderItem): String {
+    if (!reminder.isChecklist) {
+        return reminder.text
+    }
+    val validItems = reminder.checklistItems.filter { it.text.isNotBlank() }
+    if (validItems.isEmpty()) {
+        return reminder.text
+    }
+    val itemsText = validItems.joinToString("\n") { item ->
+        val prefix = if (item.isCompleted) "☑ " else "☐ "
+        prefix + item.text.trim()
+    }
+    return "${reminder.text.trim()}\n\n$itemsText"
+}
+
+val GRADIENT_BLEND_FRACTIONS = listOf(0.20f, 0.35f, 0.50f, 0.65f, 0.80f)
+const val DEFAULT_GRADIENT_BLEND_INDEX = 2
+const val DEFAULT_GRADIENT_BLEND_FRACTION = 0.50f
+
+fun resolveGradientBlendFraction(fraction: Float?): Float {
+    if (fraction == null) return DEFAULT_GRADIENT_BLEND_FRACTION
+    return fraction.coerceIn(0.0f, 1.0f)
+}
+
+fun migrateLegacyGradientBlendIndex(index: Int?): Float {
+    if (index == null || index !in GRADIENT_BLEND_FRACTIONS.indices) {
+        return DEFAULT_GRADIENT_BLEND_FRACTION
+    }
+    return GRADIENT_BLEND_FRACTIONS[index]
 }

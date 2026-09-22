@@ -5,6 +5,11 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 
+data class CategoryColorOverride(
+    val start: Int,
+    val end: Int? = null
+)
+
 class CategoryRepository(private val preferences: SharedPreferences) {
     constructor(context: Context) : this(context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE))
 
@@ -118,17 +123,32 @@ class CategoryRepository(private val preferences: SharedPreferences) {
         cachedItems = items
     }
 
-    fun getBuiltInCategoryColor(category: ReminderCategory): Int? = synchronized(mutationLock) {
+    fun getBuiltInCategoryColor(category: ReminderCategory): CategoryColorOverride? = synchronized(mutationLock) {
         val raw = preferences.getString(KEY_BUILTIN_CATEGORY_COLORS, null) ?: return@synchronized null
         val json = runCatching { JSONObject(raw) }.getOrNull() ?: return@synchronized null
-        if (!json.has(category.name) || json.isNull(category.name)) null else json.getInt(category.name)
+        if (!json.has(category.name) || json.isNull(category.name)) return@synchronized null
+        val value = json.get(category.name)
+        when (value) {
+            is Int -> CategoryColorOverride(start = value, end = null)
+            is Number -> CategoryColorOverride(start = value.toInt(), end = null)
+            is JSONObject -> {
+                val start = value.optInt("start", 0)
+                val end = if (value.has("end") && !value.isNull("end")) value.getInt("end") else null
+                CategoryColorOverride(start = start, end = end)
+            }
+            else -> null
+        }
     }
 
-    fun setBuiltInCategoryColor(category: ReminderCategory, colorIndex: Int?): Map<ReminderCategory, Int?> = synchronized(mutationLock) {
+    fun setBuiltInCategoryColor(category: ReminderCategory, override: CategoryColorOverride?): Map<ReminderCategory, CategoryColorOverride> = synchronized(mutationLock) {
         val raw = preferences.getString(KEY_BUILTIN_CATEGORY_COLORS, null)
         val json = if (raw != null) runCatching { JSONObject(raw) }.getOrNull() ?: JSONObject() else JSONObject()
-        if (colorIndex != null) {
-            json.put(category.name, colorIndex)
+        if (override != null) {
+            val obj = JSONObject().put("start", override.start)
+            if (override.end != null) {
+                obj.put("end", override.end)
+            }
+            json.put(category.name, obj)
         } else {
             json.remove(category.name)
         }
@@ -137,13 +157,25 @@ class CategoryRepository(private val preferences: SharedPreferences) {
         getBuiltInCategoryColors()
     }
 
-    fun getBuiltInCategoryColors(): Map<ReminderCategory, Int?> = synchronized(mutationLock) {
+    fun setBuiltInCategoryColor(category: ReminderCategory, colorIndex: Int): Map<ReminderCategory, CategoryColorOverride> =
+        setBuiltInCategoryColor(category, CategoryColorOverride(colorIndex, null))
+
+    fun getBuiltInCategoryColors(): Map<ReminderCategory, CategoryColorOverride> = synchronized(mutationLock) {
         val raw = preferences.getString(KEY_BUILTIN_CATEGORY_COLORS, null) ?: return@synchronized emptyMap()
         val json = runCatching { JSONObject(raw) }.getOrNull() ?: return@synchronized emptyMap()
         buildMap {
             for (cat in ReminderCategory.entries) {
                 if (json.has(cat.name) && !json.isNull(cat.name)) {
-                    put(cat, json.getInt(cat.name))
+                    val value = json.get(cat.name)
+                    when (value) {
+                        is Int -> put(cat, CategoryColorOverride(start = value, end = null))
+                        is Number -> put(cat, CategoryColorOverride(start = value.toInt(), end = null))
+                        is JSONObject -> {
+                            val start = value.optInt("start", 0)
+                            val end = if (value.has("end") && !value.isNull("end")) value.getInt("end") else null
+                            put(cat, CategoryColorOverride(start = start, end = end))
+                        }
+                    }
                 }
             }
         }

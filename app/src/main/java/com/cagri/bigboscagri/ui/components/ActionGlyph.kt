@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 
-enum class ActionGlyph { Calendar, Back, Check, Undo, Edit, Share, Delete, Star, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass }
+enum class ActionGlyph { Calendar, Back, Check, Undo, Edit, Share, Delete, Star, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass, WhatsApp, Category }
 
 @Composable
 fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.White, filled: Boolean = false) {
@@ -218,6 +218,47 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
 
                     drawRoundRect(color, Offset(4f, 17.5f), Size(4.5f, 4.5f), CornerRadius(1.2f, 1.2f), style = stroke)
                     line(11.5f, 19.75f, 20f, 19.75f)
+                }
+                ActionGlyph.WhatsApp -> {
+                    // Chat bubble with tail at bottom-left
+                    val bubblePath = Path().apply {
+                        moveTo(12f, 3.5f)
+                        cubicTo(16.7f, 3.5f, 20.5f, 7.3f, 20.5f, 12f)
+                        cubicTo(20.5f, 16.7f, 16.7f, 20.5f, 12f, 20.5f)
+                        cubicTo(10.4f, 20.5f, 8.9f, 20.0f, 7.6f, 19.2f)
+                        lineTo(3.5f, 20.5f)
+                        lineTo(4.8f, 16.5f)
+                        cubicTo(3.9f, 15.2f, 3.5f, 13.6f, 3.5f, 12f)
+                        cubicTo(3.5f, 7.3f, 7.3f, 3.5f, 12f, 3.5f)
+                        close()
+                    }
+                    drawPath(bubblePath, color, style = stroke)
+
+                    // Phone handset inside
+                    val phonePath = Path().apply {
+                        moveTo(8.5f, 8.8f)
+                        cubicTo(8.7f, 8.4f, 9.1f, 8.2f, 9.5f, 8.3f)
+                        lineTo(10.7f, 9.2f)
+                        cubicTo(11.0f, 9.4f, 11.1f, 9.8f, 10.9f, 10.1f)
+                        lineTo(10.3f, 10.8f)
+                        cubicTo(10.2f, 10.9f, 10.2f, 11.1f, 10.3f, 11.3f)
+                        cubicTo(10.8f, 12.2f, 11.8f, 13.2f, 12.7f, 13.7f)
+                        cubicTo(12.9f, 13.8f, 13.1f, 13.8f, 13.2f, 13.7f)
+                        lineTo(13.9f, 13.1f)
+                        cubicTo(14.2f, 12.9f, 14.6f, 13.0f, 14.8f, 13.3f)
+                        lineTo(15.7f, 14.5f)
+                        cubicTo(15.8f, 14.9f, 15.6f, 15.3f, 15.2f, 15.5f)
+                        lineTo(14.3f, 15.9f)
+                        cubicTo(13.8f, 16.1f, 13.2f, 16.0f, 12.5f, 15.6f)
+                        cubicTo(10.7f, 14.5f, 9.5f, 13.3f, 8.4f, 11.5f)
+                        cubicTo(8.0f, 10.8f, 7.9f, 10.2f, 8.1f, 9.7f)
+                        close()
+                    }
+                    drawPath(phonePath, color, style = Fill)
+                }
+                ActionGlyph.Category -> {
+                    drawLine(color, Offset(12f, 4.5f), Offset(12f, 19.5f), strokeWidth = 1.6f, cap = StrokeCap.Round)
+                    drawLine(color, Offset(4.5f, 12f), Offset(19.5f, 12f), strokeWidth = 1.6f, cap = StrokeCap.Round)
                 }
             }
         }

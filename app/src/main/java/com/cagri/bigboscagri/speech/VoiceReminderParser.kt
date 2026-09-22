@@ -18,7 +18,14 @@ data class ParsedVoiceReminder(
     val repeatRule: RecurrenceRule = RecurrenceRule.NONE,
     val requiresTimeSelection: Boolean = false,
     val dateHint: LocalDate? = null,
-    val timeOfDay: TimeOfDay? = null
+    val timeOfDay: TimeOfDay? = null,
+    val isChecklist: Boolean = false,
+    val checklistItems: List<String> = emptyList()
+)
+
+data class ExtractedChecklist(
+    val title: String,
+    val items: List<String>
 )
 
 enum class TimeOfDay { Morning, Noon, Evening, Night }
@@ -160,15 +167,19 @@ object VoiceReminderParser {
         val lower = trimmedInput.lowercase(trLocale)
 
         // 1. Try Relative Time
-        runCatching { parseRelativeTime(trimmedInput, lower, now) }.getOrNull()?.let { return it }
+        val baseParsed = runCatching { parseRelativeTime(trimmedInput, lower, now) }.getOrNull()
+            ?: runCatching { parseCalendarTime(trimmedInput, lower, now) }.getOrNull()
+            ?: run {
+                val cleaned = cleanReminderText(trimmedInput, emptyList())
+                ParsedVoiceReminder(trimmedInput, cleaned.ifEmpty { trimmedInput }, null)
+            }
 
-        // 2. Try Absolute / Calendar Time
-        runCatching { parseCalendarTime(trimmedInput, lower, now) }.getOrNull()?.let { return it }
-
-        // 3. Fallback: No date/time found, keep text as is (clean capitalization)
-        val cleaned = cleanReminderText(trimmedInput, emptyList())
-        return ParsedVoiceReminder(trimmedInput, cleaned.ifEmpty { trimmedInput }, null)
+        return applyChecklistExtraction(baseParsed)
     }
+
+    fun extractChecklist(text: String): ExtractedChecklist? = com.cagri.bigboscagri.speech.extractChecklist(text)
+    fun formatChecklistTitle(prefix: String?): String = com.cagri.bigboscagri.speech.formatChecklistTitle(prefix)
+    fun splitChecklistItems(raw: String): List<String> = com.cagri.bigboscagri.speech.splitChecklistItems(raw)
 
     private fun parseRelativeTime(
         original: String,
@@ -678,9 +689,18 @@ object VoiceReminderParser {
         // Strip boundary filler "ya" idempotently
         clean = stripBoundaryFillerYa(clean)
 
-        // Strip trailing commands: e.g. "bana hatırlat", "hatırlat", "hatirlat"
-        clean = clean.replace(Regex("""(?i)\s*(?:bana\s+)?(?:hatırlat|hatirlat)\s*[.!]?$"""), "").trim()
-            .trim(',', '.', ';', ':', '-', '’', '\'')
+        // Strip trailing commands:
+        // - "bana hatırlat" is always an assistant command suffix.
+        // - Bare "hatırlat" is only stripped when it is an assistant command (e.g. "toplantıyı hatırlat"),
+        //   and NOT when it is part of a coordinated action or compound reminder (e.g. "... ve ... hatırlat").
+        val hasCoordinatedClause = Regex("""(?i)(?:\b(?:ve|veya|ya\s+da|ile)\b|[,;])\s+.*?\b(?:hatırlat|hatirlat)\s*[.!]?$""").containsMatchIn(clean)
+        if (!hasCoordinatedClause) {
+            clean = clean.replace(Regex("""(?i)\s*(?:bana\s+)?(?:hatırlat|hatirlat)\s*[.!]?$"""), "").trim()
+                .trim(',', '.', ';', ':', '-', '’', '\'')
+        } else {
+            clean = clean.replace(Regex("""(?i)\s+\bbana\s+(?:hatırlat|hatirlat)\s*[.!]?$"""), "").trim()
+                .trim(',', '.', ';', ':', '-', '’', '\'')
+        }
 
         // Strip boundary filler "ya" again in case trailing command exposed it
         clean = stripBoundaryFillerYa(clean)
@@ -839,4 +859,160 @@ fun formatComposerScheduleLabel(
         RecurrenceRule.MONTHLY -> "$dateStr $timeStr · Her ay"
         RecurrenceRule.YEARLY -> "$dateStr $timeStr · Her yıl"
     }
+}
+
+fun formatChecklistTitle(prefix: String?): String {
+    val trLocale = Locale.forLanguageTag("tr-TR")
+    var cleanPrefix = prefix?.trim() ?: ""
+
+    // Strip leading "yeni bir " or "bir "
+    val leadingArticleRegex = Regex("""(?i)^(?:yeni\s+)?bir\s+""")
+    cleanPrefix = leadingArticleRegex.replace(cleanPrefix, "").trim()
+
+    if (cleanPrefix.isBlank()) {
+        return "Liste"
+    }
+
+    val lower = cleanPrefix.lowercase(trLocale)
+    val title = when {
+        lower.endsWith("listesi") -> cleanPrefix
+        lower.endsWith("listem") -> cleanPrefix.dropLast(1) + "si"
+        lower.endsWith("liste") -> cleanPrefix + "si"
+        else -> "$cleanPrefix listesi"
+    }
+
+    return title.replaceFirstChar { if (it.isLowerCase()) it.titlecase(trLocale) else it.toString() }
+}
+
+fun splitChecklistItems(raw: String): List<String> {
+    val trLocale = Locale.forLanguageTag("tr-TR")
+    val initialSegments = raw.split(Regex("""[,;]+"""))
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+    if (initialSegments.isEmpty()) return emptyList()
+
+    val result = mutableListOf<String>()
+
+    for (i in initialSegments.indices) {
+        var seg = initialSegments[i].trim()
+        if (seg.lowercase(trLocale).startsWith("ve ")) {
+            seg = seg.substring(3).trim()
+        }
+        if (seg.isEmpty()) continue
+
+        if (i == initialSegments.lastIndex) {
+            val subItems = seg.split(Regex("""(?i)\s+ve\s+"""))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            result.addAll(subItems)
+        } else {
+            result.add(seg)
+        }
+    }
+
+    return result.mapNotNull { item ->
+        var trimmed = item.trim().trimStart('-', '*', '•').trim()
+        trimmed = stripBoundaryFillerYa(trimmed)
+        if (trimmed.isEmpty()) null
+        else {
+            trimmed.replaceFirstChar { if (it.isLowerCase()) it.titlecase(trLocale) else it.toString() }
+        }
+    }
+}
+
+fun extractChecklist(text: String): ExtractedChecklist? {
+    val trimmed = text.trim()
+    if (trimmed.isBlank()) return null
+
+    // Pattern 1: [prefix] (listesi|listem|liste) (oluştur|olustur|yap|hazırla|hazirla|kur)[:,\s\-]*(.+)
+    val pattern1 = Regex(
+        """(?i)^(?:(.*?)\s+)?(listesi|listem|liste)\s+(oluştur|olustur|yap|hazırla|hazirla|kur)\b[:,\s\-]*(.+)$"""
+    )
+    pattern1.find(trimmed)?.let { match ->
+        val prefix = match.groupValues[1]
+        val rawItems = match.groupValues[4]
+        val items = splitChecklistItems(rawItems)
+        if (items.isNotEmpty()) {
+            return ExtractedChecklist(
+                title = formatChecklistTitle(prefix),
+                items = items
+            )
+        }
+    }
+
+    // Pattern 2: (oluştur|olustur|yap|hazırla|hazirla|kur) [bir] [prefix] (listesi|listem|liste)[:,\s\-]*(.+)
+    val patternVerbFirst = Regex(
+        """(?i)^(oluştur|olustur|yap|hazırla|hazirla|kur)\s+(?:bir\s+)?(?:(.*?)\s+)?(listesi|listem|liste)\b[:,\s\-]*(.+)$"""
+    )
+    patternVerbFirst.find(trimmed)?.let { match ->
+        val prefix = match.groupValues[2]
+        val rawItems = match.groupValues[4]
+        val items = splitChecklistItems(rawItems)
+        if (items.isNotEmpty()) {
+            return ExtractedChecklist(
+                title = formatChecklistTitle(prefix),
+                items = items
+            )
+        }
+    }
+
+    // Pattern 3A: [prefix] (listeme|listesine) (ekle|yaz)[:,\s\-]*(.+)
+    val patternAddA = Regex(
+        """(?i)^(?:(.*?)\s+)?(?:listeme|listesine)\s+(?:ekle|yaz)\b[:,\s\-]*(.+)$"""
+    )
+    patternAddA.find(trimmed)?.let { match ->
+        val prefix = match.groupValues[1]
+        val rawItems = match.groupValues[2]
+        val items = splitChecklistItems(rawItems)
+        if (items.isNotEmpty()) {
+            return ExtractedChecklist(
+                title = formatChecklistTitle(prefix),
+                items = items
+            )
+        }
+    }
+
+    // Pattern 3B: [prefix] (listeme|listesine) (.+?) (ekle|yaz)$
+    val patternAddB = Regex(
+        """(?i)^(?:(.*?)\s+)?(?:listeme|listesine)\s+(.+?)\s+(?:ekle|yaz)$"""
+    )
+    patternAddB.find(trimmed)?.let { match ->
+        val prefix = match.groupValues[1]
+        val rawItems = match.groupValues[2]
+        val items = splitChecklistItems(rawItems)
+        if (items.isNotEmpty()) {
+            return ExtractedChecklist(
+                title = formatChecklistTitle(prefix),
+                items = items
+            )
+        }
+    }
+
+    // Pattern 4: [prefix] (listesi|listem)[:\s\-]+(.+) with colon
+    val patternColon = Regex(
+        """(?i)^(?:(.*?)\s+)?(listesi|listem)\s*:\s*(.+)$"""
+    )
+    patternColon.find(trimmed)?.let { match ->
+        val prefix = match.groupValues[1]
+        val rawItems = match.groupValues[3]
+        val items = splitChecklistItems(rawItems)
+        if (items.isNotEmpty()) {
+            return ExtractedChecklist(
+                title = formatChecklistTitle(prefix),
+                items = items
+            )
+        }
+    }
+
+    return null
+}
+
+fun applyChecklistExtraction(base: ParsedVoiceReminder): ParsedVoiceReminder {
+    val extracted = extractChecklist(base.text) ?: return base
+    return base.copy(
+        text = extracted.title,
+        isChecklist = true,
+        checklistItems = extracted.items
+    )
 }

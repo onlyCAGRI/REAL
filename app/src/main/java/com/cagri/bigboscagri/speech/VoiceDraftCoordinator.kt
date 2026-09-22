@@ -13,7 +13,9 @@ object VoiceDraftCoordinator {
         val sendImmediateNotification: Boolean,
         val requiresTimeSelection: Boolean = false,
         val dateHint: LocalDate? = null,
-        val timeOfDay: TimeOfDay? = null
+        val timeOfDay: TimeOfDay? = null,
+        val isChecklist: Boolean = false,
+        val checklistItems: List<String> = emptyList()
     )
 
     fun finalizeVoice(
@@ -39,7 +41,9 @@ object VoiceDraftCoordinator {
             sendImmediateNotification = resolvedSendImmediate,
             requiresTimeSelection = parsed.requiresTimeSelection,
             dateHint = parsed.dateHint,
-            timeOfDay = parsed.timeOfDay
+            timeOfDay = parsed.timeOfDay,
+            isChecklist = parsed.isChecklist,
+            checklistItems = parsed.checklistItems
         )
     }
 }
@@ -84,6 +88,12 @@ class VoiceDraftSession(
         requiresTimeSelection = result.requiresTimeSelection
         dateHint = result.dateHint
         timeOfDay = result.timeOfDay
+        if (result.isChecklist && result.checklistItems.isNotEmpty()) {
+            isChecklistMode = true
+            checklistItems = result.checklistItems.mapIndexed { idx, itmText ->
+                ChecklistItem(id = 0L, text = itmText)
+            }
+        }
         return result
     }
 

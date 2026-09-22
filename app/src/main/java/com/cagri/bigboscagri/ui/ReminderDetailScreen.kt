@@ -7,6 +7,14 @@ import com.cagri.bigboscagri.ui.components.NotificationPermissionSheet
 import androidx.compose.material3.TextButton
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import java.io.File
+import com.cagri.bigboscagri.data.ReminderAttachment
+import com.cagri.bigboscagri.data.AttachmentStorage
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
@@ -77,6 +85,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -101,6 +112,7 @@ import androidx.compose.runtime.key
 import com.cagri.bigboscagri.data.ChecklistItem
 import com.cagri.bigboscagri.data.RecurrenceRule
 import com.cagri.bigboscagri.data.ReminderItem
+import com.cagri.bigboscagri.data.buildReminderShareText
 import com.cagri.bigboscagri.data.repeatSummary
 import com.cagri.bigboscagri.ui.components.ActionGlyph
 import com.cagri.bigboscagri.ui.components.ActionIcon
@@ -110,9 +122,13 @@ import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.ui.components.CategoryIcon
 import com.cagri.bigboscagri.ui.components.CategoryIconGlyph
 import com.cagri.bigboscagri.ui.components.CategorySelectionOverlay
+import com.cagri.bigboscagri.data.DEFAULT_GRADIENT_BLEND_FRACTION
 import com.cagri.bigboscagri.ui.components.ReminderColorChoices
 import com.cagri.bigboscagri.ui.components.ReminderColorPicker
 import com.cagri.bigboscagri.ui.components.reminderAccentBrush
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.lerp
+import com.cagri.bigboscagri.data.resolveGradientBlendFraction
 import com.cagri.bigboscagri.ui.components.TopGlassOverlay
 import com.cagri.bigboscagri.ui.theme.BigBosTheme
 
@@ -120,7 +136,7 @@ import com.cagri.bigboscagri.ui.theme.BigBosTheme
 @Composable
 fun ReminderDetailScreen(
     reminder: ReminderItem, onBack: () -> Unit, onToggleCompleted: () -> Unit,
-    onToggleImportant: () -> Unit, onSave: (String, Int?, Int?, Long?, List<ChecklistItem>?) -> Unit, onDelete: () -> Unit,
+    onToggleImportant: () -> Unit, onSave: (String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?) -> Unit, onDelete: () -> Unit,
     customCategories: List<CustomCategory> = emptyList(),
     reduceAnimations: Boolean = false,
     reduceDynamicBlur: Boolean = false,
@@ -138,21 +154,55 @@ fun ReminderDetailScreen(
     var editedText by rememberSaveable(reminder.id) { mutableStateOf(reminder.text) }
     var accentStart by rememberSaveable(reminder.id) { mutableStateOf<Int?>(reminder.accentStart) }
     var accentEnd by rememberSaveable(reminder.id) { mutableStateOf<Int?>(reminder.accentEnd) }
+    var customSolidColorArgb by rememberSaveable(reminder.id) { mutableStateOf(reminder.customSolidColorArgb) }
+    var gradientBlendFraction by rememberSaveable(reminder.id) {
+        mutableStateOf(reminder.gradientBlendFraction ?: DEFAULT_GRADIENT_BLEND_FRACTION)
+    }
+    var starBorderColorIndex by rememberSaveable(reminder.id) {
+        mutableStateOf(reminder.starBorderColorIndex ?: Math.floorMod(reminder.id, 10))
+    }
     var selectedCategoryId by rememberSaveable(reminder.id) { mutableStateOf(reminder.customCategoryId) }
     var editedChecklistItems by remember(reminder.id, editing) { mutableStateOf(reminder.checklistItems) }
     var newChecklistItemText by rememberSaveable(reminder.id) { mutableStateOf("") }
+    var secondaryPanelsExpanded by rememberSaveable(reminder.id) { mutableStateOf(true) }
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var showNotificationPermissionSheet by rememberSaveable { mutableStateOf(false) }
     var pendingDetailDatePicker by rememberSaveable(reminder.id) { mutableStateOf(false) }
+    var editedAttachments by remember(reminder.id, editing) { mutableStateOf(reminder.attachments) }
+    var newlyAddedAttachments by remember(reminder.id, editing) { mutableStateOf<List<ReminderAttachment>>(emptyList()) }
+    var previewAttachmentPath by rememberSaveable(reminder.id) { mutableStateOf<String?>(null) }
     val view = LocalView.current
     val starInteractionSource = remember(reminder.id) { MutableInteractionSource() }
+
+    val detailPhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(3)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            val remainingSlots = 3 - editedAttachments.size
+            val toAdd = uris.take(remainingSlots).mapNotNull { uri ->
+                AttachmentStorage.copyUriToAttachments(context, uri)
+            }
+            if (toAdd.isNotEmpty()) {
+                editedAttachments = editedAttachments + toAdd
+                newlyAddedAttachments = newlyAddedAttachments + toAdd
+            }
+        }
+    }
 
     LaunchedEffect(notificationsAllowed) {
         if (notificationsAllowed && pendingDetailDatePicker) {
             showDatePicker = true
             pendingDetailDatePicker = false
+        }
+    }
+
+    LaunchedEffect(reminder.isImportant, reminder.starBorderColorIndex) {
+        if (reminder.starBorderColorIndex != null) {
+            starBorderColorIndex = reminder.starBorderColorIndex
+        } else if (reminder.isImportant) {
+            starBorderColorIndex = Math.floorMod(reminder.id, 10)
         }
     }
 
@@ -175,15 +225,27 @@ fun ReminderDetailScreen(
     }
 
     val finishEditing: () -> Unit = {
+        if (newlyAddedAttachments.isNotEmpty()) {
+            AttachmentStorage.deleteAttachmentFiles(newlyAddedAttachments)
+            newlyAddedAttachments = emptyList()
+        }
+        editedAttachments = reminder.attachments
         editing = false
+        secondaryPanelsExpanded = true
+        accentStart = reminder.accentStart
+        accentEnd = reminder.accentEnd
+        customSolidColorArgb = reminder.customSolidColorArgb
         selectedCategoryId = reminder.customCategoryId
         editedChecklistItems = reminder.checklistItems
+        starBorderColorIndex = reminder.starBorderColorIndex ?: Math.floorMod(reminder.id, 10)
+        gradientBlendFraction = reminder.gradientBlendFraction ?: DEFAULT_GRADIENT_BLEND_FRACTION
         newChecklistItemText = ""
         focusManager.clearFocus()
         keyboard?.hide()
     }
-    BackHandler(editing || deleting || showCategoryPicker) {
-        if (showCategoryPicker) showCategoryPicker = false
+    BackHandler(previewAttachmentPath != null || editing || deleting || showCategoryPicker) {
+        if (previewAttachmentPath != null) previewAttachmentPath = null
+        else if (showCategoryPicker) showCategoryPicker = false
         else if (deleting) deleting = false
         else finishEditing()
     }
@@ -216,10 +278,13 @@ fun ReminderDetailScreen(
                 }
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, end = 16.dp, top = statusHeight + 10.dp,
-                    bottom = if (editing) 300.dp else 114.dp)
+                    bottom = if (editing) {
+                        if (secondaryPanelsExpanded) 300.dp else 140.dp
+                    } else 114.dp)
         ) {
             Row(
                 Modifier.fillMaxWidth().graphicsLayer { alpha = chromeAlpha },
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
@@ -227,12 +292,6 @@ fun ReminderDetailScreen(
                     modifier = Modifier.background(Color(0xFF161619), CircleShape)
                         .semantics { contentDescription = if (editing) "Düzenlemeyi iptal et" else "Geri" }
                 ) { ActionIcon(ActionGlyph.Back, Modifier.size(23.dp)) }
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.padding(bottom = 8.dp).size(34.dp, 3.dp)
-                        .background(Color(0xFF5D5D65), CircleShape))
-                    Text(if (editing) "Düzenle" else "Hatırlatıcı", color = Color(0xFFAAAAB3), fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium)
-                }
                 val starSettleScale = remember(reminder.id) { Animatable(1f) }
                 var hasRenderedInitialStar by remember(reminder.id) { mutableStateOf(false) }
                 LaunchedEffect(reminder.isImportant) {
@@ -280,8 +339,10 @@ fun ReminderDetailScreen(
             val cardShape = RoundedCornerShape(28.dp)
             val shownAccentStart = if (editing) accentStart else reminder.accentStart
             val shownAccentEnd = if (editing) accentEnd else reminder.accentEnd
-            val accentBrush = remember(shownAccentStart, shownAccentEnd, reminder.isCompleted) {
-                reminderAccentBrush(shownAccentStart, shownAccentEnd, reminder.isCompleted)
+            val shownBlendFraction = if (editing) gradientBlendFraction else reminder.gradientBlendFraction
+            val shownCustomSolidColorArgb = if (editing) customSolidColorArgb else reminder.customSolidColorArgb
+            val accentBrush = remember(shownAccentStart, shownAccentEnd, reminder.isCompleted, shownBlendFraction, shownCustomSolidColorArgb) {
+                reminderAccentBrush(shownAccentStart, shownAccentEnd, reminder.isCompleted, shownBlendFraction, shownCustomSolidColorArgb)
             }
             val sharedCardModifier = if (!reduceAnimations && sharedTransitionScope != null && animatedVisibilityScope != null) {
                 with(sharedTransitionScope) {
@@ -294,8 +355,19 @@ fun ReminderDetailScreen(
                 }
             } else Modifier
 
+            val currentStarBorderIndex = if (editing) starBorderColorIndex else (reminder.starBorderColorIndex ?: Math.floorMod(reminder.id, 10))
+            val cardBorderColor = if (reminder.isImportant) {
+                ReminderColorChoices.getOrNull(currentStarBorderIndex ?: 0)?.color?.copy(alpha = 0.85f)
+                    ?: Color(0xFFEACB75).copy(alpha = 0.85f)
+            } else null
+            val cardBorderModifier = if (cardBorderColor != null) {
+                Modifier.border(1.25.dp, cardBorderColor, cardShape)
+            } else {
+                Modifier.border(0.8.dp, Brush.verticalGradient(listOf(Color(0xFF494953), Color(0xFF252529))), cardShape)
+            }
+
             Column(
-                Modifier.padding(top = 24.dp)
+                Modifier.padding(top = 12.dp)
                     .then(sharedCardModifier)
                     .fillMaxWidth()
                     .clip(cardShape)
@@ -304,13 +376,15 @@ fun ReminderDetailScreen(
                             Brush.linearGradient(listOf(Color(0xFF25252C), Color(0xFF17171B), Color(0xFF131315)))
                         ) else Modifier.background(accentBrush)
                     )
-                    .border(0.8.dp, Brush.verticalGradient(listOf(Color(0xFF494953), Color(0xFF252529))), cardShape)
+                    .then(cardBorderModifier)
                     .padding(horizontal = 22.dp, vertical = 25.dp)
             ) {
                 if (editing) {
                     BasicTextField(
                         value = editedText, onValueChange = { editedText = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)
+                        modifier = Modifier.fillMaxWidth()
+                            .then(if (reminder.isChecklist) Modifier else Modifier.heightIn(min = 96.dp))
+                            .onFocusChanged { if (it.isFocused) secondaryPanelsExpanded = false }
                             .semantics { contentDescription = "Hatırlatıcı metni" },
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White, fontSize = 21.sp, lineHeight = 31.sp),
                         cursorBrush = SolidColor(Color(0xFF82B3FF)),
@@ -335,7 +409,7 @@ fun ReminderDetailScreen(
                             color = Color(0xFFA5A5B5),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp)
+                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                         )
                     }
                 }
@@ -343,7 +417,7 @@ fun ReminderDetailScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = if (editing) 16.dp else 4.dp),
+                            .padding(top = if (editing) 24.dp else 2.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (editing) {
@@ -364,6 +438,7 @@ fun ReminderDetailScreen(
                                                 if (it.id == item.id) it.toggleCompleted(System.currentTimeMillis()) else it
                                             }
                                         },
+                                        onFocus = { secondaryPanelsExpanded = false },
                                         reduceAnimations = reduceAnimations
                                     )
                                 }
@@ -371,6 +446,7 @@ fun ReminderDetailScreen(
                             AddChecklistItemRow(
                                 text = newChecklistItemText,
                                 onTextChange = { newChecklistItemText = it },
+                                onFocus = { secondaryPanelsExpanded = false },
                                 onAdd = {
                                     if (newChecklistItemText.trim().isNotBlank()) {
                                         val newItem = ChecklistItem(
@@ -391,6 +467,71 @@ fun ReminderDetailScreen(
                                         onToggle = { onToggleChecklistItem(reminder.id, item.id) }
                                     )
                                 }
+                            }
+                        }
+                    }
+                }
+                val displayedAttachments = if (editing) editedAttachments else reminder.attachments
+                if (displayedAttachments.isNotEmpty() || editing) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        displayedAttachments.forEach { attachment ->
+                            Box(
+                                modifier = Modifier
+                                    .size(76.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        if (!editing) {
+                                            previewAttachmentPath = attachment.localPath
+                                        }
+                                    }
+                            ) {
+                                AsyncImage(
+                                    model = File(attachment.localPath),
+                                    contentDescription = "Fotoğraf eki",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                                if (editing) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .align(Alignment.TopEnd)
+                                            .padding(2.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xE61E1E24))
+                                            .border(0.5.dp, Color(0x4DFFFFFF), CircleShape)
+                                            .clickable {
+                                                editedAttachments = editedAttachments.filter { it.id != attachment.id }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        ActionIcon(ActionGlyph.Close, Modifier.size(10.dp), Color(0xFFEEEEF2))
+                                    }
+                                }
+                            }
+                        }
+                        if (editing && displayedAttachments.size < 3) {
+                            Box(
+                                modifier = Modifier
+                                    .size(76.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(14.dp))
+                                    .background(Color(0x1AFFFFFF))
+                                    .clickable {
+                                        detailPhotoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ActionIcon(ActionGlyph.Add, Modifier.size(24.dp), Color(0xFF91B9FF))
                             }
                         }
                     }
@@ -537,7 +678,7 @@ fun ReminderDetailScreen(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().graphicsLayer { alpha = chromeAlpha }.padding(horizontal = 24.dp, vertical = 18.dp)
         ) {
             AnimatedVisibility(
-                visible = editing,
+                visible = editing && secondaryPanelsExpanded,
                 enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)) + slideInVertically(tween(240)) { it / 8 } + scaleIn(tween(240), initialScale = 0.97f),
                 exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 8 } + scaleOut(tween(180), targetScale = 0.97f)
             ) {
@@ -548,8 +689,31 @@ fun ReminderDetailScreen(
                     ReminderColorPicker(
                         startIndex = accentStart,
                         endIndex = accentEnd,
-                        onStartChange = { accentStart = it },
-                        onEndChange = { accentEnd = it },
+                        onStartChange = {
+                            accentStart = it
+                            customSolidColorArgb = null
+                        },
+                        onEndChange = {
+                            accentEnd = it
+                            customSolidColorArgb = null
+                        },
+                        gradientBlendFraction = gradientBlendFraction,
+                        onGradientBlendFractionChange = { gradientBlendFraction = it },
+                        customSolidColorArgb = customSolidColorArgb,
+                        onUseTransitionColor = {
+                            val startColor = ReminderColorChoices.getOrNull(accentStart ?: -1)?.color
+                            val endColor = ReminderColorChoices.getOrNull(accentEnd ?: -1)?.color
+                            if (startColor != null && endColor != null) {
+                                val frac = resolveGradientBlendFraction(gradientBlendFraction)
+                                val bridge = lerp(startColor, endColor, frac)
+                                customSolidColorArgb = bridge.toArgb()
+                                accentEnd = null
+                                gradientBlendFraction = DEFAULT_GRADIENT_BLEND_FRACTION
+                            }
+                        },
+                        isStarred = reminder.isImportant,
+                        starBorderIndex = starBorderColorIndex,
+                        onStarBorderChange = { if (it != null) starBorderColorIndex = it },
                         backdrop = scene,
                         backdropPosition = { scenePosition },
                         designStyle = designStyle,
@@ -604,6 +768,37 @@ fun ReminderDetailScreen(
                 }
             }
             AnimatedVisibility(
+                visible = editing && !secondaryPanelsExpanded,
+                enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(160)) + scaleIn(tween(180), initialScale = 0.98f),
+                exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(120)) + scaleOut(tween(140), targetScale = 0.98f)
+            ) {
+                DesignPanel(
+                    backdrop = scene,
+                    backdropPosition = { scenePosition },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                    corners = 22.dp,
+                    designStyle = designStyle,
+                    reduceDynamicBlur = reduceDynamicBlur
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(22.dp))
+                            .clickable {
+                                focusManager.clearFocus()
+                                keyboard?.hide()
+                                secondaryPanelsExpanded = true
+                            }
+                            .padding(horizontal = 16.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Renk ve kategori", color = Color(0xFFB7B7C0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        ActionIcon(ActionGlyph.ChevronRight, Modifier.size(14.dp), Color(0xFF8E8E98))
+                    }
+                }
+            }
+            AnimatedVisibility(
                 visible = deleting,
                 enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)) + slideInVertically(tween(240)) { it / 8 } + scaleIn(tween(240), initialScale = 0.97f),
                 exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 8 } + scaleOut(tween(180), targetScale = 0.97f)
@@ -625,7 +820,22 @@ fun ReminderDetailScreen(
                                     } else emptyList()
                                     editedChecklistItems + pending
                                 } else null
-                                onSave(editedText.trim(), accentStart, accentEnd, selectedCategoryId, finalItems)
+                                val removedAttachments = reminder.attachments.filter { orig ->
+                                    editedAttachments.none { it.id == orig.id }
+                                }
+                                AttachmentStorage.deleteAttachmentFiles(removedAttachments)
+                                newlyAddedAttachments = emptyList()
+                                onSave(
+                                    editedText.trim(),
+                                    accentStart,
+                                    accentEnd,
+                                    selectedCategoryId,
+                                    finalItems,
+                                    if (reminder.isImportant) starBorderColorIndex else reminder.starBorderColorIndex,
+                                    if (accentStart != null && accentEnd != null) gradientBlendFraction else null,
+                                    customSolidColorArgb,
+                                    editedAttachments
+                                )
                                 finishEditing()
                             })
                     } else {
@@ -645,14 +855,20 @@ fun ReminderDetailScreen(
                             editedText = reminder.text
                             accentStart = reminder.accentStart
                             accentEnd = reminder.accentEnd
+                            customSolidColorArgb = reminder.customSolidColorArgb
                             selectedCategoryId = reminder.customCategoryId
                             editedChecklistItems = reminder.checklistItems
+                            starBorderColorIndex = reminder.starBorderColorIndex ?: Math.floorMod(reminder.id, 10)
+                            gradientBlendFraction = reminder.gradientBlendFraction ?: DEFAULT_GRADIENT_BLEND_FRACTION
                             newChecklistItemText = ""
+                            editedAttachments = reminder.attachments
+                            newlyAddedAttachments = emptyList()
+                            secondaryPanelsExpanded = true
                             editing = true
                         })
                         DetailAction("Paylaş", ActionGlyph.Share, Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
                             context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"; putExtra(Intent.EXTRA_TEXT, reminder.text)
+                                type = "text/plain"; putExtra(Intent.EXTRA_TEXT, buildReminderShareText(reminder))
                             }, "Hatırlatıcıyı paylaş"))
                         })
                         DetailAction("Sil", ActionGlyph.Delete, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = { deleting = !deleting })
@@ -693,6 +909,37 @@ fun ReminderDetailScreen(
             reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations
         )
+        if (previewAttachmentPath != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        previewAttachmentPath = null
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = File(previewAttachmentPath!!),
+                    contentDescription = "Fotoğraf tam ekran önizleme",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+                IconButton(
+                    onClick = { previewAttachmentPath = null },
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(top = statusHeight + 10.dp, start = 16.dp)
+                        .background(Color(0x80161619), CircleShape)
+                        .semantics { contentDescription = "Önizlemeyi kapat" }
+                ) {
+                    ActionIcon(ActionGlyph.Close, Modifier.size(22.dp), Color.White)
+                }
+            }
+        }
     }
 }
 
@@ -787,16 +1034,27 @@ private fun EditableChecklistItemRow(
     onTextChange: (String) -> Unit,
     onDelete: () -> Unit,
     onToggle: () -> Unit,
+    onFocus: () -> Unit = {},
     reduceAnimations: Boolean
 ) {
     val view = LocalView.current
     val circleBorderColor = if (item.isCompleted) Color.Transparent else Color(0xFF5E5E68)
     val circleBgColor = if (item.isCompleted) Color(0xFF686873) else Color.Transparent
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                onFocus()
+                focusRequester.requestFocus()
+                keyboard?.show()
+            }
             .padding(vertical = 4.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -820,10 +1078,15 @@ private fun EditableChecklistItemRow(
 
         BasicTextField(
             value = item.text,
-            onValueChange = onTextChange,
+            onValueChange = {
+                onFocus()
+                onTextChange(it)
+            },
             modifier = Modifier
                 .weight(1f)
                 .padding(vertical = 4.dp)
+                .focusRequester(focusRequester)
+                .onFocusChanged { if (it.isFocused) onFocus() }
                 .semantics { contentDescription = "Madde metni" },
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = if (item.isCompleted) Color(0xFF8E8E98) else Color(0xFFF1F1F5),
@@ -850,12 +1113,24 @@ private fun EditableChecklistItemRow(
 private fun AddChecklistItemRow(
     text: String,
     onTextChange: (String) -> Unit,
+    onFocus: () -> Unit = {},
     onAdd: () -> Unit
 ) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                onFocus()
+                focusRequester.requestFocus()
+                keyboard?.show()
+            }
             .padding(vertical = 4.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -863,7 +1138,15 @@ private fun AddChecklistItemRow(
         Box(
             modifier = Modifier
                 .size(20.dp)
-                .border(1.5.dp, Color(0xFF5E5E68), CircleShape),
+                .border(1.5.dp, Color(0xFF5E5E68), CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    onFocus()
+                    focusRequester.requestFocus()
+                    keyboard?.show()
+                },
             contentAlignment = Alignment.Center
         ) {
             ActionIcon(ActionGlyph.Add, Modifier.size(12.dp), Color(0xFF8E8E98))
@@ -871,10 +1154,15 @@ private fun AddChecklistItemRow(
 
         BasicTextField(
             value = text,
-            onValueChange = onTextChange,
+            onValueChange = {
+                onFocus()
+                onTextChange(it)
+            },
             modifier = Modifier
                 .weight(1f)
                 .padding(vertical = 4.dp)
+                .focusRequester(focusRequester)
+                .onFocusChanged { if (it.isFocused) onFocus() }
                 .semantics { contentDescription = "Yeni madde ekle" },
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = Color.White,
@@ -949,7 +1237,7 @@ private fun DetailAction(
 @Composable
 private fun DetailPreview() {
     BigBosTheme {
-        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _, _ -> }, {})
+        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _, _, _, _, _, _ -> }, {})
     }
 }
 

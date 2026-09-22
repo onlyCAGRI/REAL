@@ -1,14 +1,18 @@
 package com.cagri.bigboscagri.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import java.time.LocalDate
+import com.cagri.bigboscagri.data.ReminderAttachment
+import com.cagri.bigboscagri.data.AttachmentStorage
 import com.cagri.bigboscagri.speech.TimeOfDay
 import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
 import com.cagri.bigboscagri.ui.components.NotificationPermissionSheet
@@ -18,6 +22,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
@@ -51,6 +56,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.cagri.bigboscagri.ui.components.pressScale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -76,14 +82,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -104,6 +114,7 @@ import com.cagri.bigboscagri.ui.components.RealHaptics
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -118,6 +129,7 @@ import com.cagri.bigboscagri.speech.VoicePhase
 import com.cagri.bigboscagri.speech.VoiceReminderParser
 import com.cagri.bigboscagri.speech.VoiceDraftCoordinator
 import com.cagri.bigboscagri.speech.rememberVoiceInput
+import com.cagri.bigboscagri.data.CategoryColorOverride
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.ui.components.AccountMenuOverlay
 import com.cagri.bigboscagri.ui.components.ActionGlyph
@@ -137,10 +149,25 @@ import com.cagri.bigboscagri.ui.components.CategoryIcon
 import com.cagri.bigboscagri.ui.components.CategoryIconGlyph
 import com.cagri.bigboscagri.ui.components.ReminderCard
 import com.cagri.bigboscagri.ui.components.ReminderColorChoices
+import com.cagri.bigboscagri.data.WhatsAppConsentRepository
+import com.cagri.bigboscagri.data.WhatsAppRecipientRepository
+import com.cagri.bigboscagri.data.WhatsAppSender
+import com.cagri.bigboscagri.ui.components.WhatsAppConsentSheet
+import com.cagri.bigboscagri.ui.components.WhatsAppRecipientSheet
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.cagri.bigboscagri.ui.components.ReminderEntryTracker
 import com.cagri.bigboscagri.ui.components.SelectionActionButtons
 import com.cagri.bigboscagri.ui.components.TopGlassOverlay
 import com.cagri.bigboscagri.ui.components.glyph
 import com.cagri.bigboscagri.ui.components.resolveStyle
+import com.cagri.bigboscagri.data.ReminderSortOrder
+import com.cagri.bigboscagri.data.filterAndSortReminders
+import com.cagri.bigboscagri.data.HOME_COMPLETED_PREVIEW_LIMIT
+import com.cagri.bigboscagri.ui.components.CategoryColorFilterButton
+import com.cagri.bigboscagri.ui.components.CategoryColorSelectorHeader
+import com.cagri.bigboscagri.ui.components.CategoryEditButton
+import com.cagri.bigboscagri.ui.components.HomeSortControl
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -155,10 +182,10 @@ internal data class ReminderRoute(val category: ReminderCategory?, val customCat
 @Composable
 fun ReminderScreen(
     reminders: List<ReminderItem>,
-    onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Long?,
+    onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>) -> Long?,
     onToggleCompleted: (Long) -> Unit,
     onToggleImportant: (Long) -> Unit,
-    onEditReminder: (Long, String, Int?, Int?, Long?, List<ChecklistItem>?) -> Unit,
+    onEditReminder: (Long, String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?) -> Unit,
     onDeleteReminder: (Long) -> Unit,
     onSetAlert: (Long, Long?, RecurrenceRule) -> Unit,
     onToggleChecklistItem: (Long, Long) -> Unit = { _, _ -> },
@@ -179,8 +206,8 @@ fun ReminderScreen(
     onDeleteCategory: (Long) -> Unit = {},
     onDeleteCategories: (Set<Long>) -> Unit = { ids -> ids.forEach { onDeleteCategory(it) } },
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
-    builtInCategoryColors: Map<ReminderCategory, Int?> = emptyMap(),
-    onUpdateBuiltInCategoryColor: (ReminderCategory, Int?) -> Unit = { _, _ -> },
+    builtInCategoryColors: Map<ReminderCategory, CategoryColorOverride> = emptyMap(),
+    onUpdateBuiltInCategoryColor: (ReminderCategory, CategoryColorOverride?) -> Unit = { _, _ -> },
     pendingShareDraft: com.cagri.bigboscagri.data.SharedPayload? = null,
     onShareDraftHandled: () -> Unit = {},
     userName: String = "",
@@ -188,17 +215,52 @@ fun ReminderScreen(
     onRequestNotifications: () -> Unit = {},
     onRequestNotificationPermission: () -> Unit = {},
     isFirstHomeIntro: Boolean = false,
-    onFirstHomeIntroComplete: () -> Unit = {}
+    onFirstHomeIntroComplete: () -> Unit = {},
+    onPickAttachment: () -> Unit = {}
 ) {
     var category by rememberSaveable { mutableStateOf<ReminderCategory?>(null) }
     var customCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var detailId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
+    var draftAttachments by rememberSaveable(
+        saver = Saver(
+            save = { list -> ArrayList(list.map { "${it.id}|${it.localPath}" }) },
+            restore = { list ->
+                list.mapNotNull { str ->
+                    val parts = str.split("|", limit = 2)
+                    if (parts.size == 2) ReminderAttachment(parts[0], parts[1]) else null
+                }
+            }
+        )
+    ) { mutableStateOf<List<ReminderAttachment>>(emptyList()) }
     var draftAlertAt by rememberSaveable { mutableStateOf<Long?>(null) }
     var draftRepeatRule by rememberSaveable { mutableStateOf(RecurrenceRule.NONE) }
     var isShareDraft by rememberSaveable { mutableStateOf(false) }
     var draftReferenceUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    val categoryColorFilters = rememberSaveable(
+        saver = Saver<SnapshotStateMap<String, Int>, ArrayList<String>>(
+            save = { map ->
+                val list = ArrayList<String>(map.size)
+                for ((k, v) in map) {
+                    list.add("$k:$v")
+                }
+                list
+            },
+            restore = { list ->
+                val map = mutableStateMapOf<String, Int>()
+                for (item in list) {
+                    val parts = item.split(":", limit = 2)
+                    if (parts.size == 2) {
+                        parts[1].toIntOrNull()?.let { v -> map[parts[0]] = v }
+                    }
+                }
+                map
+            }
+        )
+    ) {
+        mutableStateMapOf<String, Int>()
+    }
     val stateHolder = rememberSaveableStateHolder()
     val scope = rememberCoroutineScope()
     var detailExitJob by remember { mutableStateOf<Job?>(null) }
@@ -354,8 +416,8 @@ fun ReminderScreen(
                                     },
                                     onToggleImportant = { onToggleImportant(reminder.id) },
                                     onToggleChecklistItem = onToggleChecklistItem,
-                                    onSave = { text, accentStart, accentEnd, customCatId, checklistItems ->
-                                        onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId, checklistItems)
+                                    onSave = { text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments ->
+                                        onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments)
                                     },
                                     onDelete = { onDeleteReminder(reminder.id); detailId = null },
                                     customCategories = customCategories,
@@ -369,9 +431,20 @@ fun ReminderScreen(
                                 )
                             } else {
                                 val currentCustomCategory = customCategories.firstOrNull { it.id == route.customCategoryId }
+                                val currentCategoryKey = route.customCategoryId?.let { "custom_$it" } ?: route.category?.let { "cat_${it.name}" }
                                 ReminderListScreen(
                                     reminders = reminders, category = route.category,
                                     customCategory = currentCustomCategory,
+                                    categoryColorFilter = currentCategoryKey?.let { categoryColorFilters[it] },
+                                    onCategoryColorFilterChange = { selected ->
+                                        if (currentCategoryKey != null) {
+                                            if (selected != null) {
+                                                categoryColorFilters[currentCategoryKey] = selected
+                                            } else {
+                                                categoryColorFilters.remove(currentCategoryKey)
+                                            }
+                                        }
+                                    },
                                     builtInCategoryColors = builtInCategoryColors,
                                     onUpdateBuiltInCategoryColor = onUpdateBuiltInCategoryColor,
                                     draft = draft,
@@ -427,7 +500,8 @@ fun ReminderScreen(
                                      userName = userName,
                                      isFirstHomeIntro = isFirstHomeIntro,
                                      onFirstHomeIntroComplete = onFirstHomeIntroComplete,
-                                     isSettingsOpen = showSettings
+                                     isSettingsOpen = showSettings,
+                                     onPickAttachment = onPickAttachment
                                  )
                             }
                         }
@@ -464,8 +538,8 @@ private fun ReminderListScreen(
     onDraftReferenceUrlChange: (String?) -> Unit = {},
     customCategories: List<CustomCategory> = emptyList(),
     customCategory: CustomCategory? = null,
-    builtInCategoryColors: Map<ReminderCategory, Int?> = emptyMap(),
-    onUpdateBuiltInCategoryColor: (ReminderCategory, Int?) -> Unit = { _, _ -> },
+    builtInCategoryColors: Map<ReminderCategory, CategoryColorOverride> = emptyMap(),
+    onUpdateBuiltInCategoryColor: (ReminderCategory, CategoryColorOverride?) -> Unit = { _, _ -> },
     onCreateCategory: (String, String, Int, Int?) -> Unit = { _, _, _, _ -> },
     onEditCategory: (Long, String, String, Int, Int?) -> Unit = { _, _, _, _, _ -> },
     onDeleteCategory: (Long) -> Unit = {},
@@ -477,7 +551,10 @@ private fun ReminderListScreen(
     userName: String = "",
     isFirstHomeIntro: Boolean = false,
     onFirstHomeIntroComplete: () -> Unit = {},
-    isSettingsOpen: Boolean = false
+    isSettingsOpen: Boolean = false,
+    categoryColorFilter: Int? = null,
+    onCategoryColorFilterChange: (Int?) -> Unit = {},
+    onPickAttachment: () -> Unit = {}
 ) {
     var editing by remember { mutableStateOf(false) }
     var editingBuiltInCategory by rememberSaveable { mutableStateOf<ReminderCategory?>(null) }
@@ -513,13 +590,65 @@ private fun ReminderListScreen(
 
     var showCreateCategoryDialog by rememberSaveable { mutableStateOf(false) }
     var showEditCategoryDialog by rememberSaveable { mutableStateOf(false) }
-    var saving by remember { mutableStateOf(false) }
+    var isColorFilterExpanded by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    val uiPreferences = remember { context.getSharedPreferences("bigbos_ui", Context.MODE_PRIVATE) }
+    var sortOrder by rememberSaveable {
+        val saved = uiPreferences.getString("sort_order", null)
+        mutableStateOf(
+            if (saved == "reminder_time") ReminderSortOrder.REMINDER_TIME
+            else ReminderSortOrder.RECENTLY_ADDED
+        )
+    }
+    var saving by remember { mutableStateOf(false) }
+    val whatsAppConsentRepo = remember { WhatsAppConsentRepository(context) }
+    val whatsAppRecipientRepo = remember { WhatsAppRecipientRepository(context) }
+    var isWhatsAppArmed by rememberSaveable { mutableStateOf(false) }
+    var isLabsOpen by rememberSaveable { mutableStateOf(false) }
+    var showWhatsAppConsentSheet by rememberSaveable { mutableStateOf(false) }
+    var showWhatsAppRecipientSheet by rememberSaveable { mutableStateOf(false) }
+    val onToggleWhatsApp: () -> Unit = {
+        if (!whatsAppConsentRepo.hasConsent()) {
+            showWhatsAppConsentSheet = true
+        } else if (!whatsAppRecipientRepo.hasRecipient()) {
+            showWhatsAppRecipientSheet = true
+        } else {
+            isWhatsAppArmed = !isWhatsAppArmed
+        }
+    }
     val view = LocalView.current
     var showAccountMenu by rememberSaveable { mutableStateOf(false) }
     val inputFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+
+    val composerPhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(3)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            val remainingSlots = 3 - draftAttachments.size
+            val toAdd = uris.take(remainingSlots).mapNotNull { uri ->
+                AttachmentStorage.copyUriToAttachments(context, uri)
+            }
+            if (toAdd.isNotEmpty()) {
+                draftAttachments = draftAttachments + toAdd
+            }
+        }
+    }
+    val handlePickComposerAttachment: () -> Unit = {
+        if (draftAttachments.size < 3) {
+            composerPhotoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
+    }
+    val handleRemoveDraftAttachment: (Int) -> Unit = { index ->
+        if (index in draftAttachments.indices) {
+            val item = draftAttachments[index]
+            AttachmentStorage.deleteAttachmentFile(item.localPath)
+            draftAttachments = draftAttachments.filterIndexed { i, _ -> i != index }
+        }
+    }
 
     val requestPermissionForAction: (PendingNotificationAction) -> Unit = { action ->
         if (!notificationsAllowed) {
@@ -609,14 +738,7 @@ private fun ReminderListScreen(
         }
     }
 
-    var newlyCreatedReminderId by remember { mutableStateOf<Long?>(null) }
-
-    LaunchedEffect(newlyCreatedReminderId) {
-        if (newlyCreatedReminderId != null) {
-            delay(350)
-            newlyCreatedReminderId = null
-        }
-    }
+    val entryTracker = remember { ReminderEntryTracker(scope) }
 
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var selectedCategoryIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
@@ -662,17 +784,21 @@ private fun ReminderListScreen(
                     showDatePicker = true
                 } else {
                     saving = true
+                    val wasWhatsAppArmed = isWhatsAppArmed
+                    isWhatsAppArmed = false
                     scope.launch {
                         try {
                             val items = validItems.mapIndexed { idx, itmText -> ChecklistItem(id = 0L, text = itmText) }
                             val resolvedTitle = text.trim()
-                            val createdId = onAddReminder(resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl)
+                            val createdId = onAddReminder(resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl, draftAttachments)
                             if (createdId != null) {
-                                newlyCreatedReminderId = createdId
+                                draftAttachments = emptyList()
+                                entryTracker.onReminderCreated(createdId, reduceAnimations)
                                 RealHaptics.success(view)
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
                                 isChecklistMode = false
                                 checklistDraftItems = listOf("")
+                                isLabsOpen = false
                                 sendImmediateNotification = false
                                 onDraftChange("")
                                 isVoiceDraft = false
@@ -682,7 +808,26 @@ private fun ReminderListScreen(
                                 onShareDraftChange(false)
                                 onDraftReferenceUrlChange(null)
                                 focusManager.clearFocus(); keyboard?.hide()
-                                if (reduceAnimations) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+
+                                if (wasWhatsAppArmed) {
+                                    scope.launch {
+                                        val recipientPhone = whatsAppRecipientRepo.getRecipient()
+                                        val sendSuccess = WhatsAppSender.sendReminder(
+                                            id = createdId,
+                                            text = resolvedTitle,
+                                            isChecklist = true,
+                                            checklistItems = validItems,
+                                            recipient = recipientPhone
+                                        )
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(
+                                                context,
+                                                if (sendSuccess) "WhatsApp'a gönderildi" else "WhatsApp gönderilemedi",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                }
                             }
                         } finally { saving = false }
                     }
@@ -695,13 +840,18 @@ private fun ReminderListScreen(
                     showDatePicker = true
                 } else {
                     saving = true
+                    val wasWhatsAppArmed = isWhatsAppArmed
+                    isWhatsAppArmed = false
                     scope.launch {
                         try {
-                            val createdId = onAddReminder(text.trim(), alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl)
+                            val reminderText = text.trim()
+                            val createdId = onAddReminder(reminderText, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl, draftAttachments)
                             if (createdId != null) {
-                                newlyCreatedReminderId = createdId
+                                draftAttachments = emptyList()
+                                entryTracker.onReminderCreated(createdId, reduceAnimations)
                                 RealHaptics.success(view)
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
+                                isLabsOpen = false
                                 sendImmediateNotification = false
                                 onDraftChange("")
                                 isVoiceDraft = false
@@ -711,7 +861,26 @@ private fun ReminderListScreen(
                                 onShareDraftChange(false)
                                 onDraftReferenceUrlChange(null)
                                 focusManager.clearFocus(); keyboard?.hide()
-                                if (reduceAnimations) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+
+                                if (wasWhatsAppArmed) {
+                                    scope.launch {
+                                        val recipientPhone = whatsAppRecipientRepo.getRecipient()
+                                        val sendSuccess = WhatsAppSender.sendReminder(
+                                            id = createdId,
+                                            text = reminderText,
+                                            isChecklist = false,
+                                            checklistItems = emptyList(),
+                                            recipient = recipientPhone
+                                        )
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(
+                                                context,
+                                                if (sendSuccess) "WhatsApp'a gönderildi" else "WhatsApp gönderilemedi",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                }
                             }
                         } finally { saving = false }
                     }
@@ -744,6 +913,10 @@ private fun ReminderListScreen(
                 sendImmediateNotification = false
             }
         }
+        if (result.isChecklist && result.checklistItems.isNotEmpty()) {
+            isChecklistMode = true
+            checklistDraftItems = result.checklistItems
+        }
         isVoiceDraft = true
     }
     val voice = rememberVoiceInput(draft, onDraftChange, onVoiceFinalize, observeLevel = !reduceAnimations)
@@ -765,26 +938,33 @@ private fun ReminderListScreen(
             textLineCount = 1
         }
     }
-    val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null || requiresTimeSelection || draftCategoryId != null || isChecklistMode || isVoiceDraft || isShareDraft || sendImmediateNotification || pendingNotificationAction != PendingNotificationAction.NONE
+    val expanded = editing || voice.phase != VoicePhase.Idle || alertAt != null || requiresTimeSelection || draftCategoryId != null || isChecklistMode || isVoiceDraft || isShareDraft || sendImmediateNotification || pendingNotificationAction != PendingNotificationAction.NONE || draftAttachments.isNotEmpty()
     LaunchedEffect(showDatePicker, showNotificationPermissionSheet, refocus) {
         if (!showDatePicker && !showNotificationPermissionSheet && refocus) { refocus = false; inputFocus.requestFocus(); keyboard?.show() }
     }
+    val labsExtraHeight = if (isLabsOpen && expanded) 76.dp else 0.dp
+    val attachmentExtraHeight = if (draftAttachments.isNotEmpty()) 48.dp else 0.dp
     val targetComposerHeight = when {
-        isChecklistMode -> 280.dp
+        isChecklistMode -> 280.dp + labsExtraHeight + attachmentExtraHeight
         voice.phase != VoicePhase.Idle -> {
             val extraLines = (voiceLineCount - 1).coerceIn(0, 3)
-            (118 + extraLines * 27).dp
+            (118 + extraLines * 27).dp + labsExtraHeight + attachmentExtraHeight
         }
         expanded -> {
             val extraLines = (textLineCount - 1).coerceIn(0, 3)
-            (118 + extraLines * 27).dp
+            (118 + extraLines * 27).dp + labsExtraHeight + attachmentExtraHeight
         }
         else -> 58.dp
     }
     val composerHeight by animateDpAsState(
         targetComposerHeight,
-        if (reduceAnimations) snap() else tween(220),
+        if (reduceAnimations) snap() else tween(280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
         label = "composerHeight"
+    )
+    val labsProgress by animateFloatAsState(
+        targetValue = if (isLabsOpen && expanded) 1f else 0f,
+        animationSpec = if (reduceAnimations) snap() else tween(280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+        label = "labsProgress"
     )
     val bottomGap by animateDpAsState(
         if (expanded) 20.dp else 12.dp,
@@ -801,13 +981,28 @@ private fun ReminderListScreen(
         }
     }
     val anySelectionMode = isSelectionMode || isCategorySelectionMode
+    BackHandler(enabled = isLabsOpen && !anySelectionMode) { isLabsOpen = false }
+    BackHandler(enabled = isColorFilterExpanded && !anySelectionMode) { isColorFilterExpanded = false }
     BackHandler(enabled = isCategorySelectionMode) { selectedCategoryIds = emptySet() }
     BackHandler(enabled = isSelectionMode && !isCategorySelectionMode) { selectedIds = emptySet() }
     BackHandler(enabled = showAccountMenu && !anySelectionMode) { showAccountMenu = false }
     BackHandler(enabled = showCategoryPicker && !anySelectionMode) { showCategoryPicker = false }
-    BackHandler(enabled = isChecklistMode && !showAccountMenu && !showDatePicker && !showCategoryPicker && !anySelectionMode) {
+    BackHandler(enabled = (isChecklistMode || draftAttachments.isNotEmpty()) && !showAccountMenu && !showDatePicker && !showCategoryPicker && !anySelectionMode) {
+        if (draftAttachments.isNotEmpty()) {
+            AttachmentStorage.deleteAttachmentFiles(draftAttachments)
+            draftAttachments = emptyList()
+        }
         isChecklistMode = false
         checklistDraftItems = listOf("")
+        if (isVoiceDraft) {
+            isVoiceDraft = false
+            requiresTimeSelection = false
+            pendingDateHintEpochDay = null
+            pendingTimeOfDay = null
+            onDraftChange("")
+            onAlertChange(null, RecurrenceRule.NONE)
+            draftCategoryId = if (customCategory != null) customCategory.id else null
+        }
         focusManager.clearFocus()
         keyboard?.hide()
     }
@@ -847,79 +1042,45 @@ private fun ReminderListScreen(
         }
     }
     val today = rememberReminderDay()
-    var pendingExitReminderIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
-    val pendingExitJobs = remember { mutableMapOf<Long, Job>() }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            pendingExitJobs.values.forEach { it.cancel() }
-            pendingExitJobs.clear()
-        }
-    }
-
-    val handleToggleCompleted: (ReminderItem) -> Unit = { reminder ->
-        pendingExitJobs[reminder.id]?.cancel()
-        pendingExitJobs.remove(reminder.id)
-
-        if (reminder.hasRepeat) {
-            onToggleCompleted(reminder.id)
-        } else if (reminder.isCompleted) {
-            pendingExitReminderIds = pendingExitReminderIds - reminder.id
-            onToggleCompleted(reminder.id)
-        } else {
-            if (reduceAnimations) {
-                pendingExitReminderIds = pendingExitReminderIds - reminder.id
-                onToggleCompleted(reminder.id)
-            } else {
-                pendingExitReminderIds = pendingExitReminderIds + reminder.id
-                onToggleCompleted(reminder.id)
-                pendingExitJobs[reminder.id] = scope.launch {
-                    delay(240)
-                    pendingExitReminderIds = pendingExitReminderIds - reminder.id
-                    pendingExitJobs.remove(reminder.id)
-                }
-            }
-        }
-    }
-
-    val active = remember(reminders, category, customCategory, today, pendingExitReminderIds) {
-        val base = when {
+    val baseActive = remember(reminders, category, customCategory, today) {
+        when {
             category == ReminderCategory.Completed -> reminders.inCategory(ReminderCategory.Completed, today)
-            category != null -> {
-                val matchingIds = reminders.map { if (it.id in pendingExitReminderIds) it.copy(completedAt = null) else it }
-                    .inCategory(category, today)
-                    .map { it.id }
-                    .toSet()
-                reminders.filter { it.id in matchingIds }.sortedByDescending { it.createdAt }
-            }
+            category != null -> reminders.inCategory(category, today)
             customCategory != null -> reminders.filter {
-                it.customCategoryId == customCategory.id && (!it.isCompleted || it.id in pendingExitReminderIds)
+                it.customCategoryId == customCategory.id && !it.isCompleted
             }.sortedByDescending { it.createdAt }
-            else -> reminders.filter { !it.isCompleted || it.id in pendingExitReminderIds }
+            else -> reminders.filter { !it.isCompleted }
         }
-        base
     }
-    val completed = remember(reminders, category, customCategory, pendingExitReminderIds) {
+    val active = remember(baseActive, categoryColorFilter, sortOrder, category, customCategory) {
+        val effectiveColorFilter = if (category != null || customCategory != null) categoryColorFilter else null
+        filterAndSortReminders(baseActive, effectiveColorFilter, sortOrder)
+    }
+    val baseCompleted = remember(reminders, category, customCategory) {
         when {
             category == null && customCategory == null ->
                 reminders.inCategory(ReminderCategory.Completed)
-                    .filter { it.id !in pendingExitReminderIds }
                     .sortedByDescending { it.completedAt ?: it.createdAt }
-                    .take(20)
             customCategory != null -> reminders.filter {
-                it.customCategoryId == customCategory.id && it.isCompleted && it.id !in pendingExitReminderIds
+                it.customCategoryId == customCategory.id && it.isCompleted
             }.sortedByDescending { it.completedAt ?: it.createdAt }
             else -> emptyList()
         }
     }
-    val totalCompletedCount = remember(reminders, pendingExitReminderIds) {
-        reminders.inCategory(ReminderCategory.Completed).count { it.id !in pendingExitReminderIds }
+    val completed = remember(baseCompleted, categoryColorFilter, sortOrder, category, customCategory) {
+        val effectiveColorFilter = if (category != null || customCategory != null) categoryColorFilter else null
+        filterAndSortReminders(baseCompleted, effectiveColorFilter, sortOrder)
+    }
+    val isHome = category == null && customCategory == null
+    val completedPreview = remember(completed, isHome) {
+        if (isHome) completed.take(HOME_COMPLETED_PREVIEW_LIMIT) else completed
     }
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     val customCategoriesById = remember(customCategories) { customCategories.associateBy { it.id } }
 
     DisposableEffect(category, customCategory) {
+        isColorFilterExpanded = false
         if (category != null || customCategory != null) {
             showAccountMenu = false
             selectedIds = emptySet()
@@ -991,97 +1152,130 @@ private fun ReminderListScreen(
                             GuestAvatar(Modifier.size(36.dp))
                         }
                     }
-                } else if (customCategory != null) {
-                    val startColor = ReminderColorChoices.getOrNull(customCategory.accentStart)?.color ?: Color(0xFF233F73)
-                    val endColor = customCategory.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
-                    val icon = CategoryIcon.fromKey(customCategory.iconKey)
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Ana sayfaya dön" }) {
-                            ActionIcon(ActionGlyph.Back, Modifier.size(23.dp))
-                        }
-                        Spacer(Modifier.width(2.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .drawWithCache {
-                                    val topLight = Brush.radialGradient(
-                                        colors = listOf(startColor.copy(alpha = 0.85f), Color.Transparent),
-                                        center = Offset(size.width * 0.95f, -size.height * 0.1f),
-                                        radius = size.width * 1.12f
-                                    )
-                                    val bottomLight = Brush.radialGradient(
-                                        colors = listOf(endColor.copy(alpha = 0.70f), Color.Transparent),
-                                        center = Offset(-size.width * 0.05f, size.height * 1.1f),
-                                        radius = size.width * 1.15f
-                                    )
-                                    onDrawBehind {
-                                        drawRect(Color(0xFF14151C))
-                                        drawRect(topLight)
-                                        drawRect(bottomLight)
-                                    }
+                } else {
+                    AnimatedContent(
+                        targetState = isColorFilterExpanded,
+                        transitionSpec = {
+                            if (reduceAnimations) {
+                                EnterTransition.None togetherWith ExitTransition.None
+                            } else {
+                                (fadeIn(tween(200, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))) +
+                                    scaleIn(tween(200, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)), initialScale = 0.96f)) togetherWith
+                                (fadeOut(tween(160, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))) +
+                                    scaleOut(tween(160, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)), targetScale = 0.96f))
+                            }
+                        },
+                        label = "categoryHeaderFilterTransition"
+                    ) { inFilterMode ->
+                        if (inFilterMode) {
+                            CategoryColorSelectorHeader(
+                                selectedColorFilter = categoryColorFilter,
+                                onSelectColor = { selected ->
+                                    onCategoryColorFilterChange(selected)
+                                    isColorFilterExpanded = false
+                                },
+                                onClose = { isColorFilterExpanded = false },
+                                reduceAnimations = reduceAnimations
+                            )
+                        } else if (customCategory != null) {
+                            val startColor = ReminderColorChoices.getOrNull(customCategory.accentStart)?.color ?: Color(0xFF233F73)
+                            val endColor = customCategory.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
+                            val icon = CategoryIcon.fromKey(customCategory.iconKey)
+                            Row(
+                                Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Ana sayfaya dön" }) {
+                                    ActionIcon(ActionGlyph.Back, Modifier.size(23.dp))
                                 }
-                                .border(0.75.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CategoryIconGlyph(icon = icon, modifier = Modifier.size(20.dp), color = Color.White)
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = customCategory.name,
-                            color = Color.White,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(
-                            onClick = { showEditCategoryDialog = true },
-                            modifier = Modifier.semantics { contentDescription = "Kategoriyi düzenle" }
-                        ) {
-                            ActionIcon(ActionGlyph.Edit, Modifier.size(21.dp), color = Color(0xFFC0C0CB))
-                        }
-                    }
-                } else if (category != null) {
-                    val resolvedStyle = category.resolveStyle(builtInCategoryColors[category])
-                    val badgeColor = resolvedStyle.tint
-                    val glyph = category.glyph()
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Ana sayfaya dön" }) {
-                            ActionIcon(ActionGlyph.Back, Modifier.size(23.dp))
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(badgeColor.copy(alpha = 0.2f))
-                                .border(1.dp, badgeColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CategoryGlyph(glyph, Modifier.size(20.dp), tint = badgeColor)
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = category.title,
-                            color = Color.White,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(
-                            onClick = { editingBuiltInCategory = category },
-                            modifier = Modifier.semantics { contentDescription = "Kategori rengini düzenle" }
-                        ) {
-                            ActionIcon(ActionGlyph.Edit, Modifier.size(21.dp), color = Color(0xFFC0C0CB))
+                                Spacer(Modifier.width(2.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .drawWithCache {
+                                            val topLight = Brush.radialGradient(
+                                                colors = listOf(startColor.copy(alpha = 0.85f), Color.Transparent),
+                                                center = Offset(size.width * 0.95f, -size.height * 0.1f),
+                                                radius = size.width * 1.12f
+                                            )
+                                            val bottomLight = Brush.radialGradient(
+                                                colors = listOf(endColor.copy(alpha = 0.70f), Color.Transparent),
+                                                center = Offset(-size.width * 0.05f, size.height * 1.1f),
+                                                radius = size.width * 1.15f
+                                            )
+                                            onDrawBehind {
+                                                drawRect(Color(0xFF14151C))
+                                                drawRect(topLight)
+                                                drawRect(bottomLight)
+                                            }
+                                        }
+                                        .border(0.75.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CategoryIconGlyph(icon = icon, modifier = Modifier.size(20.dp), color = Color.White)
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    text = customCategory.name,
+                                    color = Color.White,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                CategoryColorFilterButton(
+                                    hasFilter = categoryColorFilter != null,
+                                    selectedColorIndex = categoryColorFilter,
+                                    onClick = { isColorFilterExpanded = true }
+                                )
+                                CategoryEditButton(
+                                    onClick = { showEditCategoryDialog = true },
+                                    contentDescription = "Kategoriyi düzenle"
+                                )
+                            }
+                        } else if (category != null) {
+                            val resolvedStyle = category.resolveStyle(builtInCategoryColors[category])
+                            val badgeColor = resolvedStyle.tint
+                            val glyph = category.glyph()
+                            Row(
+                                Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Ana sayfaya dön" }) {
+                                    ActionIcon(ActionGlyph.Back, Modifier.size(23.dp))
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(badgeColor.copy(alpha = 0.2f))
+                                        .border(1.dp, badgeColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CategoryGlyph(glyph, Modifier.size(20.dp), tint = badgeColor)
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    text = category.title,
+                                    color = Color.White,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                CategoryColorFilterButton(
+                                    hasFilter = categoryColorFilter != null,
+                                    selectedColorIndex = categoryColorFilter,
+                                    onClick = { isColorFilterExpanded = true }
+                                )
+                                CategoryEditButton(
+                                    onClick = { editingBuiltInCategory = category },
+                                    contentDescription = "Kategori rengini düzenle"
+                                )
+                            }
                         }
                     }
                 }
@@ -1124,7 +1318,36 @@ private fun ReminderListScreen(
                         reduceAnimations = reduceAnimations
                     )
                     Spacer(Modifier.height(24.dp))
-                    SectionTitle("Hatırlatıcılar")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 18.dp, end = 6.dp, bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Hatırlatıcılar",
+                            color = Color(0xFFF2F2F4),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        HomeSortControl(
+                            sortOrder = sortOrder,
+                            onToggleSortOrder = {
+                                val next = if (sortOrder == ReminderSortOrder.RECENTLY_ADDED) {
+                                    ReminderSortOrder.REMINDER_TIME
+                                } else {
+                                    ReminderSortOrder.RECENTLY_ADDED
+                                }
+                                sortOrder = next
+                                uiPreferences.edit().putString(
+                                    "sort_order",
+                                    if (next == ReminderSortOrder.REMINDER_TIME) "reminder_time" else "recently_added"
+                                ).apply()
+                            },
+                            reduceAnimations = reduceAnimations
+                        )
+                    }
                 }
             }
             val isListEmpty = when {
@@ -1136,6 +1359,7 @@ private fun ReminderListScreen(
                 item(key = "empty") {
                     Box(Modifier.fillMaxWidth().height(104.dp).padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
                         val emptyMsg = when {
+                            (category != null || customCategory != null) && categoryColorFilter != null -> "Bu renkte hatırlatıcı yok"
                             customCategory != null -> "Bu kategoride henüz hatırlatıcı yok"
                             category != null -> category.emptyMessage
                             else -> "Henüz hatırlatıcı yok"
@@ -1146,13 +1370,13 @@ private fun ReminderListScreen(
             }
             items(active, key = { it.id }, contentType = { "reminder" }) { reminder ->
                 val isSelected = reminder.id in selectedIds
-                val isNewlyCreated = reminder.id == newlyCreatedReminderId
+                val isNewlyCreated = entryTracker.isAnimating(reminder.id)
                 val reminderCategory = remember(reminder.customCategoryId, customCategoriesById, customCategory) {
                     reminder.customCategoryId?.let { customCategoriesById[it] }
                         ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
                 }
                 ReminderCard(
-                    reminder, onToggle = { handleToggleCompleted(reminder) },
+                    reminder, onToggle = { onToggleCompleted(reminder.id) },
                     onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                     reduceAnimations = reduceAnimations,
                     sharedTransitionScope = sharedTransitionScope,
@@ -1160,7 +1384,9 @@ private fun ReminderListScreen(
                     isSelectionMode = isSelectionMode,
                     isSelected = isSelected,
                     isNewlyCreated = isNewlyCreated,
+                    onEntryAnimationFinished = { entryTracker.onAnimationFinished(reminder.id) },
                     customCategory = reminderCategory,
+                    showCategoryStripes = category == null && customCategory == null,
                     onLongClick = {
                         if (category == null && customCategory == null && !isCategorySelectionMode) {
                             voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
@@ -1179,7 +1405,7 @@ private fun ReminderListScreen(
                                 durationMillis = 240,
                                 easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
                             ),
-                            fadeInSpec = tween(180),
+                            fadeInSpec = if (isNewlyCreated) null else tween(180),
                             fadeOutSpec = tween(180)
                         ))
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -1189,69 +1415,83 @@ private fun ReminderListScreen(
                 item(key = "completed_heading") {
                     Spacer(Modifier.height(18.dp)); SectionTitle("Tamamlandı")
                 }
-                items(completed, key = { it.id }, contentType = { "reminder" }) { reminder ->
-                    val isSelected = reminder.id in selectedIds
-                    val reminderCategory = remember(reminder.customCategoryId, customCategoriesById, customCategory) {
-                        reminder.customCategoryId?.let { customCategoriesById[it] }
-                            ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
-                    }
-                    ReminderCard(
-                        reminder, onToggle = { handleToggleCompleted(reminder) },
-                        onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
-                        reduceAnimations = reduceAnimations,
-                        sharedTransitionScope = sharedTransitionScope,
-                        animatedVisibilityScope = animatedVisibilityScope,
-                        isSelectionMode = isSelectionMode,
-                        isSelected = isSelected,
-                        customCategory = reminderCategory,
-                        onLongClick = {
-                            if (category == null && customCategory == null && !isCategorySelectionMode) {
-                                voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
-                                selectedCategoryIds = emptySet()
-                                selectedIds = selectedIds + reminder.id
-                            }
-                        },
-                        onSelectToggle = {
-                            if (category == null && customCategory == null) {
-                                selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
-                            }
-                        },
-                        modifier = Modifier
-                            .then(if (reduceAnimations) Modifier else Modifier.animateItem(
-                                placementSpec = tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                                fadeInSpec = tween(180),
-                                fadeOutSpec = tween(180)
-                            ))
-                            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                    )
-                }
-                if (category == null && customCategory == null && totalCompletedCount > 20) {
-                    item(key = "show_all_completed") {
-                        val showAllInteractionSource = remember { MutableInteractionSource() }
+                if (isHome) {
+                    item(key = "home_completed_preview_container") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 12.dp)
-                                .height(44.dp)
-                                .pressScale(showAllInteractionSource, targetScale = 0.98f, reduceAnimations = reduceAnimations)
-                                .clickable(
-                                    interactionSource = showAllInteractionSource,
-                                    indication = null
-                                ) {
-                                    voice.cancel()
-                                    focusManager.clearFocus()
-                                    keyboard?.hide()
-                                    onOpenCategory(ReminderCategory.Completed)
-                                },
-                            contentAlignment = Alignment.Center
+                                .then(if (reduceAnimations) Modifier else Modifier.animateItem(
+                                    placementSpec = tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                                    fadeInSpec = tween(180),
+                                    fadeOutSpec = tween(180)
+                                ))
                         ) {
-                            Text(
-                                text = "Tümünü göster",
-                                color = Color(0xFF94B8F7),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(if (reduceAnimations) Modifier else Modifier.animateContentSize(tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))))
+                            ) {
+                                completedPreview.forEachIndexed { index, reminder ->
+                                    key(reminder.id) {
+                                        val isSelected = reminder.id in selectedIds
+                                        val reminderCategory = remember(reminder.customCategoryId, customCategoriesById, customCategory) {
+                                            reminder.customCategoryId?.let { customCategoriesById[it] }
+                                                ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
+                                        }
+                                        ReminderCard(
+                                            reminder, onToggle = { onToggleCompleted(reminder.id) },
+                                            onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
+                                            reduceAnimations = reduceAnimations,
+                                            sharedTransitionScope = sharedTransitionScope,
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            isSelectionMode = isSelectionMode,
+                                            isSelected = isSelected,
+                                            customCategory = reminderCategory,
+                                            showCategoryStripes = true,
+                                            onLongClick = {
+                                                if (!isCategorySelectionMode) {
+                                                    voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
+                                                    selectedCategoryIds = emptySet()
+                                                    selectedIds = selectedIds + reminder.id
+                                                }
+                                            },
+                                            onSelectToggle = {
+                                                selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
+                                            },
+                                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
+                    }
+                } else {
+                    items(completed, key = { it.id }, contentType = { "reminder" }) { reminder ->
+                        val isSelected = reminder.id in selectedIds
+                        val reminderCategory = remember(reminder.customCategoryId, customCategoriesById, customCategory) {
+                            reminder.customCategoryId?.let { customCategoriesById[it] }
+                                ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
+                        }
+                        ReminderCard(
+                            reminder, onToggle = { onToggleCompleted(reminder.id) },
+                            onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
+                            reduceAnimations = reduceAnimations,
+                            sharedTransitionScope = sharedTransitionScope,
+                            animatedVisibilityScope = animatedVisibilityScope,
+                            isSelectionMode = isSelectionMode,
+                            isSelected = isSelected,
+                            customCategory = reminderCategory,
+                            showCategoryStripes = false,
+                            onLongClick = { },
+                            onSelectToggle = { },
+                            modifier = Modifier
+                                .then(if (reduceAnimations) Modifier else Modifier.animateItem(
+                                    placementSpec = tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                                    fadeInSpec = tween(180),
+                                    fadeOutSpec = tween(180)
+                                ))
+                                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                        )
                     }
                 }
             }
@@ -1310,6 +1550,9 @@ private fun ReminderListScreen(
             customCategories = customCategories,
             selectedCategoryId = draftCategoryId,
             onPickCategory = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showCategoryPicker = true },
+            onPickAttachment = handlePickComposerAttachment,
+            draftAttachments = draftAttachments,
+            onRemoveDraftAttachment = handleRemoveDraftAttachment,
             onSubmit = { if (voice.phase == VoicePhase.Idle) submit(draft) else voice.finish() },
             expanded = expanded, onFocusChanged = { editing = it }, focusRequester = inputFocus,
             backdrop = scene, backdropPosition = { scenePosition },
@@ -1376,6 +1619,14 @@ private fun ReminderListScreen(
             isVoiceDraft = isVoiceDraft,
             isShareDraft = isShareDraft,
             isHomeReady = isHomeReadyForShimmer && category == null && customCategory == null && !isSettingsOpen,
+            isLabsOpen = isLabsOpen,
+            labsProgress = labsProgress,
+            isWhatsAppArmed = isWhatsAppArmed,
+            onToggleWhatsApp = onToggleWhatsApp,
+            hasSavedRecipient = whatsAppRecipientRepo.hasRecipient(),
+            onConfigureRecipient = { showWhatsAppRecipientSheet = true },
+            onSwipeUp = { if (expanded && !isLabsOpen) isLabsOpen = true },
+            onSwipeDown = { if (isLabsOpen) isLabsOpen = false },
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = bottomGap).height(composerHeight)
                 .graphicsLayer {
@@ -1516,16 +1767,45 @@ private fun ReminderListScreen(
             },
             reduceAnimations = reduceAnimations
         )
+        WhatsAppConsentSheet(
+            visible = showWhatsAppConsentSheet,
+            onAllow = {
+                whatsAppConsentRepo.setConsent(true)
+                showWhatsAppConsentSheet = false
+                if (!whatsAppRecipientRepo.hasRecipient()) {
+                    showWhatsAppRecipientSheet = true
+                } else {
+                    isWhatsAppArmed = true
+                }
+            },
+            onDismiss = {
+                showWhatsAppConsentSheet = false
+            },
+            reduceAnimations = reduceAnimations
+        )
+        WhatsAppRecipientSheet(
+            visible = showWhatsAppRecipientSheet,
+            initialPhoneNumber = whatsAppRecipientRepo.getRecipient(),
+            onSaveRecipient = { normalizedPhone ->
+                whatsAppRecipientRepo.setRecipient(normalizedPhone)
+                isWhatsAppArmed = true
+                showWhatsAppRecipientSheet = false
+            },
+            onDismiss = {
+                showWhatsAppRecipientSheet = false
+            },
+            reduceAnimations = reduceAnimations
+        )
         if (editingBuiltInCategory != null) {
             val targetCat = editingBuiltInCategory!!
             CategoryEditor(
                 builtInCategory = targetCat,
-                builtInColorIndex = builtInCategoryColors[targetCat],
+                builtInColorOverride = builtInCategoryColors[targetCat],
                 backdrop = scene,
                 backdropPosition = { scenePosition },
                 onDismiss = { editingBuiltInCategory = null },
-                onSaveBuiltInColor = { cat, colorIdx ->
-                    onUpdateBuiltInCategoryColor(cat, colorIdx)
+                onSaveBuiltInColor = { cat, override ->
+                    onUpdateBuiltInCategoryColor(cat, override)
                     editingBuiltInCategory = null
                 },
                 designStyle = designStyle,

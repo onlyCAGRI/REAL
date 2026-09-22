@@ -40,6 +40,20 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                                 }
                             }
                         } else emptyList()
+                    val attachments = if (item.has("attachments")) {
+                        val attsArray = item.optJSONArray("attachments")
+                        if (attsArray != null) {
+                            buildList {
+                                for (i in 0 until attsArray.length()) {
+                                    val obj = attsArray.getJSONObject(i)
+                                    val id = obj.optString("id")
+                                    val localPath = obj.optString("localPath")
+                                    if (id.isNotBlank() && localPath.isNotBlank()) {
+                                        add(ReminderAttachment(id = id, localPath = localPath))
+                                    }
+                                }
+                            }
+                        } else emptyList()
                     } else emptyList()
                     add(
                         ReminderItem(
@@ -59,7 +73,12 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             isChecklist = isChecklist,
                             checklistItems = checklistItems,
                             sendImmediateNotification = item.optBoolean("sendImmediateNotification", true),
-                            referenceUrl = item.optString("referenceUrl").takeIf { !it.isNullOrBlank() && it != "null" }
+                            referenceUrl = item.optString("referenceUrl").takeIf { !it.isNullOrBlank() && it != "null" },
+                            starBorderColorIndex = item.optionalAccent("starBorderColorIndex")
+                                ?: if (item.optBoolean("isImportant", false)) Math.floorMod(item.getLong("id"), 10) else null,
+                            gradientBlendFraction = item.optionalBlendFraction(),
+                            customSolidColorArgb = item.optionalColorArgb("customSolidColorArgb"),
+                            attachments = attachments
                         )
                     )
                 }
@@ -78,7 +97,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         isChecklist: Boolean = false,
         checklistItems: List<ChecklistItem> = emptyList(),
         sendImmediateNotification: Boolean = true,
-        referenceUrl: String? = null
+        referenceUrl: String? = null,
+        attachments: List<ReminderAttachment> = emptyList()
     ): ReminderItem = synchronized(mutationLock) {
         val trimmedTitle = text.trim()
         require(trimmedTitle.isNotBlank()) { "Başlık boş olamaz" }
@@ -107,7 +127,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
             isChecklist = isChecklist,
             checklistItems = normalizedItems,
             sendImmediateNotification = sendImmediateNotification,
-            referenceUrl = referenceUrl?.trim()?.takeIf { it.isNotBlank() }
+            referenceUrl = referenceUrl?.trim()?.takeIf { it.isNotBlank() },
+            attachments = attachments
         )
         val updated = listOf(newItem) + previous
         save(updated)
@@ -157,8 +178,18 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         }
     }
 
-    fun toggleImportant(id: Long): List<ReminderItem> = update(id) {
-        it.copy(isImportant = !it.isImportant, updatedAt = System.currentTimeMillis())
+    fun toggleImportant(id: Long): List<ReminderItem> = update(id) { reminder ->
+        val newImportant = !reminder.isImportant
+        val starBorderIndex = if (newImportant) {
+            reminder.starBorderColorIndex ?: (0 until 10).random()
+        } else {
+            reminder.starBorderColorIndex
+        }
+        reminder.copy(
+            isImportant = newImportant,
+            starBorderColorIndex = starBorderIndex,
+            updatedAt = System.currentTimeMillis()
+        )
     }
 
     fun edit(
@@ -168,11 +199,17 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         accentEnd: Int? = null,
         customCategoryId: Long? = null,
         updateCategory: Boolean = true,
-        checklistItems: List<ChecklistItem>? = null
+        checklistItems: List<ChecklistItem>? = null,
+        starBorderColorIndex: Int? = null,
+        gradientBlendFraction: Float? = null,
+        customSolidColorArgb: Int? = null,
+        attachments: List<ReminderAttachment>? = null
     ): List<ReminderItem> {
         require(text.isNotBlank())
         require(accentStart == null || accentStart in ACCENT_RANGE)
         require(accentEnd == null || accentEnd in ACCENT_RANGE)
+        require(starBorderColorIndex == null || starBorderColorIndex in ACCENT_RANGE)
+        require(gradientBlendFraction == null || (gradientBlendFraction in 0.0f..1.0f))
         return update(id) { reminder ->
             val updatedChecklist = if (checklistItems != null) {
                 checklistItems.filter { it.text.isNotBlank() }.mapIndexed { index, item ->
@@ -180,16 +217,45 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                     else ChecklistItem(id = System.currentTimeMillis() + index + 1L, text = item.text.trim(), completedAt = item.completedAt)
                 }
             } else reminder.checklistItems
+            val resolvedBlendFraction = if (accentStart != null && accentEnd != null) {
+                gradientBlendFraction ?: reminder.gradientBlendFraction
+            } else null
             reminder.copy(
                 text = text.trim(),
                 accentStart = accentStart,
                 accentEnd = accentEnd,
                 customCategoryId = if (updateCategory) customCategoryId else reminder.customCategoryId,
                 checklistItems = updatedChecklist,
+                starBorderColorIndex = starBorderColorIndex ?: reminder.starBorderColorIndex,
+                gradientBlendFraction = resolvedBlendFraction,
+                customSolidColorArgb = customSolidColorArgb,
+                attachments = attachments ?: reminder.attachments,
                 updatedAt = System.currentTimeMillis()
             )
         }
     }
+
+    fun edit(
+        id: Long,
+        text: String,
+        accentStart: Int? = null,
+        accentEnd: Int? = null,
+        customCategoryId: Long? = null,
+        updateCategory: Boolean = true,
+        checklistItems: List<ChecklistItem>? = null,
+        starBorderColorIndex: Int? = null,
+        gradientBlendIndex: Int
+    ): List<ReminderItem> = edit(
+        id = id,
+        text = text,
+        accentStart = accentStart,
+        accentEnd = accentEnd,
+        customCategoryId = customCategoryId,
+        updateCategory = updateCategory,
+        checklistItems = checklistItems,
+        starBorderColorIndex = starBorderColorIndex,
+        gradientBlendFraction = migrateLegacyGradientBlendIndex(gradientBlendIndex)
+    )
 
     fun setCustomCategory(id: Long, customCategoryId: Long?): List<ReminderItem> = update(id) {
         it.copy(customCategoryId = customCategoryId, updatedAt = System.currentTimeMillis())
@@ -290,10 +356,13 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                     .put("updatedAt", reminder.updatedAt)
                     .put("completedAt", reminder.completedAt ?: JSONObject.NULL)
                     .put("isImportant", reminder.isImportant)
+                    .put("starBorderColorIndex", reminder.starBorderColorIndex ?: JSONObject.NULL)
                     .put("alertAt", reminder.alertAt ?: JSONObject.NULL)
                     .put("notifiedAlertAt", reminder.notifiedAlertAt ?: JSONObject.NULL)
                     .put("accentStart", reminder.accentStart ?: JSONObject.NULL)
                     .put("accentEnd", reminder.accentEnd ?: JSONObject.NULL)
+                    .put("gradientBlendFraction", reminder.gradientBlendFraction?.toDouble() ?: JSONObject.NULL)
+                    .put("customSolidColorArgb", reminder.customSolidColorArgb ?: JSONObject.NULL)
                     .put("repeatRule", reminder.repeatRule.storageKey)
                     .put("anchorAlertAt", reminder.anchorAlertAt ?: JSONObject.NULL)
                     .put("customCategoryId", reminder.customCategoryId ?: JSONObject.NULL)
@@ -310,6 +379,15 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             )
                         }
                     })
+                    .put("attachments", JSONArray().apply {
+                        reminder.attachments.forEach { att ->
+                            put(
+                                JSONObject()
+                                    .put("id", att.id)
+                                    .put("localPath", att.localPath)
+                            )
+                        }
+                    })
             )
         }
         val raw = array.toString()
@@ -318,11 +396,36 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         cachedItems = items
     }
 
+    fun getAttachmentPathsForReminders(ids: Set<Long>): List<String> = synchronized(mutationLock) {
+        load().filter { it.id in ids }.flatMap { it.attachments.map { att -> att.localPath } }
+    }
+
+    fun getAllAttachmentPaths(): Set<String> = synchronized(mutationLock) {
+        load().flatMap { it.attachments.map { att -> att.localPath } }.toSet()
+    }
+
     private fun JSONObject.optionalTimestamp(key: String): Long? =
         if (!has(key) || isNull(key)) null else optLong(key).takeIf { it > 0L }
 
     private fun JSONObject.optionalAccent(key: String): Int? =
         if (!has(key) || isNull(key)) null else optInt(key).takeIf { it in ACCENT_RANGE }
+
+    private fun JSONObject.optionalColorArgb(key: String): Int? =
+        if (!has(key) || isNull(key)) null else optInt(key)
+
+    private fun JSONObject.optionalBlendFraction(): Float? {
+        if (has("gradientBlendFraction") && !isNull("gradientBlendFraction")) {
+            val f = optDouble("gradientBlendFraction").toFloat()
+            return if (f.isFinite()) f.coerceIn(0.0f, 1.0f) else null
+        }
+        if (has("gradientBlendIndex") && !isNull("gradientBlendIndex")) {
+            val idx = optInt("gradientBlendIndex")
+            if (idx in GRADIENT_BLEND_FRACTIONS.indices) {
+                return GRADIENT_BLEND_FRACTIONS[idx]
+            }
+        }
+        return null
+    }
 
     companion object {
         val mutationLock = Any()

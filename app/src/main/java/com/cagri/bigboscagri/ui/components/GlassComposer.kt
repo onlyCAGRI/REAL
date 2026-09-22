@@ -1,5 +1,10 @@
 package com.cagri.bigboscagri.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
@@ -11,7 +16,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.key
 import androidx.compose.runtime.saveable.rememberSaveable
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import java.io.File
+import com.cagri.bigboscagri.data.ReminderAttachment
+
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -93,6 +105,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.ui.DesignStyle
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -112,6 +125,9 @@ fun GlassComposer(
     customCategories: List<CustomCategory> = emptyList(),
     selectedCategoryId: Long? = null,
     onPickCategory: () -> Unit = {},
+    onPickAttachment: () -> Unit = {},
+    draftAttachments: List<ReminderAttachment> = emptyList(),
+    onRemoveDraftAttachment: (Int) -> Unit = {},
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
     expanded: Boolean,
@@ -141,6 +157,14 @@ fun GlassComposer(
     isVoiceDraft: Boolean = false,
     isShareDraft: Boolean = false,
     isHomeReady: Boolean = true,
+    isLabsOpen: Boolean = false,
+    labsProgress: Float = 0f,
+    isWhatsAppArmed: Boolean = false,
+    onToggleWhatsApp: () -> Unit = {},
+    hasSavedRecipient: Boolean = false,
+    onConfigureRecipient: () -> Unit = {},
+    onSwipeUp: () -> Unit = {},
+    onSwipeDown: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val corners by animateDpAsState(
@@ -337,15 +361,71 @@ fun GlassComposer(
 
     val panelContent: @Composable BoxScope.() -> Unit = {
         Box(
-            Modifier.align(Alignment.TopCenter).padding(top = 10.dp).size(width = 36.dp, height = 3.dp)
-                .graphicsLayer { alpha = handleAlpha }
-                .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(2.dp))
-        )
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(32.dp)
+                .pointerInput(expanded, isLabsOpen) {
+                    if (!expanded) return@pointerInput
+                    var totalDragY = 0f
+                    val threshold = with(density) { 28.dp.toPx() }
+                    detectVerticalDragGestures(
+                        onDragStart = { totalDragY = 0f },
+                        onDragEnd = {
+                            if (totalDragY < -threshold) {
+                                onSwipeUp()
+                            } else if (totalDragY > threshold && isLabsOpen) {
+                                onSwipeDown()
+                            }
+                            totalDragY = 0f
+                        },
+                        onDragCancel = { totalDragY = 0f },
+                        onVerticalDrag = { change, dragAmount ->
+                            totalDragY += dragAmount
+                            if (totalDragY < -threshold || (totalDragY > threshold && isLabsOpen)) {
+                                change.consume()
+                            }
+                        }
+                    )
+                },
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Box(
+                Modifier.padding(top = 10.dp).size(width = 36.dp, height = 3.dp)
+                    .graphicsLayer { alpha = handleAlpha }
+                    .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(2.dp))
+            )
+        }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) { detectTapGestures { /* consume panel tap */ } }
+                .pointerInput(expanded, isLabsOpen) {
+                    if (!expanded) {
+                        detectTapGestures { /* consume panel tap */ }
+                    } else {
+                        var totalDragY = 0f
+                        val threshold = with(density) { 28.dp.toPx() }
+                        detectVerticalDragGestures(
+                            onDragStart = { totalDragY = 0f },
+                            onDragEnd = {
+                                if (totalDragY < -threshold) {
+                                    onSwipeUp()
+                                } else if (totalDragY > threshold && isLabsOpen) {
+                                    onSwipeDown()
+                                }
+                                totalDragY = 0f
+                            },
+                            onDragCancel = { totalDragY = 0f },
+                            onVerticalDrag = { change, dragAmount ->
+                                totalDragY += dragAmount
+                                if (totalDragY < -threshold || (totalDragY > threshold && isLabsOpen)) {
+                                    change.consume()
+                                }
+                            }
+                        )
+                    }
+                }
                 .padding(
                     top = if (expanded) 16.dp else textInset,
                     bottom = if (expanded) 6.dp else 0.dp
@@ -702,7 +782,7 @@ fun GlassComposer(
                         ) {
                             ActionIcon(
                                 ActionGlyph.Calendar,
-                                Modifier.size(21.dp),
+                                Modifier.size(20.dp),
                                 Color(0xFFBABAC3)
                             )
                         }
@@ -727,14 +807,49 @@ fun GlassComposer(
                             if (isCatSelected) {
                                 CategoryIconGlyph(
                                     CategoryIcon.fromKey(selectedCategory!!.iconKey),
-                                    Modifier.size(21.dp),
+                                    Modifier.size(20.dp),
                                     catColor
                                 )
                             } else {
                                 ActionIcon(
-                                    ActionGlyph.Note,
-                                    Modifier.size(21.dp),
+                                    ActionGlyph.Category,
+                                    Modifier.size(20.dp),
                                     catColor
+                                )
+                            }
+                        }
+                    }
+
+                    val hasDraftAttachments = draftAttachments.isNotEmpty()
+                    val attachmentColor = if (hasDraftAttachments) Color(0xFF91B9FF) else Color(0xFFBABAC3)
+                    Box(contentAlignment = Alignment.Center) {
+                        IconButton(
+                            onClick = onPickAttachment,
+                            enabled = !recording && !saving,
+                            modifier = Modifier.size(40.dp).semantics {
+                                contentDescription = if (hasDraftAttachments) "Ekler: ${draftAttachments.size} fotoğraf" else "Ek ekle"
+                            }
+                        ) {
+                            ActionIcon(
+                                ActionGlyph.Note,
+                                Modifier.size(20.dp),
+                                attachmentColor
+                            )
+                        }
+                        if (hasDraftAttachments) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = (-4).dp, y = 4.dp)
+                                    .size(14.dp)
+                                    .background(Color(0xFF3B82F6), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = draftAttachments.size.toString(),
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
@@ -749,7 +864,7 @@ fun GlassComposer(
                     ) {
                         ActionIcon(
                             ActionGlyph.Checklist,
-                            Modifier.size(21.dp),
+                            Modifier.size(20.dp),
                             if (isChecklistMode) Color(0xFF91B9FF) else Color(0xFFBABAC3)
                         )
                     }
@@ -764,9 +879,46 @@ fun GlassComposer(
                         ) {
                             ActionIcon(
                                 if (sendImmediateNotification) ActionGlyph.Bell else ActionGlyph.BellOff,
-                                Modifier.size(21.dp),
+                                Modifier.size(20.dp),
                                 if (sendImmediateNotification) Color(0xFF91B9FF) else Color(0xFFBABAC3)
                             )
+                        }
+                    }
+                }
+            }
+
+            if (expanded && draftAttachments.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, end = 14.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    draftAttachments.forEachIndexed { index, attachment ->
+                        Box(modifier = Modifier.size(40.dp)) {
+                            AsyncImage(
+                                model = File(attachment.localPath),
+                                contentDescription = "Taslak ek ${index + 1}",
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .align(Alignment.BottomStart)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .border(0.8.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .align(Alignment.TopEnd)
+                                    .clip(CircleShape)
+                                    .background(Color(0xE61E1E24))
+                                    .border(0.5.dp, Color(0x4DFFFFFF), CircleShape)
+                                    .clickable(enabled = !saving) { onRemoveDraftAttachment(index) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ActionIcon(ActionGlyph.Close, Modifier.size(8.dp), Color(0xFFEEEEF2))
+                            }
                         }
                     }
                 }
@@ -862,6 +1014,129 @@ fun GlassComposer(
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(start = 6.dp)
                         )
+                    }
+                }
+            }
+
+            if (expanded && labsProgress > 0f) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            alpha = labsProgress
+                            translationY = (1f - labsProgress) * with(density) { 8.dp.toPx() }
+                        }
+                ) {
+                    // Subtle separation
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 3.dp)
+                            .height(0.5.dp)
+                            .background(Color.White.copy(alpha = 0.08f))
+                    )
+
+                    // Subtle label: "Real Labs."
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Real Labs.",
+                            color = Color(0xFF7A7A85),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.2.sp
+                        )
+                    }
+
+                    // WhatsApp Action Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val whatsappGreen = Color(0xFF34D399) // restrained WhatsApp green consistent with REAL's dark/glass UI
+                        val iconTint = if (isWhatsAppArmed) whatsappGreen else Color(0xFFBABAC3)
+                        val interactionSource = remember { MutableInteractionSource() }
+
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isWhatsAppArmed) whatsappGreen.copy(alpha = 0.14f) else Color.Transparent)
+                                .border(
+                                    width = if (isWhatsAppArmed) 0.75.dp else 0.dp,
+                                    color = if (isWhatsAppArmed) whatsappGreen.copy(alpha = 0.35f) else Color.Transparent,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable(
+                                    interactionSource = interactionSource,
+                                    indication = null,
+                                    enabled = !saving,
+                                    onClick = onToggleWhatsApp
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            ActionIcon(
+                                ActionGlyph.WhatsApp,
+                                Modifier.size(21.dp),
+                                iconTint
+                            )
+                            if (isWhatsAppArmed) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(2.dp)
+                                        .size(12.dp)
+                                        .background(whatsappGreen, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    ActionIcon(
+                                        ActionGlyph.Check,
+                                        Modifier.size(8.dp),
+                                        Color(0xFF0F172A)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Status text BESIDE the icon
+                        AnimatedVisibility(
+                            visible = isWhatsAppArmed,
+                            enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)),
+                            exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(140))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(start = 8.dp)
+                            ) {
+                                Text(
+                                    text = "WhatsApp'tan da gönderilecek",
+                                    color = whatsappGreen,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.weight(1f))
+
+                        if (hasSavedRecipient) {
+                            Text(
+                                text = "Numarayı değiştir",
+                                color = Color(0xFF6B6B76),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Normal,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable(enabled = !saving, onClick = onConfigureRecipient)
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             }
