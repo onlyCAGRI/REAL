@@ -32,6 +32,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -47,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.cagri.bigboscagri.notifications.NowBarReminderController
+import com.cagri.bigboscagri.notifications.NowBarProbe
 import com.cagri.bigboscagri.notifications.ReminderNotifications
 import com.cagri.bigboscagri.ui.components.ActionGlyph
 import com.cagri.bigboscagri.ui.components.ActionIcon
@@ -436,6 +440,89 @@ fun SettingsScreen(
                     Text("İzni aç", color = Color(0xFF91B9FF))
                 }
             }
+
+            Spacer(Modifier.height(40.dp))
+
+            // Real Labs / R&D Section
+            Text(
+                "Now Bar R&D",
+                color = Color(0xFFA5A5AF),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(start = 16.dp, bottom = 12.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color(0xFF141416))
+                    .border(0.8.dp, Color(0xFF28282C), RoundedCornerShape(24.dp))
+            ) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp)) {
+                    var nowBarEnabled by remember { mutableStateOf(NowBarReminderController.isEnabled(context)) }
+                    SettingsRow(
+                        icon = ActionGlyph.Bell,
+                        title = "Samsung Now Bar",
+                        subtitle = "Hatırlatıcıları Now Bar'da canlı takip et (Deneysel)",
+                        checked = nowBarEnabled,
+                        onCheckedChange = {
+                            nowBarEnabled = it
+                            NowBarReminderController.setEnabled(context, it)
+                        }
+                    )
+
+                    if (nowBarEnabled) {
+                        Text(
+                            "Not: Cihazın Geliştirici Seçenekleri'nden 'Tüm uygulamalar için canlı bildirimler' ayarını açmanız gerekebilir.",
+                            color = Color(0xFF91B9FF),
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                        )
+                    }
+
+                    HorizontalDivider(color = Color(0xFF26262B), thickness = 0.75.dp, modifier = Modifier.padding(vertical = 12.dp))
+
+                    val supported = NowBarProbe.canPostPromoted(context)
+                    val characteristics = NowBarProbe.hasPromotableCharacteristics(context)
+
+                    Text("Android promoted access", color = Color.White, fontSize = 14.sp)
+                    Text(if (supported) "Açık" else "Sistem tarafından bildirilmedi", color = Color(0xFFA5A5AF), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+
+                    Spacer(Modifier.height(12.dp))
+                    Text("Samsung Now Bar metadata", color = Color.White, fontSize = 14.sp)
+                    Text("Hazır", color = Color(0xFFA5A5AF), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+
+                    Spacer(Modifier.height(12.dp))
+                    Text("Notification structure", color = Color.White, fontSize = 14.sp)
+                    Text(if (characteristics) "Uygun" else "Uygun değil", color = Color(0xFFA5A5AF), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(onClick = { NowBarProbe.postTest(context) }) {
+                            Text("Testi başlat", color = Color(0xFF91B9FF))
+                        }
+                        TextButton(onClick = { NowBarProbe.cancelTest(context) }) {
+                            Text("Bitir", color = Color(0xFF91B9FF))
+                        }
+                        if (supported) {
+                            val settingsIntent = NowBarProbe.buildSettingsIntent(context)
+                            if (settingsIntent != null) {
+                                Spacer(Modifier.weight(1f))
+                                TextButton(onClick = { context.startActivity(settingsIntent) }) {
+                                    Text("Ayarları aç", color = Color(0xFF91B9FF))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(60.dp))
         }
     }
 }

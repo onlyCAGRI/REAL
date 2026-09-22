@@ -15,6 +15,7 @@ object ReminderScheduler {
         context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
 
     fun reconcile(context: Context, repository: ReminderRepository) = synchronized(ReminderRepository.mutationLock) {
+        NowBarReminderController.reconcile(context, repository)
         val now = System.currentTimeMillis()
         repository.deliverDue(now) { item ->
             ReminderNotifications.show(context, item, alerting = true)
