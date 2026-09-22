@@ -224,7 +224,7 @@ fun ReminderScreen(
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     var draftAttachments by rememberSaveable(
-        saver = Saver(
+        stateSaver = Saver<List<ReminderAttachment>, ArrayList<String>>(
             save = { list -> ArrayList(list.map { "${it.id}|${it.localPath}" }) },
             restore = { list ->
                 list.mapNotNull { str ->
@@ -233,7 +233,7 @@ fun ReminderScreen(
                 }
             }
         )
-    ) { mutableStateOf<List<ReminderAttachment>>(emptyList()) }
+    ) { mutableStateOf(emptyList()) }
     var draftAlertAt by rememberSaveable { mutableStateOf<Long?>(null) }
     var draftRepeatRule by rememberSaveable { mutableStateOf(RecurrenceRule.NONE) }
     var isShareDraft by rememberSaveable { mutableStateOf(false) }
@@ -476,8 +476,8 @@ fun ReminderScreen(
                                          customCategoryId = customCategoryItem.id
                                          onOpenCustomCategory(customCategoryItem)
                                      },
-                                     onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl ->
-                                         val createdId = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl)
+                                     onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments ->
+                                         val createdId = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments)
                                          if (createdId != null) {
                                              draft = ""; draftAlertAt = null; draftRepeatRule = RecurrenceRule.NONE; draftReferenceUrl = null; isShareDraft = false
                                              if (category != null) {
@@ -495,6 +495,8 @@ fun ReminderScreen(
                                      onShareDraftChange = { isShareDraft = it },
                                      draftReferenceUrl = draftReferenceUrl,
                                      onDraftReferenceUrlChange = { draftReferenceUrl = it },
+                                     draftAttachments = draftAttachments,
+                                     onDraftAttachmentsChange = { draftAttachments = it },
                                      sharedTransitionScope = this@SharedTransitionLayout,
                                      animatedVisibilityScope = this@AnimatedContent,
                                      userName = userName,
@@ -531,11 +533,13 @@ private fun ReminderListScreen(
     onDeleteCategories: (Set<Long>) -> Unit = {},
     reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean, designStyle: DesignStyle,
-    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?) -> Long?,
+    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>) -> Long?,
     isShareDraft: Boolean = false,
     onShareDraftChange: (Boolean) -> Unit = {},
     draftReferenceUrl: String? = null,
     onDraftReferenceUrlChange: (String?) -> Unit = {},
+    draftAttachments: List<ReminderAttachment> = emptyList(),
+    onDraftAttachmentsChange: (List<ReminderAttachment>) -> Unit = {},
     customCategories: List<CustomCategory> = emptyList(),
     customCategory: CustomCategory? = null,
     builtInCategoryColors: Map<ReminderCategory, CategoryColorOverride> = emptyMap(),
@@ -631,7 +635,7 @@ private fun ReminderListScreen(
                 AttachmentStorage.copyUriToAttachments(context, uri)
             }
             if (toAdd.isNotEmpty()) {
-                draftAttachments = draftAttachments + toAdd
+                onDraftAttachmentsChange(draftAttachments + toAdd)
             }
         }
     }
@@ -646,7 +650,7 @@ private fun ReminderListScreen(
         if (index in draftAttachments.indices) {
             val item = draftAttachments[index]
             AttachmentStorage.deleteAttachmentFile(item.localPath)
-            draftAttachments = draftAttachments.filterIndexed { i, _ -> i != index }
+            onDraftAttachmentsChange(draftAttachments.filterIndexed { i, _ -> i != index })
         }
     }
 
@@ -792,7 +796,7 @@ private fun ReminderListScreen(
                             val resolvedTitle = text.trim()
                             val createdId = onAddReminder(resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl, draftAttachments)
                             if (createdId != null) {
-                                draftAttachments = emptyList()
+                                onDraftAttachmentsChange(emptyList())
                                 entryTracker.onReminderCreated(createdId, reduceAnimations)
                                 RealHaptics.success(view)
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
@@ -847,7 +851,7 @@ private fun ReminderListScreen(
                             val reminderText = text.trim()
                             val createdId = onAddReminder(reminderText, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl, draftAttachments)
                             if (createdId != null) {
-                                draftAttachments = emptyList()
+                                onDraftAttachmentsChange(emptyList())
                                 entryTracker.onReminderCreated(createdId, reduceAnimations)
                                 RealHaptics.success(view)
                                 draftCategoryId = if (customCategory != null) customCategory.id else null
@@ -990,7 +994,7 @@ private fun ReminderListScreen(
     BackHandler(enabled = (isChecklistMode || draftAttachments.isNotEmpty()) && !showAccountMenu && !showDatePicker && !showCategoryPicker && !anySelectionMode) {
         if (draftAttachments.isNotEmpty()) {
             AttachmentStorage.deleteAttachmentFiles(draftAttachments)
-            draftAttachments = emptyList()
+            onDraftAttachmentsChange(emptyList())
         }
         isChecklistMode = false
         checklistDraftItems = listOf("")

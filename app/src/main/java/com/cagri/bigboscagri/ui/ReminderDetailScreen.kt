@@ -174,6 +174,7 @@ fun ReminderDetailScreen(
     var newlyAddedAttachments by remember(reminder.id, editing) { mutableStateOf<List<ReminderAttachment>>(emptyList()) }
     var previewAttachmentPath by rememberSaveable(reminder.id) { mutableStateOf<String?>(null) }
     val view = LocalView.current
+    val context = LocalContext.current
     val starInteractionSource = remember(reminder.id) { MutableInteractionSource() }
 
     val detailPhotoPickerLauncher = rememberLauncherForActivityResult(
@@ -208,7 +209,6 @@ fun ReminderDetailScreen(
 
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
-    val context = LocalContext.current
     val scene = rememberGraphicsLayer()
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     var scenePosition by remember { mutableStateOf(Offset.Zero) }

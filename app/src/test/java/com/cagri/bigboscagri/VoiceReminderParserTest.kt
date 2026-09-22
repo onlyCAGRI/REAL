@@ -135,7 +135,7 @@ class VoiceReminderParserTest {
     fun tomorrowNoonOne() {
         val input = "yarın öğlen 1'de yemek ye"
         val parsed = VoiceReminderParser.parse(input, baseFridayNow)
-        assertEquals("Yemek ye", parsed.text)
+        assertEquals("Öğlen yemek ye", parsed.text)
         assertNotNull(parsed.alertAt)
 
         val expected = ZonedDateTime.of(2026, 9, 19, 13, 0, 0, 0, istanbulZone)

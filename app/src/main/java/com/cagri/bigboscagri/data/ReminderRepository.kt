@@ -40,6 +40,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                                 }
                             }
                         } else emptyList()
+                    } else emptyList()
                     val attachments = if (item.has("attachments")) {
                         val attsArray = item.optJSONArray("attachments")
                         if (attsArray != null) {
