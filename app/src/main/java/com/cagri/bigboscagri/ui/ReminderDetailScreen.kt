@@ -4,8 +4,10 @@ import android.os.Build
 import com.cagri.bigboscagri.ui.components.DesignPanel
 import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
 import com.cagri.bigboscagri.ui.components.NotificationPermissionSheet
+import com.cagri.bigboscagri.ui.components.LocationGuideSheet
 import androidx.compose.material3.TextButton
 import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +16,9 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import java.io.File
 import com.cagri.bigboscagri.data.ReminderAttachment
+import com.cagri.bigboscagri.data.ReminderLocation
+import com.cagri.bigboscagri.ui.components.ReminderLocationMap
+import com.cagri.bigboscagri.ui.components.openReminderLocationInMaps
 import com.cagri.bigboscagri.data.AttachmentStorage
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -119,6 +124,8 @@ import com.cagri.bigboscagri.data.buildReminderShareText
 import com.cagri.bigboscagri.data.repeatSummary
 import com.cagri.bigboscagri.ui.components.ActionGlyph
 import com.cagri.bigboscagri.ui.components.ActionIcon
+import com.cagri.bigboscagri.ui.components.journalMoodGlyph
+import com.cagri.bigboscagri.ui.components.journalMoodLabel
 import com.cagri.bigboscagri.ui.components.GlassPanel
 import com.cagri.bigboscagri.ui.components.DeleteReminderPrompt
 import com.cagri.bigboscagri.data.CustomCategory
@@ -139,7 +146,11 @@ import com.cagri.bigboscagri.ui.theme.BigBosTheme
 @Composable
 fun ReminderDetailScreen(
     reminder: ReminderItem, onBack: () -> Unit, onToggleCompleted: () -> Unit,
-    onToggleImportant: () -> Unit, onSave: (String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?) -> Unit, onDelete: () -> Unit,
+    onToggleImportant: () -> Unit, onSave: (String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?, ReminderLocation?) -> Unit, onDelete: () -> Unit,
+    incomingLocation: ReminderLocation? = null,
+    onIncomingLocationHandled: () -> Unit = {},
+    onRequestLocationShare: () -> Unit = {},
+    onResolveLocationPreview: () -> Unit = {},
     onSaveJournal: (JournalMood?, String) -> Unit = { _, _ -> },
     onDeleteJournal: () -> Unit = {},
     customCategories: List<CustomCategory> = emptyList(),
@@ -176,6 +187,7 @@ fun ReminderDetailScreen(
     var showNotificationPermissionSheet by rememberSaveable { mutableStateOf(false) }
     var pendingDetailDatePicker by rememberSaveable(reminder.id) { mutableStateOf(false) }
     var editedAttachments by remember(reminder.id, editing) { mutableStateOf(reminder.attachments) }
+    var editedLocation by remember(reminder.id) { mutableStateOf(reminder.location) }
     var journalEditing by remember(reminder.id) { mutableStateOf(false) }
     var journalCreating by remember(reminder.id) { mutableStateOf(false) }
     var editedJournalMood by remember(reminder.id, journalEditing, journalCreating) { mutableStateOf(reminder.journal?.mood) }
@@ -186,6 +198,19 @@ fun ReminderDetailScreen(
     var previewAttachmentPath by rememberSaveable(reminder.id) { mutableStateOf<String?>(null) }
     val view = LocalView.current
     val context = LocalContext.current
+    var showLocationGuide by rememberSaveable(reminder.id) { mutableStateOf(false) }
+    var locationJustShared by remember(reminder.id) { mutableStateOf(false) }
+    LaunchedEffect(reminder.id, reminder.location?.mapsUrl, reminder.location?.latitude) {
+        if (reminder.location?.mapsUrl != null && reminder.location?.latitude == null) onResolveLocationPreview()
+    }
+    LaunchedEffect(incomingLocation) {
+        if (incomingLocation != null) {
+            editing = true
+            editedLocation = incomingLocation
+            locationJustShared = true
+            onIncomingLocationHandled()
+        }
+    }
     val starInteractionSource = remember(reminder.id) { MutableInteractionSource() }
 
     val detailPhotoPickerLauncher = rememberLauncherForActivityResult(
@@ -246,6 +271,8 @@ fun ReminderDetailScreen(
         editedJournalMood = reminder.journal?.mood
         editedJournalText = reminder.journal?.text ?: ""
         editedAttachments = reminder.attachments
+        editedLocation = reminder.location
+        locationJustShared = false
         editing = false
         secondaryPanelsExpanded = true
         accentStart = reminder.accentStart
@@ -535,12 +562,23 @@ fun ReminderDetailScreen(
                                 }
                             }
                         }
+                        if (editing) {
+                            Box(Modifier.size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp))
+                                .background(Color(0x1AFFFFFF))
+                                .clickable { showLocationGuide = true }
+                                .semantics { contentDescription = "Konum ekle veya değiştir" },
+                                contentAlignment = Alignment.Center) {
+                                ActionIcon(ActionGlyph.Pin, Modifier.size(20.dp), Color(0xFF91B9FF))
+                            }
+                        }
                         if (editing && displayedAttachments.size < 3) {
                             Box(
                                 modifier = Modifier
-                                    .size(76.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(14.dp))
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp))
                                     .background(Color(0x1AFFFFFF))
                                     .clickable {
                                         detailPhotoPickerLauncher.launch(
@@ -549,8 +587,21 @@ fun ReminderDetailScreen(
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                ActionIcon(ActionGlyph.Add, Modifier.size(24.dp), Color(0xFF91B9FF))
+                                ActionIcon(ActionGlyph.Add, Modifier.size(20.dp), Color(0xFF91B9FF))
                             }
+                        }
+                    }
+                }
+                if (editing && editedLocation != null) {
+                    val place = editedLocation!!
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(place.placeName, color = Color(0xFFD3DCE9), fontSize = 13.sp, maxLines = 1)
+                            if (place.address.isNotBlank()) Text(place.address, color = Color(0xFF8996A8), fontSize = 11.sp, maxLines = 1)
+                        }
+                        TextButton(onClick = { editedLocation = null; locationJustShared = false }) {
+                            Text("Kaldır", color = Color(0xFFAFB8C5), fontSize = 12.sp)
                         }
                     }
                 }
@@ -679,6 +730,53 @@ fun ReminderDetailScreen(
                 }
             }
 
+            val locationForCard = if (editing) editedLocation.takeIf { locationJustShared } else reminder.location
+            if (locationForCard != null) {
+                val place = locationForCard
+                if (place.latitude != null && place.longitude != null) {
+                    Box(Modifier.fillMaxWidth().padding(top = 16.dp).height(180.dp)
+                        .clip(cardShape)
+                        .background(Color(0xFF131820))
+                        .then(cardBorderModifier)) {
+                        ReminderLocationMap(place, Modifier.fillMaxSize()) {
+                            if (!openReminderLocationInMaps(context, place))
+                                Toast.makeText(context, "Harita uygulaması açılamadı", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else {
+                    Column(Modifier.fillMaxWidth().padding(top = 16.dp)
+                        .clip(cardShape)
+                        .background(Color(0xFF141416))
+                        .then(cardBorderModifier)
+                        .clickable {
+                            if (!openReminderLocationInMaps(context, place)) {
+                                Toast.makeText(context, "Harita uygulaması açılamadı", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        .padding(horizontal = 22.dp, vertical = 20.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            ActionIcon(ActionGlyph.Pin, Modifier.size(20.dp), Color(0xFF91B9FF))
+                            Column {
+                                if (place.placeName.isNotBlank()) {
+                                    Text(place.placeName, color = Color(0xFFE2E2E8), fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                }
+                                if (place.address.isNotBlank()) {
+                                    Text(place.address, color = Color(0xFFA5A5B0), fontSize = 13.sp, maxLines = 2)
+                                    Text("Harita için koordinat bulunamadı", color = Color(0xFF9E9EA4), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                                } else {
+                                    Text("Harita için koordinat bulunamadı", color = Color(0xFFE2E2E8), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text("Harita uygulamasında aç", color = Color(0xFFA5A5B0), fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // --- JOURNAL SECTION ---
             val showJournalCard = reminder.journal != null || journalCreating
             AnimatedVisibility(
@@ -737,14 +835,8 @@ fun ReminderDetailScreen(
                                     )
                                     if (!isJournalActive && reminder.journal?.mood != null) {
                                         val viewMood = reminder.journal.mood
-                                        val moodIcon = when (viewMood) {
-                                            JournalMood.VERY_GOOD -> ActionGlyph.MoodVeryGood
-                                            JournalMood.GOOD -> ActionGlyph.MoodGood
-                                            JournalMood.NEUTRAL -> ActionGlyph.MoodNeutral
-                                            JournalMood.HARD -> ActionGlyph.MoodHard
-                                            JournalMood.BAD -> ActionGlyph.MoodBad
-                                        }
-                                        ActionIcon(moodIcon, Modifier.size(16.dp), Color(0xFF91B9FF))
+                                        ActionIcon(journalMoodGlyph(viewMood), Modifier.size(16.dp), Color(0xFF91B9FF))
+                                        Text(journalMoodLabel(viewMood), color = Color(0xFFA5A5B0), fontSize = 12.sp)
                                     }
                                 }
                                 if (reminder.journal != null && !isJournalActive && !editing) {
@@ -775,58 +867,18 @@ fun ReminderDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    if (editedJournalMood == null) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable { showMoodSelector = !showMoodSelector }
-                                                .padding(vertical = 6.dp, horizontal = 4.dp)
-                                        ) {
-                                            ActionIcon(ActionGlyph.MoodNeutral, Modifier.size(16.dp), Color(0xFF6B6B75))
-                                            Text("Mood ekle", color = Color(0xFF8E8E98), fontSize = 13.sp)
-                                        }
-                                    } else {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .clickable { showMoodSelector = !showMoodSelector }
-                                                    .padding(vertical = 6.dp, horizontal = 4.dp)
-                                            ) {
-                                                val mIcon = when (editedJournalMood!!) {
-                                                    JournalMood.VERY_GOOD -> ActionGlyph.MoodVeryGood
-                                                    JournalMood.GOOD -> ActionGlyph.MoodGood
-                                                    JournalMood.NEUTRAL -> ActionGlyph.MoodNeutral
-                                                    JournalMood.HARD -> ActionGlyph.MoodHard
-                                                    JournalMood.BAD -> ActionGlyph.MoodBad
-                                                }
-                                                val mLabel = when (editedJournalMood!!) {
-                                                    JournalMood.VERY_GOOD -> "Çok iyi"
-                                                    JournalMood.GOOD -> "İyi"
-                                                    JournalMood.NEUTRAL -> "Normal"
-                                                    JournalMood.HARD -> "Zor"
-                                                    JournalMood.BAD -> "Kötü"
-                                                }
-                                                ActionIcon(mIcon, Modifier.size(16.dp), Color(0xFF91B9FF))
-                                                Text(mLabel, color = Color(0xFFD3D3D9), fontSize = 13.sp)
-                                            }
-                                            IconButton(
-                                                onClick = {
-                                                    editedJournalMood = null
-                                                    showMoodSelector = false
-                                                },
-                                                modifier = Modifier.size(24.dp)
-                                            ) {
-                                                ActionIcon(ActionGlyph.Close, Modifier.size(12.dp), Color(0xFF6B6B75))
-                                            }
-                                        }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                                            .clickable { showMoodSelector = !showMoodSelector }
+                                            .padding(vertical = 6.dp, horizontal = 4.dp)
+                                    ) {
+                                        val chosenMood = editedJournalMood
+                                        ActionIcon(chosenMood?.let(::journalMoodGlyph) ?: ActionGlyph.MoodNeutral,
+                                            Modifier.size(16.dp), if (chosenMood == null) Color(0xFF6B6B75) else Color(0xFF91B9FF))
+                                        Text(chosenMood?.let(::journalMoodLabel) ?: "Mood ekle",
+                                            color = if (chosenMood == null) Color(0xFF8E8E98) else Color(0xFFD3D3D9), fontSize = 13.sp)
                                     }
                                 }
 
@@ -835,34 +887,29 @@ fun ReminderDetailScreen(
                                     enter = fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 8 },
                                     exit = fadeOut(tween(180)) + slideOutVertically(tween(180)) { it / 8 }
                                 ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        JournalMood.entries.forEach { mood ->
-                                            val isSelected = editedJournalMood == mood
-                                            val moodIcon = when (mood) {
-                                                JournalMood.VERY_GOOD -> ActionGlyph.MoodVeryGood
-                                                JournalMood.GOOD -> ActionGlyph.MoodGood
-                                                JournalMood.NEUTRAL -> ActionGlyph.MoodNeutral
-                                                JournalMood.HARD -> ActionGlyph.MoodHard
-                                                JournalMood.BAD -> ActionGlyph.MoodBad
-                                            }
-                                            val glyphColor = if (isSelected) Color(0xFF91B9FF) else Color(0xFF5E5E68)
-                                            val bgColor = if (isSelected) Color(0xFF91B9FF).copy(alpha = 0.12f) else Color.Transparent
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(40.dp)
-                                                    .clip(CircleShape)
-                                                    .background(bgColor)
-                                                    .clickable {
-                                                        editedJournalMood = mood
-                                                        showMoodSelector = false
+                                    val choices: List<JournalMood?> = JournalMood.entries + listOf(null)
+                                    Column(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        choices.chunked(3).forEach { rowMoods ->
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                rowMoods.forEach { mood ->
+                                                    val selected = mood != null && editedJournalMood == mood
+                                                    val shape = RoundedCornerShape(10.dp)
+                                                    Row(Modifier.weight(1f).height(38.dp).clip(shape)
+                                                        .background(if (selected) Color(0xFF91B9FF).copy(alpha = 0.12f) else Color(0xFF1C1C21))
+                                                        .border(0.8.dp, if (selected) Color(0xFF91B9FF).copy(alpha = 0.55f) else Color(0xFF303037), shape)
+                                                        .clickable { editedJournalMood = mood; showMoodSelector = false }
+                                                        .semantics { contentDescription = mood?.let(::journalMoodLabel) ?: "Mood kaldır" }
+                                                        .padding(horizontal = 6.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                        val tint = if (selected) Color(0xFF91B9FF) else Color(0xFF9A9AA4)
+                                                        ActionIcon(mood?.let(::journalMoodGlyph) ?: ActionGlyph.Close, Modifier.size(16.dp), tint)
+                                                        Text(mood?.let(::journalMoodLabel) ?: "Kaldır", color = tint,
+                                                            fontSize = 11.sp, maxLines = 1,
+                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                                     }
-                                                    .semantics { contentDescription = "..." },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                ActionIcon(moodIcon, Modifier.size(22.dp), glyphColor)
+                                                }
                                             }
                                         }
                                     }
@@ -912,12 +959,33 @@ fun ReminderDetailScreen(
             }
             // --- END JOURNAL SECTION ---
 
-            Text(
-                reminder.completedAt?.let { "Tamamlandı: ${reminderDate(it)}" }
-                    ?: "Son düzenleme: ${reminderDate(reminder.updatedAt)}",
-                color = Color(0xFF8E8E98), fontSize = 12.sp, lineHeight = 18.sp, textAlign = TextAlign.End,
-                modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = chromeAlpha }.padding(top = 15.dp, start = 10.dp, end = 10.dp)
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { alpha = chromeAlpha }
+                    .padding(top = 15.dp, start = 10.dp, end = 10.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                if (reminder.completedAt != null) {
+                    Text(
+                        text = "Tamamlandı · ${reminderDate(reminder.completedAt)}",
+                        color = Color(0xFF8E8E98),
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        textAlign = TextAlign.End
+                    )
+                }
+                if (reminder.journal != null) {
+                    Text(
+                        text = "Günlüğe eklendi · ${reminderDate(reminder.journal.createdAt)}",
+                        color = Color(0xFF8E8E98),
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        textAlign = TextAlign.End
+                    )
+                }
+            }
         }
         TopGlassOverlay(scene, { scenePosition }, Modifier.align(Alignment.TopCenter), reduceDynamicBlur)
         BottomFade(Modifier.align(Alignment.BottomCenter).height(130.dp))
@@ -1114,7 +1182,8 @@ fun ReminderDetailScreen(
                                     if (reminder.isImportant) starBorderColorIndex else reminder.starBorderColorIndex,
                                     if (accentStart != null && accentEnd != null) gradientBlendFraction else null,
                                     customSolidColorArgb,
-                                    editedAttachments
+                                    editedAttachments,
+                                    editedLocation
                                 )
                                 finishEditing()
                             })
@@ -1142,6 +1211,7 @@ fun ReminderDetailScreen(
                             gradientBlendFraction = reminder.gradientBlendFraction ?: DEFAULT_GRADIENT_BLEND_FRACTION
                             newChecklistItemText = ""
                             editedAttachments = reminder.attachments
+                            editedLocation = reminder.location
                             newlyAddedAttachments = emptyList()
                             secondaryPanelsExpanded = true
                             editing = true
@@ -1165,6 +1235,12 @@ fun ReminderDetailScreen(
             onConfirm = { at, rule -> onSetAlert(at, rule); showDatePicker = false },
             exactAlarmsAllowed = exactAlarmsAllowed,
             onRequestExactAlarms = onRequestExactAlarms)
+        LocationGuideSheet(
+            visible = showLocationGuide,
+            onOpenMaps = { showLocationGuide = false; onRequestLocationShare() },
+            onCancel = { showLocationGuide = false },
+            reduceAnimations = reduceAnimations
+        )
         NotificationPermissionSheet(
             visible = showNotificationPermissionSheet,
             onAllow = {
@@ -1517,7 +1593,7 @@ private fun DetailAction(
 @Composable
 private fun DetailPreview() {
     BigBosTheme {
-        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _, _, _, _, _, _ -> }, {})
+        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _, _, _, _, _, _, _ -> }, {})
     }
 }
 

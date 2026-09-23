@@ -31,6 +31,7 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                             iconKey = item.optString("iconKey", "WORK"),
                             accentStart = item.optInt("accentStart", 0),
                             accentEnd = if (!item.has("accentEnd") || item.isNull("accentEnd")) null else item.optInt("accentEnd"),
+                            hideFromGeneralLists = item.optBoolean("hideFromGeneralLists", false),
                             createdAt = item.optLong("createdAt", System.currentTimeMillis())
                         )
                     )
@@ -46,7 +47,8 @@ class CategoryRepository(private val preferences: SharedPreferences) {
         name: String,
         iconKey: String,
         accentStart: Int,
-        accentEnd: Int? = null
+        accentEnd: Int? = null,
+        hideFromGeneralLists: Boolean = false
     ): List<CustomCategory> = synchronized(mutationLock) {
         require(name.isNotBlank()) { "Kategori adı boş olamaz" }
         val now = System.currentTimeMillis()
@@ -58,6 +60,7 @@ class CategoryRepository(private val preferences: SharedPreferences) {
             iconKey = iconKey,
             accentStart = accentStart,
             accentEnd = accentEnd,
+            hideFromGeneralLists = hideFromGeneralLists,
             createdAt = now
         )
         val updated = previous + newCategory
@@ -70,7 +73,8 @@ class CategoryRepository(private val preferences: SharedPreferences) {
         name: String,
         iconKey: String,
         accentStart: Int,
-        accentEnd: Int? = null
+        accentEnd: Int? = null,
+        hideFromGeneralLists: Boolean = false
     ): List<CustomCategory> = synchronized(mutationLock) {
         require(name.isNotBlank()) { "Kategori adı boş olamaz" }
         val previous = load()
@@ -80,7 +84,8 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                     name = name.trim(),
                     iconKey = iconKey,
                     accentStart = accentStart,
-                    accentEnd = accentEnd
+                    accentEnd = accentEnd,
+                    hideFromGeneralLists = hideFromGeneralLists
                 )
             } else {
                 item
@@ -114,6 +119,7 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                     .put("iconKey", category.iconKey)
                     .put("accentStart", category.accentStart)
                     .put("accentEnd", category.accentEnd ?: JSONObject.NULL)
+                    .put("hideFromGeneralLists", category.hideFromGeneralLists)
                     .put("createdAt", category.createdAt)
             )
         }
@@ -193,13 +199,19 @@ fun deleteCategoryWithRollback(
     categoryId: Long,
     reminderRepository: ReminderRepository,
     categoryRepository: CategoryRepository,
+    deleteReminders: Boolean = false,
     deleteCategoryStep: (Long) -> Unit = { categoryRepository.delete(it) }
 ): Pair<List<ReminderItem>, List<CustomCategory>> = synchronized(ReminderRepository.mutationLock) {
     synchronized(CategoryRepository.mutationLock) {
         val reminderSnapshot = reminderRepository.load()
         val categorySnapshot = categoryRepository.load()
         try {
-            val updatedReminders = reminderRepository.unassignCategory(categoryId)
+            val updatedReminders = if (deleteReminders) {
+                val idsToDelete = reminderSnapshot.filter { it.customCategoryId == categoryId }.map { it.id }.toSet()
+                reminderRepository.deleteAll(idsToDelete)
+            } else {
+                reminderRepository.unassignCategory(categoryId)
+            }
             deleteCategoryStep(categoryId)
             val updatedCategories = categoryRepository.load()
             updatedReminders to updatedCategories

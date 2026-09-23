@@ -56,11 +56,30 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             }
                         } else emptyList()
                     } else emptyList()
+                    val location = item.optJSONObject("location")?.let { place ->
+                        val name = place.optString("placeName", "")
+                        val latitude = place.optDouble("latitude", Double.NaN)
+                        val longitude = place.optDouble("longitude", Double.NaN)
+                        val mapsUrl = place.optString("mapsUrl", "").takeIf { it.startsWith("https://") }
+                        val hasCoordinates = latitude.isFinite() && longitude.isFinite() &&
+                            latitude in -90.0..90.0 && longitude in -180.0..180.0
+                        if (name.isNotBlank() && (hasCoordinates || mapsUrl != null)) ReminderLocation(
+                            placeId = if (place.isNull("placeId")) null else place.optString("placeId", "").takeIf { it.isNotBlank() },
+                            placeName = name,
+                            address = place.optString("address", ""),
+                            latitude = if (hasCoordinates) latitude else null,
+                            longitude = if (hasCoordinates) longitude else null,
+                            mapsUrl = mapsUrl,
+                            approximateCoordinates = place.optBoolean("approximateCoordinates", false)
+                        ) else null
+                    }
                     val journal = if (item.has("journal") && !item.isNull("journal")) {
                         val jObj = item.getJSONObject("journal")
                         val moodKey = if (jObj.has("mood") && !jObj.isNull("mood")) jObj.getString("mood") else null
+                        val specificMoodKey = if (jObj.has("specificMood") && !jObj.isNull("specificMood")) jObj.getString("specificMood") else null
                         ReminderJournal(
-                            mood = JournalMood.fromKey(moodKey),
+                            // Phase 4A stored a secondary choice. Prefer it when both were set.
+                            mood = JournalMood.fromKey(specificMoodKey) ?: JournalMood.fromKey(moodKey),
                             text = jObj.optString("text", ""),
                             createdAt = jObj.getLong("createdAt"),
                             updatedAt = jObj.optLong("updatedAt", jObj.getLong("createdAt"))
@@ -90,7 +109,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             gradientBlendFraction = item.optionalBlendFraction(),
                             customSolidColorArgb = item.optionalColorArgb("customSolidColorArgb"),
                             attachments = attachments,
-                            journal = journal
+                            journal = journal,
+                            location = location
                         )
                     )
                 }
@@ -110,7 +130,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         checklistItems: List<ChecklistItem> = emptyList(),
         sendImmediateNotification: Boolean = true,
         referenceUrl: String? = null,
-        attachments: List<ReminderAttachment> = emptyList()
+        attachments: List<ReminderAttachment> = emptyList(),
+        location: ReminderLocation? = null
     ): ReminderItem = synchronized(mutationLock) {
         val trimmedTitle = text.trim()
         require(trimmedTitle.isNotBlank()) { "Başlık boş olamaz" }
@@ -140,7 +161,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
             checklistItems = normalizedItems,
             sendImmediateNotification = sendImmediateNotification,
             referenceUrl = referenceUrl?.trim()?.takeIf { it.isNotBlank() },
-            attachments = attachments
+            attachments = attachments,
+            location = location
         )
         val updated = listOf(newItem) + previous
         save(updated)
@@ -215,7 +237,9 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         starBorderColorIndex: Int? = null,
         gradientBlendFraction: Float? = null,
         customSolidColorArgb: Int? = null,
-        attachments: List<ReminderAttachment>? = null
+        attachments: List<ReminderAttachment>? = null,
+        location: ReminderLocation? = null,
+        updateLocation: Boolean = false
     ): List<ReminderItem> {
         require(text.isNotBlank())
         require(accentStart == null || accentStart in ACCENT_RANGE)
@@ -242,6 +266,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                 gradientBlendFraction = resolvedBlendFraction,
                 customSolidColorArgb = customSolidColorArgb,
                 attachments = attachments ?: reminder.attachments,
+                location = if (updateLocation) location else reminder.location,
                 updatedAt = System.currentTimeMillis()
             )
         }
@@ -268,6 +293,20 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         starBorderColorIndex = starBorderColorIndex,
         gradientBlendFraction = migrateLegacyGradientBlendIndex(gradientBlendIndex)
     )
+
+    /** Fill only missing map preview coordinates; keep the saved place and edit timestamp intact. */
+    fun enrichLocationCoordinates(id: Long, expectedMapsUrl: String, resolved: ReminderLocation): List<ReminderItem> {
+        require(resolved.latitude != null && resolved.longitude != null)
+        return update(id) { reminder ->
+            val existing = reminder.location
+            if (existing?.mapsUrl != expectedMapsUrl || existing.latitude != null || existing.longitude != null) reminder
+            else reminder.copy(location = existing.copy(
+                latitude = resolved.latitude,
+                longitude = resolved.longitude,
+                approximateCoordinates = resolved.approximateCoordinates
+            ))
+        }
+    }
 
     fun setCustomCategory(id: Long, customCategoryId: Long?): List<ReminderItem> = update(id) {
         it.copy(customCategoryId = customCategoryId, updatedAt = System.currentTimeMillis())
@@ -396,6 +435,16 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                     .put("isChecklist", reminder.isChecklist)
                     .put("sendImmediateNotification", reminder.sendImmediateNotification)
                     .put("referenceUrl", reminder.referenceUrl ?: JSONObject.NULL)
+                    .put("location", reminder.location?.let { place ->
+                        JSONObject()
+                            .put("placeId", place.placeId ?: JSONObject.NULL)
+                            .put("placeName", place.placeName)
+                            .put("address", place.address)
+                            .put("latitude", place.latitude ?: JSONObject.NULL)
+                            .put("longitude", place.longitude ?: JSONObject.NULL)
+                            .put("mapsUrl", place.mapsUrl ?: JSONObject.NULL)
+                            .put("approximateCoordinates", place.approximateCoordinates)
+                    } ?: JSONObject.NULL)
                     .put("checklistItems", JSONArray().apply {
                         reminder.checklistItems.forEach { checkItem ->
                             put(

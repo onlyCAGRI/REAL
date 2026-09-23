@@ -41,15 +41,30 @@ fun TopGlassOverlay(
 ) {
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val density = LocalDensity.current
-    val radius = with(density) { 14.dp.toPx() }
-    val fadeStart = with(density) { statusHeight.toPx() / (statusHeight + 18.dp).toPx() }
+
+    // Extend the visual coverage approximately another status-bar-height below it (1.9x total)
+    val totalHeight = statusHeight * 1.9f
+
+    val fadeStart = with(density) {
+        val s = statusHeight.toPx()
+        val t = totalHeight.toPx()
+        if (t > 0f) s / t else 0.5f
+    }
+
     var position by remember { mutableStateOf(Offset.Zero) }
     val dynamic = Build.VERSION.SDK_INT >= 31 && !reduceDynamicBlur
+
+    // Gradual fade into normal screen background
     val fadeBrush = remember(fadeStart) {
-        Brush.verticalGradient(0f to Color.White, fadeStart to Color.White, 1f to Color.Transparent)
+        Brush.verticalGradient(
+            0f to Color.White,
+            fadeStart to Color.White,
+            1f to Color.Transparent
+        )
     }
+
     Box(
-        modifier.fillMaxWidth().height(statusHeight + 18.dp)
+        modifier.fillMaxWidth().height(totalHeight)
             .onGloballyPositioned { position = it.positionInRoot() }
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithContent {

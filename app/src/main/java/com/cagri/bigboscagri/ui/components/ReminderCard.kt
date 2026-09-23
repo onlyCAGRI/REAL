@@ -453,13 +453,7 @@ fun ReminderCard(
                         )
                         val mood = reminder.journal.mood
                         if (mood != null) {
-                            val moodIcon = when (mood) {
-                                JournalMood.VERY_GOOD -> ActionGlyph.MoodVeryGood
-                                JournalMood.GOOD -> ActionGlyph.MoodGood
-                                JournalMood.NEUTRAL -> ActionGlyph.MoodNeutral
-                                JournalMood.HARD -> ActionGlyph.MoodHard
-                                JournalMood.BAD -> ActionGlyph.MoodBad
-                            }
+                            val moodIcon = journalMoodGlyph(mood)
                             Spacer(Modifier.width(4.dp))
                             ActionIcon(moodIcon, Modifier.size(10.dp), Color(0xFFA5A5B0))
                         }

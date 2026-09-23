@@ -79,35 +79,28 @@ class CategoryFilterAndSortTest {
         assertFalse(filtered.any { it.id == 3L })
     }
 
-    // 3. Reminder with matching Color 2 but DIFFERENT Color 1 is EXCLUDED (Color 2 must never match)
+    // 3. Both selected endpoints count; unrelated palette colors do not.
     @Test
-    fun matchingColor2AloneDoesNotIncludeReminder() {
-        // Target filter is Color 1 = index 4
-        // This reminder has Color 1 = index 1, and Color 2 = index 4
-        val reminderWithColor2Match = ReminderItem(
+    fun eitherSelectedColorMatchesButUnselectedColorsDoNot() {
+        val gradient = ReminderItem(
             id = 10L,
-            text = "Gradient reminder with Color 2 match",
+            text = "Two selected colors",
             createdAt = 1500L,
-            accentStart = 1, // Color 1
-            accentEnd = 4    // Color 2
+            accentStart = 1,
+            accentEnd = 4
         )
-        val reminderWithColor1Match = ReminderItem(
+        val singleColor = ReminderItem(
             id = 20L,
-            text = "Reminder with Color 1 match",
+            text = "Only Color 4",
             createdAt = 2500L,
-            accentStart = 4, // Color 1 matches filter
-            accentEnd = 7
+            accentStart = 4,
+            accentEnd = null
         )
+        val reminders = listOf(gradient, singleColor)
 
-        val filtered = filterAndSortReminders(
-            reminders = listOf(reminderWithColor2Match, reminderWithColor1Match),
-            colorFilter = 4,
-            sortOrder = ReminderSortOrder.RECENTLY_ADDED
-        )
-
-        assertEquals(1, filtered.size)
-        assertEquals(20L, filtered.first().id)
-        assertFalse("Color 2 match must never cause inclusion", filtered.any { it.id == 10L })
+        assertEquals(listOf(10L), filterAndSortReminders(reminders, colorFilter = 1).map { it.id })
+        assertEquals(listOf(20L, 10L), filterAndSortReminders(reminders, colorFilter = 4).map { it.id })
+        assertTrue(filterAndSortReminders(reminders, colorFilter = 2).isEmpty())
     }
 
     // 4. Clearing the color filter restores all category reminders

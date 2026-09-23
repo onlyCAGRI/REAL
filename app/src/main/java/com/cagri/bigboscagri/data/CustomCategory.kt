@@ -6,5 +6,6 @@ data class CustomCategory(
     val iconKey: String,
     val accentStart: Int,
     val accentEnd: Int? = null,
+    val hideFromGeneralLists: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )

@@ -46,6 +46,8 @@ class MainActivity : ComponentActivity() {
     private var notificationsAllowed by mutableStateOf(false)
     private var openedReminderId by mutableStateOf<Long?>(null)
     private var pendingShareDraft by mutableStateOf<SharedPayload?>(null)
+    private var pendingLocationShare by mutableStateOf<PendingReminderLocation?>(null)
+    private val attemptedLocationPreviews = mutableSetOf<Pair<Long, String>>()
     private val operations = Mutex()
     private val waiting = mutableSetOf<Long>() // Accessed only under mutationLock on IO.
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -125,7 +127,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         ReminderScreen(
                             reminders = reminders,
-                            onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl, attachments ->
+                            onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl, attachments, location ->
                                 var createdId: Long? = null
                                 val success = perform(warnIfBlocked = true) {
                                     val newest = repository.add(
@@ -137,7 +139,8 @@ class MainActivity : ComponentActivity() {
                                         checklistItems = checklistItems,
                                         sendImmediateNotification = sendImmediateNotification,
                                         referenceUrl = referenceUrl,
-                                        attachments = attachments
+                                        attachments = attachments,
+                                        location = location
                                     )
                                     createdId = newest.id
                                     if (alertAt == null && canShowImmediateNotification(newest) && !ReminderNotifications.show(this@MainActivity, newest)) waiting.add(newest.id)
@@ -159,8 +162,8 @@ class MainActivity : ComponentActivity() {
                                 if (item?.shouldPinNotification == true) ReminderNotifications.show(this, item)
                                 else { ReminderNotifications.cancel(this, id); waiting.remove(id) }
                             } },
-                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments -> mutate {
-                                repository.edit(id, text, accentStart, accentEnd, customCategoryId, checklistItems = checklistItems, starBorderColorIndex = starBorderColorIndex, gradientBlendFraction = gradientBlendFraction, customSolidColorArgb = customSolidColorArgb, attachments = attachments).firstOrNull { it.id == id }
+                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, location -> mutate {
+                                repository.edit(id, text, accentStart, accentEnd, customCategoryId, checklistItems = checklistItems, starBorderColorIndex = starBorderColorIndex, gradientBlendFraction = gradientBlendFraction, customSolidColorArgb = customSolidColorArgb, attachments = attachments, location = location, updateLocation = true).firstOrNull { it.id == id }
                                     ?.let { ReminderNotifications.refreshEdited(this, it) }
                             } },
                             onSetAlert = { id, at, repeatRule -> mutate {
@@ -199,19 +202,19 @@ class MainActivity : ComponentActivity() {
                             exactAlarmsAllowed = exactAllowed,
                             onRequestExactAlarms = ::openAlarmAccess,
                             customCategories = customCategories,
-                            onCreateCategory = { name, iconKey, start, end ->
+                            onCreateCategory = { name, iconKey, start, end, hide ->
                                 mutateCategory("Kategori oluşturulamadı.") {
-                                    categoryRepository.add(name, iconKey, start, end)
+                                    categoryRepository.add(name, iconKey, start, end, hide)
                                 }
                             },
-                            onEditCategory = { id, name, iconKey, start, end ->
+                            onEditCategory = { id, name, iconKey, start, end, hide ->
                                 mutateCategory("Kategori güncellenemedi.") {
-                                    categoryRepository.update(id, name, iconKey, start, end)
+                                    categoryRepository.update(id, name, iconKey, start, end, hide)
                                 }
                             },
-                            onDeleteCategory = { id ->
+                            onDeleteCategory = { id, deleteReminders ->
                                 mutateCategory("Kategori silinemedi. Yeniden deneyebilirsin.") {
-                                    deleteCategoryWithRollback(id, repository, categoryRepository)
+                                    deleteCategoryWithRollback(id, repository, categoryRepository, deleteReminders)
                                 }
                             },
                             onDeleteCategories = { ids ->
@@ -223,6 +226,10 @@ class MainActivity : ComponentActivity() {
                             onUpdateBuiltInCategoryColor = { cat, override ->
                                 builtInCategoryColors = categoryRepository.setBuiltInCategoryColor(cat, override)
                             },
+                            pendingLocationShare = pendingLocationShare,
+                            onLocationShareHandled = { pendingLocationShare = null },
+                            onRequestLocationShare = ::openMapsForLocation,
+                            onResolveLocationPreview = ::resolveLocationPreview,
                             pendingShareDraft = pendingShareDraft,
                             onShareDraftHandled = { pendingShareDraft = null },
                             userName = userName,
@@ -271,7 +278,62 @@ class MainActivity : ComponentActivity() {
         handleShareIntent(intent)
     }
 
+    private fun openMapsForLocation(reminderId: Long) {
+        if (reminders.none { it.id == reminderId }) return
+        val prefs = getSharedPreferences("real_pending_location", MODE_PRIVATE)
+        // Commit before switching apps: Android may terminate REAL in the background.
+        if (!prefs.edit().putLong("reminder_id", reminderId)
+                .putLong("started_at", System.currentTimeMillis()).commit()) {
+            Toast.makeText(this, "Konum seçimi başlatılamadı", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps"))
+                .setPackage("com.google.android.apps.maps"))
+        } catch (_: Exception) {
+            prefs.edit().clear().apply()
+            Toast.makeText(this, "Google Haritalar açılamadı", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun resolveLocationPreview(reminderId: Long) {
+        val existing = reminders.firstOrNull { it.id == reminderId }?.location ?: return
+        val url = existing.mapsUrl ?: return
+        if (existing.latitude != null || !attemptedLocationPreviews.add(reminderId to url)) return
+        lifecycleScope.launch {
+            val resolved = withContext(Dispatchers.IO) {
+                GoogleMapsShareParser.parse("${existing.placeName}\n${existing.address}\n$url")
+            }
+            if (resolved?.latitude != null && resolved.longitude != null) {
+                mutate { repository.enrichLocationCoordinates(reminderId, url, resolved) }
+            }
+        }
+    }
+
     private fun handleShareIntent(intent: Intent?) {
+        val sharedText = if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true)
+            intent.getStringExtra(Intent.EXTRA_TEXT) else null
+        val mapsUrl = GoogleMapsShareParser.sharedUrl(sharedText)
+        if (mapsUrl != null) {
+            val prefs = getSharedPreferences("real_pending_location", MODE_PRIVATE)
+            val reminderId = prefs.getLong("reminder_id", -1L)
+            val startedAt = prefs.getLong("started_at", 0L)
+            prefs.edit().clear().apply()
+            intent?.removeExtra(Intent.EXTRA_TEXT)
+            intent?.removeExtra(Intent.EXTRA_SUBJECT)
+            intent?.removeExtra(Intent.EXTRA_TITLE)
+            if (reminderId > 0 && System.currentTimeMillis() - startedAt in 0..3_600_000L &&
+                reminders.any { it.id == reminderId }) {
+                lifecycleScope.launch {
+                    val location = withContext(Dispatchers.IO) { GoogleMapsShareParser.parse(sharedText.orEmpty()) }
+                    if (location != null) pendingLocationShare = PendingReminderLocation(reminderId, location)
+                    else Toast.makeText(this@MainActivity, "Harita bağlantısı okunamadı", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                Toast.makeText(this, "Konumu eklemek için hatırlatmanın Düzenle ekranından başla", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         ShareParser.parse(intent)?.let { payload ->
             pendingShareDraft = payload
             intent?.removeExtra(Intent.EXTRA_TEXT)

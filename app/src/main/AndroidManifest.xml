@@ -24,6 +24,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BigBosCagri">
 
+
         <meta-data
             android:name="com.samsung.android.support.ongoing_activity"
             android:value="true" />
@@ -45,7 +46,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

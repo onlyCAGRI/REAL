@@ -1,0 +1,45 @@
+package com.cagri.bigboscagri
+
+import com.cagri.bigboscagri.data.GoogleMapsShareParser
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class GoogleMapsShareParserTest {
+    @Test fun shortLinkKeepsOriginalAndUsesTrustedRedirectCoordinates() {
+        val short = "https://maps.app.goo.gl/abcXYZ"
+        val result = GoogleMapsShareParser.parse("Starbucks Piazza\nCanik, Samsun\n$short") {
+            "https://www.google.com/maps/place/Starbucks+Piazza/data=!3d41.2801!4d36.3202"
+        }!!
+        assertEquals(short, result.mapsUrl)
+        assertEquals("Starbucks Piazza", result.placeName)
+        assertEquals("Canik, Samsun", result.address)
+        assertEquals(41.2801, result.latitude!!, 0.000001)
+        assertEquals(36.3202, result.longitude!!, 0.000001)
+    }
+
+    @Test fun unresolvedShortLinkDoesNotInventCoordinates() {
+        val result = GoogleMapsShareParser.parse("https://maps.app.goo.gl/abcXYZ") { null }!!
+        assertNull(result.latitude)
+        assertNull(result.longitude)
+        assertEquals("https://maps.app.goo.gl/abcXYZ", result.mapsUrl)
+    }
+
+    @Test fun placeCameraIsFlaggedApproximateAndNeverReplacesExactPin() {
+        val result = GoogleMapsShareParser.parse("https://www.google.com/maps/place/Cafe/@41.0,36.0,15z")!!
+        assertEquals("Cafe", result.placeName)
+        assertEquals(41.0, result.latitude!!, 0.000001)
+        assertEquals(36.0, result.longitude!!, 0.000001)
+        assertEquals(true, result.approximateCoordinates)
+        val exact = GoogleMapsShareParser.parse(
+            "https://www.google.com/maps/place/Cafe/@40.0,35.0,15z/data=!3d41.2801!4d36.3202"
+        )!!
+        assertEquals(41.2801, exact.latitude!!, 0.000001)
+        assertEquals(false, exact.approximateCoordinates)
+    }
+
+    @Test fun unrelatedAndUnsafeUrlsCannotBecomeLocations() {
+        assertNull(GoogleMapsShareParser.parse("https://example.com/maps/place/Private"))
+        assertNull(GoogleMapsShareParser.sharedUrl("https://maps.app.goo.gl.evil.example/abc"))
+    }
+}

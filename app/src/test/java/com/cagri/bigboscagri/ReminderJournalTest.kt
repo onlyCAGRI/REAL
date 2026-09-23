@@ -33,6 +33,70 @@ class ReminderJournalTest {
     }
 
     @Test
+    fun legacyJournalWithoutSpecificMoodPreservesGeneralMood() {
+        val prefs = FakeSharedPreferences()
+        val json = JSONArray().apply {
+            put(JSONObject()
+                .put("id", 1001L)
+                .put("text", "Eski günlük")
+                .put("createdAt", 1000L)
+                .put("journal", JSONObject()
+                    .put("mood", "good")
+                    .put("text", "Eski not")
+                    .put("createdAt", 1000L)))
+        }
+        prefs.edit().putString("reminders", json.toString()).commit()
+
+        val journal = ReminderRepository(prefs).load().first().journal
+        assertEquals(JournalMood.GOOD, journal?.mood)
+        assertEquals("Eski not", journal?.text)
+    }
+
+    @Test
+    fun phase4aDualMoodLoadsAsSingleSpecificChoiceAndRewritesWithoutSecondaryField() {
+        val prefs = FakeSharedPreferences()
+        val json = JSONArray().put(JSONObject()
+            .put("id", 1001L).put("text", "Phase 4A günlüğü").put("createdAt", 1000L)
+            .put("journal", JSONObject().put("mood", "good")
+                .put("specificMood", "calm").put("text", "Not").put("createdAt", 1000L)))
+        prefs.edit().putString("reminders", json.toString()).commit()
+        val repo = ReminderRepository(prefs)
+        assertEquals(JournalMood.CALM, repo.load().single().journal?.mood)
+        repo.setJournal(1001L, JournalMood.CALM, "Not")
+        val stored = JSONArray(prefs.getString("reminders", "[]")).getJSONObject(0).getJSONObject("journal")
+        assertEquals("calm", stored.getString("mood"))
+        assertTrue(!stored.has("specificMood"))
+    }
+
+    @Test
+    fun unknownPhase4aSecondaryChoiceFallsBackToOriginalMood() {
+        val prefs = FakeSharedPreferences()
+        prefs.edit().putString("reminders", JSONArray().put(JSONObject()
+            .put("id", 1002L).put("text", "Eski günlük").put("createdAt", 1000L)
+            .put("journal", JSONObject().put("mood", "bad").put("specificMood", "unknown")
+                .put("text", "Not").put("createdAt", 1000L))).toString()).commit()
+        assertEquals(JournalMood.BAD, ReminderRepository(prefs).load().single().journal?.mood)
+    }
+
+    @Test
+    fun everyNewChoiceRoundTripsInOriginalMoodField() {
+        val prefs = FakeSharedPreferences()
+        val repo = ReminderRepository(prefs)
+        val reminder = repo.add("Bugün")
+        val newChoices = JournalMood.entries.drop(5)
+        assertEquals(9, newChoices.size)
+        newChoices.forEach { mood ->
+            repo.setJournal(reminder.id, mood, "Not")
+            val stored = JSONArray(prefs.getString("reminders", "[]")).getJSONObject(0).getJSONObject("journal")
+            assertEquals(mood.persistKey, stored.getString("mood"))
+            assertTrue(!stored.has("specificMood"))
+            assertEquals(mood, ReminderRepository(prefs).load().single().journal?.mood)
+        }
+        repo.setJournal(reminder.id, null, "Not")
+        assertNull(ReminderRepository(prefs).load().single().journal?.mood)
+    }
+
+    @Test
     fun journalSaveAndReload() {
         val prefs = FakeSharedPreferences()
         val repo = ReminderRepository(prefs)

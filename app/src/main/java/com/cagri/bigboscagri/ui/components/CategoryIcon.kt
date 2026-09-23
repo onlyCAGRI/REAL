@@ -23,17 +23,28 @@ enum class CategoryIcon(val key: String, val label: String) {
     SCHOOL("SCHOOL", "Eğitim"),
     TRAVEL("TRAVEL", "Seyahat"),
     FAMILY("FAMILY", "Aile"),
-    CAR("CAR", "Araç"),
+    PET("PET", "Evcil hayvan"),
     FOOD("FOOD", "Yemek"),
     IDEA("IDEA", "Fikir"),
     HEART("HEART", "Favori"),
     STAR("STAR", "Yıldız"),
     FILE("FILE", "Belge"),
-    GAME("GAME", "Oyun");
+    LOCATION("LOCATION", "Konum"),
+    BOOKMARK("BOOKMARK", "Kaydedilen"),
+    GIFT("GIFT", "Hediye");
 
     companion object {
-        fun fromKey(key: String): CategoryIcon =
-            entries.firstOrNull { it.key.equals(key, ignoreCase = true) } ?: WORK
+        val selectableEntries: List<CategoryIcon>
+            get() = entries.filterNot { it == PET || it == GIFT } + listOf(PET, GIFT)
+
+        fun fromKey(key: String): CategoryIcon {
+            // Preserve compatibility with categories saved by the short-lived CAR/GAME build.
+            return when {
+                key.equals("CAR", ignoreCase = true) -> PET
+                key.equals("GAME", ignoreCase = true) -> GIFT
+                else -> entries.firstOrNull { it.key.equals(key, ignoreCase = true) } ?: WORK
+            }
+        }
     }
 }
 
@@ -92,9 +103,23 @@ fun CategoryIconGlyph(
                     drawPath(basket, color, style = stroke)
                 }
                 CategoryIcon.HEALTH -> {
-                    drawCircle(color, 8.5f, Offset(12f, 12f), style = stroke)
-                    line(12f, 7.5f, 12f, 16.5f)
-                    line(7.5f, 12f, 16.5f, 12f)
+                    // Pharmacy-style medical cross: clearer than a generic circled +.
+                    val pharmacyCross = Path().apply {
+                        moveTo(9f, 3.5f)
+                        lineTo(15f, 3.5f)
+                        lineTo(15f, 9f)
+                        lineTo(20.5f, 9f)
+                        lineTo(20.5f, 15f)
+                        lineTo(15f, 15f)
+                        lineTo(15f, 20.5f)
+                        lineTo(9f, 20.5f)
+                        lineTo(9f, 15f)
+                        lineTo(3.5f, 15f)
+                        lineTo(3.5f, 9f)
+                        lineTo(9f, 9f)
+                        close()
+                    }
+                    drawPath(pharmacyCross, color, style = stroke)
                 }
                 CategoryIcon.SPORT -> {
                     line(6.5f, 12f, 17.5f, 12f)
@@ -104,9 +129,17 @@ fun CategoryIconGlyph(
                     line(20f, 9.5f, 20f, 14.5f)
                 }
                 CategoryIcon.MONEY -> {
-                    drawRoundRect(color, Offset(3.5f, 6.5f), Size(17f, 12.5f), CornerRadius(2.5f, 2.5f), style = stroke)
-                    drawRoundRect(color, Offset(13.5f, 10f), Size(7f, 5.5f), CornerRadius(1.5f, 1.5f), style = stroke)
-                    drawCircle(color, 1f, Offset(16f, 12.75f))
+                    line(12f, 3.5f, 12f, 20.5f)
+                    val money = Path().apply {
+                        moveTo(16.8f, 6.5f)
+                        cubicTo(15.4f, 5.2f, 13.8f, 4.7f, 12f, 4.7f)
+                        cubicTo(8.6f, 4.7f, 6.8f, 6.4f, 6.8f, 8.7f)
+                        cubicTo(6.8f, 11.3f, 8.9f, 12.1f, 12.2f, 12.7f)
+                        cubicTo(15.5f, 13.3f, 17.2f, 14.2f, 17.2f, 16.5f)
+                        cubicTo(17.2f, 18.9f, 15.3f, 20.1f, 12f, 20.1f)
+                        cubicTo(9.8f, 20.1f, 7.9f, 19.4f, 6.4f, 17.9f)
+                    }
+                    drawPath(money, color, style = stroke)
                 }
                 CategoryIcon.SCHOOL -> {
                     val book = Path().apply {
@@ -136,23 +169,44 @@ fun CategoryIconGlyph(
                     }
                     drawPath(body, color, style = stroke)
                 }
-                CategoryIcon.CAR -> {
-                    drawCircle(color, 1.4f, Offset(7.5f, 17.5f))
-                    drawCircle(color, 1.4f, Offset(16.5f, 17.5f))
-                    val carBody = Path().apply {
-                        moveTo(3.5f, 14.5f)
-                        lineTo(5.5f, 14.5f)
-                        lineTo(7.5f, 9.5f)
-                        lineTo(15.5f, 9.5f)
-                        lineTo(18f, 14.5f)
-                        lineTo(20.5f, 14.5f)
-                        lineTo(20.5f, 17.5f)
-                        lineTo(18.5f, 17.5f)
+                CategoryIcon.PET -> {
+                    // Tabler-inspired paw: four toe pads and one soft central pad.
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(8.15f, 3.6f),
+                        size = Size(3.4f, 5.0f),
+                        style = stroke
+                    )
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(12.45f, 3.6f),
+                        size = Size(3.4f, 5.0f),
+                        style = stroke
+                    )
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(3.25f, 8.1f),
+                        size = Size(3.4f, 5.0f),
+                        style = stroke
+                    )
+                    drawOval(
+                        color = color,
+                        topLeft = Offset(17.35f, 8.1f),
+                        size = Size(3.4f, 5.0f),
+                        style = stroke
+                    )
+                    val pawPad = Path().apply {
+                        moveTo(14.7f, 13.5f)
+                        cubicTo(13.6f, 11.5f, 13.25f, 11f, 12f, 11f)
+                        cubicTo(10.7f, 11f, 10.25f, 11.75f, 9.16f, 13.75f)
+                        cubicTo(8.2f, 15.45f, 5.85f, 15.6f, 5.7f, 18f)
+                        cubicTo(5.7f, 19.2f, 6.5f, 20f, 7.5f, 20f)
+                        cubicTo(8.75f, 20f, 10.5f, 19f, 12f, 19f)
+                        cubicTo(13.5f, 19f, 15.25f, 20f, 16.5f, 20f)
+                        cubicTo(17.5f, 20f, 18.3f, 19.2f, 18.3f, 18f)
+                        cubicTo(18.15f, 15.6f, 15.65f, 15.45f, 14.7f, 13.5f)
                     }
-                    drawPath(carBody, color, style = stroke)
-                    line(3.5f, 14.5f, 3.5f, 17.5f)
-                    line(3.5f, 17.5f, 5.5f, 17.5f)
-                    line(9.5f, 17.5f, 14.5f, 17.5f)
+                    drawPath(pawPad, color, style = stroke)
                 }
                 CategoryIcon.FOOD -> {
                     val cup = Path().apply {
@@ -224,12 +278,64 @@ fun CategoryIconGlyph(
                     line(9f, 12f, 15.5f, 12f)
                     line(9f, 16f, 13.5f, 16f)
                 }
-                CategoryIcon.GAME -> {
-                    drawRoundRect(color, Offset(4f, 7.5f), Size(16f, 10.5f), CornerRadius(5.2f, 5.2f), style = stroke)
-                    line(7.5f, 10.5f, 7.5f, 14.5f)
-                    line(5.5f, 12.5f, 9.5f, 12.5f)
-                    drawCircle(color, 1.05f, Offset(15f, 11.2f))
-                    drawCircle(color, 1.05f, Offset(16.8f, 13.5f))
+                CategoryIcon.LOCATION -> {
+                    val pin = Path().apply {
+                        moveTo(12f, 21f)
+                        cubicTo(10.1f, 18.7f, 5.5f, 14.1f, 5.5f, 9.5f)
+                        cubicTo(5.5f, 5.8f, 8.4f, 3f, 12f, 3f)
+                        cubicTo(15.6f, 3f, 18.5f, 5.8f, 18.5f, 9.5f)
+                        cubicTo(18.5f, 14.1f, 13.9f, 18.7f, 12f, 21f)
+                        close()
+                    }
+                    drawPath(pin, color, style = stroke)
+                    drawCircle(color, 2.2f, Offset(12f, 9.5f), style = stroke)
+                }
+                CategoryIcon.BOOKMARK -> {
+                    val bookmark = Path().apply {
+                        moveTo(7f, 3.5f)
+                        lineTo(17f, 3.5f)
+                        lineTo(17f, 20.5f)
+                        lineTo(12f, 17f)
+                        lineTo(7f, 20.5f)
+                        close()
+                    }
+                    drawPath(bookmark, color, style = stroke)
+                }
+                CategoryIcon.GIFT -> {
+                    // Tabler gift outline, adapted to the app's 24dp stroke language.
+                    drawRoundRect(
+                        color,
+                        Offset(3f, 8f),
+                        Size(18f, 4f),
+                        CornerRadius(1.2f, 1.2f),
+                        style = stroke
+                    )
+                    val giftBody = Path().apply {
+                        moveTo(5f, 12f)
+                        lineTo(5f, 19f)
+                        cubicTo(5f, 20.1f, 5.9f, 21f, 7f, 21f)
+                        lineTo(17f, 21f)
+                        cubicTo(18.1f, 21f, 19f, 20.1f, 19f, 19f)
+                        lineTo(19f, 12f)
+                    }
+                    drawPath(giftBody, color, style = stroke)
+                    line(12f, 8f, 12f, 21f)
+                    val leftBow = Path().apply {
+                        moveTo(12f, 8f)
+                        cubicTo(10.6f, 5f, 9.1f, 3f, 7.5f, 3f)
+                        cubicTo(5.9f, 3f, 5f, 4.1f, 5f, 5.5f)
+                        cubicTo(5f, 7f, 6.1f, 8f, 7.5f, 8f)
+                        close()
+                    }
+                    drawPath(leftBow, color, style = stroke)
+                    val rightBow = Path().apply {
+                        moveTo(12f, 8f)
+                        cubicTo(13.4f, 5f, 14.9f, 3f, 16.5f, 3f)
+                        cubicTo(18.1f, 3f, 19f, 4.1f, 19f, 5.5f)
+                        cubicTo(19f, 7f, 17.9f, 8f, 16.5f, 8f)
+                        close()
+                    }
+                    drawPath(rightBow, color, style = stroke)
                 }
             }
         }

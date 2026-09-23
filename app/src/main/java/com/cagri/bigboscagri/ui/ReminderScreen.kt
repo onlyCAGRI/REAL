@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import java.time.LocalDate
 import com.cagri.bigboscagri.data.ReminderAttachment
+import com.cagri.bigboscagri.data.ReminderLocation
 import com.cagri.bigboscagri.data.JournalMood
 import com.cagri.bigboscagri.data.AttachmentStorage
 import com.cagri.bigboscagri.speech.TimeOfDay
@@ -169,9 +170,10 @@ import com.cagri.bigboscagri.ui.components.CategoryColorFilterButton
 import com.cagri.bigboscagri.ui.components.CategoryColorSelectorHeader
 import com.cagri.bigboscagri.ui.components.CategoryEditButton
 import com.cagri.bigboscagri.ui.components.HomeSortControl
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+data class PendingReminderLocation(val reminderId: Long, val location: ReminderLocation)
 
 internal data class ReminderRoute(val category: ReminderCategory?, val customCategoryId: Long?, val detailId: Long?) {
     val key: String get() = detailId?.let { "detail_$it" }
@@ -183,10 +185,10 @@ internal data class ReminderRoute(val category: ReminderCategory?, val customCat
 @Composable
 fun ReminderScreen(
     reminders: List<ReminderItem>,
-    onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>) -> Long?,
+    onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>, ReminderLocation?) -> Long?,
     onToggleCompleted: (Long) -> Unit,
     onToggleImportant: (Long) -> Unit,
-    onEditReminder: (Long, String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?) -> Unit,
+    onEditReminder: (Long, String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?, ReminderLocation?) -> Unit,
     onDeleteReminder: (Long) -> Unit,
     onSetAlert: (Long, Long?, RecurrenceRule) -> Unit,
     onSetJournal: (Long, JournalMood?, String) -> Unit,
@@ -204,13 +206,17 @@ fun ReminderScreen(
     designStyle: DesignStyle = DesignStyle.Glass,
     onDesignStyleChange: (DesignStyle) -> Unit = {},
     customCategories: List<CustomCategory> = emptyList(),
-    onCreateCategory: (String, String, Int, Int?) -> Unit = { _, _, _, _ -> },
-    onEditCategory: (Long, String, String, Int, Int?) -> Unit = { _, _, _, _, _ -> },
-    onDeleteCategory: (Long) -> Unit = {},
-    onDeleteCategories: (Set<Long>) -> Unit = { ids -> ids.forEach { onDeleteCategory(it) } },
+    onCreateCategory: (String, String, Int, Int?, Boolean) -> Unit = { _, _, _, _, _ -> },
+    onEditCategory: (Long, String, String, Int, Int?, Boolean) -> Unit = { _, _, _, _, _, _ -> },
+    onDeleteCategory: (Long, Boolean) -> Unit = { _, _ -> },
+    onDeleteCategories: (Set<Long>) -> Unit = { ids -> ids.forEach { onDeleteCategory(it, false) } },
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
     builtInCategoryColors: Map<ReminderCategory, CategoryColorOverride> = emptyMap(),
     onUpdateBuiltInCategoryColor: (ReminderCategory, CategoryColorOverride?) -> Unit = { _, _ -> },
+    pendingLocationShare: PendingReminderLocation? = null,
+    onLocationShareHandled: () -> Unit = {},
+    onRequestLocationShare: (Long) -> Unit = {},
+    onResolveLocationPreview: (Long) -> Unit = {},
     pendingShareDraft: com.cagri.bigboscagri.data.SharedPayload? = null,
     onShareDraftHandled: () -> Unit = {},
     userName: String = "",
@@ -266,12 +272,17 @@ fun ReminderScreen(
     }
     val stateHolder = rememberSaveableStateHolder()
     val scope = rememberCoroutineScope()
-    var detailExitJob by remember { mutableStateOf<Job?>(null) }
     LaunchedEffect(requestedReminderId) {
         if (requestedReminderId != null) {
             ColdStartTracker.markExecuted()
             if (reminders.any { it.id == requestedReminderId }) { detailId = requestedReminderId; showSettings = false }
             onRequestHandled()
+        }
+    }
+    LaunchedEffect(pendingLocationShare) {
+        if (pendingLocationShare != null && reminders.any { it.id == pendingLocationShare.reminderId }) {
+            detailId = pendingLocationShare.reminderId
+            showSettings = false
         }
     }
     LaunchedEffect(pendingShareDraft) {
@@ -395,32 +406,20 @@ fun ReminderScreen(
                             if (route.detailId != null && reminder != null) {
                                 ReminderDetailScreen(
                                     reminder = reminder,
+                                    incomingLocation = pendingLocationShare?.takeIf { it.reminderId == reminder.id }?.location,
+                                    onIncomingLocationHandled = onLocationShareHandled,
+                                    onRequestLocationShare = { onRequestLocationShare(reminder.id) },
+                                    onResolveLocationPreview = { onResolveLocationPreview(reminder.id) },
                                     onBack = {
-                                        detailExitJob?.cancel()
-                                        detailExitJob = null
                                         detailId = null
                                     },
                                     onToggleCompleted = {
-                                        detailExitJob?.cancel()
-                                        detailExitJob = null
-                                        val wasCompleted = reminder.isCompleted
                                         onToggleCompleted(reminder.id)
-                                        if (reminder.repeatRule == RecurrenceRule.NONE && !wasCompleted) {
-                                            if (reduceAnimations) {
-                                                detailId = null
-                                            } else {
-                                                detailExitJob = scope.launch {
-                                                    delay(220)
-                                                    detailId = null
-                                                    detailExitJob = null
-                                                }
-                                            }
-                                        }
                                     },
                                     onToggleImportant = { onToggleImportant(reminder.id) },
                                     onToggleChecklistItem = onToggleChecklistItem,
-                                    onSave = { text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments ->
-                                        onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments)
+                                    onSave = { text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, location ->
+                                        onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, location)
                                     },
                                     onSaveJournal = { mood, text -> onSetJournal(reminder.id, mood, text) },
                                     onDeleteJournal = { onDeleteJournal(reminder.id) },
@@ -471,8 +470,8 @@ fun ReminderScreen(
                                     customCategories = customCategories,
                                     onCreateCategory = onCreateCategory,
                                     onEditCategory = onEditCategory,
-                                     onDeleteCategory = { id ->
-                                         onDeleteCategory(id)
+                                     onDeleteCategory = { id, deleteReminders ->
+                                         onDeleteCategory(id, deleteReminders)
                                          customCategoryId = null
                                      },
                                      onDeleteCategories = onDeleteCategories,
@@ -481,8 +480,8 @@ fun ReminderScreen(
                                          customCategoryId = customCategoryItem.id
                                          onOpenCustomCategory(customCategoryItem)
                                      },
-                                     onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments ->
-                                         val createdId = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments)
+                                     onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments, location ->
+                                         val createdId = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments, location)
                                          if (createdId != null) {
                                              draft = ""; draftAlertAt = null; draftRepeatRule = RecurrenceRule.NONE; draftReferenceUrl = null; isShareDraft = false
                                              if (category != null) {
@@ -538,7 +537,7 @@ private fun ReminderListScreen(
     onDeleteCategories: (Set<Long>) -> Unit = {},
     reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean, designStyle: DesignStyle,
-    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>) -> Long?,
+    onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>, ReminderLocation?) -> Long?,
     isShareDraft: Boolean = false,
     onShareDraftChange: (Boolean) -> Unit = {},
     draftReferenceUrl: String? = null,
@@ -549,9 +548,9 @@ private fun ReminderListScreen(
     customCategory: CustomCategory? = null,
     builtInCategoryColors: Map<ReminderCategory, CategoryColorOverride> = emptyMap(),
     onUpdateBuiltInCategoryColor: (ReminderCategory, CategoryColorOverride?) -> Unit = { _, _ -> },
-    onCreateCategory: (String, String, Int, Int?) -> Unit = { _, _, _, _ -> },
-    onEditCategory: (Long, String, String, Int, Int?) -> Unit = { _, _, _, _, _ -> },
-    onDeleteCategory: (Long) -> Unit = {},
+    onCreateCategory: (String, String, Int, Int?, Boolean) -> Unit = { _, _, _, _, _ -> },
+    onEditCategory: (Long, String, String, Int, Int?, Boolean) -> Unit = { _, _, _, _, _, _ -> },
+    onDeleteCategory: (Long, Boolean) -> Unit = { _, _ -> },
     onOpenCustomCategory: (CustomCategory) -> Unit = {},
     notificationsAllowed: Boolean = true,
     onRequestNotificationPermission: () -> Unit = {},
@@ -799,7 +798,7 @@ private fun ReminderListScreen(
                         try {
                             val items = validItems.mapIndexed { idx, itmText -> ChecklistItem(id = 0L, text = itmText) }
                             val resolvedTitle = text.trim()
-                            val createdId = onAddReminder(resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl, draftAttachments)
+                            val createdId = onAddReminder(resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl, draftAttachments, null)
                             if (createdId != null) {
                                 onDraftAttachmentsChange(emptyList())
                                 entryTracker.onReminderCreated(createdId, reduceAnimations)
@@ -854,7 +853,7 @@ private fun ReminderListScreen(
                     scope.launch {
                         try {
                             val reminderText = text.trim()
-                            val createdId = onAddReminder(reminderText, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl, draftAttachments)
+                            val createdId = onAddReminder(reminderText, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE, draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl, draftAttachments, null)
                             if (createdId != null) {
                                 onDraftAttachmentsChange(emptyList())
                                 entryTracker.onReminderCreated(createdId, reduceAnimations)
@@ -1051,24 +1050,40 @@ private fun ReminderListScreen(
         }
     }
     val today = rememberReminderDay()
-    val baseActive = remember(reminders, category, customCategory, today) {
+    val customCategoriesById = remember(customCategories) { customCategories.associateBy { it.id } }
+    
+    val baseActive = remember(reminders, category, customCategory, today, customCategoriesById) {
         when {
-            category == ReminderCategory.Completed -> reminders.inCategory(ReminderCategory.Completed, today)
-            category != null -> reminders.inCategory(category, today)
+            category == ReminderCategory.Completed -> reminders.inCategory(ReminderCategory.Completed, today).filter {
+                val cat = it.customCategoryId?.let { id -> customCategoriesById[id] }
+                cat?.hideFromGeneralLists != true
+            }
+            category != null -> reminders.inCategory(category, today).filter {
+                val cat = it.customCategoryId?.let { id -> customCategoriesById[id] }
+                cat?.hideFromGeneralLists != true
+            }
             customCategory != null -> reminders.filter {
                 it.customCategoryId == customCategory.id && !it.isCompleted
             }.sortedByDescending { it.createdAt }
-            else -> reminders.filter { !it.isCompleted }
+            else -> reminders.filter { 
+                if (it.isCompleted) return@filter false
+                val cat = it.customCategoryId?.let { id -> customCategoriesById[id] }
+                cat?.hideFromGeneralLists != true
+            }
         }
     }
     val active = remember(baseActive, categoryColorFilter, sortOrder, category, customCategory) {
         val effectiveColorFilter = if (category != null || customCategory != null) categoryColorFilter else null
         filterAndSortReminders(baseActive, effectiveColorFilter, sortOrder)
     }
-    val baseCompleted = remember(reminders, category, customCategory) {
+    val baseCompleted = remember(reminders, category, customCategory, customCategoriesById) {
         when {
             category == null && customCategory == null ->
                 reminders.inCategory(ReminderCategory.Completed)
+                    .filter {
+                        val cat = it.customCategoryId?.let { id -> customCategoriesById[id] }
+                        cat?.hideFromGeneralLists != true
+                    }
                     .sortedByDescending { it.completedAt ?: it.createdAt }
             customCategory != null -> reminders.filter {
                 it.customCategoryId == customCategory.id && it.isCompleted
@@ -1085,8 +1100,6 @@ private fun ReminderListScreen(
         if (isHome) completed.take(HOME_COMPLETED_PREVIEW_LIMIT) else completed
     }
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
-    val customCategoriesById = remember(customCategories) { customCategories.associateBy { it.id } }
 
     DisposableEffect(category, customCategory) {
         isColorFilterExpanded = false
@@ -1661,6 +1674,7 @@ private fun ReminderListScreen(
             customCategories = customCategories,
             selectedCategoryId = draftCategoryId,
             onSelectCategory = { draftCategoryId = it },
+            onCreateCategoryClick = { showCreateCategoryDialog = true },
             onDismiss = { showCategoryPicker = false },
             backdrop = scene,
             backdropPosition = { scenePosition },
@@ -1828,8 +1842,8 @@ private fun ReminderListScreen(
                 backdrop = scene,
                 backdropPosition = { scenePosition },
                 onDismiss = { showCreateCategoryDialog = false },
-                onSaveCustomCategory = { name, iconKey, start, end ->
-                    onCreateCategory(name, iconKey, start, end)
+                onSaveCustomCategory = { name, iconKey, start, end, hide ->
+                    onCreateCategory(name, iconKey, start, end, hide)
                     showCreateCategoryDialog = false
                 },
                 designStyle = designStyle,
@@ -1843,12 +1857,12 @@ private fun ReminderListScreen(
                 backdrop = scene,
                 backdropPosition = { scenePosition },
                 onDismiss = { showEditCategoryDialog = false },
-                onSaveCustomCategory = { name, iconKey, start, end ->
-                    onEditCategory(customCategory.id, name, iconKey, start, end)
+                onSaveCustomCategory = { name, iconKey, start, end, hide ->
+                    onEditCategory(customCategory.id, name, iconKey, start, end, hide)
                     showEditCategoryDialog = false
                 },
-                onDeleteCustomCategory = {
-                    onDeleteCategory(customCategory.id)
+                onDeleteCustomCategory = { deleteReminders ->
+                    onDeleteCategory(customCategory.id, deleteReminders)
                     showEditCategoryDialog = false
                 },
                 designStyle = designStyle,

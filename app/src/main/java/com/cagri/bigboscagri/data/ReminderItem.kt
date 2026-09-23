@@ -10,7 +10,16 @@ enum class JournalMood(val persistKey: String) {
     GOOD("good"),
     NEUTRAL("neutral"),
     HARD("hard"),
-    BAD("bad");
+    BAD("bad"),
+    HAPPY("happy"),
+    EXCITED("excited"),
+    CALM("calm"),
+    TIRED("tired"),
+    BORED("bored"),
+    STRESSED("stressed"),
+    ANGRY("angry"),
+    SAD("sad"),
+    LOW("low");
 
     companion object {
         fun fromKey(key: String?): JournalMood? = entries.firstOrNull { it.persistKey == key }
@@ -46,7 +55,8 @@ data class ReminderItem(
     val gradientBlendFraction: Float? = null,
     val customSolidColorArgb: Int? = null,
     val attachments: List<ReminderAttachment> = emptyList(),
-    val journal: ReminderJournal? = null
+    val journal: ReminderJournal? = null,
+    val location: ReminderLocation? = null
 ) {
     val gradientBlendIndex: Int?
         get() = gradientBlendFraction?.let { frac ->
@@ -106,7 +116,7 @@ fun filterAndSortReminders(
         result = if (colorFilter == COLOR_FILTER_DEFAULT) {
             result.filter { it.accentStart == null }
         } else {
-            result.filter { it.accentStart == colorFilter }
+            result.filter { it.accentStart == colorFilter || it.accentEnd == colorFilter }
         }
     }
     result = when (sortOrder) {

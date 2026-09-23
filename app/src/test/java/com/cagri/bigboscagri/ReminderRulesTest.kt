@@ -152,7 +152,25 @@ class ReminderRulesTest {
         assertEquals(com.cagri.bigboscagri.ui.components.CategoryIcon.HOME, com.cagri.bigboscagri.ui.components.CategoryIcon.fromKey("HOME"))
         assertEquals(com.cagri.bigboscagri.ui.components.CategoryIcon.SHOPPING, com.cagri.bigboscagri.ui.components.CategoryIcon.fromKey("shopping"))
         assertEquals(com.cagri.bigboscagri.ui.components.CategoryIcon.WORK, com.cagri.bigboscagri.ui.components.CategoryIcon.fromKey("non_existent_key"))
-        assertEquals(16, com.cagri.bigboscagri.ui.components.CategoryIcon.entries.size)
+        assertEquals(com.cagri.bigboscagri.ui.components.CategoryIcon.PET, com.cagri.bigboscagri.ui.components.CategoryIcon.fromKey("PET"))
+        assertEquals(com.cagri.bigboscagri.ui.components.CategoryIcon.GIFT, com.cagri.bigboscagri.ui.components.CategoryIcon.fromKey("GIFT"))
+        assertEquals(com.cagri.bigboscagri.ui.components.CategoryIcon.PET, com.cagri.bigboscagri.ui.components.CategoryIcon.fromKey("CAR"))
+        assertEquals(com.cagri.bigboscagri.ui.components.CategoryIcon.GIFT, com.cagri.bigboscagri.ui.components.CategoryIcon.fromKey("GAME"))
+        assertEquals(18, com.cagri.bigboscagri.ui.components.CategoryIcon.entries.size)
+        assertTrue(com.cagri.bigboscagri.ui.components.CategoryIcon.selectableEntries.contains(com.cagri.bigboscagri.ui.components.CategoryIcon.PET))
+        assertTrue(com.cagri.bigboscagri.ui.components.CategoryIcon.selectableEntries.contains(com.cagri.bigboscagri.ui.components.CategoryIcon.GIFT))
+        assertEquals(18, com.cagri.bigboscagri.ui.components.CategoryIcon.selectableEntries.size)
+        assertEquals(
+            listOf(
+                com.cagri.bigboscagri.ui.components.CategoryIcon.BOOKMARK,
+                com.cagri.bigboscagri.ui.components.CategoryIcon.PET,
+                com.cagri.bigboscagri.ui.components.CategoryIcon.GIFT
+            ),
+            com.cagri.bigboscagri.ui.components.CategoryIcon.selectableEntries.takeLast(3)
+        )
+        assertTrue(com.cagri.bigboscagri.ui.components.CategoryIcon.selectableEntries.contains(com.cagri.bigboscagri.ui.components.CategoryIcon.MONEY))
+        assertTrue(com.cagri.bigboscagri.ui.components.CategoryIcon.selectableEntries.contains(com.cagri.bigboscagri.ui.components.CategoryIcon.LOCATION))
+        assertTrue(com.cagri.bigboscagri.ui.components.CategoryIcon.selectableEntries.contains(com.cagri.bigboscagri.ui.components.CategoryIcon.BOOKMARK))
     }
 
     @Test fun categoryPaginationComputesCorrectPageCount() {
@@ -631,10 +649,10 @@ class ReminderRulesTest {
         assertNull(standardMetadata.category)
 
         // Case C: category exists -> metadata uses category name and accent color
-        val addedCategory = categoryRepo.add("Araba", "CAR", 6, null).first()
+        val addedCategory = categoryRepo.add("Evcil hayvan", "PET", 6, null).first()
         val matchingReminder = ReminderItem(id = 12L, text = "Yağ ekle", createdAt = 1000L, customCategoryId = addedCategory.id)
         val matchedMetadata = resolveNotificationMetadata(matchingReminder, categoryRepo, fallbackTitle = "Real")
-        assertEquals("Araba", matchedMetadata.title)
+        assertEquals("Evcil hayvan", matchedMetadata.title)
         assertEquals("Yağ ekle", matchedMetadata.text)
         assertEquals(addedCategory, matchedMetadata.category)
         assertNotNull(matchedMetadata.accentColor)

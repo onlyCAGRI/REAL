@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -67,6 +68,7 @@ import com.cagri.bigboscagri.data.ReminderCategory
 import com.cagri.bigboscagri.ui.DesignStyle
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CategoryEditor(
     builtInCategory: ReminderCategory? = null,
@@ -75,9 +77,9 @@ fun CategoryEditor(
     backdrop: GraphicsLayer,
     backdropPosition: () -> Offset,
     onDismiss: () -> Unit,
-    onSaveCustomCategory: ((name: String, iconKey: String, accentStart: Int, accentEnd: Int?) -> Unit)? = null,
+    onSaveCustomCategory: ((name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean) -> Unit)? = null,
     onSaveBuiltInColor: ((category: ReminderCategory, override: CategoryColorOverride?) -> Unit)? = null,
-    onDeleteCustomCategory: (() -> Unit)? = null,
+    onDeleteCustomCategory: ((deleteReminders: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
     designStyle: DesignStyle = DesignStyle.Glass,
     reduceDynamicBlur: Boolean = false,
@@ -92,6 +94,7 @@ fun CategoryEditor(
     }
 
     var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
+    var deleteRemindersOption by rememberSaveable { mutableStateOf(false) }
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val coroutineScope = rememberCoroutineScope()
@@ -140,6 +143,7 @@ fun CategoryEditor(
     })
 
     var name by rememberSaveable(customCategory) { mutableStateOf(customCategory?.name ?: "") }
+    var hideFromGeneralLists by rememberSaveable(customCategory) { mutableStateOf(customCategory?.hideFromGeneralLists ?: false) }
     var selectedIcon by rememberSaveable(customCategory) {
         mutableStateOf(customCategory?.let { CategoryIcon.fromKey(it.iconKey) } ?: CategoryIcon.WORK)
     }
@@ -254,221 +258,42 @@ fun CategoryEditor(
                     }
                 }
 
-                // 3. 1. Renk Palette
+                // 3-4. Compact color rows — same visual language as reminder card colors
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .graphicsLayer {
                             alpha = ((progress - 0.10f) / 0.90f).coerceIn(0f, 1f)
                         },
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "1. Renk",
-                        color = Color(0xFFBEBEC8),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // "Varsayılan" option (Built-in only)
-                        if (isBuiltIn) {
-                            item(key = "default_color1") {
-                                val isSelected = (selectedColor1 == null)
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .selectable(
-                                            selected = isSelected,
-                                            role = Role.RadioButton,
-                                            onClick = {
-                                                selectedColor1 = null
-                                                selectedColor2 = null
-                                            }
-                                        )
-                                        .semantics {
-                                            contentDescription = if (isSelected) "Varsayılan renk, seçili" else "Varsayılan renk"
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFF1E1E24))
-                                            .border(
-                                                width = if (isSelected) 1.5.dp else 0.75.dp,
-                                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.20f),
-                                                shape = CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (isSelected) {
-                                            ActionIcon(ActionGlyph.Check, Modifier.size(13.dp), Color.White)
-                                        } else {
-                                            ActionIcon(ActionGlyph.Undo, Modifier.size(13.dp), Color(0xFF8E8E98))
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    val isColor2Enabled = !(isBuiltIn && selectedColor1 == null)
 
-                        // Color swatches from ReminderColorChoices
-                        items(ReminderColorChoices.size, key = { "c1_$it" }) { index ->
-                            val choice = ReminderColorChoices[index]
-                            val isSelected = (selectedColor1 == index)
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .selectable(
-                                        selected = isSelected,
-                                        role = Role.RadioButton,
-                                        onClick = { selectedColor1 = index }
-                                    )
-                                    .semantics {
-                                        contentDescription = if (isSelected) "1. Renk: ${choice.label}, seçili" else "1. Renk: ${choice.label}"
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(choice.color)
-                                        .border(
-                                            width = if (isSelected) 1.5.dp else 0.6.dp,
-                                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.16f),
-                                            shape = CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isSelected) {
-                                        ActionIcon(ActionGlyph.Check, Modifier.size(13.dp), Color.White)
-                                    }
-                                }
+                    CategoryEditorColorRow(
+                        label = "Ana renk",
+                        selectedIndex = selectedColor1,
+                        allowNone = isBuiltIn,
+                        noneGlyph = ActionGlyph.Undo,
+                        enabled = true,
+                        onSelected = { index ->
+                            selectedColor1 = index
+                            if (isBuiltIn && index == null) {
+                                selectedColor2 = null
                             }
                         }
-                    }
+                    )
+
+                    CategoryEditorColorRow(
+                        label = "Geçiş rengi",
+                        selectedIndex = selectedColor2,
+                        allowNone = true,
+                        noneGlyph = ActionGlyph.Close,
+                        enabled = isColor2Enabled,
+                        onSelected = { selectedColor2 = it }
+                    )
                 }
 
-                // 4. 2. Renk Palette (Optional gradient color)
-                val isColor2Enabled = !(isBuiltIn && selectedColor1 == null)
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            alpha = if (isColor2Enabled) {
-                                ((progress - 0.14f) / 0.86f).coerceIn(0f, 1f)
-                            } else {
-                                0.38f
-                            }
-                        },
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "2. Renk (İsteğe bağlı)",
-                        color = Color(0xFFBEBEC8),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // "Yok" option (no second color)
-                        item(key = "none_color2") {
-                            val isSelected = (selectedColor2 == null)
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .then(
-                                        if (isColor2Enabled) {
-                                            Modifier.selectable(
-                                                selected = isSelected,
-                                                role = Role.RadioButton,
-                                                onClick = { selectedColor2 = null }
-                                            )
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
-                                    .semantics {
-                                        contentDescription = if (isSelected) "İkinci renk yok, seçili" else "İkinci renk yok"
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF1E1E24))
-                                        .border(
-                                            width = if (isSelected) 1.5.dp else 0.75.dp,
-                                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.20f),
-                                            shape = CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isSelected) {
-                                        ActionIcon(ActionGlyph.Check, Modifier.size(13.dp), Color.White)
-                                    } else {
-                                        ActionIcon(ActionGlyph.Close, Modifier.size(13.dp), Color(0xFF8E8E98))
-                                    }
-                                }
-                            }
-                        }
-
-                        // Color swatches from ReminderColorChoices
-                        items(ReminderColorChoices.size, key = { "c2_$it" }) { index ->
-                            val choice = ReminderColorChoices[index]
-                            val isSelected = (selectedColor2 == index)
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .then(
-                                        if (isColor2Enabled) {
-                                            Modifier.selectable(
-                                                selected = isSelected,
-                                                role = Role.RadioButton,
-                                                onClick = { selectedColor2 = index }
-                                            )
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
-                                    .semantics {
-                                        contentDescription = if (isSelected) "2. Renk: ${choice.label}, seçili" else "2. Renk: ${choice.label}"
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(choice.color)
-                                        .border(
-                                            width = if (isSelected) 1.5.dp else 0.6.dp,
-                                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.16f),
-                                            shape = CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isSelected) {
-                                        ActionIcon(ActionGlyph.Check, Modifier.size(13.dp), Color.White)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 5. Icon Selector - 4x4 Grid (Custom categories only)
+                // 5. Icon Selector - exactly 6 columns x 3 rows (18 icons)
                 if (!isBuiltIn) {
                     Column(
                         modifier = Modifier
@@ -485,23 +310,19 @@ fun CategoryEditor(
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        val iconRows = remember { CategoryIcon.entries.chunked(4) }
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            iconRows.forEach { rowIcons ->
+                        val selectableIcons = remember { CategoryIcon.selectableEntries }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            selectableIcons.chunked(6).forEach { iconRow ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    rowIcons.forEach { icon ->
-                                        val isSelected = (icon == selectedIcon)
+                                    iconRow.forEach { icon ->
+                                        val isSelected = icon == selectedIcon
                                         Box(
                                             modifier = Modifier
-                                                .size(44.dp)
-                                                .clip(RoundedCornerShape(14.dp))
+                                                .size(40.dp)
+                                                .clip(RoundedCornerShape(13.dp))
                                                 .background(
                                                     if (isSelected) Color.White.copy(alpha = 0.16f)
                                                     else Color.White.copy(alpha = 0.04f)
@@ -509,9 +330,10 @@ fun CategoryEditor(
                                                 .border(
                                                     width = if (isSelected) 1.5.dp else 0.6.dp,
                                                     color = if (isSelected) Color.White else Color.White.copy(alpha = 0.08f),
-                                                    shape = RoundedCornerShape(14.dp)
+                                                    shape = RoundedCornerShape(13.dp)
                                                 )
-                                                .clickable(
+                                                .selectable(
+                                                    selected = isSelected,
                                                     role = Role.RadioButton,
                                                     onClick = { selectedIcon = icon }
                                                 )
@@ -522,7 +344,7 @@ fun CategoryEditor(
                                         ) {
                                             CategoryIconGlyph(
                                                 icon = icon,
-                                                modifier = Modifier.size(22.dp),
+                                                modifier = Modifier.size(20.dp),
                                                 color = if (isSelected) Color.White else Color(0xFFB0B0BA)
                                             )
                                         }
@@ -530,6 +352,41 @@ fun CategoryEditor(
                                 }
                             }
                         }
+                    }
+                }
+                
+                // 5.5 Visibility Option
+                if (!isBuiltIn) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { hideFromGeneralLists = !hideFromGeneralLists }
+                            .padding(vertical = 8.dp, horizontal = 4.dp)
+                            .graphicsLayer {
+                                alpha = ((progress - 0.20f) / 0.80f).coerceIn(0f, 1f)
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(if (hideFromGeneralLists) Color(0xFF2C5696).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.1f))
+                                .border(1.dp, if (hideFromGeneralLists) Color(0xFF91B9FF) else Color.White.copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (hideFromGeneralLists) {
+                                ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color.White)
+                            }
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "Yalnızca kategori içinde göster",
+                            color = if (hideFromGeneralLists) Color(0xFFF5F5F8) else Color(0xFFB7B7C0),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
 
@@ -561,6 +418,38 @@ fun CategoryEditor(
                                     fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Center
                                 )
+                                
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { deleteRemindersOption = !deleteRemindersOption }
+                                        .padding(vertical = 8.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    // val iconColor = if (deleteRemindersOption) Color(0xFFFF858D) else Color(0xFF888894)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .background(if (deleteRemindersOption) Color(0xFFFF858D).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f))
+                                            .border(1.dp, if (deleteRemindersOption) Color(0xFFFF858D) else Color.White.copy(alpha = 0.2f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (deleteRemindersOption) {
+                                            ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color(0xFFFF858D))
+                                        }
+                                    }
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        text = "Kategori içindeki kutucukları da sil",
+                                        color = if (deleteRemindersOption) Color(0xFFF5F5F8) else Color(0xFFB7B7C0),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -578,7 +467,7 @@ fun CategoryEditor(
                                         onClick = {
                                             showDeleteConfirm = false
                                             keyboardController?.hide()
-                                            onDeleteCustomCategory?.invoke()
+                                            onDeleteCustomCategory?.invoke(deleteRemindersOption)
                                         },
                                         modifier = Modifier
                                             .weight(1f)
@@ -628,7 +517,7 @@ fun CategoryEditor(
                                                 onSaveBuiltInColor?.invoke(builtInCategory!!, override)
                                             } else {
                                                 val startIdx = selectedColor1 ?: 0
-                                                onSaveCustomCategory?.invoke(name.trim(), selectedIcon.key, startIdx, selectedColor2)
+                                                onSaveCustomCategory?.invoke(name.trim(), selectedIcon.key, startIdx, selectedColor2, hideFromGeneralLists)
                                             }
                                         }
                                     },
@@ -675,6 +564,113 @@ fun CategoryEditor(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun CategoryEditorColorRow(
+    label: String,
+    selectedIndex: Int?,
+    allowNone: Boolean,
+    noneGlyph: ActionGlyph,
+    enabled: Boolean,
+    onSelected: (Int?) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { alpha = if (enabled) 1f else 0.38f },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = Color(0xFFB7B7C0),
+            fontSize = 11.sp,
+            modifier = Modifier.width(72.dp)
+        )
+
+        LazyRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (allowNone) {
+                item(key = "${label}_none") {
+                    val selected = selectedIndex == null
+                    Box(
+                        modifier = Modifier
+                            .size(31.dp)
+                            .clip(CircleShape)
+                            .background(if (selected) Color(0xFF2D2D36) else Color(0xFF1B1B1F))
+                            .border(
+                                width = if (selected) 2.2.dp else 0.8.dp,
+                                color = if (selected) Color.White else Color.White.copy(alpha = 0.18f),
+                                shape = CircleShape
+                            )
+                            .then(
+                                if (enabled) {
+                                    Modifier.selectable(
+                                        selected = selected,
+                                        role = Role.RadioButton,
+                                        onClick = { onSelected(null) }
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .semantics {
+                                contentDescription = if (selected) {
+                                    "$label: Varsayılan, seçili"
+                                } else {
+                                    "$label: Varsayılan"
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ActionIcon(
+                            glyph = noneGlyph,
+                            modifier = Modifier.size(13.dp),
+                            color = if (selected) Color.White else Color(0xFF878792)
+                        )
+                    }
+                }
+            }
+
+            items(ReminderColorChoices.size, key = { "${label}_$it" }) { index ->
+                val choice = ReminderColorChoices[index]
+                val selected = index == selectedIndex
+                Box(
+                    modifier = Modifier
+                        .size(31.dp)
+                        .clip(CircleShape)
+                        .background(choice.color)
+                        .border(
+                            width = if (selected) 2.2.dp else 0.8.dp,
+                            color = if (selected) Color.White else Color.White.copy(alpha = 0.16f),
+                            shape = CircleShape
+                        )
+                        .then(
+                            if (enabled) {
+                                Modifier.selectable(
+                                    selected = selected,
+                                    role = Role.RadioButton,
+                                    onClick = { onSelected(index) }
+                                )
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .semantics {
+                            contentDescription = if (selected) {
+                                "$label: ${choice.label}, seçili"
+                            } else {
+                                "$label: ${choice.label}"
+                            }
+                        }
+                )
             }
         }
     }
@@ -780,13 +776,13 @@ fun CreateCategoryDialog(
     backdrop: GraphicsLayer,
     backdropPosition: () -> Offset,
     onDismiss: () -> Unit,
-    onSave: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?) -> Unit,
-    onDelete: (() -> Unit)? = null,
+    onSave: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean) -> Unit,
+    onDelete: ((deleteReminders: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
     designStyle: DesignStyle = DesignStyle.Glass,
     reduceDynamicBlur: Boolean = false,
     reduceAnimations: Boolean = false,
-    onCreate: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?) -> Unit = onSave
+    onCreate: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean) -> Unit = onSave
 ) {
     CategoryEditor(
         customCategory = initialCategory,

@@ -209,7 +209,9 @@ object ReminderNotifications {
         val saved = reminders.filter { it.shouldPinNotification }
         val savedIds = saved.map { it.id.hashCode() }.toSet()
         val visible = manager.activeNotifications
-            .filter { it.isOngoing }.map { it.id }.toSet()
+            .filter { it.isOngoing && ownsPinnedNotification(it.notification.channelId, it.notification.category) }
+            .map { it.id }
+            .toSet()
         // Reconcile with saved notes if the process stopped between a save and cancellation.
         visible.filter { it !in savedIds }.forEach { manager.cancel(it) }
         if (!canNotify(context, PINNED_CHANNEL_ID)) return
@@ -217,6 +219,11 @@ object ReminderNotifications {
         saved.filter { it.id.hashCode() !in visible }.forEach {
             show(context, it, categoryRepository = categoryRepo)
         }
+    }
+
+    internal fun ownsPinnedNotification(channelId: String?, category: String?): Boolean {
+        return channelId == PINNED_CHANNEL_ID ||
+            (channelId == CHANNEL_ID && category == android.app.Notification.CATEGORY_REMINDER)
     }
 
     fun needsBigTextStyle(text: String): Boolean = com.cagri.bigboscagri.notifications.needsBigTextStyle(text)
@@ -367,9 +374,12 @@ private fun drawCategoryGlyphOnAndroidCanvas(
             canvas.drawPath(basket, strokePaint)
         }
         CategoryIcon.HEALTH -> {
-            canvas.drawCircle(12f, 12f, 8.5f, strokePaint)
-            line(12f, 7.5f, 12f, 16.5f)
-            line(7.5f, 12f, 16.5f, 12f)
+            val pharmacyCross = Path().apply {
+                moveTo(9f, 3.5f); lineTo(15f, 3.5f); lineTo(15f, 9f); lineTo(20.5f, 9f)
+                lineTo(20.5f, 15f); lineTo(15f, 15f); lineTo(15f, 20.5f); lineTo(9f, 20.5f)
+                lineTo(9f, 15f); lineTo(3.5f, 15f); lineTo(3.5f, 9f); lineTo(9f, 9f); close()
+            }
+            canvas.drawPath(pharmacyCross, strokePaint)
         }
         CategoryIcon.SPORT -> {
             line(6.5f, 12f, 17.5f, 12f)
@@ -379,9 +389,17 @@ private fun drawCategoryGlyphOnAndroidCanvas(
             line(20f, 9.5f, 20f, 14.5f)
         }
         CategoryIcon.MONEY -> {
-            canvas.drawRoundRect(3.5f, 6.5f, 20.5f, 19f, 2.5f, 2.5f, strokePaint)
-            canvas.drawRoundRect(13.5f, 10f, 20.5f, 15.5f, 1.5f, 1.5f, strokePaint)
-            canvas.drawCircle(16f, 12.75f, 1f, fillPaint)
+            line(12f, 3.5f, 12f, 20.5f)
+            val money = Path().apply {
+                moveTo(16.8f, 6.5f)
+                cubicTo(15.4f, 5.2f, 13.8f, 4.7f, 12f, 4.7f)
+                cubicTo(8.6f, 4.7f, 6.8f, 6.4f, 6.8f, 8.7f)
+                cubicTo(6.8f, 11.3f, 8.9f, 12.1f, 12.2f, 12.7f)
+                cubicTo(15.5f, 13.3f, 17.2f, 14.2f, 17.2f, 16.5f)
+                cubicTo(17.2f, 18.9f, 15.3f, 20.1f, 12f, 20.1f)
+                cubicTo(9.8f, 20.1f, 7.9f, 19.4f, 6.4f, 17.9f)
+            }
+            canvas.drawPath(money, strokePaint)
         }
         CategoryIcon.SCHOOL -> {
             val book = Path().apply {
@@ -411,17 +429,23 @@ private fun drawCategoryGlyphOnAndroidCanvas(
             }
             canvas.drawPath(body, strokePaint)
         }
-        CategoryIcon.CAR -> {
-            canvas.drawCircle(7.5f, 17.5f, 1.4f, fillPaint)
-            canvas.drawCircle(16.5f, 17.5f, 1.4f, fillPaint)
-            val carBody = Path().apply {
-                moveTo(3.5f, 14.5f); lineTo(5.5f, 14.5f); lineTo(7.5f, 9.5f); lineTo(15.5f, 9.5f)
-                lineTo(18f, 14.5f); lineTo(20.5f, 14.5f); lineTo(20.5f, 17.5f); lineTo(18.5f, 17.5f)
+        CategoryIcon.PET -> {
+            canvas.drawOval(8.15f, 3.6f, 11.55f, 8.6f, strokePaint)
+            canvas.drawOval(12.45f, 3.6f, 15.85f, 8.6f, strokePaint)
+            canvas.drawOval(3.25f, 8.1f, 6.65f, 13.1f, strokePaint)
+            canvas.drawOval(17.35f, 8.1f, 20.75f, 13.1f, strokePaint)
+            val pawPad = Path().apply {
+                moveTo(14.7f, 13.5f)
+                cubicTo(13.6f, 11.5f, 13.25f, 11f, 12f, 11f)
+                cubicTo(10.7f, 11f, 10.25f, 11.75f, 9.16f, 13.75f)
+                cubicTo(8.2f, 15.45f, 5.85f, 15.6f, 5.7f, 18f)
+                cubicTo(5.7f, 19.2f, 6.5f, 20f, 7.5f, 20f)
+                cubicTo(8.75f, 20f, 10.5f, 19f, 12f, 19f)
+                cubicTo(13.5f, 19f, 15.25f, 20f, 16.5f, 20f)
+                cubicTo(17.5f, 20f, 18.3f, 19.2f, 18.3f, 18f)
+                cubicTo(18.15f, 15.6f, 15.65f, 15.45f, 14.7f, 13.5f)
             }
-            canvas.drawPath(carBody, strokePaint)
-            line(3.5f, 14.5f, 3.5f, 17.5f)
-            line(3.5f, 17.5f, 5.5f, 17.5f)
-            line(9.5f, 17.5f, 14.5f, 17.5f)
+            canvas.drawPath(pawPad, strokePaint)
         }
         CategoryIcon.FOOD -> {
             val cup = Path().apply {
@@ -478,12 +502,56 @@ private fun drawCategoryGlyphOnAndroidCanvas(
             line(9f, 12f, 15.5f, 12f)
             line(9f, 16f, 13.5f, 16f)
         }
-        CategoryIcon.GAME -> {
-            canvas.drawRoundRect(4f, 7.5f, 20f, 18f, 5.2f, 5.2f, strokePaint)
-            line(7.5f, 10.5f, 7.5f, 14.5f)
-            line(5.5f, 12.5f, 9.5f, 12.5f)
-            canvas.drawCircle(15f, 11.2f, 1.05f, fillPaint)
-            canvas.drawCircle(16.8f, 13.5f, 1.05f, fillPaint)
+        CategoryIcon.LOCATION -> {
+            val pin = Path().apply {
+                moveTo(12f, 21f)
+                cubicTo(10.1f, 18.7f, 5.5f, 14.1f, 5.5f, 9.5f)
+                cubicTo(5.5f, 5.8f, 8.4f, 3f, 12f, 3f)
+                cubicTo(15.6f, 3f, 18.5f, 5.8f, 18.5f, 9.5f)
+                cubicTo(18.5f, 14.1f, 13.9f, 18.7f, 12f, 21f)
+                close()
+            }
+            canvas.drawPath(pin, strokePaint)
+            canvas.drawCircle(12f, 9.5f, 2.2f, strokePaint)
+        }
+        CategoryIcon.BOOKMARK -> {
+            val bookmark = Path().apply {
+                moveTo(7f, 3.5f)
+                lineTo(17f, 3.5f)
+                lineTo(17f, 20.5f)
+                lineTo(12f, 17f)
+                lineTo(7f, 20.5f)
+                close()
+            }
+            canvas.drawPath(bookmark, strokePaint)
+        }
+        CategoryIcon.GIFT -> {
+            canvas.drawRoundRect(3f, 8f, 21f, 12f, 1.2f, 1.2f, strokePaint)
+            val giftBody = Path().apply {
+                moveTo(5f, 12f); lineTo(5f, 19f)
+                cubicTo(5f, 20.1f, 5.9f, 21f, 7f, 21f)
+                lineTo(17f, 21f)
+                cubicTo(18.1f, 21f, 19f, 20.1f, 19f, 19f)
+                lineTo(19f, 12f)
+            }
+            canvas.drawPath(giftBody, strokePaint)
+            line(12f, 8f, 12f, 21f)
+            val leftBow = Path().apply {
+                moveTo(12f, 8f)
+                cubicTo(10.6f, 5f, 9.1f, 3f, 7.5f, 3f)
+                cubicTo(5.9f, 3f, 5f, 4.1f, 5f, 5.5f)
+                cubicTo(5f, 7f, 6.1f, 8f, 7.5f, 8f)
+                close()
+            }
+            canvas.drawPath(leftBow, strokePaint)
+            val rightBow = Path().apply {
+                moveTo(12f, 8f)
+                cubicTo(13.4f, 5f, 14.9f, 3f, 16.5f, 3f)
+                cubicTo(18.1f, 3f, 19f, 4.1f, 19f, 5.5f)
+                cubicTo(19f, 7f, 17.9f, 8f, 16.5f, 8f)
+                close()
+            }
+            canvas.drawPath(rightBow, strokePaint)
         }
     }
 }

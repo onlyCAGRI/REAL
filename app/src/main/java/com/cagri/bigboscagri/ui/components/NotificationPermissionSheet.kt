@@ -43,7 +43,9 @@ fun PermissionSheet(
     onAllow: () -> Unit,
     onLater: () -> Unit,
     reduceAnimations: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    primaryLabel: String = "İzin ver",
+    secondaryLabel: String = "Daha sonra"
 ) {
     if (visible) {
         BackHandler(onBack = onLater)
@@ -141,7 +143,7 @@ fun PermissionSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "İzin ver",
+                            text = primaryLabel,
                             color = Color.Black,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
@@ -160,7 +162,7 @@ fun PermissionSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Daha sonra",
+                            text = secondaryLabel,
                             color = Color(0xFFA4A4AD),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium
@@ -209,5 +211,24 @@ fun MicrophonePermissionSheet(
         onLater = onLater,
         reduceAnimations = reduceAnimations,
         modifier = modifier
+    )
+}
+
+@Composable
+fun LocationGuideSheet(
+    visible: Boolean,
+    onOpenMaps: () -> Unit,
+    onCancel: () -> Unit,
+    reduceAnimations: Boolean = false
+) {
+    PermissionSheet(
+        visible = visible,
+        title = "Konum ekle",
+        description = "Google Haritalar'da istediğiniz yeri seçin. Paylaş'a dokunun ve REAL'i seçin.",
+        onAllow = onOpenMaps,
+        onLater = onCancel,
+        reduceAnimations = reduceAnimations,
+        primaryLabel = "Google Haritalar'ı aç",
+        secondaryLabel = "Vazgeç"
     )
 }

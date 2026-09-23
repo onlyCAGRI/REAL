@@ -1,5 +1,6 @@
 package com.cagri.bigboscagri.ui.components
 
+import com.cagri.bigboscagri.data.JournalMood
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,7 +15,36 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 
-enum class ActionGlyph { Calendar, Back, Check, Undo, Edit, Share, Delete, Star, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad }
+enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry }
+
+fun journalMoodLabel(mood: JournalMood): String = when (mood) {
+    JournalMood.VERY_GOOD -> "Çok iyi"
+    JournalMood.GOOD -> "İyi"
+    JournalMood.NEUTRAL -> "Normal"
+    JournalMood.HARD -> "Zor"
+    JournalMood.BAD -> "Kötü"
+    JournalMood.HAPPY -> "Mutlu"
+    JournalMood.EXCITED -> "Heyecanlı"
+    JournalMood.CALM -> "Sakin"
+    JournalMood.TIRED -> "Yorgun"
+    JournalMood.BORED -> "Sıkılmış"
+    JournalMood.STRESSED -> "Stresli"
+    JournalMood.ANGRY -> "Sinirli"
+    JournalMood.SAD -> "Üzgün"
+    JournalMood.LOW -> "Keyifsiz"
+}
+
+fun journalMoodGlyph(mood: JournalMood): ActionGlyph = when (mood) {
+    JournalMood.VERY_GOOD, JournalMood.HAPPY -> ActionGlyph.MoodVeryGood
+    JournalMood.GOOD -> ActionGlyph.MoodGood
+    JournalMood.NEUTRAL, JournalMood.BORED -> ActionGlyph.MoodNeutral
+    JournalMood.HARD, JournalMood.STRESSED, JournalMood.LOW -> ActionGlyph.MoodHard
+    JournalMood.BAD, JournalMood.SAD -> ActionGlyph.MoodBad
+    JournalMood.EXCITED -> ActionGlyph.MoodExcited
+    JournalMood.CALM -> ActionGlyph.MoodCalm
+    JournalMood.TIRED -> ActionGlyph.MoodTired
+    JournalMood.ANGRY -> ActionGlyph.MoodAngry
+}
 
 @Composable
 fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.White, filled: Boolean = false) {
@@ -24,6 +54,16 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
             fun line(x1: Float, y1: Float, x2: Float, y2: Float) =
                 drawLine(color, Offset(x1, y1), Offset(x2, y2), strokeWidth = 1.7f, cap = StrokeCap.Round)
             when (glyph) {
+                ActionGlyph.Pin -> {
+                    drawPath(Path().apply {
+                        moveTo(12f, 22f); cubicTo(9f, 18f, 4.5f, 13f, 4.5f, 9f)
+                        cubicTo(4.5f, 4.9f, 7.8f, 2f, 12f, 2f)
+                        cubicTo(16.2f, 2f, 19.5f, 4.9f, 19.5f, 9f)
+                        cubicTo(19.5f, 13f, 15f, 18f, 12f, 22f)
+                        close()
+                    }, color, style = stroke)
+                    drawCircle(color, 2.5f, Offset(12f, 9f), style = stroke)
+                }
                 ActionGlyph.Calendar -> {
                     drawRoundRect(color, Offset(4f, 5f), Size(16f, 16f), CornerRadius(3f, 3f), style = stroke)
                     line(8f, 3f, 8f, 7f); line(16f, 3f, 16f, 7f); line(4f, 10f, 20f, 10f)
@@ -58,6 +98,23 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                         lineTo(18.2f, 21.4f); lineTo(12f, 18.1f); lineTo(5.8f, 21.4f)
                         lineTo(7f, 14.4f); lineTo(2f, 9.4f); lineTo(9f, 8.4f); close()
                     }, color, style = if (filled) Fill else stroke)
+                }
+                ActionGlyph.NowBar -> {
+                    drawRoundRect(
+                        color,
+                        Offset(3.5f, 7.5f),
+                        Size(17f, 9f),
+                        CornerRadius(4.5f, 4.5f),
+                        style = stroke
+                    )
+                    drawRoundRect(
+                        color,
+                        Offset(7f, 10f),
+                        Size(7f, 4f),
+                        CornerRadius(2f, 2f),
+                        style = if (filled) Fill else stroke
+                    )
+                    drawCircle(color, 1.15f, Offset(17.5f, 12f), style = if (filled) Fill else stroke)
                 }
                 ActionGlyph.Mic -> {
                     drawRoundRect(color, Offset(9f, 2f), Size(6f, 12f), CornerRadius(3f, 3f))
@@ -280,6 +337,28 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
                     drawArc(color, 195f, 150f, false, Offset(6.5f, 11.5f), Size(11f, 11f), style = stroke)
                     line(8f, 9.5f, 8.1f, 9.5f); line(16f, 9.5f, 16.1f, 9.5f)
+                }
+                ActionGlyph.MoodExcited -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    line(7f, 8.5f, 9f, 9.5f); line(9f, 9.5f, 7f, 10.5f)
+                    line(15f, 9.5f, 17f, 8.5f); line(15f, 9.5f, 17f, 10.5f)
+                    drawOval(color, Offset(10f, 13f), Size(4f, 5f), style = stroke)
+                }
+                ActionGlyph.MoodCalm -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    line(6.5f, 9.5f, 9.5f, 9.5f); line(14.5f, 9.5f, 17.5f, 9.5f)
+                    drawArc(color, 30f, 120f, false, Offset(8f, 10f), Size(8f, 7f), style = stroke)
+                }
+                ActionGlyph.MoodTired -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    line(6.5f, 10f, 9.5f, 10.5f); line(14.5f, 10.5f, 17.5f, 10f)
+                    drawOval(color, Offset(10.5f, 13f), Size(3f, 4f), style = stroke)
+                }
+                ActionGlyph.MoodAngry -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    line(6.5f, 7.5f, 9.5f, 9f); line(14.5f, 9f, 17.5f, 7.5f)
+                    line(8f, 10.5f, 9f, 10.5f); line(15f, 10.5f, 16f, 10.5f)
+                    drawArc(color, 210f, 120f, false, Offset(8f, 13f), Size(8f, 7f), style = stroke)
                 }
             }
         }

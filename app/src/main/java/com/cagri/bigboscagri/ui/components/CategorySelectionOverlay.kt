@@ -55,6 +55,7 @@ fun CategorySelectionOverlay(
     customCategories: List<CustomCategory>,
     selectedCategoryId: Long?,
     onSelectCategory: (Long?) -> Unit,
+    onCreateCategoryClick: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     backdrop: GraphicsLayer,
     backdropPosition: () -> Offset,
@@ -146,6 +147,30 @@ fun CategorySelectionOverlay(
                                 onDismiss()
                             }
                         )
+                        
+                        
+                        if (onCreateCategoryClick != null) {
+                            CategoryOptionItem(
+                                title = "Yeni kategori ekle...",
+                                isSelected = false,
+                                badge = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF2C5696).copy(alpha = 0.2f))
+                                            .border(0.6.dp, Color(0xFF2C5696).copy(alpha = 0.5f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        ActionIcon(ActionGlyph.Add, Modifier.size(13.dp), Color(0xFF91B9FF))
+                                    }
+                                },
+                                onClick = {
+                                    onCreateCategoryClick()
+                                    onDismiss()
+                                }
+                            )
+                        }
 
                         if (customCategories.isNotEmpty()) {
                             HorizontalDivider(

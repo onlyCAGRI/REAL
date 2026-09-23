@@ -155,8 +155,8 @@ fun ReminderColorPicker(
             verticalArrangement = Arrangement.spacedBy(11.dp)
         ) {
             Text("Kart renkleri", color = Color(0xFFF0F0F4), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            ColorChoiceRow("1. renk", startIndex, onStartChange)
-            ColorChoiceRow("2. renk", endIndex, onEndChange)
+            ColorChoiceRow("Ana renk", startIndex, onStartChange)
+            ColorChoiceRow("Geçiş rengi", endIndex, onEndChange)
             if (isStarred) {
                 ColorChoiceRow("Yıldız çerçevesi", starBorderIndex, onStarBorderChange, allowNone = false)
             }
