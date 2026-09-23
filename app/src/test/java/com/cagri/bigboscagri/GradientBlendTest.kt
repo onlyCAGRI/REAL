@@ -143,8 +143,8 @@ class GradientBlendTest {
         val list = listOf(item1, item2, item3)
 
         val filtered0 = filterAndSortReminders(list, colorFilter = 0)
-        assertEquals(1, filtered0.size)
-        assertEquals(1L, filtered0.first().id)
+        assertEquals(2, filtered0.size)
+        assertEquals(listOf(2L, 1L), filtered0.map { it.id })
 
         val filteredDefault = filterAndSortReminders(list, colorFilter = COLOR_FILTER_DEFAULT)
         assertEquals(1, filteredDefault.size)

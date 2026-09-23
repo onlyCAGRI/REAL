@@ -2,7 +2,10 @@ package com.cagri.bigboscagri.ui.components
 
 import com.cagri.bigboscagri.data.JournalMood
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -14,6 +17,9 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.material3.Text
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 
 enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry }
 
@@ -32,6 +38,7 @@ fun journalMoodLabel(mood: JournalMood): String = when (mood) {
     JournalMood.ANGRY -> "Sinirli"
     JournalMood.SAD -> "Üzgün"
     JournalMood.LOW -> "Keyifsiz"
+    JournalMood.FUCK_OFF -> "F*ck off"
 }
 
 fun journalMoodGlyph(mood: JournalMood): ActionGlyph = when (mood) {
@@ -44,6 +51,23 @@ fun journalMoodGlyph(mood: JournalMood): ActionGlyph = when (mood) {
     JournalMood.CALM -> ActionGlyph.MoodCalm
     JournalMood.TIRED -> ActionGlyph.MoodTired
     JournalMood.ANGRY -> ActionGlyph.MoodAngry
+    // Unused fallback: FUCK_OFF is rendered as the 🖕 emoji via MoodGlyph(), never via ActionIcon.
+    JournalMood.FUCK_OFF -> ActionGlyph.MoodBad
+}
+
+/**
+ * Renders a mood's visual representation: the emoji glyph for [JournalMood.FUCK_OFF],
+ * or the existing vector [ActionIcon] for every other mood (or the null "no mood" state).
+ */
+@Composable
+fun MoodGlyph(mood: JournalMood?, size: Dp, tint: Color, fallback: ActionGlyph = ActionGlyph.MoodNeutral) {
+    if (mood == JournalMood.FUCK_OFF) {
+        Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
+            Text("🖕", fontSize = (size.value * 0.85f).sp)
+        }
+    } else {
+        ActionIcon(mood?.let(::journalMoodGlyph) ?: fallback, Modifier.size(size), tint)
+    }
 }
 
 @Composable

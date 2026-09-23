@@ -84,7 +84,7 @@ class ReminderJournalTest {
         val repo = ReminderRepository(prefs)
         val reminder = repo.add("Bugün")
         val newChoices = JournalMood.entries.drop(5)
-        assertEquals(9, newChoices.size)
+        assertEquals(10, newChoices.size)
         newChoices.forEach { mood ->
             repo.setJournal(reminder.id, mood, "Not")
             val stored = JSONArray(prefs.getString("reminders", "[]")).getJSONObject(0).getJSONObject("journal")

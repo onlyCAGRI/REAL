@@ -19,7 +19,8 @@ enum class JournalMood(val persistKey: String) {
     STRESSED("stressed"),
     ANGRY("angry"),
     SAD("sad"),
-    LOW("low");
+    LOW("low"),
+    FUCK_OFF("fuck_off");
 
     companion object {
         fun fromKey(key: String?): JournalMood? = entries.firstOrNull { it.persistKey == key }

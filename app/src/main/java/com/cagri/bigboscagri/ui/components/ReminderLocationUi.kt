@@ -108,8 +108,5 @@ fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier = Modifier, 
             contentAlignment = Alignment.Center) {
             ActionIcon(ActionGlyph.Pin, Modifier.size(20.dp), Color(0xFFF1F1F1))
         }
-        
-        Text("OpenFreeMap · OpenStreetMap", color = Color(0xFFCDD1D8), fontSize = 9.sp,
-            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp))
     }
 }
