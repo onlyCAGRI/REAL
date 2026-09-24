@@ -205,17 +205,18 @@ fun ReminderCard(
             }
         }
     }
+    val shouldStrikeThrough = reminder.isCompleted && reminder.journal == null
     val strikethroughProgress = remember(reminder.id) {
-        Animatable(if (reminder.isCompleted) 1f else 0f)
+        Animatable(if (shouldStrikeThrough) 1f else 0f)
     }
-    LaunchedEffect(reminder.isCompleted) {
+    LaunchedEffect(shouldStrikeThrough) {
         if (!reduceAnimations) {
             strikethroughProgress.animateTo(
-                targetValue = if (reminder.isCompleted) 1f else 0f,
+                targetValue = if (shouldStrikeThrough) 1f else 0f,
                 animationSpec = tween(180, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
             )
         } else {
-            strikethroughProgress.snapTo(if (reminder.isCompleted) 1f else 0f)
+            strikethroughProgress.snapTo(if (shouldStrikeThrough) 1f else 0f)
         }
     }
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -255,7 +256,7 @@ fun ReminderCard(
             .fillMaxWidth()
             .pressScale(cardInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.985f)
             .clip(shape)
-            .then(if (accentBrush == null) Modifier.background(Color(0xFF141416)) else Modifier.background(accentBrush))
+            .then(if (accentBrush == null) Modifier.background(if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) LiquidGlassTokens.contentColor else Color(0xFF141416)) else Modifier.background(accentBrush))
             .then(if (isSelected) Modifier.background(selectionOverlay) else Modifier)
             .border(borderWidth, borderColor, shape)
             .combinedClickable(
@@ -387,7 +388,7 @@ fun ReminderCard(
                 color = textColor,
                 fontSize = 16.sp,
                 lineHeight = 23.sp,
-                textDecoration = if (reduceAnimations && reminder.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                textDecoration = if (reduceAnimations && shouldStrikeThrough) TextDecoration.LineThrough else TextDecoration.None,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
                 onTextLayout = { textLayoutResult = it },
@@ -453,9 +454,8 @@ fun ReminderCard(
                         )
                         val mood = reminder.journal.mood
                         if (mood != null) {
-                            val moodIcon = journalMoodGlyph(mood)
                             Spacer(Modifier.width(4.dp))
-                            ActionIcon(moodIcon, Modifier.size(10.dp), Color(0xFFA5A5B0))
+                            MoodGlyph(mood, 10.dp, Color(0xFFA5A5B0))
                         }
                     }
                 }

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.location.Geocoder
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -33,6 +34,7 @@ import com.cagri.bigboscagri.ui.theme.BigBosTheme
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private lateinit var repository: ReminderRepository
@@ -90,11 +92,15 @@ class MainActivity : ComponentActivity() {
             BigBosTheme {
                 var reduceBlur by remember { mutableStateOf(preferences.getBoolean("reduce_dynamic_blur", false)) }
                 var reduceAnimations by remember { mutableStateOf(preferences.getBoolean("reduce_animations", false)) }
-                var style by remember { mutableStateOf(if (preferences.getString("design_style", "glass") == "ice") DesignStyle.Ice else DesignStyle.Glass) }
+                var style by remember { mutableStateOf(DesignStyle.fromPreference(preferences.getString("design_style", "glass"))) }
                 var hasCompletedOnboarding by remember { mutableStateOf(preferences.getBoolean("onboarding_completed", false)) }
                 var userName by remember { mutableStateOf(preferences.getString("user_display_name", "") ?: "") }
                 var playFirstHomeIntro by remember { mutableStateOf(false) }
 
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.cagri.bigboscagri.ui.components.LocalDesignStyle provides style,
+                    com.cagri.bigboscagri.ui.components.LocalLiquidReduceMotion provides reduceAnimations
+                ) {
                 Crossfade(
                     targetState = hasCompletedOnboarding,
                     animationSpec = if (reduceAnimations) snap() else tween(240),
@@ -198,7 +204,7 @@ class MainActivity : ComponentActivity() {
                             reduceAnimations = reduceAnimations,
                             onReduceAnimationsChange = { reduceAnimations = it; preferences.edit().putBoolean("reduce_animations", it).apply() },
                             designStyle = style,
-                            onDesignStyleChange = { style = it; preferences.edit().putString("design_style", if (it == DesignStyle.Ice) "ice" else "glass").apply() },
+                            onDesignStyleChange = { style = it; preferences.edit().putString("design_style", it.preferenceKey).apply() },
                             exactAlarmsAllowed = exactAllowed,
                             onRequestExactAlarms = ::openAlarmAccess,
                             customCategories = customCategories,
@@ -243,6 +249,7 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
+                }
                 }
             }
         }
@@ -302,11 +309,49 @@ class MainActivity : ComponentActivity() {
         if (existing.latitude != null || !attemptedLocationPreviews.add(reminderId to url)) return
         lifecycleScope.launch {
             val resolved = withContext(Dispatchers.IO) {
-                GoogleMapsShareParser.parse("${existing.placeName}\n${existing.address}\n$url")
+                parseAndResolveSharedLocation("${existing.placeName}\n${existing.address}\n$url")
             }
             if (resolved?.latitude != null && resolved.longitude != null) {
                 mutate { repository.enrichLocationCoordinates(reminderId, url, resolved) }
             }
+        }
+    }
+
+    /**
+     * Google Maps place/business shares can resolve to a Place-ID/search URL with no literal
+     * coordinates. Keep URL parsing as the first choice; only then use Android's key-free
+     * forward geocoder so a shared cafe/restaurant can still get a static map preview.
+     */
+    private fun parseAndResolveSharedLocation(text: String): ReminderLocation? {
+        val parsed = GoogleMapsShareParser.parse(text) ?: return null
+        if (parsed.latitude != null && parsed.longitude != null) return parsed
+        return geocodeSharedPlace(parsed)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun geocodeSharedPlace(location: ReminderLocation): ReminderLocation {
+        if (!Geocoder.isPresent()) return location
+        val name = location.placeName.trim().takeUnless {
+            it.isBlank() || it.equals("Google Haritalar konumu", ignoreCase = true)
+        }
+        val address = location.address.trim().takeIf { it.isNotBlank() }
+        val query = listOfNotNull(name, address).distinct().joinToString(", ")
+        if (query.isBlank()) return location
+
+        return try {
+            val match = Geocoder(applicationContext, Locale.getDefault())
+                .getFromLocationName(query, 1)
+                ?.firstOrNull()
+                ?: return location
+            if (!match.latitude.isFinite() || !match.longitude.isFinite() ||
+                match.latitude !in -90.0..90.0 || match.longitude !in -180.0..180.0) return location
+            location.copy(
+                latitude = match.latitude,
+                longitude = match.longitude,
+                approximateCoordinates = true
+            )
+        } catch (_: Exception) {
+            location
         }
     }
 
@@ -325,7 +370,7 @@ class MainActivity : ComponentActivity() {
             if (reminderId > 0 && System.currentTimeMillis() - startedAt in 0..3_600_000L &&
                 reminders.any { it.id == reminderId }) {
                 lifecycleScope.launch {
-                    val location = withContext(Dispatchers.IO) { GoogleMapsShareParser.parse(sharedText.orEmpty()) }
+                    val location = withContext(Dispatchers.IO) { parseAndResolveSharedLocation(sharedText.orEmpty()) }
                     if (location != null) pendingLocationShare = PendingReminderLocation(reminderId, location)
                     else Toast.makeText(this@MainActivity, "Harita bağlantısı okunamadı", Toast.LENGTH_SHORT).show()
                 }

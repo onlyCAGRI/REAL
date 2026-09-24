@@ -1,5 +1,9 @@
 package com.cagri.bigboscagri.ui
 
+import com.cagri.bigboscagri.ui.components.liquidChrome
+import com.cagri.bigboscagri.ui.components.SettingsLayout
+import com.cagri.bigboscagri.ui.components.LiquidAppearanceSelector
+import com.cagri.bigboscagri.ui.components.LiquidGlassTokens
 import android.app.NotificationManager
 import android.content.Intent
 import android.provider.Settings
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -82,17 +87,10 @@ fun SettingsScreen(
     val isChannelBlocked = reminderChannel != null && reminderChannel.importance == NotificationManager.IMPORTANCE_NONE
     val isChannelVibrationEnabled = reminderChannel != null && !isChannelBlocked && reminderChannel.shouldVibrate()
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
+    val liquid = designStyle == DesignStyle.LiquidGlass
+    SettingsLayout(designStyle, reduceDynamicBlur, onBack) {
         // Top App Bar: Only "Ayarlar" centered with back button
-        Box(
+        if (!liquid) Box(
             Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
@@ -132,7 +130,7 @@ fun SettingsScreen(
             Modifier
                 .fillMaxWidth()
                 .clip(cardShape)
-                .background(Color(0xFF18181B))
+                .background(if (liquid) LiquidGlassTokens.contentColor else Color(0xFF18181B))
                 .border(0.75.dp, Color.White.copy(alpha = 0.08f), cardShape)
         ) {
             // Item 1: Tema with Segmented Control (Sistem | Açık | Koyu - Koyu sabit, diğerleri disabled)
@@ -168,13 +166,13 @@ fun SettingsScreen(
                             Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) Color.White else Color.Transparent)
+                                .then(if (liquid && isSelected) Modifier.liquidChrome(12.dp, selected = true) else Modifier.background(if (isSelected) Color.White else Color.Transparent))
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = option,
-                                color = if (isSelected) Color.Black else Color.White.copy(alpha = 0.28f),
+                                color = if (isSelected) (if (liquid) Color.White else Color.Black) else Color.White.copy(alpha = 0.28f),
                                 fontSize = 13.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                             )
@@ -208,6 +206,9 @@ fun SettingsScreen(
                     )
                 }
                 Spacer(Modifier.height(12.dp))
+                if (liquid) {
+                    LiquidAppearanceSelector(designStyle, onDesignStyleChange)
+                } else {
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -217,7 +218,8 @@ fun SettingsScreen(
                 ) {
                     val styles = listOf(
                         "Glass" to DesignStyle.Glass,
-                        "Buz" to DesignStyle.Ice
+                        "Buz" to DesignStyle.Ice,
+                        "Liquid Glass" to DesignStyle.LiquidGlass
                     )
                     styles.forEach { (label, style) ->
                         val isSelected = designStyle == style
@@ -226,7 +228,7 @@ fun SettingsScreen(
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(if (isSelected) Color.White else Color.Transparent)
-                                .clickable { onDesignStyleChange(style) }
+                                .selectable(selected = isSelected, role = Role.RadioButton) { onDesignStyleChange(style) }
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -238,6 +240,7 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
                 }
             }
 
@@ -251,7 +254,7 @@ fun SettingsScreen(
             SettingsRow(
                 icon = ActionGlyph.MotionOff,
                 title = "Animasyonu azalt",
-                subtitle = "Ana oynatıcının gradyanını kaymak yerine dondurur",
+                subtitle = if (liquid) "Camın basış ve ışık hareketlerini azaltır" else "Ana oynatıcının gradyanını kaymak yerine dondurur",
                 checked = reduceAnimations,
                 onCheckedChange = onReduceAnimationsChange
             )
@@ -266,7 +269,7 @@ fun SettingsScreen(
             SettingsRow(
                 icon = ActionGlyph.BlurOff,
                 title = "Dinamik bulanıklığı azalt",
-                subtitle = "Uygulama genelinde buzlu camı düz dolgularla değiştirir",
+                subtitle = if (liquid) "Bulanıklık ve kırılma yerine sabit koyu cam kullanır" else "Uygulama genelinde buzlu camı düz dolgularla değiştirir",
                 checked = reduceDynamicBlur,
                 onCheckedChange = onReduceDynamicBlurChange
             )
@@ -288,7 +291,7 @@ fun SettingsScreen(
             Modifier
                 .fillMaxWidth()
                 .clip(cardShape)
-                .background(Color(0xFF18181B))
+                .background(if (liquid) LiquidGlassTokens.contentColor else Color(0xFF18181B))
                 .border(0.75.dp, Color.White.copy(alpha = 0.08f), cardShape)
                 .padding(16.dp)
         ) {

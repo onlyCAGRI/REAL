@@ -23,8 +23,8 @@ android {
         applicationId = "com.cagri.bigboscagri"
         minSdk = 26
         targetSdk = 36
-        versionCode = 19
-        versionName = "0.6.2"
+        versionCode = 21
+        versionName = "0.7.1"
 
         buildConfigField("String", "REAL_API_KEY", "\"$realApiKey\"")
     }

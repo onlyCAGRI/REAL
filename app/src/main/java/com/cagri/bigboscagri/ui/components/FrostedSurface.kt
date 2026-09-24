@@ -71,7 +71,14 @@ fun FrostedSurface(
 @Composable
 fun DesignPanel(backdrop: GraphicsLayer, backdropPosition: () -> Offset, modifier: Modifier = Modifier,
     corners: Dp = 30.dp, reduceDynamicBlur: Boolean = false, designStyle: DesignStyle = DesignStyle.Glass,
+    liquidDynamic: Boolean = false, liquidSheet: Boolean = false,
     content: @Composable BoxScope.() -> Unit) {
+    if (designStyle == DesignStyle.LiquidGlass) {
+        if (liquidDynamic || liquidSheet) LiquidGlassSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur,
+            role = if (liquidSheet) LiquidGlassRole.Sheet else LiquidGlassRole.Chrome, content = content)
+        else LiquidGlassContentSurface(modifier, corners, content)
+        return
+    }
     FrostedSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur,
         if (designStyle == DesignStyle.Ice) 38.dp else 18.dp, designStyle == DesignStyle.Ice, false, content)
 }

@@ -88,7 +88,12 @@ fun SelectionActionButtons(
             }
         }
 
-        if (designStyle == DesignStyle.Ice) {
+        if (designStyle == DesignStyle.LiquidGlass) {
+            LiquidGlassSurface(backdrop, backdropPosition, Modifier.weight(1f).fillMaxHeight(),
+                29.dp, reduceDynamicBlur, content = cancelContent)
+            LiquidGlassSurface(backdrop, backdropPosition, Modifier.weight(1f).fillMaxHeight(),
+                29.dp, reduceDynamicBlur, content = deleteContent)
+        } else if (designStyle == DesignStyle.Ice) {
             IcePanel(
                 backdrop = backdrop,
                 backdropPosition = backdropPosition,

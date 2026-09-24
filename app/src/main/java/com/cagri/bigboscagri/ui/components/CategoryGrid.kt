@@ -280,6 +280,7 @@ private fun CategoryCard(
     modifier: Modifier,
     reduceAnimations: Boolean = false
 ) {
+    val liquid = LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass
     val shape = CategoryCardShape
     val interactionSource = remember(category.label) { MutableInteractionSource() }
     Column(
@@ -328,9 +329,10 @@ private fun CategoryCard(
                         drawRect(category.base)
                         drawRect(topLight)
                         drawRect(bottomLight)
+                        if (liquid) drawRect(Color.Black.copy(alpha = 0.28f))
                     }
                 }
-                .border(0.75.dp, Color.White.copy(alpha = 0.07f), shape),
+                .border(0.75.dp, Color.White.copy(alpha = if (liquid) 0.13f else 0.07f), shape),
             contentAlignment = Alignment.Center
         ) {
             CategoryGlyph(category.glyph, Modifier.size(32.dp))
@@ -357,6 +359,7 @@ private fun CustomCategoryCard(
     modifier: Modifier,
     reduceAnimations: Boolean = false
 ) {
+    val liquid = LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass
     val shape = CategoryCardShape
     val startColor = ReminderColorChoices.getOrNull(category.accentStart)?.color ?: Color(0xFF233F73)
     val endColor = category.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
@@ -421,6 +424,7 @@ private fun CustomCategoryCard(
                         drawRect(Color(0xFF14151C))
                         drawRect(topLight)
                         drawRect(bottomLight)
+                        if (liquid) drawRect(Color.Black.copy(alpha = 0.28f))
                     }
                 }
                 .border(animatedBorderWidth, animatedBorderColor, shape),

@@ -1,6 +1,8 @@
 package com.cagri.bigboscagri.ui
 
 import android.os.Build
+import com.cagri.bigboscagri.ui.components.LiquidGlassTokens
+import com.cagri.bigboscagri.ui.components.liquidContentEdge
 import com.cagri.bigboscagri.ui.components.DesignPanel
 import com.cagri.bigboscagri.ui.components.AnimatedDateTimePickerOverlay
 import com.cagri.bigboscagri.ui.components.NotificationPermissionSheet
@@ -180,7 +182,7 @@ fun ReminderDetailScreen(
     var selectedCategoryId by rememberSaveable(reminder.id) { mutableStateOf(reminder.customCategoryId) }
     var editedChecklistItems by remember(reminder.id, editing) { mutableStateOf(reminder.checklistItems) }
     var newChecklistItemText by rememberSaveable(reminder.id) { mutableStateOf("") }
-    var secondaryPanelsExpanded by rememberSaveable(reminder.id) { mutableStateOf(true) }
+    var secondaryPanelsExpanded by rememberSaveable(reminder.id) { mutableStateOf(false) }
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
@@ -274,7 +276,7 @@ fun ReminderDetailScreen(
         editedLocation = reminder.location
         locationJustShared = false
         editing = false
-        secondaryPanelsExpanded = true
+        secondaryPanelsExpanded = false
         accentStart = reminder.accentStart
         accentEnd = reminder.accentEnd
         customSolidColorArgb = reminder.customSolidColorArgb
@@ -312,29 +314,17 @@ fun ReminderDetailScreen(
         remember { mutableStateOf(1f) }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black).navigationBarsPadding().imePadding()) {
-        Column(
-            Modifier.fillMaxSize()
-                .then(if (deleting) Modifier.clearAndSetSemantics { } else Modifier)
-                .onGloballyPositioned { scenePosition = it.positionInRoot() }
-                .drawWithContent {
-                    if (!reduceDynamicBlur && Build.VERSION.SDK_INT >= 31) { scene.record { this@drawWithContent.drawContent() }; drawLayer(scene) }
-                    else drawContent()
-                }
-                .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, top = statusHeight + 10.dp,
-                    bottom = if (editing) {
-                        if (secondaryPanelsExpanded) 300.dp else 140.dp
-                    } else 114.dp)
-        ) {
+    val detailHeader: @Composable () -> Unit = {
             Row(
                 Modifier.fillMaxWidth().graphicsLayer { alpha = chromeAlpha },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
+                com.cagri.bigboscagri.ui.components.DesignIconButton(
+                    backdrop = scene, backdropPosition = { scenePosition },
+                    designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
                     onClick = { if (editing) finishEditing() else onBack() },
-                    modifier = Modifier.background(Color(0xFF161619), CircleShape)
+                    modifier = Modifier.then(if (designStyle == DesignStyle.LiquidGlass) Modifier else Modifier.background(Color(0xFF161619), CircleShape))
                         .semantics { contentDescription = if (editing) "Düzenlemeyi iptal et" else "Geri" }
                 ) { ActionIcon(ActionGlyph.Back, Modifier.size(23.dp)) }
                 val starSettleScale = remember(reminder.id) { Animatable(1f) }
@@ -356,7 +346,9 @@ fun ReminderDetailScreen(
                     animationSpec = if (reduceAnimations) snap() else tween(160),
                     label = "starColor"
                 )
-                IconButton(
+                com.cagri.bigboscagri.ui.components.DesignIconButton(
+                    backdrop = scene, backdropPosition = { scenePosition },
+                    designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
                     onClick = {
                         RealHaptics.toggle(view, on = !reminder.isImportant)
                         onToggleImportant()
@@ -364,7 +356,7 @@ fun ReminderDetailScreen(
                     interactionSource = starInteractionSource,
                     modifier = Modifier
                         .pressScale(starInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.95f)
-                        .background(Color(0xFF161619), CircleShape)
+                        .then(if (designStyle == DesignStyle.LiquidGlass) Modifier else Modifier.background(Color(0xFF161619), CircleShape))
                         .semantics { contentDescription = if (reminder.isImportant) "Önemli işaretini kaldır" else "Önemli olarak işaretle" }
                 ) {
                     ActionIcon(
@@ -380,6 +372,25 @@ fun ReminderDetailScreen(
                     )
                 }
             }
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black).navigationBarsPadding().imePadding()) {
+        Column(
+            Modifier.fillMaxSize()
+                .then(if (deleting) Modifier.clearAndSetSemantics { } else Modifier)
+                .onGloballyPositioned { scenePosition = it.positionInRoot() }
+                .drawWithContent {
+                    if (com.cagri.bigboscagri.ui.components.shouldCaptureBackdrop(designStyle, reduceDynamicBlur, Build.VERSION.SDK_INT)) { scene.record { this@drawWithContent.drawContent() }; drawLayer(scene) }
+                    else drawContent()
+                }
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, top = statusHeight + 10.dp,
+                    bottom = if (editing) {
+                        if (secondaryPanelsExpanded) 300.dp else 140.dp
+                    } else 114.dp)
+        ) {
+            if (designStyle == DesignStyle.LiquidGlass) Spacer(Modifier.height(48.dp))
+            else detailHeader()
 
             val cardShape = RoundedCornerShape(28.dp)
             val shownAccentStart = if (editing) accentStart else reminder.accentStart
@@ -408,7 +419,7 @@ fun ReminderDetailScreen(
             val cardBorderModifier = if (cardBorderColor != null) {
                 Modifier.border(1.25.dp, cardBorderColor, cardShape)
             } else {
-                Modifier.border(0.8.dp, Brush.verticalGradient(listOf(Color(0xFF494953), Color(0xFF252529))), cardShape)
+                Modifier.border(0.8.dp, if (designStyle == DesignStyle.LiquidGlass) liquidContentEdge() else Brush.verticalGradient(listOf(Color(0xFF494953), Color(0xFF252529))), cardShape)
             }
 
             Column(
@@ -418,7 +429,8 @@ fun ReminderDetailScreen(
                     .clip(cardShape)
                     .then(
                         if (accentBrush == null) Modifier.background(
-                            Brush.linearGradient(listOf(Color(0xFF25252C), Color(0xFF17171B), Color(0xFF131315)))
+                            if (designStyle == DesignStyle.LiquidGlass) Brush.verticalGradient(listOf(Color(0xFF18181A), LiquidGlassTokens.contentColor))
+                            else Brush.linearGradient(listOf(Color(0xFF25252C), Color(0xFF17171B), Color(0xFF131315)))
                         ) else Modifier.background(accentBrush)
                     )
                     .then(cardBorderModifier)
@@ -442,7 +454,7 @@ fun ReminderDetailScreen(
                             color = if (reminder.isCompleted) Color(0xFF9999A2) else Color(0xFFF4F4F6),
                             fontSize = 21.sp,
                             lineHeight = 31.sp,
-                            textDecoration = if (reminder.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                            textDecoration = if (reminder.isCompleted && reminder.journal == null) TextDecoration.LineThrough else TextDecoration.None
                         )
                     }
                     if (reminder.isChecklist && reminder.checklistItems.isNotEmpty()) {
@@ -755,7 +767,7 @@ fun ReminderDetailScreen(
                     if (place.latitude != null && place.longitude != null) {
                         Box(Modifier.fillMaxWidth().height(180.dp)
                             .clip(cardShape)
-                            .background(Color(0xFF131820))
+                            .background(if (designStyle == DesignStyle.LiquidGlass) LiquidGlassTokens.contentColor else Color(0xFF131820))
                             .then(cardBorderModifier)) {
                             ReminderLocationMap(place, Modifier.fillMaxSize()) {
                                 if (!openReminderLocationInMaps(context, place))
@@ -765,7 +777,7 @@ fun ReminderDetailScreen(
                     } else {
                         Column(Modifier.fillMaxWidth()
                             .clip(cardShape)
-                            .background(Color(0xFF141416))
+                            .background(if (designStyle == DesignStyle.LiquidGlass) LiquidGlassTokens.contentColor else Color(0xFF141416))
                             .then(cardBorderModifier)
                             .clickable {
                                 if (!openReminderLocationInMaps(context, place)) {
@@ -832,8 +844,8 @@ fun ReminderDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(22.dp))
-                            .background(Color(0xFF141416))
-                            .border(0.8.dp, Color(0xFF28282C), RoundedCornerShape(22.dp))
+                            .background(if (designStyle == DesignStyle.LiquidGlass) LiquidGlassTokens.contentColor else Color(0xFF141416))
+                            .then(if (designStyle == DesignStyle.LiquidGlass) Modifier.border(0.65.dp, liquidContentEdge(), RoundedCornerShape(22.dp)) else Modifier.border(0.8.dp, Color(0xFF28282C), RoundedCornerShape(22.dp)))
                             .padding(18.dp)
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
@@ -952,20 +964,23 @@ fun ReminderDetailScreen(
                                             Text("Sil", color = Color(0xFFF87171), fontSize = 14.sp)
                                         }
                                         Spacer(Modifier.weight(1f))
-                                    }
-                                    TextButton(onClick = { finishEditing() }) {
-                                        Text("İptal", color = Color(0xFFA5A5B0), fontSize = 14.sp)
-                                    }
-                                    TextButton(
-                                        onClick = {
-                                            val validText = editedJournalText.trim()
-                                            onSaveJournal(editedJournalMood, validText)
-                                            journalCreating = false
-                                            journalEditing = false
-                                        },
-                                        enabled = editedJournalMood != null || editedJournalText.trim().isNotBlank()
-                                    ) {
-                                        Text("Kaydet", color = Color(0xFF91B9FF), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    } else {
+                                        // Standalone Journal creation still needs its own actions because the
+                                        // main reminder is not in edit mode in this flow.
+                                        TextButton(onClick = { finishEditing() }) {
+                                            Text("İptal", color = Color(0xFFA5A5B0), fontSize = 14.sp)
+                                        }
+                                        TextButton(
+                                            onClick = {
+                                                val validText = editedJournalText.trim()
+                                                onSaveJournal(editedJournalMood, validText)
+                                                journalCreating = false
+                                                journalEditing = false
+                                            },
+                                            enabled = editedJournalMood != null || editedJournalText.trim().isNotBlank()
+                                        ) {
+                                            Text("Kaydet", color = Color(0xFF91B9FF), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        }
                                     }
                                 }
                             } else {
@@ -1014,6 +1029,11 @@ fun ReminderDetailScreen(
             }
         }
         TopGlassOverlay(scene, { scenePosition }, Modifier.align(Alignment.TopCenter), reduceDynamicBlur)
+        if (designStyle == DesignStyle.LiquidGlass) {
+            Box(Modifier.align(Alignment.TopCenter).then(if (deleting) Modifier.clearAndSetSemantics { } else Modifier).padding(start = 16.dp, end = 16.dp, top = statusHeight + 10.dp)) {
+                detailHeader()
+            }
+        }
         BottomFade(Modifier.align(Alignment.BottomCenter).height(130.dp))
         if (deleting) {
             Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.16f))
@@ -1181,11 +1201,12 @@ fun ReminderDetailScreen(
                 }
             }
 
-            DesignPanel(scene, { scenePosition }, modifier = Modifier.fillMaxWidth(), corners = 36.dp, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur) {
+            DesignPanel(scene, { scenePosition }, modifier = Modifier.fillMaxWidth(), corners = 36.dp, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur, liquidDynamic = true) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (editing) {
                         DetailAction("Vazgeç", ActionGlyph.Close, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = finishEditing)
-                        DetailAction("Kaydet", ActionGlyph.Check, Modifier.weight(1f), enabled = editedText.isNotBlank(),
+                        DetailAction("Kaydet", ActionGlyph.Check, Modifier.weight(1f),
+                            enabled = editedText.isNotBlank() && (!journalEditing || editedJournalMood != null || editedJournalText.trim().isNotBlank()),
                             color = Color(0xFF91B9FF), reduceAnimations = reduceAnimations, onClick = {
                                 RealHaptics.success(view)
                                 val finalItems = if (reminder.isChecklist) {
@@ -1211,6 +1232,9 @@ fun ReminderDetailScreen(
                                     editedAttachments,
                                     editedLocation
                                 )
+                                if (journalEditing) {
+                                    onSaveJournal(editedJournalMood, editedJournalText.trim())
+                                }
                                 finishEditing()
                             })
                     } else {
@@ -1239,7 +1263,7 @@ fun ReminderDetailScreen(
                             editedAttachments = reminder.attachments
                             editedLocation = reminder.location
                             newlyAddedAttachments = emptyList()
-                            secondaryPanelsExpanded = true
+                            secondaryPanelsExpanded = false
                             // Düzenle is now the single edit entry point: if a Journal entry already
                             // exists, it becomes editable here too (no separate pencil trigger).
                             if (reminder.journal != null) journalEditing = true

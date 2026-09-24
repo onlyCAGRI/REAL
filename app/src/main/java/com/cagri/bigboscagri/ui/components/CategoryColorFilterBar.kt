@@ -56,6 +56,7 @@ fun CategoryColorFilterButton(
     Box(
         modifier = modifier
             .size(44.dp)
+            .then(if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) Modifier.pressScale(interactionSource, reduceAnimations = LocalLiquidReduceMotion.current, targetScale = 0.97f).liquidChrome(selected = hasFilter) else Modifier)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -87,6 +88,7 @@ fun CategoryEditButton(
     Box(
         modifier = modifier
             .size(44.dp)
+            .then(if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) Modifier.pressScale(interactionSource, reduceAnimations = LocalLiquidReduceMotion.current, targetScale = 0.97f).liquidChrome() else Modifier)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -142,7 +144,8 @@ fun CategoryColorSelectorHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 10.dp, end = 8.dp, start = 8.dp),
+            .padding(top = 10.dp, end = 8.dp, start = 8.dp)
+            .then(if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) Modifier.liquidChrome() else Modifier),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Horizontally scrollable palette

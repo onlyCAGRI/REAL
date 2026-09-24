@@ -90,7 +90,7 @@ fun CategorySelectionOverlay(
                     .padding(start = 16.dp, end = 16.dp, bottom = 20.dp)
                     .pointerInput(Unit) { detectTapGestures { /* consume panel tap */ } },
                 corners = 28.dp,
-                designStyle = designStyle,
+                designStyle = designStyle, liquidSheet = true,
                 reduceDynamicBlur = reduceDynamicBlur
             ) {
                 Column(
@@ -227,7 +227,7 @@ private fun CategoryOptionItem(
             .fillMaxWidth()
             .clip(CategoryOptionShape)
             .clickable(onClick = onClick)
-            .background(if (isSelected) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+            .then(if (LocalDesignStyle.current == DesignStyle.LiquidGlass && isSelected) Modifier.liquidChrome(14.dp, selected = true) else Modifier.background(if (isSelected) Color.White.copy(alpha = 0.08f) else Color.Transparent))
             .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -241,7 +241,7 @@ private fun CategoryOptionItem(
             modifier = Modifier.weight(1f)
         )
         if (isSelected) {
-            ActionIcon(ActionGlyph.Check, Modifier.size(18.dp), Color(0xFF91B9FF))
+            ActionIcon(ActionGlyph.Check, Modifier.size(18.dp), if (LocalDesignStyle.current == DesignStyle.LiquidGlass) LiquidGlassTokens.selectionAccent else Color(0xFF91B9FF))
         }
     }
 }

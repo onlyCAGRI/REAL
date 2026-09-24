@@ -213,16 +213,19 @@ fun DateTimePickerOverlay(
     val scrollChanged: (String, Boolean) -> Unit = { key, scrolling -> moving = if (scrolling) moving + key else moving - key }
     val controlFill = when {
         reduceDynamicBlur -> Color(0xFF151518)
+        designStyle == DesignStyle.LiquidGlass -> Color(0xFF202329)
         designStyle == DesignStyle.Ice -> Color.White.copy(alpha = 0.055f)
         else -> Color.White.copy(alpha = 0.10f)
     }
     val selectedFill = when {
         reduceDynamicBlur -> Color(0xFF3B3B40)
+        designStyle == DesignStyle.LiquidGlass -> Color(0xFF202329)
         designStyle == DesignStyle.Ice -> Color.White.copy(alpha = 0.13f)
         else -> Color.White.copy(alpha = 0.19f)
     }
     val cardFill = when {
         reduceDynamicBlur -> Color(0xFF1A1A1E)
+        designStyle == DesignStyle.LiquidGlass -> Color(0xFF202329)
         designStyle == DesignStyle.Ice -> Color.White.copy(alpha = 0.06f)
         else -> Color.White.copy(alpha = 0.08f)
     }
@@ -247,7 +250,7 @@ fun DateTimePickerOverlay(
         DesignPanel(
             backdrop = backdrop,
             backdropPosition = backdropPosition,
-            designStyle = designStyle,
+            designStyle = designStyle, liquidSheet = true,
             reduceDynamicBlur = reduceDynamicBlur,
             corners = 32.dp,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
@@ -282,13 +285,21 @@ fun DateTimePickerOverlay(
                             Box(Modifier.size(34.dp, 3.dp).background(Color(0xFF666669), RoundedCornerShape(2.dp)))
                             Text(date.format(dateFormat) + " · " + String.format(tr, "%02d:%02d", hour, minute),
                                 color = Color(0xFFC6C6CB), fontSize = 15.sp, modifier = Modifier.padding(vertical = 20.dp))
+                            if (designStyle == DesignStyle.LiquidGlass) {
+                                LiquidSegmentedControl(
+                                    labels = listOf("Tarih", "Saat"), selectedIndex = if (timeTab) 1 else 0,
+                                    onSelect = { timeTab = it == 1 }, enabled = moving.isEmpty(),
+                                    reduceAnimations = reduceAnimations
+                                )
+                            } else {
                             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(controlFill).padding(4.dp)) {
                                 listOf(false to "Tarih", true to "Saat").forEach { (time, label) ->
                                     TextButton(onClick = { timeTab = time }, enabled = moving.isEmpty(), modifier = Modifier.weight(1f)
-                                        .background(if (timeTab == time) selectedFill else Color.Transparent, RoundedCornerShape(22.dp))) {
+                                        .then(if (designStyle == DesignStyle.LiquidGlass && timeTab == time) Modifier.liquidChrome(22.dp) else Modifier.background(if (timeTab == time) selectedFill else Color.Transparent, RoundedCornerShape(22.dp)))) {
                                         Text(label, color = Color.White)
                                     }
                                 }
+                            }
                             }
                             Spacer(Modifier.height(18.dp))
                             AnimatedContent(
@@ -451,7 +462,7 @@ fun DateTimePickerOverlay(
                                 TextButton(onClick = onRequestExactAlarms) { Text("İzni aç", color = Color(0xFF91B9FF)) }
                             }
                             error?.let { Text(it, color = Color(0xFFFFA4AA), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp)) }
-                            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.fillMaxWidth().padding(top = 12.dp).then(if (designStyle == DesignStyle.LiquidGlass) Modifier.liquidChrome(24.dp) else Modifier), verticalAlignment = Alignment.CenterVertically) {
                                 TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("İptal", color = Color.White, fontSize = 18.sp) }
                                 Box(Modifier.size(1.dp, 22.dp).background(Color(0xFF555559)))
                                 TextButton(enabled = moving.isEmpty(), onClick = {
@@ -676,7 +687,9 @@ private fun NumberWheel(
         flingBehavior = rememberSnapFlingBehavior(state),
         contentPadding = PaddingValues(vertical = rowHeight),
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.height(rowHeight * 3).semantics {
+        modifier = modifier.height(rowHeight * 3)
+            .then(if (LocalDesignStyle.current == DesignStyle.LiquidGlass) Modifier.liquidWheelWindow(rowHeight) else Modifier)
+            .semantics {
             contentDescription = label
             stateDescription = format(value)
             customActions = listOf(

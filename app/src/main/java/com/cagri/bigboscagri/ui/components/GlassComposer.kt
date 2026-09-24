@@ -1143,7 +1143,10 @@ fun GlassComposer(
         }
     }
 
-    if (designStyle == DesignStyle.Ice) {
+    if (designStyle == DesignStyle.LiquidGlass) {
+        LiquidGlassSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur,
+            reduceAnimations = reduceAnimations, content = panelContent)
+    } else if (designStyle == DesignStyle.Ice) {
         IcePanel(
             backdrop = backdrop,
             backdropPosition = backdropPosition,

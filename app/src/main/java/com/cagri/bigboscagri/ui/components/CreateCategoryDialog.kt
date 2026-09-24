@@ -176,7 +176,7 @@ fun CategoryEditor(
             backdrop = backdrop,
             backdropPosition = backdropPosition,
             corners = 28.dp,
-            designStyle = designStyle,
+            designStyle = designStyle, liquidSheet = true,
             reduceDynamicBlur = reduceDynamicBlur,
             modifier = Modifier
                 .fillMaxWidth(0.92f)

@@ -47,6 +47,7 @@ fun PermissionSheet(
     primaryLabel: String = "İzin ver",
     secondaryLabel: String = "Daha sonra"
 ) {
+    val liquid = LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass
     if (visible) {
         BackHandler(onBack = onLater)
     }
@@ -72,14 +73,14 @@ fun PermissionSheet(
             AnimatedVisibility(
                 visible = visible,
                 enter = if (reduceAnimations) EnterTransition.None
-                else slideInVertically(
+                else if (liquid) fadeIn(tween(180)) else slideInVertically(
                     animationSpec = tween(
                         durationMillis = 400,
                         easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
                     )
                 ) { fullHeight -> fullHeight },
                 exit = if (reduceAnimations) ExitTransition.None
-                else slideOutVertically(
+                else if (liquid) fadeOut(tween(140)) else slideOutVertically(
                     animationSpec = tween(
                         durationMillis = 300,
                         easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)
@@ -91,7 +92,7 @@ fun PermissionSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(sheetShape)
-                        .background(Color(0xFF18181B))
+                        .background(if (liquid) LiquidGlassTokens.contentColor else Color(0xFF18181B))
                         .border(0.75.dp, Color.White.copy(alpha = 0.12f), sheetShape)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -138,13 +139,13 @@ fun PermissionSheet(
                             .fillMaxWidth()
                             .height(50.dp)
                             .clip(RoundedCornerShape(25.dp))
-                            .background(Color.White)
+                            .then(if (liquid) Modifier.liquidChrome(25.dp) else Modifier.background(Color.White))
                             .clickable(onClick = onAllow),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = primaryLabel,
-                            color = Color.Black,
+                            color = if (liquid) Color.White else Color.Black,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )

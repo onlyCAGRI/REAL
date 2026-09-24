@@ -1,5 +1,7 @@
 package com.cagri.bigboscagri.ui
 
+import com.cagri.bigboscagri.ui.components.liquidHomeAtmosphere
+import com.cagri.bigboscagri.ui.components.liquidChrome
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -1126,7 +1128,7 @@ private fun ReminderListScreen(
             modifier = Modifier.fillMaxSize()
                 .onGloballyPositioned { scenePosition = it.positionInRoot() }
                 .drawWithContent {
-                    if (!reduceDynamicBlur && Build.VERSION.SDK_INT >= 31) {
+                    if (com.cagri.bigboscagri.ui.components.shouldCaptureBackdrop(designStyle, reduceDynamicBlur, Build.VERSION.SDK_INT)) {
                         scene.record { this@drawWithContent.drawContent() }; drawLayer(scene)
                     } else drawContent()
                 }
@@ -1134,7 +1136,8 @@ private fun ReminderListScreen(
                     if (isColdStarting) {
                         alpha = coldStartProgress.value
                     }
-                },
+                }
+                .then(if (designStyle == DesignStyle.LiquidGlass && isHome) Modifier.liquidHomeAtmosphere() else Modifier),
             contentPadding = PaddingValues(top = statusHeight, bottom = composerHeight + bottomGap + 24.dp)
         ) {
             item(key = "header") {
@@ -1162,16 +1165,19 @@ private fun ReminderListScreen(
                                     }
                             )
                         }
+                        val profileInteraction = remember { MutableInteractionSource() }
                         IconButton(
+                            interactionSource = profileInteraction,
                             onClick = {
                                 voice.cancel()
                                 focusManager.clearFocus()
                                 keyboard?.hide()
                                 showAccountMenu = true
                             },
-                            modifier = Modifier.semantics { contentDescription = "Hesap menüsünü aç" }
+                            modifier = Modifier.then(if (designStyle == DesignStyle.LiquidGlass) Modifier.pressScale(profileInteraction, reduceAnimations = reduceAnimations, targetScale = 0.97f).liquidChrome() else Modifier).semantics { contentDescription = "Hesap menüsünü aç" }
                         ) {
-                            GuestAvatar(Modifier.size(36.dp))
+                            if (designStyle == DesignStyle.LiquidGlass) ActionIcon(ActionGlyph.Person, Modifier.size(24.dp), Color.White)
+                            else GuestAvatar(Modifier.size(36.dp))
                         }
                     }
                 } else {
@@ -1207,7 +1213,7 @@ private fun ReminderListScreen(
                                 Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Ana sayfaya dön" }) {
+                                IconButton(onClick = onBack, modifier = Modifier.then(if (designStyle == DesignStyle.LiquidGlass) Modifier.liquidChrome() else Modifier).semantics { contentDescription = "Ana sayfaya dön" }) {
                                     ActionIcon(ActionGlyph.Back, Modifier.size(23.dp))
                                 }
                                 Spacer(Modifier.width(2.dp))
@@ -1265,7 +1271,7 @@ private fun ReminderListScreen(
                                 Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                IconButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Ana sayfaya dön" }) {
+                                IconButton(onClick = onBack, modifier = Modifier.then(if (designStyle == DesignStyle.LiquidGlass) Modifier.liquidChrome() else Modifier).semantics { contentDescription = "Ana sayfaya dön" }) {
                                     ActionIcon(ActionGlyph.Back, Modifier.size(23.dp))
                                 }
                                 Box(
@@ -1522,7 +1528,8 @@ private fun ReminderListScreen(
             scene,
             { scenePosition },
             Modifier.align(Alignment.TopCenter),
-            reduceDynamicBlur = reduceDynamicBlur
+            reduceDynamicBlur = reduceDynamicBlur,
+            extendLiquidArea = listState.firstVisibleItemIndex > 0
         )
         val selectionProgress by animateFloatAsState(
             targetValue = if (isSelectionMode || isCategorySelectionMode) 1f else 0f,

@@ -38,6 +38,30 @@ class GoogleMapsShareParserTest {
         assertEquals(false, exact.approximateCoordinates)
     }
 
+
+    @Test fun mobilePlaceSearchKeepsBusinessNameForKeyFreeGeocoderFallback() {
+        val result = GoogleMapsShareParser.parse(
+            "https://www.google.com/maps/search/?api=1&query=Vagon%20Cafe&query_place_id=ChIJExample"
+        )!!
+        assertEquals("Vagon Cafe", result.placeName)
+        assertNull(result.latitude)
+        assertNull(result.longitude)
+    }
+
+    @Test fun additionalCoordinateFormsAreParsed() {
+        val placePath = GoogleMapsShareParser.parse(
+            "https://www.google.com/maps/place/41.0301,37.5002"
+        )!!
+        assertEquals(41.0301, placePath.latitude!!, 0.000001)
+        assertEquals(37.5002, placePath.longitude!!, 0.000001)
+
+        val viewpoint = GoogleMapsShareParser.parse(
+            "https://www.google.com/maps?viewpoint=41.0301%2C37.5002"
+        )!!
+        assertEquals(41.0301, viewpoint.latitude!!, 0.000001)
+        assertEquals(37.5002, viewpoint.longitude!!, 0.000001)
+    }
+
     @Test fun unrelatedAndUnsafeUrlsCannotBecomeLocations() {
         assertNull(GoogleMapsShareParser.parse("https://example.com/maps/place/Private"))
         assertNull(GoogleMapsShareParser.sharedUrl("https://maps.app.goo.gl.evil.example/abc"))

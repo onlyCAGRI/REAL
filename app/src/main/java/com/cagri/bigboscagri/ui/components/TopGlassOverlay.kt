@@ -1,5 +1,8 @@
 package com.cagri.bigboscagri.ui.components
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import android.os.Build
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -37,13 +40,19 @@ fun TopGlassOverlay(
     backdrop: GraphicsLayer,
     backdropPosition: () -> Offset,
     modifier: Modifier = Modifier,
-    reduceDynamicBlur: Boolean = false
+    reduceDynamicBlur: Boolean = false,
+    extendLiquidArea: Boolean = true
 ) {
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val density = LocalDensity.current
 
     // Extend the visual coverage approximately another status-bar-height below it (1.9x total)
-    val totalHeight = statusHeight * 1.9f
+    val liquid = LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass
+    val extension by animateDpAsState(
+        if (liquid && extendLiquidArea) LiquidGlassTokens.topExtension else 0.dp,
+        if (LocalLiquidReduceMotion.current) snap() else tween(180), label = "liquidTopExtension"
+    )
+    val totalHeight = if (liquid) statusHeight * 1.9f + extension else statusHeight * 1.9f
 
     val fadeStart = with(density) {
         val s = statusHeight.toPx()
@@ -52,7 +61,7 @@ fun TopGlassOverlay(
     }
 
     var position by remember { mutableStateOf(Offset.Zero) }
-    val dynamic = Build.VERSION.SDK_INT >= 31 && !reduceDynamicBlur
+    val dynamic = shouldCaptureBackdrop(LocalDesignStyle.current, reduceDynamicBlur, Build.VERSION.SDK_INT)
 
     // Gradual fade into normal screen background
     val fadeBrush = remember(fadeStart) {
@@ -75,12 +84,20 @@ fun TopGlassOverlay(
                 )
             }
     ) {
-        if (dynamic) BlurredBackdrop(backdrop, { position - backdropPosition() }, 14.dp, Modifier.matchParentSize())
+        if (dynamic) BlurredBackdrop(backdrop, { position - backdropPosition() }, if (liquid) LiquidGlassTokens.topBlur else 14.dp, Modifier.matchParentSize())
+        if (liquid) {
+            // The unframed top scrim diffuses content without turning the status bar gray.
+            Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(
+                Color.Black.copy(alpha = if (dynamic) 0.64f else 0.96f),
+                Color.Black.copy(alpha = if (dynamic) 0.18f else 0.72f)
+            ))))
+        } else {
         Box(
             Modifier.matchParentSize().background(
                 if (reduceDynamicBlur) Color.Black
                 else Color.Black.copy(alpha = if (dynamic) 0.2f else 0.76f)
             )
         )
+        }
     }
 }

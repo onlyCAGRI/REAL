@@ -41,6 +41,7 @@ fun HomeSortControl(
     Box(
         modifier = modifier
             .size(44.dp)
+            .then(if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) Modifier.pressScale(interactionSource, reduceAnimations = reduceAnimations, targetScale = 0.97f).liquidChrome() else Modifier)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

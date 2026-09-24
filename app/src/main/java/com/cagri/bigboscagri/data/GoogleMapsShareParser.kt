@@ -7,9 +7,13 @@ import java.net.URLDecoder
 /** Accept only Google Maps shares. Redirects are followed only to known HTTPS Maps hosts. */
 object GoogleMapsShareParser {
     private val urlPattern = Regex("https://[^\\s<>]+", RegexOption.IGNORE_CASE)
-    private val placePoint = Regex("!3d(-?\\d{1,2}\\.\\d+)!4d(-?\\d{1,3}\\.\\d+)")
-    private val coordinatePair = Regex("^(-?\\d{1,2}(?:\\.\\d+)?),\\s*(-?\\d{1,3}(?:\\.\\d+)?)")
-    private val cameraPoint = Regex("/@(-?\\d{1,2}(?:\\.\\d+)?),(-?\\d{1,3}(?:\\.\\d+)?)(?:,|/|$)")
+    private val number = "-?\\d{1,3}(?:\\.\\d+)?"
+    private val placePoint = Regex("!3d($number)!4d($number)")
+    private val coordinatePair = Regex("^(?:loc:|geo:)?\\s*($number),\\s*($number)", RegexOption.IGNORE_CASE)
+    private val cameraPoint = Regex("/@($number),($number)(?:,|/|$)")
+    private val placePathPoint = Regex("/place/($number),($number)(?:/|$)")
+    private val separatedLat = setOf("lat", "latitude")
+    private val separatedLng = setOf("lng", "lon", "long", "longitude")
 
     fun sharedUrl(text: String?): String? = urlPattern.find(text.orEmpty())?.value
         ?.trimEnd('.', ',', ';', ')', ']', '>', '"')?.takeIf(::isMapsUrl)
@@ -18,10 +22,15 @@ object GoogleMapsShareParser {
         val original = sharedUrl(text) ?: return null
         val originalUri = URI(original)
         val isShort = originalUri.host.equals("maps.app.goo.gl", true) ||
-            originalUri.host.equals("goo.gl", true)
+            originalUri.host.equals("goo.gl", true) ||
+            originalUri.host.equals("share.google", true)
         val resolved = if (isShort) resolveShortLink(original)?.takeIf(::isMapsUrl) ?: original else original
         val uri = URI(resolved)
+        // Some mobile shares percent-encode the inner Maps URL/data payload. Inspect both forms.
+        val decodedResolved = decodeRepeated(resolved)
         val exactPoint = placePoint.find(resolved)?.let { it.groupValues[1] to it.groupValues[2] }
+            ?: placePoint.find(decodedResolved)?.let { it.groupValues[1] to it.groupValues[2] }
+            ?: placePathPoint.find(uri.rawPath.orEmpty())?.let { it.groupValues[1] to it.groupValues[2] }
             ?: parseCoordinatesInQuery(uri)
         // A Maps camera center is not necessarily the place's pin; flag it as approximate.
         val camera = if (exactPoint == null && uri.path.orEmpty().startsWith("/maps/"))
@@ -35,9 +44,10 @@ object GoogleMapsShareParser {
             .filter { it.isNotBlank() && !it.equals("Google Maps", true) && !it.equals("Google Haritalar", true) }
             .toList()
         val pathName = Regex("/place/([^/?]+)").find(uri.rawPath.orEmpty())?.groupValues?.get(1)
-            ?.let(::decode)?.replace('+', ' ')?.takeIf(String::isNotBlank)
+            ?.let(::decode)?.replace('+', ' ')?.takeIf { it.isNotBlank() && coordinatePair.find(it) == null }
+        val queryName = parseTextQuery(uri)
         return ReminderLocation(
-            placeName = lines.firstOrNull()?.take(150) ?: pathName?.take(150) ?: "Google Haritalar konumu",
+            placeName = lines.firstOrNull()?.take(150) ?: pathName?.take(150) ?: queryName?.take(150) ?: "Google Haritalar konumu",
             address = lines.drop(1).firstOrNull()?.take(250) ?: "",
             latitude = if (latitude != null && longitude != null) latitude else null,
             longitude = if (latitude != null && longitude != null) longitude else null,
@@ -46,14 +56,45 @@ object GoogleMapsShareParser {
         )
     }
 
-    private fun parseCoordinatesInQuery(uri: URI): Pair<String, String>? = uri.rawQuery
-        ?.split('&')?.firstNotNullOfOrNull { part ->
+    private fun parseCoordinatesInQuery(uri: URI): Pair<String, String>? {
+        val parts = uri.rawQuery?.split('&').orEmpty()
+        parts.firstNotNullOfOrNull { part ->
             val key = part.substringBefore('=').lowercase()
-            if (key !in setOf("q", "query", "ll", "center")) null
+            if (key !in setOf("q", "query", "ll", "center", "viewpoint")) null
             else coordinatePair.find(decode(part.substringAfter('=', "")))?.let {
                 it.groupValues[1] to it.groupValues[2]
             }
+        }?.let { return it }
+
+        var lat: String? = null
+        var lng: String? = null
+        for (part in parts) {
+            val key = part.substringBefore('=').lowercase()
+            val value = decode(part.substringAfter('=', "")).trim()
+            if (key in separatedLat) lat = value
+            if (key in separatedLng) lng = value
         }
+        return if (lat?.toDoubleOrNull() != null && lng?.toDoubleOrNull() != null) lat to lng else null
+    }
+
+    private fun parseTextQuery(uri: URI): String? = uri.rawQuery
+        ?.split('&')
+        ?.firstNotNullOfOrNull { part ->
+            val key = part.substringBefore('=').lowercase()
+            if (key !in setOf("q", "query")) null
+            else decode(part.substringAfter('=', "")).trim()
+                .takeIf { it.isNotBlank() && coordinatePair.find(it) == null && !it.startsWith("place_id:", true) }
+        }
+
+    private fun decodeRepeated(value: String): String {
+        var current = value
+        repeat(2) {
+            val decoded = decode(current)
+            if (decoded == current) return current
+            current = decoded
+        }
+        return current
+    }
 
     private fun decode(value: String): String = try {
         URLDecoder.decode(value.replace("+", "%20"), "UTF-8")
@@ -63,16 +104,20 @@ object GoogleMapsShareParser {
         return try {
             val uri = URI(value)
             val host = uri.host?.lowercase() ?: return false
+            val googleMapsHost = host in setOf(
+                "google.com", "www.google.com", "maps.google.com",
+                "google.com.tr", "www.google.com.tr", "maps.google.com.tr"
+            )
             uri.scheme.equals("https", true) && uri.userInfo == null && uri.port == -1 &&
-                (host == "maps.app.goo.gl" || host == "goo.gl" && uri.path.startsWith("/maps/") ||
-                    host == "google.com" || host == "www.google.com" || host == "maps.google.com") &&
-                (host != "google.com" && host != "www.google.com" || uri.path.startsWith("/maps"))
+                (host == "maps.app.goo.gl" || host == "share.google" ||
+                    host == "goo.gl" && uri.path.startsWith("/maps/") || googleMapsHost) &&
+                (!googleMapsHost || uri.path.startsWith("/maps"))
         } catch (_: Exception) { false }
     }
 
     private fun resolveRedirects(start: String): String? {
         var current = start
-        repeat(4) {
+        repeat(8) {
             val connection = (URI(current).toURL().openConnection() as HttpURLConnection).apply {
                 instanceFollowRedirects = false
                 connectTimeout = 2500

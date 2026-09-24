@@ -2,10 +2,8 @@ package com.cagri.bigboscagri.ui.components
 
 import com.cagri.bigboscagri.data.JournalMood
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -17,11 +15,9 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.material3.Text
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.sp
 
-enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry }
+enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry, MoodFuckOff }
 
 fun journalMoodLabel(mood: JournalMood): String = when (mood) {
     JournalMood.VERY_GOOD -> "Çok iyi"
@@ -51,23 +47,15 @@ fun journalMoodGlyph(mood: JournalMood): ActionGlyph = when (mood) {
     JournalMood.CALM -> ActionGlyph.MoodCalm
     JournalMood.TIRED -> ActionGlyph.MoodTired
     JournalMood.ANGRY -> ActionGlyph.MoodAngry
-    // Unused fallback: FUCK_OFF is rendered as the 🖕 emoji via MoodGlyph(), never via ActionIcon.
-    JournalMood.FUCK_OFF -> ActionGlyph.MoodBad
+    JournalMood.FUCK_OFF -> ActionGlyph.MoodFuckOff
 }
 
 /**
- * Renders a mood's visual representation: the emoji glyph for [JournalMood.FUCK_OFF],
- * or the existing vector [ActionIcon] for every other mood (or the null "no mood" state).
+ * Renders a mood using the same minimal vector icon language across every mood.
  */
 @Composable
 fun MoodGlyph(mood: JournalMood?, size: Dp, tint: Color, fallback: ActionGlyph = ActionGlyph.MoodNeutral) {
-    if (mood == JournalMood.FUCK_OFF) {
-        Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
-            Text("🖕", fontSize = (size.value * 0.85f).sp)
-        }
-    } else {
-        ActionIcon(mood?.let(::journalMoodGlyph) ?: fallback, Modifier.size(size), tint)
-    }
+    ActionIcon(mood?.let(::journalMoodGlyph) ?: fallback, Modifier.size(size), tint)
 }
 
 @Composable
@@ -383,6 +371,36 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     line(6.5f, 7.5f, 9.5f, 9f); line(14.5f, 9f, 17.5f, 7.5f)
                     line(8f, 10.5f, 9f, 10.5f); line(15f, 10.5f, 16f, 10.5f)
                     drawArc(color, 210f, 120f, false, Offset(8f, 13f), Size(8f, 7f), style = stroke)
+                }
+                ActionGlyph.MoodFuckOff -> {
+                    // Minimal outlined hand with an extended middle finger. Kept intentionally
+                    // simple so it reads cleanly at the same 16dp size as the other mood glyphs.
+                    drawPath(
+                        Path().apply {
+                            moveTo(8.2f, 21f)
+                            cubicTo(7.4f, 19.7f, 7f, 18f, 7f, 16.4f)
+                            lineTo(7f, 13.8f)
+                            cubicTo(7f, 12.9f, 7.7f, 12.2f, 8.6f, 12.2f)
+                            cubicTo(9.4f, 12.2f, 10f, 12.8f, 10f, 13.6f)
+                            lineTo(10f, 8.2f)
+                            cubicTo(10f, 7.3f, 10.7f, 6.6f, 11.6f, 6.6f)
+                            cubicTo(12.5f, 6.6f, 13.2f, 7.3f, 13.2f, 8.2f)
+                            lineTo(13.2f, 3.5f)
+                            cubicTo(13.2f, 2.5f, 13.9f, 1.8f, 14.8f, 1.8f)
+                            cubicTo(15.7f, 1.8f, 16.4f, 2.5f, 16.4f, 3.5f)
+                            lineTo(16.4f, 11.8f)
+                            cubicTo(16.6f, 11.1f, 17.2f, 10.7f, 17.9f, 10.7f)
+                            cubicTo(18.8f, 10.7f, 19.4f, 11.4f, 19.4f, 12.3f)
+                            lineTo(19.4f, 16.1f)
+                            cubicTo(19.4f, 18.2f, 18.5f, 20f, 16.9f, 21f)
+                            close()
+                        },
+                        color,
+                        style = stroke
+                    )
+                    line(10f, 13.6f, 10f, 16f)
+                    line(13.2f, 11.7f, 13.2f, 16f)
+                    line(16.4f, 11.8f, 16.4f, 16f)
                 }
             }
         }

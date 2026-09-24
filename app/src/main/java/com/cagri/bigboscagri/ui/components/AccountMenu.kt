@@ -141,7 +141,10 @@ fun AccountMenuOverlay(
             }
             .pointerInput(Unit) { detectTapGestures(onTap = {}) }
 
-        if (designStyle == DesignStyle.Ice) {
+        if (designStyle == DesignStyle.LiquidGlass) {
+            LiquidGlassSurface(backdrop, backdropPosition, panelModifier, 30.dp, reduceDynamicBlur,
+                reduceAnimations = reduceAnimations, content = panelContent)
+        } else if (designStyle == DesignStyle.Ice) {
             IcePanel(
                 backdrop = backdrop,
                 backdropPosition = backdropPosition,

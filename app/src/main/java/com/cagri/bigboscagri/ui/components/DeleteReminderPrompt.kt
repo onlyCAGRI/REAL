@@ -30,7 +30,7 @@ fun DeleteReminderPrompt(
     onDismiss: () -> Unit, onConfirm: () -> Unit, modifier: Modifier = Modifier,
     designStyle: DesignStyle = DesignStyle.Glass, reduceDynamicBlur: Boolean = false
 ) {
-    DesignPanel(backdrop, backdropPosition, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
+    DesignPanel(backdrop, backdropPosition, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur, liquidDynamic = true,
         modifier = modifier.fillMaxWidth()
             .pointerInput(Unit) { detectTapGestures(onTap = {}) }
             .semantics { paneTitle = "Hatırlatıcı silinsin mi?" }, corners = 26.dp
