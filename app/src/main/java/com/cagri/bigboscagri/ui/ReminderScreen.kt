@@ -154,6 +154,7 @@ import com.cagri.bigboscagri.ui.components.CategorySelectionOverlay
 import com.cagri.bigboscagri.ui.components.GlassComposer
 import com.cagri.bigboscagri.ui.components.MoodV2FullScreen
 import com.cagri.bigboscagri.ui.components.MoodTrackerHistoryScreen
+import com.cagri.bigboscagri.ui.components.MoodSuggestionsScreen
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
@@ -670,6 +671,9 @@ private fun ReminderListScreen(
     var pendingMicrophoneAction by rememberSaveable { mutableStateOf(false) }
     var showHomeMood by rememberSaveable { mutableStateOf(false) }
     var showMoodTrackerHistory by rememberSaveable { mutableStateOf(false) }
+    var showMoodSuggestions by remember { mutableStateOf(false) }
+    var activeSuggestionMood by remember { mutableStateOf<JournalMood?>(null) }
+    var activeSuggestionDetails by remember { mutableStateOf<MoodDetails?>(null) }
     var homeMoodSelection by remember { mutableStateOf(homeMoodEntries.firstOrNull()?.mood ?: JournalMood.NEUTRAL) }
     var refocus by remember { mutableStateOf(false) }
 
@@ -2222,9 +2226,25 @@ private fun ReminderListScreen(
                 onSave = { mood, details ->
                     onAddHomeMood(mood, details)
                     showHomeMood = false
-                    showMoodTrackerHistory = true
+                    activeSuggestionMood = mood
+                    activeSuggestionDetails = details
+                    showMoodSuggestions = true
                 },
                 initialDetails = null,
+                reduceAnimations = reduceAnimations
+            )
+        }
+        if (showMoodSuggestions && activeSuggestionMood != null && activeSuggestionDetails != null) {
+            MoodSuggestionsScreen(
+                mood = activeSuggestionMood!!,
+                details = activeSuggestionDetails!!,
+                onDismiss = {
+                    showMoodSuggestions = false
+                    activeSuggestionMood = null
+                    activeSuggestionDetails = null
+                    showMoodTrackerHistory = true
+                },
+                onAddReminder = onAddReminder,
                 reduceAnimations = reduceAnimations
             )
         }

@@ -564,19 +564,8 @@ fun MoodV2FullScreen(
                             fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center
                         )
-                        if (isReminderMoodFlow) {
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = reminderContextLabel.orEmpty(),
-                                color = Color(0xFF8D8D96),
-                                fontSize = 12.sp,
-                                lineHeight = 17.sp,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2
-                            )
-                        }
 
-                        Spacer(Modifier.height(if (isReminderMoodFlow) 16.dp else 22.dp))
+                        Spacer(Modifier.height(22.dp))
 
                         MoodV2FaceCanvas(
                             faceParams = faceParams,
