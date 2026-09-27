@@ -18,6 +18,8 @@ import java.util.Locale
 import com.cagri.bigboscagri.data.ReminderAttachment
 import com.cagri.bigboscagri.data.ReminderLocation
 import com.cagri.bigboscagri.data.MusicBlock
+import com.cagri.bigboscagri.data.MediaBlock
+import com.cagri.bigboscagri.data.CardStackBlock
 import com.cagri.bigboscagri.data.ReminderVoiceRecording
 import com.cagri.bigboscagri.data.ReminderRepository
 import com.cagri.bigboscagri.data.JournalMood
@@ -197,9 +199,10 @@ internal data class ReminderRoute(val category: ReminderCategory?, val customCat
 fun ReminderScreen(
     reminders: List<ReminderItem>,
     onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>, List<ReminderVoiceRecording>, ReminderLocation?) -> Long?,
+    onAddSuggestedReal: suspend (String, MusicBlock?, MediaBlock?, CardStackBlock?) -> Long? = { _, _, _, _ -> null },
     onToggleCompleted: (Long) -> Unit,
     onToggleImportant: (Long) -> Unit,
-    onEditReminder: suspend (Long, String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?, List<ReminderVoiceRecording>?, ReminderLocation?, String?, List<MusicBlock>, List<String>?) -> Boolean,
+    onEditReminder: suspend (Long, String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?, List<ReminderVoiceRecording>?, ReminderLocation?, String?, List<MusicBlock>, List<MediaBlock>, CardStackBlock?, List<String>?) -> Boolean,
     onDeleteReminder: (Long) -> Unit,
     onSetAlert: (Long, Long?, RecurrenceRule) -> Unit,
     onSetJournal: (Long, JournalMood?, String) -> Unit,
@@ -485,8 +488,8 @@ fun ReminderScreen(
                                     },
                                     onToggleImportant = { onToggleImportant(reminder.id) },
                                     onToggleChecklistItem = onToggleChecklistItem,
-                                    onSave = { text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, voiceRecordings, location, referenceUrl, musicBlocks, contentBlockOrder ->
-                                        onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, voiceRecordings, location, referenceUrl, musicBlocks, contentBlockOrder)
+                                    onSave = { text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, voiceRecordings, location, referenceUrl, musicBlocks, mediaBlocks, cardStack, contentBlockOrder ->
+                                        onEditReminder(reminder.id, text, accentStart, accentEnd, customCatId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, voiceRecordings, location, referenceUrl, musicBlocks, mediaBlocks, cardStack, contentBlockOrder)
                                     },
                                     onSaveJournal = { mood, text -> onSetJournal(reminder.id, mood, text) },
                                     onDeleteJournal = { onDeleteJournal(reminder.id) },
@@ -561,6 +564,7 @@ fun ReminderScreen(
                                          customCategoryId = customCategoryItem.id
                                          onOpenCustomCategory(customCategoryItem)
                                      },
+                                     onAddSuggestedReal = onAddSuggestedReal,
                                      onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments, voiceRecordings, location ->
                                          val createdId = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments, voiceRecordings, location)
                                          if (createdId != null) {
@@ -624,6 +628,7 @@ private fun ReminderListScreen(
     reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean, designStyle: DesignStyle,
     onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>, List<ReminderVoiceRecording>, ReminderLocation?) -> Long?,
+    onAddSuggestedReal: suspend (String, MusicBlock?, MediaBlock?, CardStackBlock?) -> Long? = { _, _, _, _ -> null },
     isShareDraft: Boolean = false,
     onShareDraftChange: (Boolean) -> Unit = {},
     draftReferenceUrl: String? = null,
@@ -2244,7 +2249,7 @@ private fun ReminderListScreen(
                     activeSuggestionDetails = null
                     showMoodTrackerHistory = true
                 },
-                onAddReminder = onAddReminder,
+                onAddSuggestedReal = onAddSuggestedReal,
                 reduceAnimations = reduceAnimations
             )
         }

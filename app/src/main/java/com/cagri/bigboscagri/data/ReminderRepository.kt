@@ -117,6 +117,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             attachments = attachments,
                             voiceRecordings = voiceRecordings,
                             musicBlocks = MusicBlock.decodeArray(item.optJSONArray("musicBlocks")),
+                            mediaBlocks = MediaBlock.decodeArray(item.optJSONArray("mediaBlocks")),
+                            cardStack = CardStackBlock.decode(item.optJSONObject("cardStack")) ?: CardStackBlock.decodeArray(item.optJSONArray("cardStackBlocks")).firstOrNull(),
                             journal = journal,
                             mood = standaloneMood,
                             moodDetails = moodDetails,
@@ -146,6 +148,9 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         referenceUrl: String? = null,
         attachments: List<ReminderAttachment> = emptyList(),
         voiceRecordings: List<ReminderVoiceRecording> = emptyList(),
+        musicBlocks: List<MusicBlock> = emptyList(),
+        mediaBlocks: List<MediaBlock> = emptyList(),
+        cardStack: CardStackBlock? = null,
         location: ReminderLocation? = null
     ): ReminderItem = synchronized(mutationLock) {
         val typedTitle = text.trim()
@@ -181,6 +186,9 @@ class ReminderRepository(private val preferences: SharedPreferences) {
             referenceUrl = referenceUrl?.trim()?.takeIf { it.isNotBlank() },
             attachments = attachments,
             voiceRecordings = voiceRecordings,
+            musicBlocks = musicBlocks,
+            mediaBlocks = mediaBlocks,
+            cardStack = cardStack,
             location = location
         )
         val updated = listOf(newItem) + previous
@@ -263,6 +271,9 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         referenceUrl: String? = null,
         updateReferenceUrl: Boolean = false,
         musicBlocks: List<MusicBlock>? = null,
+        mediaBlocks: List<MediaBlock>? = null,
+        cardStack: CardStackBlock? = null,
+        updateCardStack: Boolean = false,
         contentBlockOrder: List<String>? = null
     ): List<ReminderItem> {
         val resolvedVoiceRecordings = voiceRecordings ?: load().firstOrNull { it.id == id }?.voiceRecordings.orEmpty()
@@ -297,6 +308,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                 attachments = attachments ?: reminder.attachments,
                 voiceRecordings = voiceRecordings ?: reminder.voiceRecordings,
                 musicBlocks = musicBlocks ?: reminder.musicBlocks,
+                mediaBlocks = mediaBlocks ?: reminder.mediaBlocks,
+                cardStack = if (updateCardStack) cardStack else reminder.cardStack,
                 referenceUrl = if (updateReferenceUrl) referenceUrl else reminder.referenceUrl,
                 location = if (updateLocation) location else reminder.location,
                 contentBlockOrder = contentBlockOrder ?: reminder.contentBlockOrder,
@@ -532,6 +545,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                     .put("attachments", AttachmentJson.encodeArray(reminder.attachments))
                     .put("voiceRecordings", VoiceRecordingJson.encodeArray(reminder.voiceRecordings))
                     .put("musicBlocks", MusicBlock.encodeArray(reminder.musicBlocks))
+                    .put("mediaBlocks", MediaBlock.encodeArray(reminder.mediaBlocks))
+                    .put("cardStack", reminder.cardStack?.let { CardStackBlock.encode(it) } ?: JSONObject.NULL)
                     .put("mood", reminder.mood?.persistKey ?: JSONObject.NULL)
                     .put("moodDetails", reminder.moodDetails?.let { details ->
                         JSONObject()

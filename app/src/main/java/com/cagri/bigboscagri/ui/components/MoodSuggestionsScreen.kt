@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -45,18 +44,23 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.cagri.bigboscagri.data.ChecklistItem
 import com.cagri.bigboscagri.data.JournalMood
 import com.cagri.bigboscagri.data.MoodDetails
 import com.cagri.bigboscagri.data.MoodSuggestion
 import com.cagri.bigboscagri.data.MoodSuggestionClient
-import com.cagri.bigboscagri.data.RecurrenceRule
-import com.cagri.bigboscagri.data.ReminderAttachment
-import com.cagri.bigboscagri.data.ReminderLocation
-import com.cagri.bigboscagri.data.ReminderVoiceRecording
+import com.cagri.bigboscagri.data.MoodSuggestionKind
+import com.cagri.bigboscagri.data.MoodSuggestionMusicCandidate
+import com.cagri.bigboscagri.data.MoodSuggestionMediaCandidate
+import com.cagri.bigboscagri.data.MusicBlock
+import com.cagri.bigboscagri.data.MediaBlock
+import com.cagri.bigboscagri.data.MediaCatalog
+import com.cagri.bigboscagri.data.MusicCandidateMatcher
+import com.cagri.bigboscagri.data.CardStackBlock
+import com.cagri.bigboscagri.data.CardStackCard
 import kotlinx.coroutines.launch
 
 private sealed interface SuggestionsUiState {
@@ -65,24 +69,24 @@ private sealed interface SuggestionsUiState {
     data class Error(val message: String) : SuggestionsUiState
 }
 
+private sealed interface MusicResolutionState {
+    object Loading : MusicResolutionState
+    data class Success(val musicBlock: MusicBlock) : MusicResolutionState
+    object Failed : MusicResolutionState
+}
+
+private sealed interface MediaResolutionState {
+    object Loading : MediaResolutionState
+    data class Success(val mediaBlock: MediaBlock) : MediaResolutionState
+    object Failed : MediaResolutionState
+}
+
 @Composable
 fun MoodSuggestionsScreen(
     mood: JournalMood,
     details: MoodDetails,
     onDismiss: () -> Unit,
-    onAddReminder: suspend (
-        String,
-        Long?,
-        RecurrenceRule,
-        Long?,
-        Boolean,
-        List<ChecklistItem>,
-        Boolean,
-        String?,
-        List<ReminderAttachment>,
-        List<ReminderVoiceRecording>,
-        ReminderLocation?
-    ) -> Long?,
+    onAddSuggestedReal: suspend (String, MusicBlock?, MediaBlock?, CardStackBlock?) -> Long?,
     reduceAnimations: Boolean = false
 ) {
     BackHandler(onBack = onDismiss)
@@ -94,6 +98,12 @@ fun MoodSuggestionsScreen(
     var fetchTrigger by remember { mutableIntStateOf(0) }
     var addedIndices by remember { mutableStateOf(setOf<Int>()) }
     var pendingIndices by remember { mutableStateOf(setOf<Int>()) }
+
+    var musicResolutions by remember { mutableStateOf(mapOf<Int, MusicResolutionState>()) }
+    var musicRetryTriggers by remember { mutableStateOf(mapOf<Int, Int>()) }
+
+    var mediaResolutions by remember { mutableStateOf(mapOf<Int, MediaResolutionState>()) }
+    var mediaRetryTriggers by remember { mutableStateOf(mapOf<Int, Int>()) }
 
     val scope = rememberCoroutineScope()
     val view = LocalView.current
@@ -109,6 +119,52 @@ fun MoodSuggestionsScreen(
                 uiState = SuggestionsUiState.Error(error.localizedMessage ?: "Öneriler alınamadı")
             }
         )
+    }
+
+    // Resolve music and media candidates when suggestions load
+    val currentUiState = uiState
+    if (currentUiState is SuggestionsUiState.Success) {
+        currentUiState.suggestions.forEachIndexed { index, suggestion ->
+            if (suggestion.kind == MoodSuggestionKind.MUSIC) {
+                val candidate = suggestion.music
+                val retryCount = musicRetryTriggers[index] ?: 0
+                LaunchedEffect(index, candidate, retryCount) {
+                    if (candidate == null) {
+                        musicResolutions = musicResolutions + (index to MusicResolutionState.Failed)
+                        return@LaunchedEffect
+                    }
+                    if (musicResolutions[index] is MusicResolutionState.Success) return@LaunchedEffect
+                    musicResolutions = musicResolutions + (index to MusicResolutionState.Loading)
+                    val resolvedBlock = MusicCandidateMatcher.resolve(candidate)
+                    musicResolutions = if (resolvedBlock != null) {
+                        musicResolutions + (index to MusicResolutionState.Success(resolvedBlock))
+                    } else {
+                        musicResolutions + (index to MusicResolutionState.Failed)
+                    }
+                }
+            } else if (suggestion.kind == MoodSuggestionKind.MOVIE || suggestion.kind == MoodSuggestionKind.TV) {
+                val candidate = suggestion.media
+                val retryCount = mediaRetryTriggers[index] ?: 0
+                LaunchedEffect(index, candidate, retryCount) {
+                    if (candidate == null) {
+                        mediaResolutions = mediaResolutions + (index to MediaResolutionState.Failed)
+                        return@LaunchedEffect
+                    }
+                    if (mediaResolutions[index] is MediaResolutionState.Success) return@LaunchedEffect
+                    mediaResolutions = mediaResolutions + (index to MediaResolutionState.Loading)
+                    val resolvedBlock = if (suggestion.kind == MoodSuggestionKind.MOVIE) {
+                        MediaCatalog.resolveMovie(candidate)
+                    } else {
+                        MediaCatalog.resolveTv(candidate)
+                    }
+                    mediaResolutions = if (resolvedBlock != null) {
+                        mediaResolutions + (index to MediaResolutionState.Success(resolvedBlock))
+                    } else {
+                        mediaResolutions + (index to MediaResolutionState.Failed)
+                    }
+                }
+            }
+        }
     }
 
     Box(
@@ -204,6 +260,24 @@ fun MoodSuggestionsScreen(
                         state.suggestions.forEachIndexed { index, suggestion ->
                             val isAdded = index in addedIndices
                             val isPending = index in pendingIndices
+                            val isMusic = suggestion.kind == MoodSuggestionKind.MUSIC
+                            val isMovie = suggestion.kind == MoodSuggestionKind.MOVIE
+                            val isTv = suggestion.kind == MoodSuggestionKind.TV
+                            val isMedia = isMovie || isTv
+
+                            val musicResolutionState = if (isMusic) {
+                                musicResolutions[index] ?: if (suggestion.music != null) MusicResolutionState.Loading else MusicResolutionState.Failed
+                            } else null
+                            val verifiedMusicBlock = (musicResolutionState as? MusicResolutionState.Success)?.musicBlock
+
+                            val mediaResolutionState = if (isMedia) {
+                                mediaResolutions[index] ?: if (suggestion.media != null) MediaResolutionState.Loading else MediaResolutionState.Failed
+                            } else null
+                            val verifiedMediaBlock = (mediaResolutionState as? MediaResolutionState.Success)?.mediaBlock
+
+                            val isActionEnabled = !isAdded && !isPending &&
+                                (!isMusic || verifiedMusicBlock != null) &&
+                                (!isMedia || verifiedMediaBlock != null)
 
                             Box(
                                 modifier = Modifier
@@ -225,95 +299,302 @@ fun MoodSuggestionsScreen(
                                     )
                                     .padding(horizontal = 18.dp, vertical = 16.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .padding(end = 14.dp)
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Text(
-                                            text = suggestion.title,
-                                            color = Color(0xFFF4F4F6),
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            lineHeight = 21.sp
-                                        )
-                                        if (suggestion.subtitle.isNotBlank()) {
-                                            Spacer(Modifier.height(4.dp))
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(end = 14.dp)
+                                        ) {
                                             Text(
-                                                text = suggestion.subtitle,
-                                                color = Color(0xFF9898A2),
-                                                fontSize = 13.sp,
-                                                lineHeight = 18.sp
+                                                text = suggestion.title,
+                                                color = Color(0xFFF4F4F6),
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                lineHeight = 21.sp
                                             )
+                                            if (suggestion.subtitle.isNotBlank()) {
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    text = suggestion.subtitle,
+                                                    color = Color(0xFF9898A2),
+                                                    fontSize = 13.sp,
+                                                    lineHeight = 18.sp
+                                                )
+                                            }
+                                        }
+
+                                        val buttonShape = RoundedCornerShape(13.dp)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .clip(buttonShape)
+                                                .background(
+                                                    when {
+                                                        isAdded -> accent.copy(alpha = 0.25f)
+                                                        isPending -> Color(0xFF202026)
+                                                        !isActionEnabled -> Color(0xFF19191D)
+                                                        else -> Color(0xFF222228)
+                                                    }
+                                                )
+                                                .border(
+                                                    0.8.dp,
+                                                    when {
+                                                        isAdded -> accent.copy(alpha = 0.70f)
+                                                        !isActionEnabled -> Color(0xFF2B2B33)
+                                                        else -> Color(0xFF383842)
+                                                    },
+                                                    buttonShape
+                                                )
+                                                .clickable(
+                                                    enabled = isActionEnabled,
+                                                    onClick = {
+                                                        scope.launch {
+                                                            if (index in addedIndices || index in pendingIndices) return@launch
+                                                            pendingIndices = pendingIndices + index
+                                                            try {
+                                                                val musicToAttach = if (isMusic) {
+                                                                    verifiedMusicBlock ?: return@launch
+                                                                } else null
+                                                                val mediaToAttach = if (isMedia) {
+                                                                    verifiedMediaBlock ?: return@launch
+                                                                } else null
+                                                                val cardStackToAttach = if (suggestion.kind == MoodSuggestionKind.TEXT) {
+                                                                    CardStackBlock(
+                                                                        prompt = suggestion.subtitle.trim().takeIf { it.isNotBlank() },
+                                                                        cards = listOf(CardStackCard())
+                                                                    )
+                                                                } else null
+
+                                                                val createdId = onAddSuggestedReal(
+                                                                    suggestion.title,
+                                                                    musicToAttach,
+                                                                    mediaToAttach,
+                                                                    cardStackToAttach
+                                                                )
+                                                                if (createdId != null) {
+                                                                    addedIndices = addedIndices + index
+                                                                    RealHaptics.success(view)
+                                                                }
+                                                            } catch (_: Exception) {
+                                                                // restore so user can retry
+                                                            } finally {
+                                                                pendingIndices = pendingIndices - index
+                                                            }
+                                                        }
+                                                    }
+                                                )
+                                                .semantics {
+                                                    contentDescription = if (isAdded) "REAL oluşturuldu" else "REAL olarak ekle"
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            when {
+                                                isAdded -> ActionIcon(ActionGlyph.Check, Modifier.size(17.dp), color = accent)
+                                                isPending -> Text("…", color = Color(0xFF8E8E98), fontSize = 16.sp)
+                                                !isActionEnabled -> ActionIcon(ActionGlyph.Add, Modifier.size(17.dp), color = Color(0xFF55555E))
+                                                else -> ActionIcon(ActionGlyph.Add, Modifier.size(17.dp), color = Color(0xFFF1F1F4))
+                                            }
                                         }
                                     }
 
-                                    val buttonShape = RoundedCornerShape(13.dp)
-                                    Box(
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .clip(buttonShape)
-                                            .background(
-                                                when {
-                                                    isAdded -> accent.copy(alpha = 0.25f)
-                                                    isPending -> Color(0xFF202026)
-                                                    else -> Color(0xFF222228)
-                                                }
-                                            )
-                                            .border(
-                                                0.8.dp,
-                                                when {
-                                                    isAdded -> accent.copy(alpha = 0.70f)
-                                                    else -> Color(0xFF383842)
-                                                },
-                                                buttonShape
-                                            )
-                                            .clickable(
-                                                enabled = !isAdded && !isPending,
-                                                onClick = {
-                                                    scope.launch {
-                                                        if (index in addedIndices || index in pendingIndices) return@launch
-                                                        pendingIndices = pendingIndices + index
-                                                        try {
-                                                            val createdId = onAddReminder(
-                                                                suggestion.title,
-                                                                null,
-                                                                RecurrenceRule.NONE,
-                                                                null,
-                                                                false,
-                                                                emptyList(),
-                                                                false,
-                                                                null,
-                                                                emptyList(),
-                                                                emptyList(),
-                                                                null
-                                                            )
-                                                            if (createdId != null) {
-                                                                addedIndices = addedIndices + index
-                                                                RealHaptics.success(view)
-                                                            }
-                                                        } catch (_: Exception) {
-                                                            // restore so user can retry
-                                                        } finally {
-                                                            pendingIndices = pendingIndices - index
-                                                        }
+                                    if (isMusic) {
+                                        when (musicResolutionState) {
+                                            is MusicResolutionState.Loading -> {
+                                                Spacer(Modifier.height(14.dp))
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(Color(0xFF16161A))
+                                                        .border(0.8.dp, Color(0xFF282830), RoundedCornerShape(14.dp))
+                                                        .padding(14.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(48.dp)
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .background(Color.White.copy(alpha = 0.08f)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        ActionIcon(ActionGlyph.Music, Modifier.size(22.dp), Color(0xFF85858E))
+                                                    }
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = suggestion.music?.track?.takeIf { it.isNotBlank() } ?: "Şarkı aranıyor…",
+                                                            color = Color(0xFFE0E0E5),
+                                                            fontSize = 14.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Spacer(Modifier.height(2.dp))
+                                                        Text(
+                                                            text = suggestion.music?.artist?.takeIf { it.isNotBlank() }?.let { "$it • iTunes aranıyor…" } ?: "Şarkı aranıyor…",
+                                                            color = Color(0xFF85858E),
+                                                            fontSize = 12.sp,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
                                                     }
                                                 }
-                                            )
-                                            .semantics {
-                                                contentDescription = if (isAdded) "REAL oluşturuldu" else "REAL olarak ekle"
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        when {
-                                            isAdded -> ActionIcon(ActionGlyph.Check, Modifier.size(17.dp), color = accent)
-                                            isPending -> Text("…", color = Color(0xFF8E8E98), fontSize = 16.sp)
-                                            else -> ActionIcon(ActionGlyph.Add, Modifier.size(17.dp), color = Color(0xFFF1F1F4))
+                                            }
+
+                                            is MusicResolutionState.Success -> {
+                                                Spacer(Modifier.height(14.dp))
+                                                MusicTrackCard(
+                                                    block = verifiedMusicBlock!!,
+                                                    selected = true
+                                                )
+                                            }
+
+                                            is MusicResolutionState.Failed -> {
+                                                Spacer(Modifier.height(12.dp))
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(Color(0xFF16161A))
+                                                        .border(0.8.dp, Color(0xFF282830), RoundedCornerShape(14.dp))
+                                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.weight(1f),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                    ) {
+                                                        ActionIcon(ActionGlyph.Music, Modifier.size(20.dp), Color(0xFF85858E))
+                                                        Text(
+                                                            text = "Şarkı şu anda bulunamadı.",
+                                                            color = Color(0xFF85858E),
+                                                            fontSize = 13.sp
+                                                        )
+                                                    }
+                                                    if (suggestion.music != null) {
+                                                        Text(
+                                                            text = "Tekrar dene",
+                                                            color = accent,
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            modifier = Modifier
+                                                                .clip(RoundedCornerShape(8.dp))
+                                                                .clickable {
+                                                                    musicRetryTriggers = musicRetryTriggers + (index to (musicRetryTriggers[index] ?: 0) + 1)
+                                                                }
+                                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            null -> {}
+                                        }
+                                    }
+
+                                    if (isMedia) {
+                                        when (mediaResolutionState) {
+                                            is MediaResolutionState.Loading -> {
+                                                val searchLabel = if (isMovie) "Film aranıyor…" else "Dizi aranıyor…"
+                                                val providerLabel = if (isMovie) "Film • Apple TV aranıyor…" else "Dizi • Apple TV aranıyor…"
+                                                Spacer(Modifier.height(14.dp))
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(Color(0xFF16161A))
+                                                        .border(0.8.dp, Color(0xFF282830), RoundedCornerShape(14.dp))
+                                                        .padding(14.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(48.dp)
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .background(Color.White.copy(alpha = 0.08f)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        ActionIcon(ActionGlyph.Video, Modifier.size(22.dp), Color(0xFF85858E))
+                                                    }
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = suggestion.media?.title?.takeIf { it.isNotBlank() } ?: searchLabel,
+                                                            color = Color(0xFFE0E0E5),
+                                                            fontSize = 14.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Spacer(Modifier.height(2.dp))
+                                                        Text(
+                                                            text = providerLabel,
+                                                            color = Color(0xFF85858E),
+                                                            fontSize = 12.sp,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            is MediaResolutionState.Success -> {
+                                                Spacer(Modifier.height(14.dp))
+                                                MediaTrackCard(
+                                                    block = verifiedMediaBlock!!
+                                                )
+                                            }
+
+                                            is MediaResolutionState.Failed -> {
+                                                val failText = if (isMovie) "Film şu anda bulunamadı." else "Dizi şu anda bulunamadı."
+                                                Spacer(Modifier.height(12.dp))
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .background(Color(0xFF16161A))
+                                                        .border(0.8.dp, Color(0xFF282830), RoundedCornerShape(14.dp))
+                                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.weight(1f),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                    ) {
+                                                        ActionIcon(ActionGlyph.Video, Modifier.size(20.dp), Color(0xFF85858E))
+                                                        Text(
+                                                            text = failText,
+                                                            color = Color(0xFF85858E),
+                                                            fontSize = 13.sp
+                                                        )
+                                                    }
+                                                    if (suggestion.media != null) {
+                                                        Text(
+                                                            text = "Tekrar dene",
+                                                            color = accent,
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            modifier = Modifier
+                                                                .clip(RoundedCornerShape(8.dp))
+                                                                .clickable {
+                                                                    mediaRetryTriggers = mediaRetryTriggers + (index to (mediaRetryTriggers[index] ?: 0) + 1)
+                                                                }
+                                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            null -> {}
                                         }
                                     }
                                 }

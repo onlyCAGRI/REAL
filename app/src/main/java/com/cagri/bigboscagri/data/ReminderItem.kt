@@ -106,6 +106,8 @@ data class ReminderItem(
     val moodDetails: MoodDetails? = null,
     val location: ReminderLocation? = null,
     val musicBlocks: List<MusicBlock> = emptyList(),
+    val mediaBlocks: List<MediaBlock> = emptyList(),
+    val cardStack: CardStackBlock? = null,
     val contentBlockOrder: List<String> = emptyList()
 ) {
     val gradientBlendIndex: Int?

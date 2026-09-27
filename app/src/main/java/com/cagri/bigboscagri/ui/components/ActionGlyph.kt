@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.Dp
 
-enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Music, AudioWave, Play, Pause, Close, Note, Category, Photo, File, Person, Cat, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, DragHandle, Sort, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry, MoodFuckOff }
+enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Music, AudioWave, Play, Pause, Video, Cards, Close, Note, Category, Photo, File, Person, Cat, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, DragHandle, Sort, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry, MoodFuckOff }
 
 fun journalMoodLabel(mood: JournalMood): String = mood.label
 
@@ -138,6 +138,15 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                 ActionGlyph.Pause -> {
                     drawRoundRect(color, Offset(7f, 5f), Size(3.5f, 14f), CornerRadius(1f, 1f), style = Fill)
                     drawRoundRect(color, Offset(13.5f, 5f), Size(3.5f, 14f), CornerRadius(1f, 1f), style = Fill)
+                }
+                ActionGlyph.Video -> {
+                    drawRoundRect(color, Offset(3f, 5f), Size(18f, 14f), CornerRadius(3f, 3f), style = stroke)
+                    drawPath(Path().apply { moveTo(10f, 9f); lineTo(16f, 12f); lineTo(10f, 15f); close() }, color, style = Fill)
+                }
+                ActionGlyph.Cards -> {
+                    // Two stacked overlapping cards
+                    drawRoundRect(color, Offset(6.5f, 3.5f), Size(13f, 13f), CornerRadius(2.5f, 2.5f), style = stroke)
+                    drawRoundRect(color, Offset(4.5f, 7.5f), Size(13f, 13f), CornerRadius(2.5f, 2.5f), style = stroke)
                 }
                 ActionGlyph.Note -> {
                     drawRoundRect(color, Offset(5f, 3f), Size(14f, 18f), CornerRadius(3f, 3f), style = stroke)

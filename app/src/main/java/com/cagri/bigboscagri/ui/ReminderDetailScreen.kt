@@ -36,11 +36,14 @@ import java.io.File
 import com.cagri.bigboscagri.data.ReminderAttachment
 import com.cagri.bigboscagri.data.ReminderLocation
 import com.cagri.bigboscagri.data.MusicBlock
+import com.cagri.bigboscagri.data.MediaBlock
 import com.cagri.bigboscagri.data.ReminderVoiceRecording
 import com.cagri.bigboscagri.data.VoiceRecordingStorage
 import com.cagri.bigboscagri.ui.components.ReminderLocationMap
 import com.cagri.bigboscagri.ui.components.MusicSearchSheet
 import com.cagri.bigboscagri.ui.components.MusicContentSection
+import com.cagri.bigboscagri.ui.components.MediaContentSection
+import com.cagri.bigboscagri.ui.components.MediaSearchSheet
 import com.cagri.bigboscagri.ui.components.TimelineContent
 import com.cagri.bigboscagri.ui.components.VoiceRecorderInline
 import com.cagri.bigboscagri.ui.components.openReminderLocationInMaps
@@ -114,12 +117,16 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -194,13 +201,16 @@ import com.cagri.bigboscagri.ui.components.REAL_PET_PERCH_DETAIL_BOTTOM_BAR
 import com.cagri.bigboscagri.ui.components.RealPetRuntime
 import com.cagri.bigboscagri.ui.components.realPetDetailBlockPerchId
 import com.cagri.bigboscagri.ui.components.realPetPerch
+import com.cagri.bigboscagri.data.CardStackBlock
+import com.cagri.bigboscagri.data.CardStackCard
+import com.cagri.bigboscagri.ui.components.CardStackContentSection
 import com.cagri.bigboscagri.ui.theme.BigBosTheme
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ReminderDetailScreen(
     reminder: ReminderItem, onBack: () -> Unit, onToggleCompleted: () -> Unit,
-    onToggleImportant: () -> Unit, onSave: suspend (String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?, List<ReminderVoiceRecording>?, ReminderLocation?, String?, List<MusicBlock>, List<String>?) -> Boolean, onDelete: () -> Unit,
+    onToggleImportant: () -> Unit, onSave: suspend (String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?, List<ReminderVoiceRecording>?, ReminderLocation?, String?, List<MusicBlock>, List<MediaBlock>, CardStackBlock?, List<String>?) -> Boolean, onDelete: () -> Unit,
     incomingLocation: ReminderLocation? = null,
     onIncomingLocationHandled: () -> Unit = {},
     onRequestLocationShare: () -> Unit = {},
@@ -268,7 +278,12 @@ fun ReminderDetailScreen(
     var editedAttachments by remember(reminder.id, editing) { mutableStateOf(reminder.attachments) }
     var editedVoiceRecordings by remember(reminder.id, editing) { mutableStateOf(reminder.voiceRecordings) }
     var editedMusicBlocks by remember(reminder.id, editing) { mutableStateOf(reminder.musicBlocks) }
+    var editedMediaBlocks by remember(reminder.id, editing) { mutableStateOf(reminder.mediaBlocks) }
+    var editedCardStack by remember(reminder.id, editing) { mutableStateOf(reminder.cardStack) }
+    val cardStackBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val coroutineScope = rememberCoroutineScope()
     var musicSearchOpen by remember(reminder.id) { mutableStateOf(false) }
+    var mediaSearchOpen by remember(reminder.id) { mutableStateOf(false) }
     var voiceRecorderOpen by remember(reminder.id) { mutableStateOf(false) }
     var voiceRecordingActive by remember(reminder.id) { mutableStateOf(false) }
     var editedReferenceUrl by remember(reminder.id, editing) { mutableStateOf(reminder.referenceUrl) }
@@ -474,7 +489,10 @@ fun ReminderDetailScreen(
         editedAttachments = reminder.attachments
         editedVoiceRecordings = reminder.voiceRecordings
         editedMusicBlocks = reminder.musicBlocks
+        editedMediaBlocks = reminder.mediaBlocks
+        editedCardStack = reminder.cardStack
         musicSearchOpen = false
+        mediaSearchOpen = false
         voiceRecorderOpen = false
         voiceRecordingActive = false
         editedReferenceUrl = reminder.referenceUrl
@@ -663,26 +681,32 @@ fun ReminderDetailScreen(
             editedAttachments, reminder.attachments, editedReferenceUrl, reminder.referenceUrl,
             editedVoiceRecordings, reminder.voiceRecordings, voiceRecorderOpen,
             editedMusicBlocks, reminder.musicBlocks,
+            editedMediaBlocks, reminder.mediaBlocks,
+            editedCardStack, reminder.cardStack,
             editedLocation, reminder.location,
             reminder.journal, journalCreating, journalEditing, reminder.mood
         ) {
             buildSet {
                 add("text")
                 if (editing) {
+                    if (editedCardStack != null) add("card_stack")
                     if (checklistBlockOpen || editedChecklistItems.isNotEmpty() || reminder.isChecklist) add("checklist")
                     if (editedAttachments.any { it.type == AttachmentType.IMAGE }) add("photos")
                     if (editedAttachments.any { it.type != AttachmentType.IMAGE } || editedReferenceUrl != null) add("files")
                     if (editedVoiceRecordings.isNotEmpty() || voiceRecorderOpen) add("voice")
                     if (editedMusicBlocks.isNotEmpty()) add("music")
+                    if (editedMediaBlocks.isNotEmpty()) add("media")
                     if (editedLocation != null) add("location")
                     if (reminder.mood != null) add("mood")
                     if (reminder.journal != null || journalCreating || journalEditing) add("journal")
                 } else {
+                    if (reminder.cardStack != null) add("card_stack")
                     if (reminder.checklistItems.isNotEmpty()) add("checklist")
                     if (reminder.attachments.any { it.type == AttachmentType.IMAGE }) add("photos")
                     if (reminder.attachments.any { it.type != AttachmentType.IMAGE } || reminder.referenceUrl != null) add("files")
                     if (reminder.voiceRecordings.isNotEmpty()) add("voice")
                     if (reminder.musicBlocks.isNotEmpty()) add("music")
+                    if (reminder.mediaBlocks.isNotEmpty()) add("media")
                     if (reminder.location != null) add("location")
                     if (reminder.mood != null) add("mood")
                     if (reminder.journal != null || journalCreating) add("journal")
@@ -698,6 +722,8 @@ fun ReminderDetailScreen(
             editedText, reminder.text, editedChecklistItems, reminder.checklistItems,
             editedAttachments, reminder.attachments, editedReferenceUrl, reminder.referenceUrl,
             editedVoiceRecordings, reminder.voiceRecordings, editedMusicBlocks, reminder.musicBlocks,
+            editedMediaBlocks, reminder.mediaBlocks,
+            editedCardStack, reminder.cardStack,
             editedLocation, reminder.location, reminder.journal, editedJournalMood, editedJournalText, reminder.mood,
             editing
         ) {
@@ -707,6 +733,12 @@ fun ReminderDetailScreen(
                     title = "Not Metni",
                     subtitle = if (editing) editedText.ifBlank { "Boş not" } else reminder.text.ifBlank { "Boş not" },
                     glyph = ActionGlyph.Note
+                ),
+                "card_stack" to ContentBlockDescriptor(
+                    key = "card_stack",
+                    title = "Kart Yığını",
+                    subtitle = "${(if (editing) editedCardStack else reminder.cardStack)?.cards?.size ?: 0} kart",
+                    glyph = ActionGlyph.Cards
                 ),
                 "checklist" to ContentBlockDescriptor(
                     key = "checklist",
@@ -741,6 +773,12 @@ fun ReminderDetailScreen(
                     title = "Müzik",
                     subtitle = "${(if (editing) editedMusicBlocks else reminder.musicBlocks).size} parça",
                     glyph = ActionGlyph.Music
+                ),
+                "media" to ContentBlockDescriptor(
+                    key = "media",
+                    title = "Film & Dizi",
+                    subtitle = "${(if (editing) editedMediaBlocks else reminder.mediaBlocks).size} içerik",
+                    glyph = ActionGlyph.Video
                 ),
                 "location" to ContentBlockDescriptor(
                     key = "location",
@@ -959,17 +997,21 @@ fun ReminderDetailScreen(
                     editedAttachments, reminder.attachments, editedReferenceUrl, reminder.referenceUrl,
                     editedVoiceRecordings, reminder.voiceRecordings, voiceRecorderOpen,
                     editedMusicBlocks, reminder.musicBlocks,
+                    editedMediaBlocks, reminder.mediaBlocks,
+                    editedCardStack, reminder.cardStack,
                     editedLocation, reminder.location,
                     reminder.journal, journalCreating, journalEditing, reminder.mood
                 ) {
                     currentOrder.filter { blockKey ->
                         when (blockKey) {
                             "text" -> true
+                            "card_stack" -> (if (editing) editedCardStack else reminder.cardStack) != null
                             "checklist" -> if (editing) (checklistBlockOpen || editedChecklistItems.isNotEmpty() || reminder.isChecklist) else reminder.checklistItems.isNotEmpty()
                             "photos" -> (if (editing) editedAttachments else reminder.attachments).any { it.type == AttachmentType.IMAGE }
                             "files" -> (if (editing) editedAttachments else reminder.attachments).any { it.type != AttachmentType.IMAGE } || (if (editing) editedReferenceUrl else reminder.referenceUrl) != null
                             "voice" -> (if (editing) editedVoiceRecordings else reminder.voiceRecordings).isNotEmpty() || (editing && voiceRecorderOpen)
                             "music" -> (if (editing) editedMusicBlocks else reminder.musicBlocks).isNotEmpty()
+                            "media" -> (if (editing) editedMediaBlocks else reminder.mediaBlocks).isNotEmpty()
                             "location" -> (if (editing) editedLocation else reminder.location) != null
                             "mood" -> reminder.mood != null
                             "journal" -> if (editing) (reminder.journal != null || journalCreating || journalEditing) else (reminder.journal != null || journalCreating)
@@ -1294,6 +1336,34 @@ fun ReminderDetailScreen(
                                 onRemove = { id -> editedMusicBlocks = editedMusicBlocks.filterNot { it.id == id } }
                             )
                         }
+                        "media" -> {
+                            MediaContentSection(
+                                blocks = if (editing) editedMediaBlocks else reminder.mediaBlocks,
+                                designStyle = designStyle, editing = editing && !savingDetail,
+                                onRemove = { id -> editedMediaBlocks = editedMediaBlocks.filterNot { it.id == id } }
+                            )
+                        }
+                        "card_stack" -> {
+                            val stack = if (editing) editedCardStack else reminder.cardStack
+                            if (stack != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .bringIntoViewRequester(cardStackBringIntoViewRequester)
+                                ) {
+                                    CardStackContentSection(
+                                        block = stack,
+                                        designStyle = designStyle,
+                                        editing = editing && !savingDetail,
+                                        onUpdate = { editedCardStack = it },
+                                        onRemove = {
+                                            editedCardStack = null
+                                            editedContentBlockOrder = editedContentBlockOrder.filter { it != "card_stack" }
+                                        }
+                                    )
+                                }
+                            }
+                        }
                         "location" -> {
                             val place = if (editing) editedLocation else reminder.location
                             if (place != null) {
@@ -1481,6 +1551,24 @@ fun ReminderDetailScreen(
                             editedMusicBlocks = editedMusicBlocks + track
                             musicSearchOpen = false
                         })
+                }
+
+                if (mediaSearchOpen && editing) {
+                    MediaSearchSheet(
+                        designStyle = designStyle,
+                        onDismiss = { mediaSearchOpen = false },
+                        onSelect = { mediaBlock ->
+                            val alreadyExists = editedMediaBlocks.any { existing ->
+                                (!existing.providerId.isNullOrBlank() && existing.providerId == mediaBlock.providerId) ||
+                                existing.providerUrl == mediaBlock.providerUrl ||
+                                (existing.title.equals(mediaBlock.title, ignoreCase = true) && existing.type == mediaBlock.type && existing.year == mediaBlock.year)
+                            }
+                            if (!alreadyExists) {
+                                editedMediaBlocks = editedMediaBlocks + mediaBlock
+                            }
+                            mediaSearchOpen = false
+                        }
+                    )
                 }
 
                 Column(
@@ -1708,6 +1796,7 @@ fun ReminderDetailScreen(
                         val photoCount = editedAttachments.count { it.type == AttachmentType.IMAGE }
                         val fileCount = editedAttachments.count { it.type != AttachmentType.IMAGE }
                         val musicCount = editedMusicBlocks.size
+                        val mediaCount = editedMediaBlocks.size
                         val voiceCount = editedVoiceRecordings.size
                         val checklistCount = editedChecklistItems.size
 
@@ -1794,6 +1883,16 @@ fun ReminderDetailScreen(
                         DetailQuickActionButton(
                             designStyle = designStyle,
                             reduceAnimations = reduceAnimations,
+                            glyph = ActionGlyph.Video,
+                            description = "Film & Dizi",
+                            enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
+                            active = mediaCount > 0,
+                            count = if (mediaCount > 0) mediaCount else null,
+                            onClick = { focusManager.clearFocus(); keyboard?.hide(); mediaSearchOpen = true }
+                        )
+                        DetailQuickActionButton(
+                            designStyle = designStyle,
+                            reduceAnimations = reduceAnimations,
                             glyph = ActionGlyph.AudioWave,
                             description = "Ses",
                             enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
@@ -1816,6 +1915,39 @@ fun ReminderDetailScreen(
                                 journalEditing = reminder.journal != null
                                 journalCreating = reminder.journal == null
                                 showMoodSelector = false
+                            }
+                        )
+                        DetailQuickActionButton(
+                            designStyle = designStyle,
+                            reduceAnimations = reduceAnimations,
+                            glyph = ActionGlyph.Cards,
+                            description = "Kart Yığını",
+                            enabled = !savingDetail,
+                            active = editedCardStack != null,
+                            count = editedCardStack?.cards?.size?.takeIf { it > 0 },
+                            onClick = {
+                                focusManager.clearFocus()
+                                keyboard?.hide()
+                                val wasNull = editedCardStack == null
+                                if (wasNull) {
+                                    editedCardStack = CardStackBlock(
+                                        prompt = null,
+                                        cards = listOf(CardStackCard())
+                                    )
+                                    val currentOrder = (if (editedContentBlockOrder.isNotEmpty()) editedContentBlockOrder else (reminder.contentBlockOrder.ifEmpty { DEFAULT_BLOCK_ORDER })).toMutableList()
+                                    if ("card_stack" !in currentOrder) {
+                                        currentOrder.add("card_stack")
+                                    }
+                                    editedContentBlockOrder = currentOrder
+                                }
+                                coroutineScope.launch {
+                                    if (wasNull) {
+                                        delay(80)
+                                    }
+                                    try {
+                                        cardStackBringIntoViewRequester.bringIntoView()
+                                    } catch (_: Exception) {}
+                                }
                             }
                         )
                         DetailQuickActionButton(
@@ -1985,6 +2117,8 @@ fun ReminderDetailScreen(
                                             if (reminder.isImportant) starBorderColorIndex else reminder.starBorderColorIndex,
                                             if (accentStart != null && accentEnd != null) gradientBlendFraction else null,
                                             customSolidColorArgb, editedAttachments, editedVoiceRecordings, editedLocation, editedReferenceUrl, editedMusicBlocks,
+                                            editedMediaBlocks,
+                                            editedCardStack,
                                             editedContentBlockOrder
                                         )
                                     } finally {
@@ -2034,7 +2168,10 @@ fun ReminderDetailScreen(
                             editedAttachments = reminder.attachments
                             editedVoiceRecordings = reminder.voiceRecordings
                             editedMusicBlocks = reminder.musicBlocks
+                            editedMediaBlocks = reminder.mediaBlocks
+                            editedCardStack = reminder.cardStack
                             musicSearchOpen = false
+                            mediaSearchOpen = false
                             voiceRecorderOpen = false
                             voiceRecordingActive = false
                             editedReferenceUrl = reminder.referenceUrl
@@ -2148,7 +2285,7 @@ fun ReminderDetailScreen(
 }
 
 
-private val DEFAULT_BLOCK_ORDER = listOf("text", "mood", "checklist", "photos", "files", "voice", "music", "location", "journal")
+private val DEFAULT_BLOCK_ORDER = listOf("text", "card_stack", "mood", "checklist", "photos", "files", "voice", "music", "media", "location", "journal")
 
 private fun resolveBlockOrder(savedOrder: List<String>?, activeKeys: Set<String>): List<String> {
     val base = if (!savedOrder.isNullOrEmpty()) savedOrder else DEFAULT_BLOCK_ORDER
@@ -2858,7 +2995,7 @@ private fun DetailAction(
 @Composable
 private fun DetailPreview() {
     BigBosTheme {
-        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> true }, {})
+        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> true }, {})
     }
 }
 

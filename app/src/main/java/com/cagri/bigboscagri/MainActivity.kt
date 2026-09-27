@@ -159,6 +159,29 @@ class MainActivity : ComponentActivity() {
                                 }
                                 if (success) createdId else null
                             },
+                            onAddSuggestedReal = { text, musicBlock, mediaBlock, cardStackBlock ->
+                                var createdId: Long? = null
+                                val success = perform(warnIfBlocked = true) {
+                                    val newest = repository.add(
+                                        text = text,
+                                        alertAt = null,
+                                        repeatRule = RecurrenceRule.NONE,
+                                        customCategoryId = null,
+                                        isChecklist = false,
+                                        checklistItems = emptyList(),
+                                        sendImmediateNotification = false,
+                                        referenceUrl = null,
+                                        attachments = emptyList(),
+                                        voiceRecordings = emptyList(),
+                                        musicBlocks = musicBlock?.let { listOf(it) } ?: emptyList(),
+                                        mediaBlocks = mediaBlock?.let { listOf(it) } ?: emptyList(),
+                                        cardStack = cardStackBlock,
+                                        location = null
+                                    )
+                                    createdId = newest.id
+                                }
+                                if (success) createdId else null
+                            },
                             onToggleChecklistItem = { reminderId, itemId ->
                                 mutate {
                                     repository.toggleChecklistItem(reminderId, itemId)
@@ -174,11 +197,13 @@ class MainActivity : ComponentActivity() {
                                 if (item?.shouldPinNotification == true) ReminderNotifications.show(this@MainActivity, item)
                                 else { ReminderNotifications.cancel(this@MainActivity, id); waiting.remove(id) }
                             } },
-                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, voiceRecordings, location, referenceUrl, musicBlocks, contentBlockOrder -> perform {
+                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, voiceRecordings, location, referenceUrl, musicBlocks, mediaBlocks, cardStack, contentBlockOrder -> perform {
                                 val before = repository.load().firstOrNull { it.id == id } ?: error("Hatırlatıcı artık mevcut değil")
                                 val updated = repository.edit(id, text, accentStart, accentEnd, customCategoryId, checklistItems = checklistItems,
                                     starBorderColorIndex = starBorderColorIndex, gradientBlendFraction = gradientBlendFraction,
                                     customSolidColorArgb = customSolidColorArgb, attachments = attachments, voiceRecordings = voiceRecordings, musicBlocks = musicBlocks,
+                                    mediaBlocks = mediaBlocks,
+                                    cardStack = cardStack, updateCardStack = true,
                                     location = location, updateLocation = true,
                                     referenceUrl = referenceUrl, updateReferenceUrl = true,
                                     contentBlockOrder = contentBlockOrder).firstOrNull { it.id == id }

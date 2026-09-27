@@ -116,7 +116,7 @@ fun MusicContentSection(blocks: List<MusicBlock>, designStyle: DesignStyle, edit
                         ActionIcon(ActionGlyph.Close, Modifier.size(15.dp).semantics { contentDescription = "Müziği kaldır" }, Color(0xFFB8B8C2))
                     }
                 }
-                MusicCard(block, activeId == block.id, { activeId = block.id }, { ambience = it })
+                MusicTrackCard(block, activeId == block.id, { activeId = block.id }, { ambience = it })
             }
         }
     }
@@ -155,7 +155,12 @@ private fun MusicArtwork(block: MusicBlock, modifier: Modifier, onAmbience: ((Co
 }
 
 @Composable
-private fun MusicCard(block: MusicBlock, selected: Boolean, onActivate: () -> Unit, onAmbience: (Color) -> Unit) {
+fun MusicTrackCard(
+    block: MusicBlock,
+    selected: Boolean = true,
+    onActivate: () -> Unit = {},
+    onAmbience: (Color) -> Unit = {}
+) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current
     val audioManager = remember { context.getSystemService(AudioManager::class.java) }
