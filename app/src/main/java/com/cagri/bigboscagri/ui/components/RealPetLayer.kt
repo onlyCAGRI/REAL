@@ -38,10 +38,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.data.ReminderItem
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
 import kotlin.random.Random
@@ -785,6 +787,48 @@ fun RealPetLayer(
             }
         }
 
+        // Detail navigation journey (enter/exit Detail screen)
+        var lastDetailEntranceScenario by remember { mutableStateOf<RealPetDetailEntranceScenario?>(null) }
+        var lastDetailReturnScenario by remember { mutableStateOf<RealPetDetailReturnScenario?>(null) }
+
+        val detailNav = RealPetRuntime.detailNavigation
+        LaunchedEffect(detailNav?.token, widthPx, heightPx) {
+            val nav = detailNav ?: return@LaunchedEffect
+            val tokenKey = "detailNav:${nav.token}"
+
+            actionScope.executeClaimedPetEvent(
+                tokenKey = tokenKey,
+                owner = if (nav.isEntering) "detailEnter" else "detailExit",
+                maxWaitMs = 8_000L,
+                canExecute = {
+                    !nav.isEntering || actionScope.visibleDetailPerches().isNotEmpty() ||
+                        RealPetRuntime.perches[REAL_PET_PERCH_DETAIL_BOTTOM_BAR] != null
+                },
+                consumeOnTimeout = true,
+                onConsume = { RealPetRuntime.consumeDetailNavigation(nav.token) }
+            ) {
+                if (RealPetRuntime.presence == RealPetPresence.Hidden) return@executeClaimedPetEvent
+                if (nav.isEntering) {
+                    delay(120L)
+                    val candidates = RealPetDetailEntranceScenario.entries.filter { it != lastDetailEntranceScenario }
+                    val scenario = if (candidates.isNotEmpty()) candidates.random(random) else RealPetDetailEntranceScenario.entries.random(random)
+                    lastDetailEntranceScenario = scenario
+                    when (scenario) {
+                        RealPetDetailEntranceScenario.DropOntoTopCard -> actionScope.performDetailEntranceTopCardDrop(nav.reminderId)
+                        RealPetDetailEntranceScenario.TravelDownCards -> actionScope.performDetailEntranceTravelDown(nav.reminderId)
+                        RealPetDetailEntranceScenario.SideEntrance -> actionScope.performDetailEntranceSide(nav.reminderId)
+                        RealPetDetailEntranceScenario.BottomBarExplorer -> actionScope.performDetailEntranceBottomBar(nav.reminderId)
+                    }
+                } else {
+                    delay(120L)
+                    val candidates = RealPetDetailReturnScenario.entries.filter { it != lastDetailReturnScenario }
+                    val scenario = if (candidates.isNotEmpty()) candidates.random(random) else RealPetDetailReturnScenario.entries.random(random)
+                    lastDetailReturnScenario = scenario
+                    actionScope.performDetailReturn(nav.reminderId, scenario)
+                }
+            }
+        }
+
         var lastGuestScenario by remember { mutableStateOf<RealPetGuestScenario?>(null) }
 
         // Scenario-driven visitor loop
@@ -811,7 +855,7 @@ fun RealPetLayer(
 
                 val cards = actionScope.visibleReminderPerches()
                 val categories = actionScope.visibleCategorySurfacePerches()
-                val details = actionScope.visibleDetailPerches()
+                val details = (actionScope.visibleDetailPerches() + listOfNotNull(actionScope.detailBottomBarPerch())).distinct()
                 var scenario = pickRealPetGuestScenario(
                     random = random,
                     hasCards = cards.isNotEmpty(),
@@ -844,19 +888,33 @@ fun RealPetLayer(
                 }
                 lastGuestScenario = scenario
 
-                val scenarioJob = coroutineContext[Job]
+                val scenarioJob = Job(coroutineContext[Job])
                 val acquired = motionMutex.tryLock()
-                if (!acquired) continue
+                if (!acquired) {
+                    scenarioJob.cancel()
+                    continue
+                }
                 actionScope.activeScenarioJob = scenarioJob
                 actionScope.activeMotionOwner = "scenario:${scenario.name}"
                 val endedVisit = try {
-                    val scenarioEndedVisit = actionScope.runGuestScenario(scenario)
-                    // One autonomous visit runs exactly one coherent scenario.
-                    // Scenarios that did not leave on their own exit immediately after finishing.
-                    if (!scenarioEndedVisit && RealPetRuntime.presence != RealPetPresence.Hidden) {
-                        actionScope.runOffscreenAndLeave()
+                    val scenarioEndedVisit = try {
+                        withContext(scenarioJob) {
+                            actionScope.runGuestScenario(scenario)
+                        }
+                    } catch (e: CancellationException) {
+                        if (!coroutineContext.isActive) throw e
+                        false
                     }
-                    scenarioEndedVisit || RealPetRuntime.presence == RealPetPresence.Hidden
+                    val isOnDetail = actionScope.visibleDetailPerches().isNotEmpty() ||
+                        RealPetRuntime.perches[REAL_PET_PERCH_DETAIL_BOTTOM_BAR] != null
+                    // One autonomous visit runs exactly one coherent scenario on the main list.
+                    // On Detail page, pet stays active until visit expiry or back navigation.
+                    if (!scenarioEndedVisit && RealPetRuntime.presence != RealPetPresence.Hidden) {
+                        if (!isOnDetail) {
+                            actionScope.runOffscreenAndLeave()
+                        }
+                    }
+                    scenarioEndedVisit || (!isOnDetail && RealPetRuntime.presence == RealPetPresence.Hidden)
                 } finally {
                     actionScope.activeScenarioJob = null
                     actionScope.activeMotionOwner = null
@@ -864,6 +922,7 @@ fun RealPetLayer(
                         motionProgress.snapTo(0f)
                         actionScope.motion = RealPetMotion.None
                     }
+                    scenarioJob.complete()
                     motionMutex.unlock()
                 }
                 if (endedVisit || RealPetRuntime.presence == RealPetPresence.Hidden) return@LaunchedEffect

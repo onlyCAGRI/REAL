@@ -244,7 +244,7 @@ private data class FaceV2Params(
 private val FaceAnchorsV2 = listOf(
     // Kötü: small, round eyes + a clear but soft frown. Keep brows subtle so
     // the base expression reads as "bad/sad" rather than automatically angry.
-    FaceV2Params(0.105f, 0.105f, 0.385f, 0.225f, 0.37f, 0.675f, -0.82f, 0.08f),
+    FaceV2Params(0.105f, 0.105f, 0.385f, 0.225f, 0.42f, 0.675f, -0.82f, 0.08f),
     // Zor: slightly tired / compressed.
     FaceV2Params(0.19f, 0.064f, 0.400f, 0.245f, 0.34f, 0.660f, -0.38f, 0.18f),
     // Normal: preserve the familiar neutral REAL face.
@@ -555,7 +555,7 @@ fun MoodV2FullScreen(
                     1 -> {
                         Text(
                             text = when {
-                                isReminderMoodFlow -> "Bu REAL nasıl geçti?"
+                                isReminderMoodFlow -> "How did this REAL feel?"
                                 scope == MoodScope.MOMENT -> "Şu an içeride hava nasıl?"
                                 else -> "Bugünün havası nasıldı?"
                             },
@@ -1106,15 +1106,6 @@ fun MoodV2Selector(
         modifier = selectorModifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "Bugün nasılsın?",
-            color = Color(0xFFB6B6C0),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
-
-        Spacer(Modifier.height(8.dp))
-
         Canvas(
             modifier = Modifier
                 .size(116.dp)

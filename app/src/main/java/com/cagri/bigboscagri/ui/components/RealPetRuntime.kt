@@ -100,6 +100,12 @@ enum class RealPetTokenState {
     CONSUMED
 }
 
+data class RealPetDetailNavigation(
+    val token: Int,
+    val reminderId: Long,
+    val isEntering: Boolean
+)
+
 object RealPetRuntime {
     val perches = mutableStateMapOf<String, Rect>()
 
@@ -243,6 +249,10 @@ object RealPetRuntime {
     private val newCardState = mutableStateOf<Long?>(null)
     val newCardReminderId: Long? get() = newCardState.value
 
+    private var nextDetailNavToken = 0
+    private val detailNavigationState = mutableStateOf<RealPetDetailNavigation?>(null)
+    val detailNavigation: RealPetDetailNavigation? get() = detailNavigationState.value
+
     // One global anti-spam gap plus per-event cooldowns keeps the cat playful rather than noisy.
     private var lastEventElapsedRealtime = 0L
     private var lastEventType: String? = null
@@ -380,6 +390,24 @@ object RealPetRuntime {
         if (newCardState.value == reminderId) newCardState.value = null
     }
 
+    fun noteDetailEntered(reminderId: Long) {
+        if (presence == RealPetPresence.Hidden) return
+        nextDetailNavToken += 1
+        detailNavigationState.value = RealPetDetailNavigation(nextDetailNavToken, reminderId, isEntering = true)
+    }
+
+    fun noteDetailExited(reminderId: Long) {
+        if (presence == RealPetPresence.Hidden) return
+        nextDetailNavToken += 1
+        detailNavigationState.value = RealPetDetailNavigation(nextDetailNavToken, reminderId, isEntering = false)
+    }
+
+    fun consumeDetailNavigation(token: Int) {
+        if (detailNavigationState.value?.token == token) {
+            detailNavigationState.value = null
+        }
+    }
+
     /** Genuine interaction with the cat only extends the current visit; there is no touch-hunger timer. */
     fun noteUserTouch() {
         extendVisit(12_000L)
@@ -414,6 +442,7 @@ object RealPetRuntime {
         cooldowns.clear()
         celebrationState.value = null
         newCardState.value = null
+        detailNavigationState.value = null
         scenarioTestRequestState.value = null
         commandState.value = null
         prankState.value = null

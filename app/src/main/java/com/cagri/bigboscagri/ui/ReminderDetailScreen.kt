@@ -245,8 +245,11 @@ fun ReminderDetailScreen(
     val firstItemFocusRequester = remember { FocusRequester() }
     var shouldFocusFirstItem by remember { mutableStateOf(false) }
 
-    LaunchedEffect(reminder.id) {
-        RealPetRuntime.requestDropTo(REAL_PET_PERCH_DETAIL_BOTTOM_BAR)
+    DisposableEffect(reminder.id) {
+        RealPetRuntime.noteDetailEntered(reminder.id)
+        onDispose {
+            RealPetRuntime.noteDetailExited(reminder.id)
+        }
     }
 
     LaunchedEffect(shouldFocusFirstItem) {

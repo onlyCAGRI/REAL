@@ -1,8 +1,26 @@
 package com.cagri.bigboscagri.ui.components
 
 import android.os.SystemClock
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlin.math.abs
 import kotlin.random.Random
+
+internal enum class RealPetDetailEntranceScenario {
+    DropOntoTopCard,
+    TravelDownCards,
+    SideEntrance,
+    BottomBarExplorer
+}
+
+internal enum class RealPetDetailReturnScenario {
+    JumpToComposer,
+    StayWithReminderCard,
+    LeaveOffscreen
+}
 
 /**
  * Scenario engine and selection orchestration for REAL pet guest visits.
@@ -61,6 +79,36 @@ internal fun RealPetActionScope.visibleDetailPerches(): List<String> =
                 bounds.right >= 0f && bounds.left <= widthPx
         }
         .map { it.key }
+
+internal fun RealPetActionScope.visibleDetailBlockPerches(reminderId: Long? = null): List<String> =
+    RealPetRuntime.perches.entries
+        .filter { (id, bounds) ->
+            id.startsWith(if (reminderId != null) "real_pet:detail:$reminderId:block:" else "real_pet:detail:") &&
+                ":block:" in id &&
+                bounds.bottom >= 0f && bounds.top <= heightPx &&
+                bounds.right >= 0f && bounds.left <= widthPx
+        }
+        .map { it.key }
+
+internal fun RealPetActionScope.orderedDetailPerches(reminderId: Long? = null): List<String> =
+    visibleDetailBlockPerches(reminderId).sortedBy { id ->
+        RealPetRuntime.perches[id]?.top ?: Float.MAX_VALUE
+    }
+
+internal fun RealPetActionScope.topDetailBlockPerch(reminderId: Long? = null): String? =
+    orderedDetailPerches(reminderId).firstOrNull()
+
+internal fun RealPetActionScope.bottomDetailBlockPerch(reminderId: Long? = null): String? =
+    orderedDetailPerches(reminderId).lastOrNull()
+
+internal fun RealPetActionScope.detailBottomBarPerch(): String? =
+    REAL_PET_PERCH_DETAIL_BOTTOM_BAR.takeIf {
+        val bounds = RealPetRuntime.perches[it]
+        bounds != null && bounds.bottom >= 0f && bounds.top <= heightPx
+    }
+
+internal fun RealPetActionScope.detailPerchFallback(reminderId: Long? = null): String? =
+    topDetailBlockPerch(reminderId) ?: detailBottomBarPerch()
 
 internal fun RealPetActionScope.visibleCategorySurfacePerches(): List<String> =
     RealPetRuntime.perches.entries
@@ -396,7 +444,7 @@ internal suspend fun RealPetActionScope.runGuestScenario(scenario: RealPetGuestS
         }
 
         RealPetGuestScenario.DetailExplorer -> {
-            val details = visibleDetailPerches()
+            val details = (visibleDetailPerches() + listOfNotNull(detailBottomBarPerch())).distinct()
             if (details.isNotEmpty()) {
                 val first = details[random.nextInt(details.size)]
                 if (first != anchorId) moveToPerch(first)
@@ -444,4 +492,315 @@ internal suspend fun RealPetActionScope.runGuestScenario(scenario: RealPetGuestS
         }
     }
     return false
+}
+
+internal suspend fun RealPetActionScope.performDetailEntranceTopCardDrop(reminderId: Long) {
+    val targetPerch = topDetailBlockPerch(reminderId) ?: detailBottomBarPerch() ?: return
+    val bounds = RealPetRuntime.perches[targetPerch] ?: return
+    val targetRange = realPetPerchRange(bounds.left, bounds.right, petSizePx, sidePaddingPx, maxX)
+    val targetX = (targetRange.start + targetRange.endInclusive) / 2f
+    val targetY = perchY(targetPerch, bounds)
+
+    if (sleepUntil > 0L) {
+        anchorId = targetPerch
+        sleepX = targetX
+        sleepY = targetY
+        x.snapTo(targetX)
+        y.snapTo(targetY)
+        return
+    }
+
+    performDropMotion(
+        targetX = targetX,
+        targetY = targetY,
+        targetPerchId = targetPerch,
+        startX = targetX,
+        startY = -petSizePx,
+        heightPx = with(density) { 48.dp.toPx() }
+    )
+
+    when (random.nextInt(4)) {
+        0 -> sitAndObserve(3_500L, 7_500L)
+        1 -> {
+            state = RealPetState.Idle
+            delay(random.nextLong(1_800L, 3_500L))
+        }
+        2 -> patrolCurrentSurface(running = false)
+        3 -> takeNap(random.nextLong(10_000L, 20_000L))
+    }
+}
+
+internal suspend fun RealPetActionScope.performDetailEntranceTravelDown(reminderId: Long) {
+    val orderedBlocks = orderedDetailPerches(reminderId)
+    val topBlock = orderedBlocks.firstOrNull() ?: detailBottomBarPerch() ?: return
+
+    if (sleepUntil > 0L) {
+        val bounds = RealPetRuntime.perches[topBlock] ?: return
+        val targetRange = realPetPerchRange(bounds.left, bounds.right, petSizePx, sidePaddingPx, maxX)
+        val targetX = (targetRange.start + targetRange.endInclusive) / 2f
+        val targetY = perchY(topBlock, bounds)
+        anchorId = topBlock
+        sleepX = targetX
+        sleepY = targetY
+        x.snapTo(targetX)
+        y.snapTo(targetY)
+        return
+    }
+
+    if (anchorId != topBlock) {
+        val bounds = RealPetRuntime.perches[topBlock]
+        if (bounds != null && random.nextFloat() < 0.5f) {
+            val targetRange = realPetPerchRange(bounds.left, bounds.right, petSizePx, sidePaddingPx, maxX)
+            val targetX = (targetRange.start + targetRange.endInclusive) / 2f
+            val targetY = perchY(topBlock, bounds)
+            performDropMotion(targetX, targetY, topBlock, startX = targetX, startY = -petSizePx, heightPx = with(density) { 36.dp.toPx() })
+        } else {
+            moveToPerch(topBlock)
+        }
+    }
+
+    var currentPerch = topBlock
+    if (orderedBlocks.size > 1) {
+        val hopsCount = if (orderedBlocks.size > 2 && random.nextBoolean()) 2 else 1
+        for (i in 1..hopsCount.coerceAtMost(orderedBlocks.lastIndex)) {
+            val nextBlock = orderedBlocks[i]
+            delay(if (reduceAnimations) 250L else random.nextLong(450L, 850L))
+            moveToPerch(nextBlock)
+            currentPerch = nextBlock
+        }
+    } else {
+        val bottomBar = detailBottomBarPerch()
+        if (bottomBar != null && bottomBar != currentPerch) {
+            delay(if (reduceAnimations) 250L else random.nextLong(450L, 850L))
+            moveToPerch(bottomBar)
+            currentPerch = bottomBar
+        }
+    }
+
+    if (currentPerch != detailBottomBarPerch() && random.nextFloat() < 0.45f) {
+        val bottomBar = detailBottomBarPerch()
+        if (bottomBar != null) {
+            delay(if (reduceAnimations) 250L else random.nextLong(450L, 800L))
+            moveToPerch(bottomBar)
+            currentPerch = bottomBar
+        }
+    }
+
+    when (random.nextInt(6)) {
+        0 -> patrolCurrentSurface(running = false)
+        1 -> patrolCurrentSurface(running = true)
+        2 -> hopOnPerch(currentPerch)
+        3 -> {
+            state = RealPetState.Idle
+            delay(random.nextLong(1_800L, 3_500L))
+        }
+        4 -> sitAndObserve(3_000L, 7_000L)
+        5 -> takeNap(random.nextLong(10_000L, 20_000L))
+    }
+}
+
+internal suspend fun RealPetActionScope.performDetailEntranceSide(reminderId: Long) {
+    val candidateBlocks = orderedDetailPerches(reminderId).take(2)
+    val targetPerch = candidateBlocks.randomOrNull(random) ?: topDetailBlockPerch(reminderId) ?: detailBottomBarPerch() ?: return
+    val bounds = RealPetRuntime.perches[targetPerch] ?: return
+    val targetFraction = 0.25f + random.nextFloat() * 0.50f
+    val target = perchTargetPosition(targetPerch, targetFraction) ?: return
+
+    if (sleepUntil > 0L) {
+        anchorId = targetPerch
+        sleepX = target.x
+        sleepY = target.y
+        x.snapTo(target.x)
+        y.snapTo(target.y)
+        return
+    }
+
+    val enterLeft = random.nextBoolean()
+    val enterStart = if (enterLeft) -petSizePx * 0.95f else widthPx + petSizePx * 0.02f
+    anchorId = null
+    x.snapTo(enterStart)
+    y.snapTo(target.y)
+    facing = if (enterLeft) RealPetFacing.Right else RealPetFacing.Left
+    state = RealPetState.Running
+    motionStartX = enterStart
+    motionStartY = target.y
+    motionTargetX = target.x
+    motionTargetY = target.y
+    motionHeightPx = 0f
+    motion = RealPetMotion.Drop
+    val travelDistDp = abs(target.x - enterStart) / density.density
+    try {
+        if (reduceAnimations) {
+            x.snapTo(target.x)
+        } else {
+            motionProgress.snapTo(0f)
+            motionProgress.animateTo(
+                1f,
+                tween(realPetTravelDuration(travelDistDp, running = true), easing = LinearEasing)
+            )
+        }
+    } finally {
+        motionProgress.snapTo(0f)
+        motion = RealPetMotion.None
+        x.snapTo(target.x)
+        y.snapTo(target.y)
+        lastAnchorX = target.x
+        lastAnchorY = target.y
+        perchProgress.snapTo(targetFraction)
+        anchorId = targetPerch
+        state = RealPetState.Idle
+    }
+
+    RealHaptics.tick(view)
+
+    when (random.nextInt(6)) {
+        0 -> patrolCurrentSurface(running = false)
+        1 -> patrolCurrentSurface(running = true)
+        2 -> hopOnPerch(targetPerch)
+        3 -> sitAndObserve(3_000L, 7_000L)
+        4 -> {
+            state = RealPetState.Idle
+            delay(random.nextLong(1_800L, 3_500L))
+        }
+        5 -> takeNap(random.nextLong(10_000L, 20_000L))
+    }
+}
+
+internal suspend fun RealPetActionScope.performDetailEntranceBottomBar(reminderId: Long) {
+    val bottomBar = detailBottomBarPerch() ?: topDetailBlockPerch(reminderId) ?: return
+    val bounds = RealPetRuntime.perches[bottomBar] ?: return
+
+    if (sleepUntil > 0L) {
+        val targetRange = realPetPerchRange(bounds.left, bounds.right, petSizePx, sidePaddingPx, maxX)
+        val targetX = (targetRange.start + targetRange.endInclusive) / 2f
+        val targetY = perchY(bottomBar, bounds)
+        anchorId = bottomBar
+        sleepX = targetX
+        sleepY = targetY
+        x.snapTo(targetX)
+        y.snapTo(targetY)
+        return
+    }
+
+    if (anchorId != bottomBar) {
+        if (random.nextFloat() < 0.45f) {
+            val targetRange = realPetPerchRange(bounds.left, bounds.right, petSizePx, sidePaddingPx, maxX)
+            val targetX = (targetRange.start + targetRange.endInclusive) / 2f
+            val targetY = perchY(bottomBar, bounds)
+            performDropMotion(targetX, targetY, bottomBar, startX = targetX, startY = -petSizePx, heightPx = with(density) { 36.dp.toPx() })
+        } else {
+            moveToPerch(bottomBar)
+        }
+    }
+
+    val canJumpToBlock = visibleDetailBlockPerches(reminderId).isNotEmpty()
+    val roll = if (canJumpToBlock) random.nextInt(6) else random.nextInt(5)
+
+    when (roll) {
+        0 -> patrolCurrentSurface(running = false)
+        1 -> patrolCurrentSurface(running = true)
+        2 -> sitAndObserve(3_500L, 7_500L)
+        3 -> takeNap(random.nextLong(10_000L, 20_000L))
+        4 -> {
+            hopOnPerch(bottomBar)
+            state = RealPetState.Idle
+            delay(random.nextLong(1_500L, 3_000L))
+        }
+        5 -> {
+            val otherBlocks = visibleDetailBlockPerches(reminderId)
+            if (otherBlocks.isNotEmpty()) {
+                delay(if (reduceAnimations) 250L else random.nextLong(500L, 1_100L))
+                val targetBlock = otherBlocks.random(random)
+                moveToPerch(targetBlock)
+                sitAndObserve(3_000L, 6_000L)
+            }
+        }
+    }
+}
+
+internal suspend fun RealPetActionScope.performDetailReturn(
+    reminderId: Long,
+    preferredScenario: RealPetDetailReturnScenario? = null
+) {
+    if (RealPetRuntime.presence == RealPetPresence.Hidden) return
+
+    val composerPerch = REAL_PET_PERCH_COMPOSER.takeIf { RealPetRuntime.perches[it] != null }
+    val reminderPerch = realPetReminderPerchId(reminderId).takeIf { RealPetRuntime.perches[it] != null }
+
+    val scenario = preferredScenario ?: run {
+        val candidates = mutableListOf<RealPetDetailReturnScenario>()
+        if (composerPerch != null) candidates += RealPetDetailReturnScenario.JumpToComposer
+        if (reminderPerch != null) candidates += RealPetDetailReturnScenario.StayWithReminderCard
+        candidates += RealPetDetailReturnScenario.LeaveOffscreen
+        candidates.random(random)
+    }
+
+    when (scenario) {
+        RealPetDetailReturnScenario.JumpToComposer -> {
+            if (composerPerch != null) {
+                if (sleepUntil > 0L) {
+                    val bounds = RealPetRuntime.perches[composerPerch]
+                    if (bounds != null) {
+                        val pos = perchTargetPosition(composerPerch, 0.5f) ?: Offset(sleepX, sleepY)
+                        anchorId = composerPerch
+                        sleepX = pos.x
+                        sleepY = pos.y
+                        x.snapTo(pos.x)
+                        y.snapTo(pos.y)
+                    }
+                    return
+                }
+                moveToPerch(composerPerch)
+                when (random.nextInt(3)) {
+                    0 -> patrolCurrentSurface(running = false)
+                    1 -> sitAndObserve(3_500L, 8_000L)
+                    2 -> {
+                        state = RealPetState.Idle
+                        delay(random.nextLong(1_800L, 3_500L))
+                    }
+                }
+            } else if (reminderPerch != null) {
+                moveToPerch(reminderPerch)
+                sitAndObserve(3_000L, 7_000L)
+            } else {
+                runOffscreenAndLeave()
+            }
+        }
+
+        RealPetDetailReturnScenario.StayWithReminderCard -> {
+            if (reminderPerch != null) {
+                if (sleepUntil > 0L) {
+                    val bounds = RealPetRuntime.perches[reminderPerch]
+                    if (bounds != null) {
+                        val pos = perchTargetPosition(reminderPerch, 0.5f) ?: Offset(sleepX, sleepY)
+                        anchorId = reminderPerch
+                        sleepX = pos.x
+                        sleepY = pos.y
+                        x.snapTo(pos.x)
+                        y.snapTo(pos.y)
+                    }
+                    return
+                }
+                moveToPerch(reminderPerch)
+                when (random.nextInt(4)) {
+                    0 -> sitAndObserve(4_000L, 9_000L)
+                    1 -> patrolCurrentSurface(running = false)
+                    2 -> {
+                        state = RealPetState.Idle
+                        delay(random.nextLong(2_000L, 4_000L))
+                    }
+                    3 -> takeNap(random.nextLong(12_000L, 25_000L))
+                }
+            } else if (composerPerch != null) {
+                moveToPerch(composerPerch)
+                sitAndObserve(3_500L, 8_000L)
+            } else {
+                runOffscreenAndLeave()
+            }
+        }
+
+        RealPetDetailReturnScenario.LeaveOffscreen -> {
+            runOffscreenAndLeave()
+        }
+    }
 }
