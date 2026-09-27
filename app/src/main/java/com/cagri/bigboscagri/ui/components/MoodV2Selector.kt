@@ -762,23 +762,23 @@ fun MoodV2FullScreen(
                 Text("×", color = Color(0xFFE0E0E5), fontSize = 28.sp, lineHeight = 28.sp)
             }
 
-            val saveShape = RoundedCornerShape(24.dp)
+            val ctaShape = RoundedCornerShape(22.dp)
             Row(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp)
-                    .clip(saveShape)
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 18.dp)
+                    .clip(ctaShape)
                     .background(if (ctaEnabled) Color(0xFFF3F3F5) else Color(0xFF4A4A50))
                     .clickable(enabled = ctaEnabled, onClick = { advance() })
-                    .padding(horizontal = 20.dp, vertical = 15.dp),
+                    .height(42.dp)
+                    .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     ctaText,
                     color = if (ctaEnabled) Color(0xFF111114) else Color(0xFF9A9AA2),
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }

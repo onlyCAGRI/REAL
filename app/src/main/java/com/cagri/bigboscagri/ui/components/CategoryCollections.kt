@@ -269,17 +269,67 @@ private fun MoodTrackerCategoryCard(
                 ?: sameDay.maxByOrNull { it.details.loggedAt }
         }
     }
-    val latest = remember(entries) { entries.maxByOrNull { it.details.loggedAt } }
-    val accent = latest?.let { moodV2Tint(it.mood) } ?: Color(0xFF9AA8FF)
-    val base = Color(0xFF171923)
-    val cardBrush = remember(accent) {
-        Brush.linearGradient(
-            listOf(
-                lerp(base, accent, 0.42f),
-                lerp(Color(0xFF12141B), accent, 0.20f),
-                Color(0xFF111217)
+    val recentEntries = remember(entries) {
+        entries.sortedByDescending { it.details.loggedAt }.take(5)
+    }
+    val latest = recentEntries.firstOrNull()
+    val recentTints = remember(recentEntries) {
+        recentEntries.map { moodV2Tint(it.mood) }
+    }
+    val fallbackAccent = Color(0xFF9AA8FF)
+    val accent = remember(recentTints) {
+        if (recentTints.isEmpty()) {
+            fallbackAccent
+        } else {
+            var r = 0f
+            var g = 0f
+            var b = 0f
+            var totalWeight = 0f
+            recentTints.forEachIndexed { index, tint ->
+                val weight = 1f / (index + 1)
+                r += tint.red * weight
+                g += tint.green * weight
+                b += tint.blue * weight
+                totalWeight += weight
+            }
+            Color(r / totalWeight, g / totalWeight, b / totalWeight, 1f)
+        }
+    }
+    val cardBrush = remember(recentTints) {
+        when {
+            recentTints.isEmpty() -> Brush.linearGradient(
+                listOf(
+                    lerp(Color(0xFF171923), fallbackAccent, 0.42f),
+                    lerp(Color(0xFF12141B), fallbackAccent, 0.20f),
+                    Color(0xFF111217)
+                )
             )
-        )
+            recentTints.size == 1 -> Brush.linearGradient(
+                listOf(
+                    lerp(Color(0xFF171923), recentTints[0], 0.38f),
+                    lerp(Color(0xFF12141B), recentTints[0], 0.20f),
+                    Color(0xFF111217)
+                )
+            )
+            recentTints.size == 2 -> Brush.linearGradient(
+                listOf(
+                    lerp(Color(0xFF171923), recentTints[0], 0.38f),
+                    lerp(Color(0xFF141620), lerp(recentTints[0], recentTints[1], 0.55f), 0.27f),
+                    lerp(Color(0xFF111217), lerp(recentTints[1], recentTints[0], 0.28f), 0.20f)
+                )
+            )
+            else -> {
+                val count = recentTints.size
+                val colors = recentTints.mapIndexed { index, tint ->
+                    val fraction = index.toFloat() / (count - 1)
+                    val localTint = if (index == 0) tint else lerp(tint, recentTints[0], 0.28f)
+                    val base = lerp(Color(0xFF171923), Color(0xFF111217), fraction)
+                    val alpha = 0.38f - 0.18f * fraction
+                    lerp(base, localTint, alpha)
+                }
+                Brush.linearGradient(colors)
+            }
+        }
     }
     val shape = RoundedCornerShape(26.dp)
     val interaction = remember { MutableInteractionSource() }
