@@ -1,21 +1,21 @@
 package com.cagri.bigboscagri.ui.components
 
+import android.annotation.SuppressLint
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -28,9 +28,8 @@ import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -42,12 +41,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.*
 import com.cagri.bigboscagri.ui.DesignStyle
 import com.cagri.bigboscagri.data.RecurrenceRule
@@ -73,7 +70,7 @@ private val MONTH_VALUES = (1..12).toList()
 private val HOUR_VALUES = (0..23).toList()
 private val MINUTE_VALUES = (0..59).toList()
 
-/** Keeps the picker composed through its exit so both opening and closing stay smooth. */
+
 @Composable
 fun AnimatedDateTimePickerOverlay(
     visible: Boolean,
@@ -133,7 +130,7 @@ fun AnimatedDateTimePickerOverlay(
     }
 }
 
-/** Overload for backwards compatibility */
+
 @Composable
 fun AnimatedDateTimePickerOverlay(
     visible: Boolean,
@@ -163,7 +160,8 @@ fun AnimatedDateTimePickerOverlay(
     )
 }
 
-/** In-window overlay: preserves the same glass scene and never commits a cancelled selection. */
+
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun DateTimePickerOverlay(
     initial: Long?,
@@ -207,25 +205,29 @@ fun DateTimePickerOverlay(
     val date = clampedDate(effectiveYear, month, day)
     val currentTimestamp = reminderTimestamp(date, hour, minute, zone)
     val dateFormat = remember(includeYear) {
-        DateTimeFormatter.ofPattern(if (includeYear) "EEE, dd/MM/yyyy" else "dd/MM", tr)
+        DateTimeFormatter.ofPattern(if (includeYear) "dd/MM/yyyy" else "dd/MM", tr)
     }
-    val view = LocalView.current
+    val weekdayLabel = remember(date) {
+        date.dayOfWeek
+            .getDisplayName(java.time.format.TextStyle.FULL, tr)
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(tr) else it.toString() }
+    }
     val scrollChanged: (String, Boolean) -> Unit = { key, scrolling -> moving = if (scrolling) moving + key else moving - key }
     val controlFill = when {
         reduceDynamicBlur -> Color(0xFF151518)
-        designStyle == DesignStyle.LiquidGlass -> Color(0xFF202329)
+        designStyle == DesignStyle.LiquidGlass -> LiquidGlassTokens.contentColor
         designStyle == DesignStyle.Ice -> Color.White.copy(alpha = 0.055f)
         else -> Color.White.copy(alpha = 0.10f)
     }
     val selectedFill = when {
         reduceDynamicBlur -> Color(0xFF3B3B40)
-        designStyle == DesignStyle.LiquidGlass -> Color(0xFF202329)
+        designStyle == DesignStyle.LiquidGlass -> LiquidGlassTokens.contentColor
         designStyle == DesignStyle.Ice -> Color.White.copy(alpha = 0.13f)
         else -> Color.White.copy(alpha = 0.19f)
     }
     val cardFill = when {
         reduceDynamicBlur -> Color(0xFF1A1A1E)
-        designStyle == DesignStyle.LiquidGlass -> Color(0xFF202329)
+        designStyle == DesignStyle.LiquidGlass -> LiquidGlassTokens.contentColor
         designStyle == DesignStyle.Ice -> Color.White.copy(alpha = 0.06f)
         else -> Color.White.copy(alpha = 0.08f)
     }
@@ -283,8 +285,54 @@ fun DateTimePickerOverlay(
                         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(Modifier.size(34.dp, 3.dp).background(Color(0xFF666669), RoundedCornerShape(2.dp)))
-                            Text(date.format(dateFormat) + " · " + String.format(tr, "%02d:%02d", hour, minute),
-                                color = Color(0xFFC6C6CB), fontSize = 15.sp, modifier = Modifier.padding(vertical = 20.dp))
+                            Box(
+                                Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    modifier = Modifier.then(
+                                        if (reduceAnimations) Modifier
+                                        else Modifier.animateContentSize(
+                                            animationSpec = tween(220, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                                        )
+                                    ),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        weekdayLabel + " · " + date.format(dateFormat) + " · " + String.format(tr, "%02d:%02d", hour, minute),
+                                        color = Color(0xFFD9D9DE),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1
+                                    )
+                                    AnimatedVisibility(
+                                        visible = selectedRepeatRule != RecurrenceRule.NONE,
+                                        enter = if (reduceAnimations) EnterTransition.None
+                                        else fadeIn(tween(160)) + slideInHorizontally(tween(200)) { it / 3 },
+                                        exit = if (reduceAnimations) ExitTransition.None
+                                        else fadeOut(tween(120)) + slideOutHorizontally(tween(160)) { it / 3 }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .clickable(enabled = moving.isEmpty()) { currentSubScreen = PickerSubScreen.Repeat }
+                                                .padding(start = 12.dp, top = 5.dp, bottom = 5.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            ActionIcon(ActionGlyph.Repeat, Modifier.size(13.dp), Color(0xFF91B9FF))
+                                            Text(
+                                                selectedRepeatRule.descriptionFor(currentTimestamp, zone),
+                                                color = Color(0xFFD2D2D8),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                             if (designStyle == DesignStyle.LiquidGlass) {
                                 LiquidSegmentedControl(
                                     labels = listOf("Tarih", "Saat"), selectedIndex = if (timeTab) 1 else 0,
@@ -295,7 +343,7 @@ fun DateTimePickerOverlay(
                             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(controlFill).padding(4.dp)) {
                                 listOf(false to "Tarih", true to "Saat").forEach { (time, label) ->
                                     TextButton(onClick = { timeTab = time }, enabled = moving.isEmpty(), modifier = Modifier.weight(1f)
-                                        .then(if (designStyle == DesignStyle.LiquidGlass && timeTab == time) Modifier.liquidChrome(22.dp) else Modifier.background(if (timeTab == time) selectedFill else Color.Transparent, RoundedCornerShape(22.dp)))) {
+                                        .background(if (timeTab == time) selectedFill else Color.Transparent, RoundedCornerShape(22.dp))) {
                                         Text(label, color = Color.White)
                                     }
                                 }
@@ -394,65 +442,91 @@ fun DateTimePickerOverlay(
                                     }
                                 }
                             }
-                            if (!timeTab) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 10.dp, bottom = 2.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .toggleable(
-                                                value = includeYear,
-                                                role = Role.Checkbox,
-                                                enabled = moving.isEmpty(),
-                                                onValueChange = { enabled ->
-                                                    RealHaptics.toggle(view, on = enabled)
-                                                    includeYear = enabled
-                                                    if (enabled) year = inferredYear
-                                                    day = clampedDate(if (enabled) year else inferredYear, month, day).dayOfMonth
-                                                    error = null
-                                                }
-                                            )
-                                            .padding(horizontal = 6.dp, vertical = 5.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            Modifier.size(23.dp)
-                                                .background(if (includeYear) Color(0xFF6EA8FF) else Color.Transparent, RoundedCornerShape(12.dp))
-                                                .border(1.4.dp, if (includeYear) Color.Transparent else Color(0xFF777780), RoundedCornerShape(12.dp)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            if (includeYear) ActionIcon(ActionGlyph.Check, Modifier.size(15.dp), Color(0xFF111216))
-                                        }
-                                        Text("Yıl gir", color = Color(0xFFE7E7EB), fontSize = 15.sp,
-                                            modifier = Modifier.padding(start = 10.dp, end = 6.dp))
-                                    }
-                                }
-                            }
-
-                            // Repeat Row
-                            Spacer(Modifier.height(10.dp))
-                            Column(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(cardFill)
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().clickable(enabled = moving.isEmpty()) {
-                                        currentSubScreen = PickerSubScreen.Repeat
-                                    }.padding(horizontal = 16.dp, vertical = 13.dp),
+                                    modifier = Modifier
+                                        .weight(0.9f)
+                                        .heightIn(min = 44.dp)
+                                        .clickable(enabled = moving.isEmpty()) {
+                                            val enabled = !includeYear
+                                            includeYear = enabled
+                                            if (enabled) year = inferredYear
+                                            day = clampedDate(if (enabled) year else inferredYear, month, day).dayOfMonth
+                                            error = null
+                                        }
+                                        .padding(horizontal = 4.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.Center
                                 ) {
-                                    Text("Tekrarlama", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    Box(
+                                        Modifier.size(20.dp)
+                                            .background(if (includeYear) Color(0xFF6EA8FF) else Color.Transparent, CircleShape)
+                                            .border(1.2.dp, if (includeYear) Color.Transparent else Color(0xFF777780), CircleShape),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        val repeatSummary = selectedRepeatRule.descriptionFor(currentTimestamp, zone)
-                                        Text(repeatSummary, color = Color(0xFF91B9FF), fontSize = 14.sp)
-                                        ActionIcon(ActionGlyph.ChevronRight, Modifier.size(14.dp), Color(0xFF8E8E96))
+                                        if (includeYear) ActionIcon(ActionGlyph.Check, Modifier.size(13.dp), Color(0xFF111216))
                                     }
+                                    Text(
+                                        "Yıl gir",
+                                        color = Color(0xFFE1E1E6),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(start = 6.dp),
+                                        maxLines = 1
+                                    )
+                                }
+
+                                val repeatSelected = selectedRepeatRule != RecurrenceRule.NONE
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1.15f)
+                                        .heightIn(min = 44.dp)
+                                        .clickable(enabled = moving.isEmpty()) { currentSubScreen = PickerSubScreen.Repeat }
+                                        .padding(horizontal = 4.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        Modifier.size(20.dp)
+                                            .border(1.2.dp, if (repeatSelected) Color(0xFF91B9FF) else Color(0xFF777780), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        ActionIcon(ActionGlyph.Repeat, Modifier.size(11.dp), if (repeatSelected) Color(0xFF91B9FF) else Color(0xFF9A9AA3))
+                                    }
+                                    Text(
+                                        "Tekrarlama",
+                                        color = if (repeatSelected) Color(0xFFDCE7FA) else Color(0xFFE1E1E6),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(start = 5.dp),
+                                        maxLines = 1
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1.05f)
+                                        .heightIn(min = 44.dp)
+                                        .semantics { contentDescription = "Erken uyarı, yakında" }
+                                        .padding(horizontal = 4.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        Modifier.size(20.dp).border(1.2.dp, Color(0xFF777780), CircleShape)
+                                    )
+                                    Text(
+                                        "Erken uyarı",
+                                        color = Color(0xFFA7A7AF),
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(start = 5.dp),
+                                        maxLines = 1
+                                    )
                                 }
                             }
 
@@ -670,7 +744,7 @@ private fun NumberWheel(
                     if (settled == suppressSettleHapticValue) {
                         suppressSettleHapticValue = null
                     } else if (settled != latestValue) {
-                        RealHaptics.tick(view)
+                        if (label != "Yıl") RealHaptics.tick(view)
                         latestOnValue(settled)
                     }
                 }
@@ -720,7 +794,7 @@ private fun NumberWheel(
                     .height(rowHeight)
                     .clickable {
                         if (item != latestValue) {
-                            RealHaptics.tick(view)
+                            if (label != "Yıl") RealHaptics.tick(view)
                             suppressSettleHapticValue = item
                             onValue(item)
                         }

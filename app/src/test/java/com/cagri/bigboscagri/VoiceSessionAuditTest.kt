@@ -14,15 +14,15 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Phase 4.2 & 4.2.1 audit tests for voice session lifecycle, draft safety, callback races,
- * watchdog ownership, share draft integration, checklist mode, and deduplication.
- */
+
+
+
+
 class VoiceSessionAuditTest {
 
-    /**
-     * Models the session token / generation ownership matching VoiceInputController.
-     */
+    
+
+
     private class SimulatedVoiceController(
         val onText: (String) -> Unit,
         val onSubmit: (String) -> Unit,
@@ -70,7 +70,7 @@ class VoiceSessionAuditTest {
             if (phase == VoicePhase.Finishing) {
                 submitOnce()
             } else when (errorCode) {
-                1, 2 -> { // e.g. ERROR_NO_MATCH, ERROR_SPEECH_TIMEOUT
+                1, 2 -> { 
                     draft?.commitResult(null)
                     nextRound(session)
                 }
@@ -140,9 +140,9 @@ class VoiceSessionAuditTest {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // 1. Session Token / Generation Validation
-    // -------------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun staleSessionResultIgnored() {
@@ -208,9 +208,9 @@ class VoiceSessionAuditTest {
         assertEquals(VoicePhase.Idle, controller.phase)
     }
 
-    // -------------------------------------------------------------------------
-    // 2. Finishing Error Semantics & Watchdog Idempotence
-    // -------------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun finishingOnErrorNeverStartsNewRound() {
@@ -230,10 +230,10 @@ class VoiceSessionAuditTest {
         controller.finish(simulateActiveRecognizer = true)
         assertEquals(VoicePhase.Finishing, controller.phase)
 
-        // Error arrives while Finishing (e.g. timeout / no match / busy)
+        
         controller.onError(s, r, 1, "timeout")
 
-        // Must submit accumulated partial and transition to Idle; NEVER schedule next round
+        
         assertEquals("doktora git", submittedText)
         assertEquals(VoicePhase.Idle, controller.phase)
         assertEquals(initialRounds, controller.newRoundsStarted)
@@ -256,12 +256,12 @@ class VoiceSessionAuditTest {
         val watchdogToken = controller.finish(simulateActiveRecognizer = true)
         assertEquals(VoicePhase.Finishing, controller.phase)
 
-        // Result arrives before watchdog
+        
         controller.onResults(s, r, "toplantı")
         assertEquals(1, submitCount)
         assertEquals(VoicePhase.Idle, controller.phase)
 
-        // Old watchdog wakes up later
+        
         controller.fireWatchdog(watchdogToken)
         assertEquals(1, submitCount)
         assertEquals(1, controller.submitCallCount)
@@ -277,27 +277,27 @@ class VoiceSessionAuditTest {
         )
 
         controller.start("")
-        val s1 = controller.finish() // finishes session 1
+        val s1 = controller.finish() 
 
-        // Start session 2 with active recognizer
+        
         controller.start("")
         val s2 = controller.finish(simulateActiveRecognizer = true)
         assertEquals(VoicePhase.Finishing, controller.phase)
 
-        // Stale watchdog from session 1 fires
+        
         controller.fireWatchdog(s1)
 
-        // Session 1 watchdog must be ignored; Session 2 remains in Finishing
+        
         assertEquals(VoicePhase.Finishing, controller.phase)
 
-        // Proper watchdog for Session 2 fires
+        
         controller.fireWatchdog(s2)
         assertEquals(VoicePhase.Idle, controller.phase)
     }
 
-    // -------------------------------------------------------------------------
-    // 3. Share Draft Integration
-    // -------------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun shareDraftPreservedWhenVoiceUsed() {
@@ -307,14 +307,14 @@ class VoiceSessionAuditTest {
             initialIsShareDraft = true
         )
 
-        // Voice recognized: "yarın saat beşte oku"
+        
         session.onVoiceFinalize("yarın saat beşte oku")
 
-        // Title and alertAt are updated
+        
         assertEquals("Oku", session.text)
         assertNotNull(session.alertAt)
 
-        // Share draft metadata is preserved intact
+        
         assertEquals("https://example.com/article/123", session.draftReferenceUrl)
         assertTrue(session.isShareDraft)
         assertTrue(session.isVoiceDraft)
@@ -331,18 +331,18 @@ class VoiceSessionAuditTest {
             onErrorMessage = {}
         )
 
-        // Voice started on share draft, but user stays silent and cancels
+        
         controller.start(initialTitle)
         controller.cancel()
 
-        // Original share title restored, no submit
+        
         assertEquals(initialTitle, restoredText)
         assertEquals(VoicePhase.Idle, controller.phase)
     }
 
-    // -------------------------------------------------------------------------
-    // 4. Checklist Mode Integration
-    // -------------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun checklistModePreservedWhenVoiceUsed() {
@@ -356,13 +356,13 @@ class VoiceSessionAuditTest {
             initialChecklistItems = items
         )
 
-        // Voice finalize updates title and date
+        
         session.onVoiceFinalize("Pazar alışverişi yarın saat onda")
 
         assertEquals("Pazar alışverişi", session.text)
         assertNotNull(session.alertAt)
 
-        // Checklist mode and items remain untouched
+        
         assertTrue(session.isChecklistMode)
         assertEquals(2, session.checklistItems.size)
         assertEquals("Süt", session.checklistItems[0].text)
@@ -393,9 +393,9 @@ class VoiceSessionAuditTest {
         assertEquals(1, session.checklistItems.size)
     }
 
-    // -------------------------------------------------------------------------
-    // 5. Existing Category / Date / Repeat State Precedence
-    // -------------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun manualCategoryAndDatePreservedWhenVoiceHasNoDate() {
@@ -407,13 +407,13 @@ class VoiceSessionAuditTest {
             initialCategoryId = 99L
         )
 
-        // Spoken text contains only title, no date/time or recurrence
+        
         session.onVoiceFinalize("annemi ara")
 
         assertEquals("Annemi ara", session.text)
-        assertEquals(manualAlert, session.alertAt) // Preserved
-        assertEquals(RecurrenceRule.DAILY, session.repeatRule) // Preserved
-        assertEquals(99L, session.customCategoryId) // Preserved
+        assertEquals(manualAlert, session.alertAt) 
+        assertEquals(RecurrenceRule.DAILY, session.repeatRule) 
+        assertEquals(99L, session.customCategoryId) 
     }
 
     @Test
@@ -426,14 +426,14 @@ class VoiceSessionAuditTest {
             initialCategoryId = 99L
         )
 
-        // Spoken text has explicit date and time
+        
         session.onVoiceFinalize("yarın saat beşte toplantı")
 
         assertEquals("Toplantı", session.text)
         assertNotNull(session.alertAt)
-        // Voice alert overrides manual alert
+        
         assertTrue(session.alertAt != manualAlert)
-        // Category and manual recurrence remain preserved (voice didn't specify recurrence)
+        
         assertEquals(RecurrenceRule.DAILY, session.repeatRule)
         assertEquals(99L, session.customCategoryId)
     }
@@ -444,16 +444,16 @@ class VoiceSessionAuditTest {
             initialRepeatRule = RecurrenceRule.DAILY
         )
 
-        // Spoken text specifies weekly recurrence
+        
         session.onVoiceFinalize("her hafta çiçekleri sula")
 
         assertEquals("Çiçekleri sula", session.text)
         assertEquals(RecurrenceRule.WEEKLY, session.repeatRule)
     }
 
-    // -------------------------------------------------------------------------
-    // 6. Duplicate Final Dedupe Safety
-    // -------------------------------------------------------------------------
+    
+    
+    
 
     @Test
     fun deliberateRepetitionSingleRoundPreserved() {
@@ -461,7 +461,7 @@ class VoiceSessionAuditTest {
         draft.updatePartial("ara ara")
         draft.commitResult("ara ara")
 
-        // "ara ara" is legitimate speech and must not be collapsed to "ara"
+        
         assertEquals("ara ara", draft.committed)
         assertEquals("ara ara", draft.text)
     }
@@ -470,15 +470,15 @@ class VoiceSessionAuditTest {
     fun validContinuationAcrossRoundsPreserved() {
         val draft = VoiceDraft("")
 
-        // Round 1
+        
         draft.commitResult("annemi ara")
         assertEquals("annemi ara", draft.committed)
 
-        // Round 2 contains word "ara" again
+        
         draft.updatePartial("yarın tekrar ara")
         draft.commitResult("yarın tekrar ara")
 
-        // Continuation across rounds must append cleanly
+        
         assertEquals("annemi ara yarın tekrar ara", draft.committed)
         assertEquals("annemi ara yarın tekrar ara", draft.text)
     }
@@ -487,15 +487,15 @@ class VoiceSessionAuditTest {
     fun cumulativeEngineResultDeduplicated() {
         val draft = VoiceDraft("")
 
-        // Round 1
+        
         draft.commitResult("annemi ara")
         assertEquals("annemi ara", draft.committed)
 
-        // Round 2: Cumulative recognizer returns full transcript from beginning
+        
         draft.updatePartial("annemi ara yarın")
         draft.commitResult("annemi ara yarın")
 
-        // Must NOT produce "annemi ara annemi ara yarın"
+        
         assertEquals("annemi ara yarın", draft.committed)
         assertEquals("annemi ara yarın", draft.text)
     }
@@ -508,7 +508,7 @@ class VoiceSessionAuditTest {
         draft.commitResult("doktora git")
         assertEquals("doktora git", draft.committed)
 
-        // Duplicate final callback
+        
         draft.commitResult("doktora git")
         assertEquals("doktora git", draft.committed)
         assertEquals("doktora git", draft.text)

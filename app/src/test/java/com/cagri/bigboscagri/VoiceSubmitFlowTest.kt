@@ -32,13 +32,13 @@ class VoiceSubmitFlowTest {
         val saveCalls = mutableListOf<SaveCall>()
         val session = VoiceDraftSession()
 
-        // User speaks and taps mic second time to finalize
+        
         session.onVoiceFinalize("yarın saat beşte annemi ara")
 
-        // 1. Reminder must NOT be saved to repository
+        
         assertTrue(saveCalls.isEmpty())
 
-        // 2. Draft state must be open as voice draft
+        
         assertTrue(session.isVoiceDraft)
         assertEquals("Annemi ara", session.text)
         assertNotNull(session.alertAt)
@@ -48,7 +48,7 @@ class VoiceSubmitFlowTest {
     fun secondMicTapFillsDraftStateWithParsedValues() {
         val session = VoiceDraftSession()
 
-        // "akşam saat yedi ilaçlarımı alıcam her gün"
+        
         session.onVoiceFinalize("akşam saat yedi ilaçlarımı alıcam her gün")
 
         assertEquals("İlaçlarımı al", session.text)
@@ -71,7 +71,7 @@ class VoiceSubmitFlowTest {
         assertEquals("İlaç al", session.text)
         assertNull(session.customCategoryId)
 
-        // User picks category from UI
+        
         session.customCategoryId = 101L
         assertEquals(101L, session.customCategoryId)
         assertEquals("İlaç al", session.text)
@@ -92,7 +92,7 @@ class VoiceSubmitFlowTest {
                 true
             }
 
-        // Explicit ✓ button clicked
+        
         val saved = session.saveExplicitly(mockOnAdd)
         assertTrue(saved)
         assertEquals(1, saveCalls.size)
@@ -104,13 +104,13 @@ class VoiceSubmitFlowTest {
         assertFalse(call.isChecklist)
         assertTrue(call.items.isEmpty())
 
-        // Draft state is reset
+        
         assertFalse(session.isVoiceDraft)
         assertEquals("", session.text)
         assertNull(session.alertAt)
         assertEquals(RecurrenceRule.NONE, session.repeatRule)
 
-        // Subsequent clicks do not save again
+        
         val savedAgain = session.saveExplicitly(mockOnAdd)
         assertFalse(savedAgain)
         assertEquals(1, saveCalls.size)
@@ -120,26 +120,26 @@ class VoiceSubmitFlowTest {
     fun reopeningMicPreservesExistingTranscriptAndAlert() {
         val session = VoiceDraftSession()
 
-        // 1st speech
+        
         session.onVoiceFinalize("yarın saat beşte annemi ara")
         assertEquals("Annemi ara", session.text)
         val initialAlert = session.alertAt
         assertNotNull(initialAlert)
 
-        // User taps mic again to resume speech
+        
         val voiceDraft = VoiceDraft(session.text)
         assertEquals("Annemi ara", voiceDraft.committed)
 
-        // User says "ve marketten süt al"
+        
         voiceDraft.updatePartial("ve marketten süt al")
         voiceDraft.commitResult("ve marketten süt al")
         assertEquals("Annemi ara ve marketten süt al", voiceDraft.text)
 
-        // 2nd speech finalize
+        
         session.onVoiceFinalize(voiceDraft.text)
         assertEquals("Annemi ara ve marketten süt al", session.text)
 
-        // Alert from round 1 is preserved and not duplicated or reset to null
+        
         assertEquals(initialAlert, session.alertAt)
         assertTrue(session.isVoiceDraft)
     }
@@ -152,20 +152,20 @@ class VoiceSubmitFlowTest {
         session.onVoiceFinalize("yarın saat 5te toplantıya gir")
         assertTrue(session.isVoiceDraft)
 
-        // 1. If keyboard is open, Back dismisses keyboard first
+        
         val result1 = session.handleBack(isEditing = true)
         assertEquals(VoiceDraftSession.BackResult.DismissKeyboard, result1)
         assertTrue(session.isVoiceDraft)
         assertTrue(saveCalls.isEmpty())
 
-        // 2. Second Back closes the voice draft without saving
+        
         val result2 = session.handleBack(isEditing = false)
         assertEquals(VoiceDraftSession.BackResult.CancelDraft, result2)
         assertFalse(session.isVoiceDraft)
         assertEquals("", session.text)
         assertNull(session.alertAt)
 
-        // Reminder repository is NEVER called
+        
         assertTrue(saveCalls.isEmpty())
     }
 }

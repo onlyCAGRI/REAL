@@ -97,12 +97,12 @@ fun PermissionSheet(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = {} // Prevent clicks on the sheet from bubbling up
+                            onClick = {} 
                         )
                         .padding(horizontal = 24.dp, vertical = 20.dp)
                         .navigationBarsPadding()
                 ) {
-                    // Drag handle
+                    
                     Box(
                         modifier = Modifier
                             .size(width = 38.dp, height = 4.dp)
@@ -112,7 +112,7 @@ fun PermissionSheet(
 
                     Spacer(Modifier.height(20.dp))
 
-                    // Title
+                    
                     Text(
                         text = title,
                         color = Color.White,
@@ -123,7 +123,7 @@ fun PermissionSheet(
 
                     Spacer(Modifier.height(8.dp))
 
-                    // Description
+                    
                     Text(
                         text = description,
                         color = Color(0xFFA4A4AD),
@@ -133,7 +133,7 @@ fun PermissionSheet(
 
                     Spacer(Modifier.height(28.dp))
 
-                    // Primary Button: "İzin ver"
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -153,7 +153,7 @@ fun PermissionSheet(
 
                     Spacer(Modifier.height(10.dp))
 
-                    // Secondary Button: "Daha sonra"
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

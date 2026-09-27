@@ -1,6 +1,7 @@
 package com.cagri.bigboscagri.ui.components
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -31,6 +32,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +52,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -65,10 +70,12 @@ import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.data.CategoryColorOverride
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderCategory
+import com.cagri.bigboscagri.data.DEFAULT_GRADIENT_BLEND_FRACTION
+import com.cagri.bigboscagri.data.resolveGradientBlendFraction
 import com.cagri.bigboscagri.ui.DesignStyle
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun CategoryEditor(
     builtInCategory: ReminderCategory? = null,
@@ -77,7 +84,7 @@ fun CategoryEditor(
     backdrop: GraphicsLayer,
     backdropPosition: () -> Offset,
     onDismiss: () -> Unit,
-    onSaveCustomCategory: ((name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean) -> Unit)? = null,
+    onSaveCustomCategory: ((name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean, useDarkText: Boolean, gradientBlendFraction: Float?, customSolidColorArgb: Int?) -> Unit)? = null,
     onSaveBuiltInColor: ((category: ReminderCategory, override: CategoryColorOverride?) -> Unit)? = null,
     onDeleteCustomCategory: ((deleteReminders: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -85,10 +92,18 @@ fun CategoryEditor(
     reduceDynamicBlur: Boolean = false,
     reduceAnimations: Boolean = false
 ) {
+    val descriptionContext = LocalContext.current
+    val descriptionPreferences = remember(descriptionContext) {
+        descriptionContext.getSharedPreferences("real_category_descriptions", android.content.Context.MODE_PRIVATE)
+    }
+    val descriptionKey = categoryDescriptionKey(builtInCategory, customCategory)
+    var description by rememberSaveable(descriptionKey) {
+        mutableStateOf(limitCategoryDescription(descriptionKey?.let { descriptionPreferences.getString(it, "") }.orEmpty()))
+    }
     val isBuiltIn = builtInCategory != null
     val isCustomEdit = customCategory != null
     val title = when {
-        isBuiltIn -> "${builtInCategory!!.title} Rengini Düzenle"
+        isBuiltIn -> "${builtInCategory!!.title} Düzenle"
         isCustomEdit -> "Kategoriyi Düzenle"
         else -> "Yeni Kategori"
     }
@@ -153,6 +168,24 @@ fun CategoryEditor(
     var selectedColor2 by rememberSaveable(builtInCategory, customCategory, builtInColorOverride) {
         mutableStateOf<Int?>(if (isBuiltIn) builtInColorOverride?.end else customCategory?.accentEnd)
     }
+    var gradientBlendFraction by rememberSaveable(builtInCategory, customCategory, builtInColorOverride) {
+        mutableStateOf<Float?>(
+            if (isBuiltIn) builtInColorOverride?.gradientBlendFraction
+            else customCategory?.gradientBlendFraction
+        )
+    }
+    var customSolidColorArgb by rememberSaveable(builtInCategory, customCategory, builtInColorOverride) {
+        mutableStateOf<Int?>(
+            if (isBuiltIn) builtInColorOverride?.customSolidColorArgb
+            else customCategory?.customSolidColorArgb
+        )
+    }
+
+    var useDarkText by rememberSaveable(builtInCategory, customCategory, builtInColorOverride) {
+        mutableStateOf(if (isBuiltIn) builtInColorOverride?.useDarkText == true else customCategory?.useDarkText == true)
+    }
+
+    val canSave = if (isBuiltIn) true else (name.isNotBlank() && selectedColor1 != null)
 
     val scrollState = rememberScrollState()
 
@@ -207,19 +240,59 @@ fun CategoryEditor(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 1. Live Category Preview
-                LiveCategoryPreview(
-                    builtInCategory = builtInCategory,
-                    customName = name,
-                    selectedIcon = selectedIcon,
-                    selectedColor1 = selectedColor1,
-                    selectedColor2 = selectedColor2,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = progress.coerceIn(0f, 1f)
-                    }
+                
+                // Use the production Collections card as the live preview for both edit AND create.
+                // Previously the create path fell back to the legacy compact LiveCategoryPreview,
+                // which made “Yeni kategori” look unrelated to the new category cards.
+                val previewCustomCategory = if (!isBuiltIn) {
+                    CustomCategory(
+                        id = customCategory?.id ?: Long.MIN_VALUE,
+                        name = name.ifBlank { "Yeni kategori" },
+                        iconKey = selectedIcon.key,
+                        accentStart = selectedColor1 ?: 0,
+                        accentEnd = selectedColor2,
+                        hideFromGeneralLists = hideFromGeneralLists,
+                        useDarkText = useDarkText,
+                        gradientBlendFraction = gradientBlendFraction,
+                        customSolidColorArgb = customSolidColorArgb,
+                        createdAt = customCategory?.createdAt ?: 0L
+                    )
+                } else null
+
+                CollectionCategoryCard(
+                    category = builtInCategory,
+                    customCategory = previewCustomCategory,
+                    override = if (isBuiltIn) {
+                        CategoryColorOverride(
+                            start = selectedColor1,
+                            end = selectedColor2,
+                            useDarkText = useDarkText,
+                            gradientBlendFraction = gradientBlendFraction,
+                            customSolidColorArgb = customSolidColorArgb
+                        )
+                    } else null,
+                    count = 0,
+                    showCount = false,
+                    descriptionPreview = description,
+                    reduceAnimations = reduceAnimations
                 )
 
-                // 2. Category Name Input (Custom categories only)
+                // Existing categories can persist their description immediately because they
+                // already have a stable category key. New categories keep the same modern
+                // editor UI, but description editing remains available after creation so we
+                // don't introduce a fragile temporary-key migration just for this screen.
+                if (descriptionKey != null) {
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = limitCategoryDescription(it) },
+                        label = { Text("Açıklama (isteğe bağlı)") },
+                        supportingText = { Text("Boş bırakırsan açıklama kutusu kaldırılır. ${categoryDescriptionWordCount(description)}/30 kelime") },
+                        modifier = Modifier.fillMaxWidth(), maxLines = 3,
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                }
+
+
                 if (!isBuiltIn) {
                     Box(
                         modifier = Modifier
@@ -258,7 +331,7 @@ fun CategoryEditor(
                     }
                 }
 
-                // 3-4. Compact color rows — same visual language as reminder card colors
+                
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -277,8 +350,10 @@ fun CategoryEditor(
                         enabled = true,
                         onSelected = { index ->
                             selectedColor1 = index
+                            customSolidColorArgb = null
                             if (isBuiltIn && index == null) {
                                 selectedColor2 = null
+                                gradientBlendFraction = null
                             }
                         }
                     )
@@ -289,11 +364,83 @@ fun CategoryEditor(
                         allowNone = true,
                         noneGlyph = ActionGlyph.Close,
                         enabled = isColor2Enabled,
-                        onSelected = { selectedColor2 = it }
+                        onSelected = {
+                            selectedColor2 = it
+                            customSolidColorArgb = null
+                            if (it == null) gradientBlendFraction = null
+                        }
                     )
+
+                    val transitionStart = selectedColor1?.let { ReminderColorChoices.getOrNull(it)?.color }
+                    val transitionEnd = selectedColor2?.let { ReminderColorChoices.getOrNull(it)?.color }
+                    if (transitionStart != null && transitionEnd != null) {
+                        val fraction = resolveGradientBlendFraction(gradientBlendFraction)
+                        val bridgeColor = remember(transitionStart, transitionEnd, fraction) {
+                            lerp(transitionStart, transitionEnd, fraction)
+                        }
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Geçiş",
+                                    color = Color(0xFFB7B7C0),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.width(96.dp)
+                                )
+                                ContinuousGradientTransitionBar(
+                                    fraction = fraction,
+                                    onFractionChange = {
+                                        gradientBlendFraction = it
+                                        customSolidColorArgb = null
+                                    },
+                                    startColor = transitionStart,
+                                    endColor = transitionEnd,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(start = 96.dp),
+                                horizontalArrangement = Arrangement.Start
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color.White.copy(alpha = 0.06f))
+                                        .border(0.7.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            customSolidColorArgb = bridgeColor.toArgb()
+                                            selectedColor2 = null
+                                            gradientBlendFraction = DEFAULT_GRADIENT_BLEND_FRACTION
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(bridgeColor)
+                                            .border(0.5.dp, Color.White.copy(alpha = 0.4f), CircleShape)
+                                    )
+                                    Text(
+                                        text = "Geçiş rengini kullan",
+                                        color = Color(0xFFC8C8D2),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
-                // 5. Icon Selector - exactly 6 columns x 3 rows (18 icons)
+                
                 if (!isBuiltIn) {
                     Column(
                         modifier = Modifier
@@ -355,42 +502,75 @@ fun CategoryEditor(
                     }
                 }
                 
-                // 5.5 Visibility Option
-                if (!isBuiltIn) {
+                
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    if (!isBuiltIn) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { hideFromGeneralLists = !hideFromGeneralLists }
+                                .padding(vertical = 8.dp, horizontal = 4.dp)
+                                .graphicsLayer {
+                                    alpha = ((progress - 0.20f) / 0.80f).coerceIn(0f, 1f)
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .background(if (hideFromGeneralLists) Color(0xFF2C5696).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.1f))
+                                    .border(1.dp, if (hideFromGeneralLists) Color(0xFF91B9FF) else Color.White.copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (hideFromGeneralLists) {
+                                    ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color.White)
+                                }
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "Yalnızca kategori içinde göster",
+                                color = if (hideFromGeneralLists) Color(0xFFF5F5F8) else Color(0xFFB7B7C0),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { hideFromGeneralLists = !hideFromGeneralLists }
-                            .padding(vertical = 8.dp, horizontal = 4.dp)
-                            .graphicsLayer {
-                                alpha = ((progress - 0.20f) / 0.80f).coerceIn(0f, 1f)
-                            },
-                        verticalAlignment = Alignment.CenterVertically
+                            .clickable { useDarkText = !useDarkText }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(20.dp)
-                                .clip(CircleShape)
-                                .background(if (hideFromGeneralLists) Color(0xFF2C5696).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.1f))
-                                .border(1.dp, if (hideFromGeneralLists) Color(0xFF91B9FF) else Color.White.copy(alpha = 0.2f), CircleShape),
+                                .background(if (useDarkText) Color(0xFF2C5696).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.08f), CircleShape)
+                                .border(1.dp, if (useDarkText) Color(0xFF91B9FF) else Color.White.copy(alpha = 0.2f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (hideFromGeneralLists) {
+                            if (useDarkText) {
                                 ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color.White)
                             }
                         }
-                        Spacer(Modifier.width(10.dp))
                         Text(
-                            text = "Yalnızca kategori içinde göster",
-                            color = if (hideFromGeneralLists) Color(0xFFF5F5F8) else Color(0xFFB7B7C0),
+                            text = "Koyu renk metin kullan (Siyah)",
+                            color = if (useDarkText) Color(0xFFF5F5F8) else Color(0xFFB7B7C0),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
                 }
 
-                // 6. Action Buttons
+                
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -428,7 +608,7 @@ fun CategoryEditor(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center
                                 ) {
-                                    // val iconColor = if (deleteRemindersOption) Color(0xFFFF858D) else Color(0xFF888894)
+                                    
                                     Box(
                                         modifier = Modifier
                                             .size(20.dp)
@@ -507,17 +687,42 @@ fun CategoryEditor(
                                 TextButton(
                                     onClick = {
                                         if (canSave) {
+                                            descriptionKey?.let { key ->
+                                                val text = limitCategoryDescription(description).trim()
+                                                descriptionPreferences.edit().apply {
+                                                    if (text.isEmpty()) remove(key) else putString(key, text)
+                                                }.apply()
+                                            }
                                             keyboardController?.hide()
                                             if (isBuiltIn) {
-                                                val override = if (selectedColor1 != null) {
-                                                    CategoryColorOverride(selectedColor1!!, selectedColor2)
+                                                val override = if (
+                                                    selectedColor1 != null ||
+                                                    useDarkText ||
+                                                    customSolidColorArgb != null
+                                                ) {
+                                                    CategoryColorOverride(
+                                                        start = selectedColor1,
+                                                        end = selectedColor2,
+                                                        useDarkText = useDarkText,
+                                                        gradientBlendFraction = if (selectedColor1 != null && selectedColor2 != null) gradientBlendFraction else null,
+                                                        customSolidColorArgb = customSolidColorArgb
+                                                    )
                                                 } else {
                                                     null
                                                 }
                                                 onSaveBuiltInColor?.invoke(builtInCategory!!, override)
                                             } else {
                                                 val startIdx = selectedColor1 ?: 0
-                                                onSaveCustomCategory?.invoke(name.trim(), selectedIcon.key, startIdx, selectedColor2, hideFromGeneralLists)
+                                                onSaveCustomCategory?.invoke(
+                                                    name.trim(),
+                                                    selectedIcon.key,
+                                                    startIdx,
+                                                    selectedColor2,
+                                                    hideFromGeneralLists,
+                                                    useDarkText,
+                                                    if (selectedColor2 != null) gradientBlendFraction else null,
+                                                    customSolidColorArgb
+                                                )
                                             }
                                         }
                                     },
@@ -770,19 +975,20 @@ private fun LiveCategoryPreview(
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun CreateCategoryDialog(
     initialCategory: CustomCategory? = null,
     backdrop: GraphicsLayer,
     backdropPosition: () -> Offset,
     onDismiss: () -> Unit,
-    onSave: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean) -> Unit,
+    onSave: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean, useDarkText: Boolean, gradientBlendFraction: Float?, customSolidColorArgb: Int?) -> Unit,
     onDelete: ((deleteReminders: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
     designStyle: DesignStyle = DesignStyle.Glass,
     reduceDynamicBlur: Boolean = false,
     reduceAnimations: Boolean = false,
-    onCreate: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean) -> Unit = onSave
+    onCreate: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean, useDarkText: Boolean, gradientBlendFraction: Float?, customSolidColorArgb: Int?) -> Unit = onSave
 ) {
     CategoryEditor(
         customCategory = initialCategory,

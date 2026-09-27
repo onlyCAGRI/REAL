@@ -4,7 +4,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import android.os.Build
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -24,17 +23,14 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
-import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 
-/** The scrolling scene extends behind the system clock and status icons. */
+
 @Composable
 fun TopGlassOverlay(
     backdrop: GraphicsLayer,
@@ -46,7 +42,7 @@ fun TopGlassOverlay(
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val density = LocalDensity.current
 
-    // Extend the visual coverage approximately another status-bar-height below it (1.9x total)
+    
     val liquid = LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass
     val extension by animateDpAsState(
         if (liquid && extendLiquidArea) LiquidGlassTokens.topExtension else 0.dp,
@@ -63,7 +59,7 @@ fun TopGlassOverlay(
     var position by remember { mutableStateOf(Offset.Zero) }
     val dynamic = shouldCaptureBackdrop(LocalDesignStyle.current, reduceDynamicBlur, Build.VERSION.SDK_INT)
 
-    // Gradual fade into normal screen background
+    
     val fadeBrush = remember(fadeStart) {
         Brush.verticalGradient(
             0f to Color.White,
@@ -86,7 +82,7 @@ fun TopGlassOverlay(
     ) {
         if (dynamic) BlurredBackdrop(backdrop, { position - backdropPosition() }, if (liquid) LiquidGlassTokens.topBlur else 14.dp, Modifier.matchParentSize())
         if (liquid) {
-            // The unframed top scrim diffuses content without turning the status bar gray.
+            
             Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(
                 Color.Black.copy(alpha = if (dynamic) 0.64f else 0.96f),
                 Color.Black.copy(alpha = if (dynamic) 0.18f else 0.72f)

@@ -2,6 +2,7 @@ package com.cagri.bigboscagri.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.cagri.bigboscagri.ui.components.ReminderColorChoices
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -11,7 +12,7 @@ import org.json.JSONObject
 class ReminderRepository(private val preferences: SharedPreferences) {
     constructor(context: Context) : this(context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE))
 
-    // All callers use Dispatchers.IO. Shared lock serializes receivers and activity mutations.
+    
     private var cachedRaw: String? = null
     private var cachedItems: List<ReminderItem> = emptyList()
 
@@ -41,21 +42,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             }
                         } else emptyList()
                     } else emptyList()
-                    val attachments = if (item.has("attachments")) {
-                        val attsArray = item.optJSONArray("attachments")
-                        if (attsArray != null) {
-                            buildList {
-                                for (i in 0 until attsArray.length()) {
-                                    val obj = attsArray.getJSONObject(i)
-                                    val id = obj.optString("id")
-                                    val localPath = obj.optString("localPath")
-                                    if (id.isNotBlank() && localPath.isNotBlank()) {
-                                        add(ReminderAttachment(id = id, localPath = localPath))
-                                    }
-                                }
-                            }
-                        } else emptyList()
-                    } else emptyList()
+                    val attachments = AttachmentJson.decodeArray(item.optJSONArray("attachments"))
+                    val voiceRecordings = VoiceRecordingJson.decodeArray(item.optJSONArray("voiceRecordings"))
                     val location = item.optJSONObject("location")?.let { place ->
                         val name = place.optString("placeName", "")
                         val latitude = place.optDouble("latitude", Double.NaN)
@@ -73,12 +61,30 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             approximateCoordinates = place.optBoolean("approximateCoordinates", false)
                         ) else null
                     }
+                    val standaloneMood = if (item.has("mood") && !item.isNull("mood")) {
+                        JournalMood.fromKey(item.optString("mood", "").takeIf { it.isNotBlank() })
+                    } else null
+                    val moodDetails = item.optJSONObject("moodDetails")?.let { details ->
+                        fun stringList(name: String): List<String> {
+                            val arr = details.optJSONArray(name) ?: return emptyList()
+                            return (0 until arr.length())
+                                .mapNotNull { arr.optString(it, "").takeIf { value -> value.isNotBlank() } }
+                                .distinct()
+                        }
+                        MoodDetails(
+                            scope = MoodScope.fromKey(details.optString("scope", "")) ?: MoodScope.DAILY,
+                            descriptors = stringList("descriptors"),
+                            energy = MoodEnergy.fromKey(details.optString("energy", "")),
+                            factors = stringList("factors"),
+                            loggedAt = details.optLong("loggedAt", item.optLong("updatedAt", item.getLong("createdAt")))
+                        )
+                    }
                     val journal = if (item.has("journal") && !item.isNull("journal")) {
                         val jObj = item.getJSONObject("journal")
                         val moodKey = if (jObj.has("mood") && !jObj.isNull("mood")) jObj.getString("mood") else null
                         val specificMoodKey = if (jObj.has("specificMood") && !jObj.isNull("specificMood")) jObj.getString("specificMood") else null
                         ReminderJournal(
-                            // Phase 4A stored a secondary choice. Prefer it when both were set.
+                            
                             mood = JournalMood.fromKey(specificMoodKey) ?: JournalMood.fromKey(moodKey),
                             text = jObj.optString("text", ""),
                             createdAt = jObj.getLong("createdAt"),
@@ -109,8 +115,16 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             gradientBlendFraction = item.optionalBlendFraction(),
                             customSolidColorArgb = item.optionalColorArgb("customSolidColorArgb"),
                             attachments = attachments,
+                            voiceRecordings = voiceRecordings,
+                            musicBlocks = MusicBlock.decodeArray(item.optJSONArray("musicBlocks")),
                             journal = journal,
-                            location = location
+                            mood = standaloneMood,
+                            moodDetails = moodDetails,
+                            location = location,
+                            contentBlockOrder = if (item.has("contentBlockOrder") && !item.isNull("contentBlockOrder")) {
+                                val arr = item.getJSONArray("contentBlockOrder")
+                                (0 until arr.length()).map { arr.getString(it) }
+                            } else emptyList()
                         )
                     )
                 }
@@ -131,9 +145,13 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         sendImmediateNotification: Boolean = true,
         referenceUrl: String? = null,
         attachments: List<ReminderAttachment> = emptyList(),
+        voiceRecordings: List<ReminderVoiceRecording> = emptyList(),
         location: ReminderLocation? = null
     ): ReminderItem = synchronized(mutationLock) {
-        val trimmedTitle = text.trim()
+        val typedTitle = text.trim()
+        val trimmedTitle = typedTitle.ifBlank {
+            voiceRecordings.firstOrNull()?.let { voiceRecordingPresentationTitle(it.createdAt) }.orEmpty()
+        }
         require(trimmedTitle.isNotBlank()) { "Başlık boş olamaz" }
         val validItems = if (isChecklist) {
             checklistItems.filter { it.text.isNotBlank() }
@@ -162,6 +180,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
             sendImmediateNotification = sendImmediateNotification,
             referenceUrl = referenceUrl?.trim()?.takeIf { it.isNotBlank() },
             attachments = attachments,
+            voiceRecordings = voiceRecordings,
             location = location
         )
         val updated = listOf(newItem) + previous
@@ -170,7 +189,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
     }
 
     fun toggleChecklistItem(reminderId: Long, itemId: Long): List<ReminderItem> = update(reminderId) { reminder ->
-        if (!reminder.isChecklist) reminder
+        if (reminder.checklistItems.isEmpty()) reminder
         else {
             val now = System.currentTimeMillis()
             val updatedItems = reminder.checklistItems.map { item ->
@@ -187,9 +206,9 @@ class ReminderRepository(private val preferences: SharedPreferences) {
     fun completeFromNotification(id: Long): List<ReminderItem> = update(id) { item ->
         if (item.isCompleted) item
         else if (item.hasRepeat) {
-            // Recurring reminder: alertAt already advanced in deliverDue.
-            // Acknowledging the delivered occurrence clears notifiedAlertAt.
-            // Do not set completedAt or break the recurrence cycle.
+            
+            
+            
             item.copy(notifiedAlertAt = null, updatedAt = System.currentTimeMillis())
         } else {
             item.copy(
@@ -238,10 +257,19 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         gradientBlendFraction: Float? = null,
         customSolidColorArgb: Int? = null,
         attachments: List<ReminderAttachment>? = null,
+        voiceRecordings: List<ReminderVoiceRecording>? = null,
         location: ReminderLocation? = null,
-        updateLocation: Boolean = false
+        updateLocation: Boolean = false,
+        referenceUrl: String? = null,
+        updateReferenceUrl: Boolean = false,
+        musicBlocks: List<MusicBlock>? = null,
+        contentBlockOrder: List<String>? = null
     ): List<ReminderItem> {
-        require(text.isNotBlank())
+        val resolvedVoiceRecordings = voiceRecordings ?: load().firstOrNull { it.id == id }?.voiceRecordings.orEmpty()
+        val resolvedText = text.trim().ifBlank {
+            resolvedVoiceRecordings.firstOrNull()?.let { voiceRecordingPresentationTitle(it.createdAt) }.orEmpty()
+        }
+        require(resolvedText.isNotBlank())
         require(accentStart == null || accentStart in ACCENT_RANGE)
         require(accentEnd == null || accentEnd in ACCENT_RANGE)
         require(starBorderColorIndex == null || starBorderColorIndex in ACCENT_RANGE)
@@ -257,16 +285,21 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                 gradientBlendFraction ?: reminder.gradientBlendFraction
             } else null
             reminder.copy(
-                text = text.trim(),
+                text = resolvedText,
                 accentStart = accentStart,
                 accentEnd = accentEnd,
                 customCategoryId = if (updateCategory) customCategoryId else reminder.customCategoryId,
+                isChecklist = if (checklistItems != null) updatedChecklist.isNotEmpty() else reminder.isChecklist,
                 checklistItems = updatedChecklist,
                 starBorderColorIndex = starBorderColorIndex ?: reminder.starBorderColorIndex,
                 gradientBlendFraction = resolvedBlendFraction,
                 customSolidColorArgb = customSolidColorArgb,
                 attachments = attachments ?: reminder.attachments,
+                voiceRecordings = voiceRecordings ?: reminder.voiceRecordings,
+                musicBlocks = musicBlocks ?: reminder.musicBlocks,
+                referenceUrl = if (updateReferenceUrl) referenceUrl else reminder.referenceUrl,
                 location = if (updateLocation) location else reminder.location,
+                contentBlockOrder = contentBlockOrder ?: reminder.contentBlockOrder,
                 updatedAt = System.currentTimeMillis()
             )
         }
@@ -294,7 +327,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         gradientBlendFraction = migrateLegacyGradientBlendIndex(gradientBlendIndex)
     )
 
-    /** Fill only missing map preview coordinates; keep the saved place and edit timestamp intact. */
+    
     fun enrichLocationCoordinates(id: Long, expectedMapsUrl: String, resolved: ReminderLocation): List<ReminderItem> {
         require(resolved.latitude != null && resolved.longitude != null)
         return update(id) { reminder ->
@@ -310,6 +343,17 @@ class ReminderRepository(private val preferences: SharedPreferences) {
 
     fun setCustomCategory(id: Long, customCategoryId: Long?): List<ReminderItem> = update(id) {
         it.copy(customCategoryId = customCategoryId, updatedAt = System.currentTimeMillis())
+    }
+
+    fun setCustomCategoryForReminders(ids: Set<Long>, customCategoryId: Long?): List<ReminderItem> = synchronized(mutationLock) {
+        if (ids.isEmpty()) return@synchronized load()
+        val now = System.currentTimeMillis()
+        val items = load().map {
+            if (it.id in ids) it.copy(customCategoryId = customCategoryId, updatedAt = now)
+            else it
+        }
+        save(items)
+        items
     }
 
     fun setAlert(
@@ -333,7 +377,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         val before = load()
         val after = before.map { reminder ->
             var item = reminder
-            // Deliver main alert if due
+            
             if (item.isAlertDue(now)) {
                 if (post(item)) {
                     val anchor = item.anchorAlertAt ?: item.alertAt
@@ -342,7 +386,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                     } else null
 
                     item = if (nextOccurrence != null) {
-                        // Advance to next cycle: preserve delivered occurrence in notifiedAlertAt
+                        
                         item.copy(
                             alertAt = nextOccurrence,
                             anchorAlertAt = anchor ?: item.alertAt,
@@ -393,6 +437,18 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         items
     }
 
+    
+    fun appendContent(id: Long, attachments: List<ReminderAttachment>, referenceUrl: String?): ReminderItem =
+        synchronized(mutationLock) {
+            val current = load().firstOrNull { it.id == id } ?: error("Hatırlatıcı artık mevcut değil")
+            val merged = (current.attachments + attachments).distinctBy { it.id }
+            require(merged.count { it.type == AttachmentType.IMAGE } <= 3) { "Bir hatırlatıcıya en fazla 3 fotoğraf eklenebilir" }
+            val updated = current.copy(attachments = merged,
+                referenceUrl = referenceUrl ?: current.referenceUrl, updatedAt = System.currentTimeMillis())
+            save(load().map { if (it.id == id) updated else it })
+            updated
+        }
+
     fun setJournal(id: Long, mood: JournalMood?, text: String): List<ReminderItem> = update(id) { reminder ->
         val now = System.currentTimeMillis()
         val journal = ReminderJournal(
@@ -406,6 +462,24 @@ class ReminderRepository(private val preferences: SharedPreferences) {
 
     fun deleteJournal(id: Long): List<ReminderItem> = update(id) { reminder ->
         reminder.copy(journal = null, updatedAt = System.currentTimeMillis())
+    }
+
+    /** Stores Mood V2 on the current reminder as a detail content block. */
+    fun setMood(id: Long, mood: JournalMood?, details: MoodDetails? = null): List<ReminderItem> = update(id) { reminder ->
+        val now = System.currentTimeMillis()
+        reminder.copy(
+            mood = mood,
+            moodDetails = if (mood == null) null else details ?: reminder.moodDetails,
+            updatedAt = now
+        )
+    }
+
+    /** Clears only Mood V2 data from every reminder. Journal entries are intentionally preserved. */
+    fun clearAllMoods(): List<ReminderItem> = synchronized(mutationLock) {
+        load().map { reminder ->
+            if (reminder.mood == null && reminder.moodDetails == null) reminder
+            else reminder.copy(mood = null, moodDetails = null)
+        }.also(::save)
     }
 
     private fun update(id: Long, change: (ReminderItem) -> ReminderItem): List<ReminderItem> =
@@ -455,15 +529,18 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             )
                         }
                     })
-                    .put("attachments", JSONArray().apply {
-                        reminder.attachments.forEach { att ->
-                            put(
-                                JSONObject()
-                                    .put("id", att.id)
-                                    .put("localPath", att.localPath)
-                            )
-                        }
-                    })
+                    .put("attachments", AttachmentJson.encodeArray(reminder.attachments))
+                    .put("voiceRecordings", VoiceRecordingJson.encodeArray(reminder.voiceRecordings))
+                    .put("musicBlocks", MusicBlock.encodeArray(reminder.musicBlocks))
+                    .put("mood", reminder.mood?.persistKey ?: JSONObject.NULL)
+                    .put("moodDetails", reminder.moodDetails?.let { details ->
+                        JSONObject()
+                            .put("scope", details.scope.persistKey)
+                            .put("descriptors", JSONArray().apply { details.descriptors.forEach { put(it) } })
+                            .put("energy", details.energy?.persistKey ?: JSONObject.NULL)
+                            .put("factors", JSONArray().apply { details.factors.forEach { put(it) } })
+                            .put("loggedAt", details.loggedAt)
+                    } ?: JSONObject.NULL)
                     .put("journal", reminder.journal?.let { j ->
                         JSONObject()
                             .put("mood", j.mood?.persistKey ?: JSONObject.NULL)
@@ -471,6 +548,9 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                             .put("createdAt", j.createdAt)
                             .put("updatedAt", j.updatedAt)
                     } ?: JSONObject.NULL)
+                    .put("contentBlockOrder", JSONArray().apply {
+                        reminder.contentBlockOrder.forEach { put(it) }
+                    })
             )
         }
         val raw = array.toString()
@@ -485,6 +565,14 @@ class ReminderRepository(private val preferences: SharedPreferences) {
 
     fun getAllAttachmentPaths(): Set<String> = synchronized(mutationLock) {
         load().flatMap { it.attachments.map { att -> att.localPath } }.toSet()
+    }
+
+    fun getVoiceRecordingPathsForReminders(ids: Set<Long>): List<String> = synchronized(mutationLock) {
+        load().filter { it.id in ids }.flatMap { it.voiceRecordings.map { recording -> recording.localPath } }
+    }
+
+    fun getAllVoiceRecordingPaths(): Set<String> = synchronized(mutationLock) {
+        load().flatMap { it.voiceRecordings.map { recording -> recording.localPath } }.toSet()
     }
 
     private fun JSONObject.optionalTimestamp(key: String): Long? =
@@ -514,7 +602,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         val mutationLock = Any()
         private const val PREFERENCES_NAME = "big_bos_cagri_reminders"
         private const val KEY_REMINDERS = "reminders"
-        val ACCENT_RANGE = 0..9
+        val ACCENT_RANGE: IntRange get() = ReminderColorChoices.indices
 
         private val _updates = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         val updates: SharedFlow<Unit> = _updates.asSharedFlow()

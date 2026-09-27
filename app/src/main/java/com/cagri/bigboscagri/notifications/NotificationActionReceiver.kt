@@ -18,7 +18,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val pending = goAsync()
         val app = context.applicationContext
 
-        // Hemen bildirim panelinden kaldırarak hızlı ve temiz UX sağla
+        
         ReminderNotifications.cancel(app, reminderId)
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -29,7 +29,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val reminder = repository.load().firstOrNull { it.id == reminderId }
 
                     if (reminder == null) {
-                        // Reminder önceden silinmişse güvenli no-op
+                        
                         return@synchronized
                     }
 

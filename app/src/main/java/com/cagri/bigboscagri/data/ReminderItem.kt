@@ -1,26 +1,68 @@
 package com.cagri.bigboscagri.data
 
+enum class AttachmentType { IMAGE, FILE, TEXT_SNIPPET }
+enum class SnippetSource(val label: String) {
+    WHATSAPP_TEXT("WhatsApp"), EMAIL_TEXT("E-posta"), PLAIN_TEXT("Not")
+}
+
+
 data class ReminderAttachment(
     val id: String,
-    val localPath: String
+    val localPath: String = "",
+    val type: AttachmentType = AttachmentType.IMAGE,
+    val uri: String? = null,
+    val mimeType: String? = null,
+    val displayName: String? = null,
+    val sizeBytes: Long? = null,
+    val text: String? = null,
+    val source: SnippetSource = SnippetSource.PLAIN_TEXT,
+    val sourceTitle: String? = null
 )
 
-enum class JournalMood(val persistKey: String) {
-    VERY_GOOD("very_good"),
-    GOOD("good"),
-    NEUTRAL("neutral"),
-    HARD("hard"),
-    BAD("bad"),
-    HAPPY("happy"),
-    EXCITED("excited"),
-    CALM("calm"),
-    TIRED("tired"),
-    BORED("bored"),
-    STRESSED("stressed"),
-    ANGRY("angry"),
-    SAD("sad"),
-    LOW("low"),
-    FUCK_OFF("fuck_off");
+
+
+enum class MoodScope(val persistKey: String, val label: String) {
+    MOMENT("moment", "Anlık his"),
+    DAILY("daily", "Günün havası");
+
+    companion object {
+        fun fromKey(key: String?): MoodScope? = entries.firstOrNull { it.persistKey == key }
+    }
+}
+
+enum class MoodEnergy(val persistKey: String, val label: String) {
+    LOW("low", "Düşük"),
+    BALANCED("balanced", "Dengeli"),
+    HIGH("high", "Yüksek");
+
+    companion object {
+        fun fromKey(key: String?): MoodEnergy? = entries.firstOrNull { it.persistKey == key }
+    }
+}
+
+data class MoodDetails(
+    val scope: MoodScope = MoodScope.DAILY,
+    val descriptors: List<String> = emptyList(),
+    val energy: MoodEnergy? = null,
+    val factors: List<String> = emptyList(),
+    val loggedAt: Long = System.currentTimeMillis()
+)
+enum class JournalMood(val persistKey: String, val label: String) {
+    VERY_GOOD("very_good", "Çok iyi"),
+    GOOD("good", "İyi"),
+    NEUTRAL("neutral", "Normal"),
+    HARD("hard", "Zor"),
+    BAD("bad", "Kötü"),
+    HAPPY("happy", "Mutlu"),
+    EXCITED("excited", "Heyecanlı"),
+    CALM("calm", "Sakin"),
+    TIRED("tired", "Yorgun"),
+    BORED("bored", "Sıkılmış"),
+    STRESSED("stressed", "Stresli"),
+    ANGRY("angry", "Sinirli"),
+    SAD("sad", "Üzgün"),
+    LOW("low", "Keyifsiz"),
+    FUCK_OFF("fuck_off", "F*ck off");
 
     companion object {
         fun fromKey(key: String?): JournalMood? = entries.firstOrNull { it.persistKey == key }
@@ -56,8 +98,15 @@ data class ReminderItem(
     val gradientBlendFraction: Float? = null,
     val customSolidColorArgb: Int? = null,
     val attachments: List<ReminderAttachment> = emptyList(),
+    val voiceRecordings: List<ReminderVoiceRecording> = emptyList(),
     val journal: ReminderJournal? = null,
-    val location: ReminderLocation? = null
+    /** Mood V2 detail block. Separate from journal notes. */
+    val mood: JournalMood? = null,
+    /** Optional richer Mood V2 metadata. Old reminders legitimately keep this null. */
+    val moodDetails: MoodDetails? = null,
+    val location: ReminderLocation? = null,
+    val musicBlocks: List<MusicBlock> = emptyList(),
+    val contentBlockOrder: List<String> = emptyList()
 ) {
     val gradientBlendIndex: Int?
         get() = gradientBlendFraction?.let { frac ->
@@ -74,11 +123,11 @@ data class ReminderItem(
         }
         if (hasRepeat && alertAt != null) {
             if (notifiedAlertAt != null) {
-                // An occurrence was delivered by deliverDue and alertAt was already advanced.
-                // Acknowledging that delivered occurrence clears the marker without advancing alertAt again.
+                
+                
                 return copy(notifiedAlertAt = null, updatedAt = now)
             }
-            // No pending delivered occurrence: this is an intentional early skip/completion of the current scheduled occurrence.
+            
             val anchor = anchorAlertAt ?: alertAt
             val nextOccurrence = computeNextOccurrence(
                 baseAlertAt = anchor,

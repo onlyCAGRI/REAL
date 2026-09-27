@@ -16,12 +16,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import com.cagri.bigboscagri.BuildConfig
 
-/**
- * Applies a subtle physical touch compression without consuming or intercepting gestures.
- * Relies strictly on the component's existing or provided InteractionSource.
- * Scale: 1.0 -> targetScale (default 0.98f) on press, 0.98 -> 1.0 on release.
- * Bypassed when reduceAnimations is true.
- */
+
+
+
+
+
+
 @Composable
 fun Modifier.pressScale(
     interactionSource: InteractionSource,
@@ -45,24 +45,24 @@ fun Modifier.pressScale(
     }
 }
 
-/**
- * Dispatches restrained, purposeful haptic feedback for meaningful state changes.
- * Uses strictly View.performHapticFeedback with standard constants for safe device compatibility.
- *
- * Semantic mapping:
- * - save / completion -> LONG_PRESS
- * - toggle ON / OFF -> LONG_PRESS
- * - picker tick (selection settles) -> LONG_PRESS
- */
+
+
+
+
+
+
+
+
+
 object RealHaptics {
     private const val TAG = "RealHaptics"
     private var lastTickTime = 0L
 
-    /**
-     * Mechanical wheel tick when centered value changes and settles.
-     * Fires after scroll stops and a new value is selected.
-     * Mapped to safe standard LONG_PRESS.
-     */
+    
+
+
+
+
     fun tick(view: View) {
         perform(
             view = view,
@@ -72,10 +72,10 @@ object RealHaptics {
         )
     }
 
-    /**
-     * Semantic toggle feedback.
-     * Mapped to safe standard LONG_PRESS.
-     */
+    
+
+
+
     fun toggle(view: View, on: Boolean) {
         perform(
             view = view,
@@ -84,10 +84,10 @@ object RealHaptics {
         )
     }
 
-    /**
-     * Confirmation on reminder save or completion.
-     * Mapped to safe standard LONG_PRESS.
-     */
+    
+
+
+
     fun success(view: View) {
         perform(
             view = view,
@@ -108,7 +108,7 @@ object RealHaptics {
             lastTickTime = now
         }
 
-        // 1. Respect user's global system touch-haptic preference
+        
         val isSystemHapticOn = runCatching {
             Settings.System.getInt(view.context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 0) != 0
         }.getOrDefault(false)
@@ -120,7 +120,7 @@ object RealHaptics {
             return
         }
 
-        // 2. Single safe View haptic backend
+        
         val performed = view.performHapticFeedback(
             constant,
             HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING

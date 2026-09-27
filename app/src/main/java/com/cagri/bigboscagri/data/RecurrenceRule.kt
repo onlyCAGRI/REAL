@@ -2,7 +2,6 @@ package com.cagri.bigboscagri.data
 
 import java.time.DayOfWeek
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -21,7 +20,7 @@ enum class RecurrenceRule(val storageKey: String, val displayName: String) {
 }
 
 fun RecurrenceRule.descriptionFor(alertTimestamp: Long?, zone: ZoneId = ZoneId.systemDefault()): String {
-    if (this == RecurrenceRule.NONE || alertTimestamp == null) return "Yok"
+    if (alertTimestamp == null) return "Yok"
     val date = Instant.ofEpochMilli(alertTimestamp).atZone(zone).toLocalDate()
     val tr = Locale.forLanguageTag("tr-TR")
     return when (this) {

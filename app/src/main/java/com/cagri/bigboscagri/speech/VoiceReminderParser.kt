@@ -30,13 +30,13 @@ data class ExtractedChecklist(
 
 enum class TimeOfDay { Morning, Noon, Evening, Night }
 
-/**
- * Bare spoken hour heuristic (deterministic & decoupled):
- * 1–7 -> PM equivalent (13–19)
- * 8–11 -> AM equivalent (08–11)
- * 12 -> 12:00
- * Overridden if explicit morning/noon/evening/night modifier is given.
- */
+
+
+
+
+
+
+
 fun interpretHour(hour: Int, timeOfDay: TimeOfDay? = null): Int {
     if (timeOfDay != null) {
         return when (timeOfDay) {
@@ -135,14 +135,14 @@ fun stripBoundaryFillerYa(text: String): String {
     var result = text.trim()
     if (result.isEmpty()) return ""
 
-    // Strip leading standalone "ya", optionally preceded/followed by punctuation or spaces.
-    // Must NOT be followed by a letter (so "Yasin", "yarın", "yazıcı" are NOT stripped).
-    // Must NOT be followed by "da" / "de" (so "ya da" is NOT stripped).
+    
+    
+    
     val leadingYaRegex = Regex("""(?i)^\s*[,\s;:!?.…—–-]*ya(?!\p{L})(?!\s+(?:da|de)(?!\p{L}))[,\s;:!?.…—–-]*""")
     result = leadingYaRegex.replace(result, "")
 
-    // Strip trailing standalone "ya", optionally preceded/followed by punctuation or spaces.
-    // Must NOT be preceded by a letter (so "sinemaya", "masaya", "bankaya" are NOT stripped).
+    
+    
     val trailingYaRegex = Regex("""(?i)(?<!\p{L})ya[,\s;:!?.…—–-]*$""")
     result = trailingYaRegex.replace(result, "")
 
@@ -166,7 +166,7 @@ object VoiceReminderParser {
         val trLocale = Locale.forLanguageTag("tr-TR")
         val lower = trimmedInput.lowercase(trLocale)
 
-        // 1. Try Relative Time
+        
         val baseParsed = runCatching { parseRelativeTime(trimmedInput, lower, now) }.getOrNull()
             ?: runCatching { parseCalendarTime(trimmedInput, lower, now) }.getOrNull()
             ?: run {
@@ -186,7 +186,7 @@ object VoiceReminderParser {
         lower: String,
         now: ZonedDateTime
     ): ParsedVoiceReminder? {
-        // yarım saat sonra / buçuk saat sonra
+        
         val halfHourRegex = Regex("""\b(?:bir\s+)?(?:yarım|yarim|buçuk|bucuk)\s+saat\s+sonra\b""")
         halfHourRegex.find(lower)?.let { match ->
             val target = now.plusMinutes(30).truncatedTo(ChronoUnit.MINUTES)
@@ -194,7 +194,7 @@ object VoiceReminderParser {
             return ParsedVoiceReminder(original, cleaned, target.toInstant().toEpochMilli())
         }
 
-        // bir buçuk saat sonra
+        
         val oneAndHalfRegex = Regex("""\bbir\s+(?:buçuk|bucuk)\s+saat\s+sonra\b""")
         oneAndHalfRegex.find(lower)?.let { match ->
             val target = now.plusMinutes(90).truncatedTo(ChronoUnit.MINUTES)
@@ -202,7 +202,7 @@ object VoiceReminderParser {
             return ParsedVoiceReminder(original, cleaned, target.toInstant().toEpochMilli())
         }
 
-        // X saat Y dakika sonra
+        
         val hoursAndMinutesRegex = Regex("""\b(\d+)\s+saat\s+(\d+)\s+(?:dakika|dk)\s+sonra\b""")
         hoursAndMinutesRegex.find(lower)?.let { match ->
             val hours = match.groupValues[1].toLongOrNull() ?: 0L
@@ -212,7 +212,7 @@ object VoiceReminderParser {
             return ParsedVoiceReminder(original, cleaned, target.toInstant().toEpochMilli())
         }
 
-        // X saat sonra (numeric or "bir saat sonra")
+        
         val hoursRegex = Regex("""\b(\d+|bir)\s+saat\s+sonra\b""")
         hoursRegex.find(lower)?.let { match ->
             val hours = if (match.groupValues[1] == "bir") 1L else match.groupValues[1].toLongOrNull() ?: 1L
@@ -221,7 +221,7 @@ object VoiceReminderParser {
             return ParsedVoiceReminder(original, cleaned, target.toInstant().toEpochMilli())
         }
 
-        // X dakika sonra
+        
         val minutesRegex = Regex("""\b(\d+|bir)\s+(?:dakika|dk)\s+sonra\b""")
         minutesRegex.find(lower)?.let { match ->
             val minutes = if (match.groupValues[1] == "bir") 1L else match.groupValues[1].toLongOrNull() ?: 1L
@@ -241,11 +241,11 @@ object VoiceReminderParser {
         val rangesToRemove = mutableListOf<IntRange>()
         var masked = lower
 
-        // 0. Recurrence extraction
+        
         var repeatRule = RecurrenceRule.NONE
         var timeOfDay: TimeOfDay? = null
 
-        // Her sabah / her öğlen / her akşam / her gece -> DAILY + daypart
+        
         val dailyDaypartRegex = Regex("""\bher\s+(sabahleyin|sabah|öğleden sonra|ogleden sonra|öğleyin|ogleyin|öğlen|oglen|öğle|ogle|akşamleyin|aksamleyin|akşam|aksam|geceleyin|gece)\b""")
         val dailyDaypartMatch = dailyDaypartRegex.find(masked)
         if (dailyDaypartMatch != null) {
@@ -262,7 +262,7 @@ object VoiceReminderParser {
             masked = maskRange(masked, dailyDaypartMatch.range)
         }
 
-        // Her gün / günlük recurrence
+        
         if (repeatRule == RecurrenceRule.NONE) {
             val recurrenceSignal = """(?:(?:düzenli\s+)?(?:olarak\s+)?(?:tekrar\s+eden|tekrarlayan|tekrarlanan|tekrar\s+etsin|tekrarla|tekrar))"""
             val dailyRegex = Regex("""\b(?:(?:her\s+gün|hergun)(?:\s+$recurrenceSignal)?|(?:günlük|gunluk)\s+$recurrenceSignal)\b""")
@@ -273,7 +273,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Her hafta
+        
         if (repeatRule == RecurrenceRule.NONE) {
             val weeklyRegex = Regex("""\bher\s+hafta\b""")
             weeklyRegex.find(masked)?.let { m ->
@@ -283,7 +283,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Her pazartesi ... her pazar
+        
         var targetWeekday: DayOfWeek? = null
         if (repeatRule == RecurrenceRule.NONE) {
             val recurringWeekdayRegex = Regex("""\bher\s+(pazartesi|salı|sali|çarşamba|carsamba|perşembe|persembe|cuma|cumartesi|pazar)(?:\s+(?:günü|gunu))?\b""")
@@ -296,7 +296,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Her ayın X'i / her ay
+        
         var targetDayOfMonth: Int? = null
         if (repeatRule == RecurrenceRule.NONE) {
             val monthlyDayRegex = Regex("""\bher\s+ayın\s+(\d{1,2})(?:['’\`]?\s*(?:i|si|ü|u|ı|sı|e|a|de|da|te|ta|inde|ında|unde|ünde))?\b""")
@@ -316,7 +316,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Her yıl
+        
         if (repeatRule == RecurrenceRule.NONE) {
             val yearlyRegex = Regex("""\bher\s+(?:yıl|yil)\b""")
             yearlyRegex.find(masked)?.let { m ->
@@ -326,17 +326,29 @@ object VoiceReminderParser {
             }
         }
 
-        // 1. Date extraction
+        
         var targetDate: LocalDate? = null
+        var explicitYear: Int? = null
+        var useCurrentTime = false
 
-        // Specific Date: e.g. "23 eylül" / "23 eylül günü" / "23 eylül tarihinde"
-        val specificDateRegex = Regex("""\b(\d{1,2})\s+(ocak|şubat|subat|mart|nisan|mayıs|mayis|haziran|temmuz|ağustos|agustos|eylül|eylul|ekim|kasım|kasim|aralık|aralik)(?:\s+(?:günü|gunu|tarihinde))?\b""")
+        
+        
+        val explicitYearRegex = Regex("""\b(20\d{2})(?:\s+(?:yılında|yilinda)|\s+(?:yılı|yili|yıl|yil)(?:\s*['’`]?\s*(?:da|de|ta|te))?|['’`]?\s*(?:da|de|ta|te))\b""")
+        explicitYearRegex.find(masked)?.let { match ->
+            explicitYear = match.groupValues[1].toIntOrNull()
+            rangesToRemove.add(match.range)
+            masked = maskRange(masked, match.range)
+        }
+
+        
+        
+        val specificDateRegex = Regex("""\b(\d{1,2})\s*(ocak|şubat|subat|mart|nisan|mayıs|mayis|haziran|temmuz|ağustos|agustos|eylül|eylul|ekim|kasım|kasim|aralık|aralik)(?:['’`]?\s*(?:da|de|ta|te))?(?:\s+(?:günü|gunu|tarihinde))?\b""")
         val specificDateMatch = specificDateRegex.find(masked)
         if (specificDateMatch != null) {
             val day = specificDateMatch.groupValues[1].toIntOrNull() ?: 1
             val monthStr = specificDateMatch.groupValues[2]
             val month = MONTHS[monthStr] ?: 1
-            var year = now.year
+            val year = explicitYear ?: now.year
             val testDate = runCatching { LocalDate.of(year, month, day) }.getOrNull()
             if (testDate != null) {
                 targetDate = testDate
@@ -345,7 +357,18 @@ object VoiceReminderParser {
             }
         }
 
-        // Relative Days: bugün, yarın
+        
+        if (targetDate == null) {
+            val sameTimeTomorrowRegex = Regex("""\b(?:yarın|yarin)\s+bu\s+saatlerde\b""")
+            sameTimeTomorrowRegex.find(masked)?.let { match ->
+                targetDate = now.toLocalDate().plusDays(1)
+                useCurrentTime = true
+                rangesToRemove.add(match.range)
+                masked = maskRange(masked, match.range)
+            }
+        }
+
+        
         if (targetDate == null) {
             val relativeDayRegex = Regex("""\b(bugün|bugun|yarın|yarin)\b""")
             val relMatch = relativeDayRegex.find(masked)
@@ -357,7 +380,16 @@ object VoiceReminderParser {
             }
         }
 
-        // Weekday: pazartesi, salı, etc.
+        
+        
+        if (targetDate == null && explicitYear != null) {
+            val year = explicitYear!!
+            val month = now.monthValue
+            val day = now.dayOfMonth.coerceAtMost(java.time.YearMonth.of(year, month).lengthOfMonth())
+            targetDate = LocalDate.of(year, month, day)
+        }
+
+        
         if (targetDate == null && targetWeekday == null) {
             val weekdayRegex = Regex("""\b(pazartesi|salı|sali|çarşamba|carsamba|perşembe|persembe|cuma|cumartesi|pazar)(?:\s+(?:günü|gunu))?\b""")
             val weekdayMatch = weekdayRegex.find(masked)
@@ -369,7 +401,7 @@ object VoiceReminderParser {
             }
         }
 
-        // 2. Daypart extraction (sabah, öğlen, akşam, gece)
+        
         if (timeOfDay == null) {
             val daypartRegex = Regex("""\b(öğleden sonra|ogleden sonra|öğleyin|ogleyin|öğlen|oglen|öğle|ogle|sabahleyin|sabah|akşamleyin|aksamleyin|akşam|aksam|geceleyin|gece)\b""")
             val daypartMatch = daypartRegex.find(masked)
@@ -387,13 +419,13 @@ object VoiceReminderParser {
             }
         }
 
-        // 3. Time extraction
-        var rawHour: Int? = null
-        var rawMinute: Int? = null
-        var isExplicit24h = false
+        
+        var rawHour: Int? = if (useCurrentTime) now.hour else null
+        var rawMinute: Int? = if (useCurrentTime) now.minute else null
+        var isExplicit24h = useCurrentTime
 
-        // Time Pattern A: 17:30 or 17.30 (optional 'da/de/ta/te or preceded by saat)
-        // e.g. "17:30'da", "17.30da", "saat 14:00'te"
+        
+        
         val colonTimeRegex = Regex("""\b(?:saat\s+)?(\d{1,2})[:.](\d{2})(?:\s*['’\`]?\s*(?:da|de|ta|te))?\b""")
         val colonMatch = colonTimeRegex.find(masked)
         if (colonMatch != null) {
@@ -408,7 +440,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Time Pattern B: 17 30'da (space separated with suffix)
+        
         if (rawHour == null) {
             val spaceTimeRegex = Regex("""\b(?:saat\s+)?(\d{1,2})\s+(\d{2})(?:\s*['’\`]?\s*(?:da|de|ta|te))\b""")
             val spaceMatch = spaceTimeRegex.find(masked)
@@ -425,7 +457,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Time Pattern C: 5 buçukta / saat 5 buçuk
+        
         if (rawHour == null) {
             val bucukRegex = Regex("""\b(?:saat\s+)?(\d{1,2})\s+(?:buçuk|bucuk)(?:['’\`]?\s*(?:ta|te|da|de))?\b""")
             val bucukMatch = bucukRegex.find(masked)
@@ -440,7 +472,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Time Pattern D: saat 5 / saat 5'te / saat 17 / saat 8de
+        
         if (rawHour == null) {
             val saatHourRegex = Regex("""\bsaat\s+(\d{1,2})(?:['’\`]?\s*(?:da|de|ta|te)|\s+(?:da|de|ta|te))?\b""")
             val saatMatch = saatHourRegex.find(masked)
@@ -456,7 +488,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Time Pattern E: 5'te / 5te / 5 te / 8'de / 8de / 8 de / 11'de
+        
         if (rawHour == null) {
             val suffixedHourRegex = Regex("""\b(\d{1,2})(?:['’\`]\s*(?:da|de|ta|te)|(?:ta|te|da|de)|\s+(?:da|de|ta|te))\b""")
             val suffixedMatch = suffixedHourRegex.find(masked)
@@ -472,7 +504,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Time Pattern F: Word numbers with saat or suffix (e.g. "saat beşte", "saat beş")
+        
         if (rawHour == null) {
             val wordHourRegex = Regex("""\b(?:saat\s+)?(bir|iki|üç|uc|dört|dort|beş|bes|altı|alti|yedi|sekiz|dokuz|on|on bir|on iki)(?:['’\`]?\s*(?:da|de|ta|te))?\b""")
             val wordMatch = wordHourRegex.find(masked)
@@ -485,7 +517,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Time Pattern G: Daypart-backed bare word or bare digit (e.g. "akşam 7", "akşam yedi", "sabah sekiz")
+        
         if (rawHour == null && timeOfDay != null) {
             val bareWordRegex = Regex("""\b(bir|iki|üç|uc|dört|dort|beş|bes|altı|alti|yedi|sekiz|dokuz|on|on bir|on iki)\b""")
             val bareWordMatch = bareWordRegex.find(masked)
@@ -507,12 +539,12 @@ object VoiceReminderParser {
             }
         }
 
-        // If neither time, date, weekday, day of month, nor recurrence was detected, cannot schedule
+        
         if (rawHour == null && targetDate == null && targetWeekday == null && targetDayOfMonth == null && repeatRule == RecurrenceRule.NONE) {
             return null
         }
 
-        // Calculate final hour and minute
+        
         val finalHour = if (rawHour != null) {
             if (isExplicit24h) rawHour else interpretHour(rawHour, timeOfDay)
         } else {
@@ -520,14 +552,14 @@ object VoiceReminderParser {
         }
         val finalMinute = rawMinute ?: 0
 
-        // Determine final target date
+        
         val resolvedDate: LocalDate? = when {
             targetDate != null -> {
-                var d = targetDate
+                var d = requireNotNull(targetDate)
                 if (rawHour != null) {
                     val candidate = d.atTime(finalHour, finalMinute).atZone(now.zone)
                     if (!candidate.isAfter(now)) {
-                        // Candidate is in the past! Advance by 1 day or 1 year
+                        
                         d = if (specificDateMatch != null) {
                             d.plusYears(1)
                         } else {
@@ -557,7 +589,8 @@ object VoiceReminderParser {
                 d
             }
             targetWeekday != null -> {
-                var daysAhead = (targetWeekday.value - now.dayOfWeek.value + 7) % 7
+                val weekday = requireNotNull(targetWeekday)
+                var daysAhead = (weekday.value - now.dayOfWeek.value + 7) % 7
                 if (daysAhead == 0) {
                     if (rawHour != null) {
                         val candidateToday = now.toLocalDate().atTime(finalHour, finalMinute).atZone(now.zone)
@@ -565,8 +598,8 @@ object VoiceReminderParser {
                             daysAhead = 7
                         }
                     } else {
-                        // If no hour was specified, but today is the target weekday:
-                        // "Her cuma" / "cuma": if today is Friday, today is Friday unless the day has effectively ended
+                        
+                        
                         if (now.toLocalTime().isAfter(LocalTime.of(22, 0))) {
                             daysAhead = 7
                         }
@@ -587,11 +620,11 @@ object VoiceReminderParser {
                 }
             }
             repeatRule == RecurrenceRule.WEEKLY -> {
-                // "Her hafta" without specific weekday -> dateHint remains null
+                
                 null
             }
             else -> {
-                // No date mentioned, only time: e.g. "saat 5te annemi ara"
+                
                 if (rawHour != null) {
                     val candidateToday = now.toLocalDate().atTime(finalHour, finalMinute).atZone(now.zone)
                     if (candidateToday.isAfter(now)) {
@@ -615,13 +648,13 @@ object VoiceReminderParser {
             requiresTimeSelection = false
             dateHint = resolvedDate
         } else {
-            // No exact hour was provided, or no resolved date -> do NOT invent 09:00!
+            
             alertAt = null
             requiresTimeSelection = true
             dateHint = resolvedDate
         }
 
-        // Clean text by removing matched date/daypart/time/recurrence ranges
+        
         val cleaned = cleanReminderText(original, rangesToRemove)
         val finalText = cleaned.ifEmpty { "Hatırlatıcı" }
 
@@ -649,7 +682,7 @@ object VoiceReminderParser {
             return formatText(original)
         }
 
-        // Sort ranges and merge overlapping/adjacent
+        
         val sorted = ranges.sortedBy { it.first }
         val merged = mutableListOf<IntRange>()
         for (r in sorted) {
@@ -686,13 +719,13 @@ object VoiceReminderParser {
             .replace(Regex("""\s+"""), " ")
             .trim()
 
-        // Strip boundary filler "ya" idempotently
+        
         clean = stripBoundaryFillerYa(clean)
 
-        // Strip trailing commands:
-        // - "bana hatırlat" is always an assistant command suffix.
-        // - Bare "hatırlat" is only stripped when it is an assistant command (e.g. "toplantıyı hatırlat"),
-        //   and NOT when it is part of a coordinated action or compound reminder (e.g. "... ve ... hatırlat").
+        
+        
+        
+        
         val hasCoordinatedClause = Regex("""(?i)(?:\b(?:ve|veya|ya\s+da|ile)\b|[,;])\s+.*?\b(?:hatırlat|hatirlat)\s*[.!]?$""").containsMatchIn(clean)
         if (!hasCoordinatedClause) {
             clean = clean.replace(Regex("""(?i)\s*(?:bana\s+)?(?:hatırlat|hatirlat)\s*[.!]?$"""), "").trim()
@@ -702,17 +735,17 @@ object VoiceReminderParser {
                 .trim(',', '.', ';', ':', '-', '’', '\'')
         }
 
-        // Strip boundary filler "ya" again in case trailing command exposed it
+        
         clean = stripBoundaryFillerYa(clean)
 
-        // Strip standalone residual 'her' / 'Her'
+        
         clean = clean.replace(Regex("""(?i)\bher\b"""), "").trim()
             .trim(',', '.', ';', ':', '-', '’', '\'')
 
-        // Re-clean whitespace
+        
         clean = clean.replace(Regex("""\s+"""), " ").trim()
 
-        // Verb normalization on the last word if applicable
+        
         val words = clean.split(" ").filter { it.isNotBlank() }
         if (words.isNotEmpty()) {
             val lastWord = words.last()
@@ -722,7 +755,7 @@ object VoiceReminderParser {
             }
         }
 
-        // Capitalize first character in Turkish locale
+        
         return if (clean.isNotEmpty()) {
             val trLocale = Locale.forLanguageTag("tr-TR")
             clean.replaceFirstChar { if (it.isLowerCase()) it.titlecase(trLocale) else it.toString() }
@@ -865,7 +898,7 @@ fun formatChecklistTitle(prefix: String?): String {
     val trLocale = Locale.forLanguageTag("tr-TR")
     var cleanPrefix = prefix?.trim() ?: ""
 
-    // Strip leading "yeni bir " or "bir "
+    
     val leadingArticleRegex = Regex("""(?i)^(?:yeni\s+)?bir\s+""")
     cleanPrefix = leadingArticleRegex.replace(cleanPrefix, "").trim()
 
@@ -925,7 +958,7 @@ fun extractChecklist(text: String): ExtractedChecklist? {
     val trimmed = text.trim()
     if (trimmed.isBlank()) return null
 
-    // Pattern 1: [prefix] (listesi|listem|liste) (oluştur|olustur|yap|hazırla|hazirla|kur)[:,\s\-]*(.+)
+    
     val pattern1 = Regex(
         """(?i)^(?:(.*?)\s+)?(listesi|listem|liste)\s+(oluştur|olustur|yap|hazırla|hazirla|kur)\b[:,\s\-]*(.+)$"""
     )
@@ -941,7 +974,7 @@ fun extractChecklist(text: String): ExtractedChecklist? {
         }
     }
 
-    // Pattern 2: (oluştur|olustur|yap|hazırla|hazirla|kur) [bir] [prefix] (listesi|listem|liste)[:,\s\-]*(.+)
+    
     val patternVerbFirst = Regex(
         """(?i)^(oluştur|olustur|yap|hazırla|hazirla|kur)\s+(?:bir\s+)?(?:(.*?)\s+)?(listesi|listem|liste)\b[:,\s\-]*(.+)$"""
     )
@@ -957,7 +990,7 @@ fun extractChecklist(text: String): ExtractedChecklist? {
         }
     }
 
-    // Pattern 3A: [prefix] (listeme|listesine) (ekle|yaz)[:,\s\-]*(.+)
+    
     val patternAddA = Regex(
         """(?i)^(?:(.*?)\s+)?(?:listeme|listesine)\s+(?:ekle|yaz)\b[:,\s\-]*(.+)$"""
     )
@@ -973,7 +1006,7 @@ fun extractChecklist(text: String): ExtractedChecklist? {
         }
     }
 
-    // Pattern 3B: [prefix] (listeme|listesine) (.+?) (ekle|yaz)$
+    
     val patternAddB = Regex(
         """(?i)^(?:(.*?)\s+)?(?:listeme|listesine)\s+(.+?)\s+(?:ekle|yaz)$"""
     )
@@ -989,7 +1022,7 @@ fun extractChecklist(text: String): ExtractedChecklist? {
         }
     }
 
-    // Pattern 4: [prefix] (listesi|listem)[:\s\-]+(.+) with colon
+    
     val patternColon = Regex(
         """(?i)^(?:(.*?)\s+)?(listesi|listem)\s*:\s*(.+)$"""
     )

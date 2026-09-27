@@ -1,5 +1,7 @@
 package com.cagri.bigboscagri.ui.components
 
+import android.annotation.SuppressLint
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,26 +42,37 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.cagri.bigboscagri.data.DEFAULT_GRADIENT_BLEND_FRACTION
 import com.cagri.bigboscagri.data.resolveGradientBlendFraction
 import com.cagri.bigboscagri.ui.DesignStyle
 
 data class ReminderColorChoice(val label: String, val color: Color)
 
-/**
- * 10 harmonized tones designed for dark glass surfaces and seamless gradient mixing.
- */
+
+
+
 val ReminderColorChoices = listOf(
-    ReminderColorChoice("Gece Mavisi", Color(0xFF233F73)),
-    ReminderColorChoice("Kobalt", Color(0xFF2C5696)),
-    ReminderColorChoice("Buzul Cyan", Color(0xFF246C7E)),
-    ReminderColorChoice("Zümrüt", Color(0xFF276B53)),
-    ReminderColorChoice("Yosun Yeşili", Color(0xFF3C6A48)),
-    ReminderColorChoice("Amber", Color(0xFF8B5D34)),
-    ReminderColorChoice("Terracotta", Color(0xFF8C4638)),
-    ReminderColorChoice("Mürdüm", Color(0xFF873858)),
-    ReminderColorChoice("Erik Moru", Color(0xFF6B3A79)),
-    ReminderColorChoice("İris Moru", Color(0xFF4C3C82))
+    // REAL 2026 palette — rebuilt from the approved visual references.
+    // The six reference colors are kept at their exact supplied hex values.
+    ReminderColorChoice("Duman Beyazı", Color(0xFFEFF0F6)), // Smoky White — exact reference
+    ReminderColorChoice("Jet Siyahı", Color(0xFF292B2D)),   // Jet Black — exact reference
+    ReminderColorChoice("Royal Mavi", Color(0xFF4558C8)),  // Royal Blue — exact reference
+    ReminderColorChoice("Gece Mavisi", Color(0xFF263C74)),
+    ReminderColorChoice("Gökyüzü", Color(0xFF78C9F2)),
+    ReminderColorChoice("Petrol", Color(0xFF2E8793)),
+    ReminderColorChoice("Turkuaz", Color(0xFF50C4B7)),
+    ReminderColorChoice("Nane", Color(0xFF8ED9B6)),
+    ReminderColorChoice("Zümrüt", Color(0xFF36A269)),
+    ReminderColorChoice("Old Flax", Color(0xFFDFF37D)),    // Old flax — exact reference
+    ReminderColorChoice("Altın", Color(0xFFE5B84D)),
+    ReminderColorChoice("Bronz", Color(0xFFA77952)),
+    ReminderColorChoice("Somon Turuncu", Color(0xFFEE5E37)), // Salmon orange — exact reference
+    ReminderColorChoice("Mercan", Color(0xFFE9786A)),
+    ReminderColorChoice("Gül", Color(0xFFDE6D98)),
+    ReminderColorChoice("Yakut", Color(0xFFA83B5D)),
+    ReminderColorChoice("Fuşya", Color(0xFFC85AB4)),
+    ReminderColorChoice("Lavanta", Color(0xFFD9B8F3)),     // Purple — exact reference
+    ReminderColorChoice("Menekşe", Color(0xFF8666D6)),
+    ReminderColorChoice("Erik", Color(0xFF70436F))
 )
 
 fun reminderAccentBrush(
@@ -295,8 +308,9 @@ private fun ColorChoiceRow(
     }
 }
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
-private fun ContinuousGradientTransitionBar(
+fun ContinuousGradientTransitionBar(
     fraction: Float,
     onFractionChange: (Float) -> Unit,
     startColor: Color,

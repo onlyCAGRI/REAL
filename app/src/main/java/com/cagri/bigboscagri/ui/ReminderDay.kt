@@ -7,7 +7,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import java.time.*
 
-/** Refresh Today after midnight or returning from background, with no background polling. */
+
 @Composable
 fun rememberReminderDay(): LocalDate {
     val lifecycle = LocalLifecycleOwner.current.lifecycle

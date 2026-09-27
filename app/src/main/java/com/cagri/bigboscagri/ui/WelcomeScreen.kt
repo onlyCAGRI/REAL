@@ -1,5 +1,7 @@
 package com.cagri.bigboscagri.ui
 
+import android.annotation.SuppressLint
+
 import android.graphics.BitmapFactory
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -60,7 +62,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -86,6 +87,7 @@ enum class WelcomePhase {
     Greeting
 }
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun WelcomeScreen(
     reduceAnimations: Boolean = false,
@@ -125,10 +127,10 @@ fun WelcomeScreen(
             inputOffsetY.snapTo(0f)
             phase = WelcomePhase.NamePrompt
         } else {
-            // 1. Initial pure AMOLED black hold (~280ms)
+            
             delay(280)
 
-            // 2. "Welcome to" entrance: subtle 8dp offset & calm 280ms fade
+            
             launch {
                 welcomeOffsetY.animateTo(
                     0f,
@@ -146,7 +148,7 @@ fun WelcomeScreen(
                 animationSpec = tween(280, easing = LinearOutSlowInEasing)
             )
 
-            // 3. REAL logo – soft feathered mask reveal left-to-right (500ms, subtle 10dp settle)
+            
             launch {
                 logoOffsetY.animateTo(
                     0f,
@@ -158,10 +160,10 @@ fun WelcomeScreen(
                 animationSpec = tween(500, easing = CubicBezierEasing(0.2f, 0.0f, 0.2f, 1.0f))
             )
 
-            // 4. Settled calm hold before header shift
+            
             delay(220)
 
-            // 5. Header visual group shifts up by ~54dp as ONE unified unit
+            
             phase = WelcomePhase.NamePrompt
             launch {
                 groupShiftProgress.animateTo(
@@ -170,7 +172,7 @@ fun WelcomeScreen(
                 )
             }
 
-            // 6. Question & Name Input emerge smoothly in the scene
+            
             delay(70)
             launch {
                 questionOffsetY.animateTo(
@@ -185,7 +187,7 @@ fun WelcomeScreen(
                 )
             }
 
-            delay(60) // micro-stagger
+            delay(60) 
             launch {
                 inputOffsetY.animateTo(
                     0f,
@@ -219,7 +221,7 @@ fun WelcomeScreen(
         }
     }
 
-    // Root container has NO imePadding: layout remains rock-solid when keyboard opens!
+    
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -229,7 +231,7 @@ fun WelcomeScreen(
     ) {
         val totalHeight = maxHeight
         val density = LocalDensity.current
-        val headerHeight = 129.dp // 24dp ("Welcome to") + 14dp (spacer) + 91dp (wordmark)
+        val headerHeight = 129.dp 
         val initialHeaderTop = (totalHeight - headerHeight) / 2
         val finalShiftDp = 54.dp
         val contentGapDp = 52.dp
@@ -259,7 +261,7 @@ fun WelcomeScreen(
             label = "welcomeImeShift"
         )
 
-        // Single visual parent container: All 4 elements move together as ONE unit when keyboard opens
+        
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -267,7 +269,7 @@ fun WelcomeScreen(
                     translationY = -animatedImeShiftPx
                 }
         ) {
-            // 1. Header Visual Group (Welcome to + REAL): moves together as ONE unit during entrance
+            
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -302,7 +304,7 @@ fun WelcomeScreen(
                 )
             }
 
-            // 2. Below Header: Question + Input OR Greeting (single continuous scene)
+            
             if (phase == WelcomePhase.Greeting) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -355,7 +357,7 @@ fun WelcomeScreen(
 
                     Spacer(Modifier.height(20.dp))
 
-                    // Clean, minimal pill input (NO floating label) - entire container animated together
+                    
                     Row(
                         modifier = Modifier
                             .graphicsLayer {
@@ -437,12 +439,12 @@ fun WelcomeScreen(
     }
 }
 
-/**
- * Wordmark utilizing transparent PNG asset.
- * Natural alpha channel acts as mask.
- * 1) Mask reveal: Letters emerge progressively from left to right with soft feather.
- * 2) Settles cleanly into calm, pure white logo (no specular streak, no zoom, no glow).
- */
+
+
+
+
+
+
 @Composable
 private fun WelcomeWordmark(
     revealProgress: Float,
@@ -481,7 +483,7 @@ private fun WelcomeWordmark(
                 if (revealProgress <= 0f) return@drawWithContent
                 drawContent()
 
-                // Soft feathered mask reveal from left to right (no harsh wipe)
+                
                 if (revealProgress < 1f) {
                     val featherWidth = size.width * 0.18f
                     val head = revealProgress * (size.width + featherWidth)

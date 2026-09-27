@@ -175,15 +175,15 @@ class ReminderRulesTest {
 
     @Test fun categoryPaginationComputesCorrectPageCount() {
         fun computePageCount(customCount: Int): Int {
-            val totalItems = 5 + customCount + 1 // 5 system categories + custom categories + 1 Ekle card
+            val totalItems = 5 + customCount + 1 
             return (totalItems + 5) / 6
         }
-        assertEquals(1, computePageCount(0))  // 6 items -> 1 page
-        assertEquals(2, computePageCount(1))  // 7 items -> 2 pages
-        assertEquals(2, computePageCount(6))  // 12 items -> 2 pages
-        assertEquals(3, computePageCount(7))  // 13 items -> 3 pages
-        assertEquals(3, computePageCount(12)) // 18 items -> 3 pages
-        assertEquals(4, computePageCount(13)) // 19 items -> 4 pages
+        assertEquals(1, computePageCount(0))  
+        assertEquals(2, computePageCount(1))  
+        assertEquals(2, computePageCount(6))  
+        assertEquals(3, computePageCount(7))  
+        assertEquals(3, computePageCount(12)) 
+        assertEquals(4, computePageCount(13)) 
     }
 
     @Test fun unifiedCategoryListPlacesAddCardAtTheVeryEnd() {
@@ -357,7 +357,7 @@ class ReminderRulesTest {
         assertEquals(42L, added.customCategoryId)
         assertEquals("Kahve satın al", added.text)
 
-        // Verify fresh repository instance reads the persisted data from SharedPreferences
+        
         val reloaded = ReminderRepository(prefs).load()
         assertEquals(1, reloaded.size)
         assertEquals(42L, reloaded.first().customCategoryId)
@@ -371,7 +371,7 @@ class ReminderRulesTest {
         val item = repo.add("İlk not", customCategoryId = 10L)
         assertEquals(10L, item.customCategoryId)
 
-        // Edit custom category and text
+        
         val updated = repo.edit(
             id = item.id,
             text = "Güncellenmiş not",
@@ -386,7 +386,7 @@ class ReminderRulesTest {
         assertEquals(2, updated.accentStart)
         assertEquals(5, updated.accentEnd)
 
-        // Edit again, clearing custom category
+        
         val cleared = repo.edit(
             id = item.id,
             text = "Güncellenmiş not",
@@ -397,7 +397,7 @@ class ReminderRulesTest {
         ).first()
         assertNull(cleared.customCategoryId)
 
-        // Edit with updateCategory = false keeps existing category
+        
         val restored = repo.setCustomCategory(item.id, 99L).first()
         assertEquals(99L, restored.customCategoryId)
 
@@ -412,7 +412,7 @@ class ReminderRulesTest {
         assertEquals("Başka bir güncelleme", untouchedCategory.text)
         assertEquals(99L, untouchedCategory.customCategoryId)
 
-        // Verify disk persistence with fresh repository instance
+        
         val reloaded = ReminderRepository(prefs).load().first()
         assertEquals(99L, reloaded.customCategoryId)
         assertEquals("Başka bir güncelleme", reloaded.text)
@@ -440,7 +440,7 @@ class ReminderRulesTest {
         assertEquals(200L, item3.customCategoryId)
         assertNull(item4.customCategoryId)
 
-        // Verify disk persistence with fresh repository instance
+        
         val reloaded = ReminderRepository(prefs).load()
         assertEquals(4, reloaded.size)
         assertNull(reloaded.first { it.text == "Kategori A - Not 1" }.customCategoryId)
@@ -453,7 +453,7 @@ class ReminderRulesTest {
         val prefs = FakeSharedPreferences()
         val repo = CategoryRepository(prefs)
 
-        // Add
+        
         val added = repo.add(name = "Finans", iconKey = "WORK", accentStart = 1, accentEnd = 3)
         assertEquals(1, added.size)
         val cat = added.first()
@@ -462,12 +462,12 @@ class ReminderRulesTest {
         assertEquals(1, cat.accentStart)
         assertEquals(3, cat.accentEnd)
 
-        // Reload from disk
+        
         val reloaded = CategoryRepository(prefs).load()
         assertEquals(1, reloaded.size)
         assertEquals("Finans", reloaded.first().name)
 
-        // Update
+        
         val updated = repo.update(cat.id, name = "Kişisel Finans", iconKey = "SHOPPING", accentStart = 4, accentEnd = 5)
         assertEquals(1, updated.size)
         assertEquals("Kişisel Finans", updated.first().name)
@@ -475,7 +475,7 @@ class ReminderRulesTest {
         assertEquals(4, updated.first().accentStart)
         assertEquals(5, updated.first().accentEnd)
 
-        // Delete
+        
         val afterDelete = repo.delete(cat.id)
         assertTrue(afterDelete.isEmpty())
         assertTrue(CategoryRepository(prefs).load().isEmpty())
@@ -487,22 +487,22 @@ class ReminderRulesTest {
         val reminderRepo = ReminderRepository(reminderPrefs)
         val categoryRepo = CategoryRepository(categoryPrefs)
 
-        // Create category
+        
         val category = categoryRepo.add("Okuma", "BOOK", 0, null).first()
 
-        // Create reminders: 2 in category, 1 in other category
+        
         reminderRepo.add("Kitap oku", customCategoryId = category.id)
         reminderRepo.add("Makale incele", customCategoryId = category.id)
         reminderRepo.add("Egzersiz", customCategoryId = 999L)
 
-        // Delete workflow as executed in mutateCategory: unassign then delete
+        
         reminderRepo.unassignCategory(category.id)
         categoryRepo.delete(category.id)
 
-        // Verify categories
+        
         assertTrue(CategoryRepository(categoryPrefs).load().isEmpty())
 
-        // Verify reminders still exist and category is unassigned without deleting reminders
+        
         val reminders = ReminderRepository(reminderPrefs).load()
         assertEquals(3, reminders.size)
         assertNull(reminders.first { it.text == "Kitap oku" }.customCategoryId)
@@ -520,11 +520,11 @@ class ReminderRulesTest {
         reminderRepo.add("Rapor yaz", customCategoryId = category.id)
         reminderRepo.add("Diğer not", customCategoryId = 999L)
 
-        // Pre-check: "Rapor yaz" has customCategoryId = category.id
+        
         val preItem = reminderRepo.load().first { it.text == "Rapor yaz" }
         assertEquals(category.id, preItem.customCategoryId)
 
-        // Execute deleteCategoryWithRollback where the deleteStep artificially throws an error
+        
         var thrown = false
         try {
             deleteCategoryWithRollback(category.id, reminderRepo, categoryRepo) {
@@ -536,19 +536,19 @@ class ReminderRulesTest {
         }
         assertTrue("Exception must be rethrown", thrown)
 
-        // Verify reminder-category relationship is rolled back in memory
+        
         val inMemoryReminders = reminderRepo.load()
         val inMemoryTarget = inMemoryReminders.first { it.text == "Rapor yaz" }
         assertEquals("Reminder customCategoryId must be restored to original value", category.id, inMemoryTarget.customCategoryId)
         assertEquals(999L, inMemoryReminders.first { it.text == "Diğer not" }.customCategoryId)
 
-        // Verify reminder-category relationship is rolled back on disk (fresh repository instance)
+        
         val onDiskReminders = ReminderRepository(reminderPrefs).load()
         val onDiskTarget = onDiskReminders.first { it.text == "Rapor yaz" }
         assertEquals("Disk customCategoryId must be restored to original value", category.id, onDiskTarget.customCategoryId)
         assertEquals(999L, onDiskReminders.first { it.text == "Diğer not" }.customCategoryId)
 
-        // Verify category still exists on disk
+        
         val onDiskCategories = CategoryRepository(categoryPrefs).load()
         assertEquals(1, onDiskCategories.size)
         assertEquals(category.id, onDiskCategories.first().id)
@@ -562,18 +562,18 @@ class ReminderRulesTest {
         assertEquals(777L, created.customCategoryId)
         val snapshot = reminderRepo.load()
 
-        // Mutate by unassigning
+        
         reminderRepo.unassignCategory(777L)
         assertNull(reminderRepo.load().first().customCategoryId)
 
-        // Restore snapshot
+        
         reminderRepo.restore(snapshot)
         assertEquals(777L, reminderRepo.load().first().customCategoryId)
 
-        // Verify fresh repository instance sees restored data
+        
         assertEquals(777L, ReminderRepository(reminderPrefs).load().first().customCategoryId)
 
-        // Also test CategoryRepository restore
+        
         val catPrefs = FakeSharedPreferences()
         val catRepo = CategoryRepository(catPrefs)
         val catSnapshot = catRepo.add("Test Cat", "BOOK", 0, null)
@@ -611,7 +611,7 @@ class ReminderRulesTest {
         val futureAlert = System.currentTimeMillis() + 3600000L
         val item = ReminderItem(id = 3L, text = "Toplantı", createdAt = 1000L, alertAt = futureAlert, customCategoryId = 77L)
 
-        // Enters Planned system category
+        
         val plannedList = listOf(item).inCategory(ReminderCategory.Planned)
         assertEquals(1, plannedList.size)
         assertEquals(3L, plannedList.first().id)
@@ -619,12 +619,12 @@ class ReminderRulesTest {
         val counts = listOf(item).categoryCounts(LocalDate.now())
         assertEquals(1, counts[ReminderCategory.Planned])
 
-        // Enters custom category filter
+        
         val customCategoryFiltered = listOf(item).filter { it.customCategoryId == 77L }
         assertEquals(1, customCategoryFiltered.size)
         assertEquals(3L, customCategoryFiltered.first().id)
 
-        // Does NOT enter NoAlert
+        
         assertTrue(listOf(item).inCategory(ReminderCategory.NoAlert).isEmpty())
     }
 
@@ -632,7 +632,7 @@ class ReminderRulesTest {
         val categoryPrefs = FakeSharedPreferences()
         val categoryRepo = CategoryRepository(categoryPrefs)
 
-        // Case A: reminder has customCategoryId pointing to a non-existent category
+        
         val orphanedReminder = ReminderItem(id = 10L, text = "Yağ ekle", createdAt = 1000L, customCategoryId = 999L)
         val metadataFallback = resolveNotificationMetadata(orphanedReminder, categoryRepo, fallbackTitle = "Real")
         assertEquals("Real", metadataFallback.title)
@@ -640,7 +640,7 @@ class ReminderRulesTest {
         assertNull(metadataFallback.accentColor)
         assertNull(metadataFallback.category)
 
-        // Case B: reminder has null customCategoryId
+        
         val standardReminder = ReminderItem(id = 11L, text = "Ekmek al", createdAt = 1000L, customCategoryId = null)
         val standardMetadata = resolveNotificationMetadata(standardReminder, categoryRepo, fallbackTitle = "Real")
         assertEquals("Real", standardMetadata.title)
@@ -648,7 +648,7 @@ class ReminderRulesTest {
         assertNull(standardMetadata.accentColor)
         assertNull(standardMetadata.category)
 
-        // Case C: category exists -> metadata uses category name and accent color
+        
         val addedCategory = categoryRepo.add("Evcil hayvan", "PET", 6, null).first()
         val matchingReminder = ReminderItem(id = 12L, text = "Yağ ekle", createdAt = 1000L, customCategoryId = addedCategory.id)
         val matchedMetadata = resolveNotificationMetadata(matchingReminder, categoryRepo, fallbackTitle = "Real")
@@ -675,7 +675,7 @@ class ReminderRulesTest {
         )
         val list = listOf(itemWithCategory, itemWithoutCategory)
 
-        // custom category + no alert, NoAlert filtresinde görünmüyor
+        
         val noAlertList = list.inCategory(ReminderCategory.NoAlert)
         assertEquals(listOf(itemWithoutCategory), noAlertList)
         assertFalse(noAlertList.contains(itemWithCategory))
@@ -698,7 +698,7 @@ class ReminderRulesTest {
             alertAt = null,
             customCategoryId = null
         )
-        // category count da NoAlert saymıyor
+        
         val today = LocalDate.now()
         val counts = listOf(itemWithCategoryNoAlert, itemWithoutCategoryNoAlert).categoryCounts(today)
         assertEquals(1, counts[ReminderCategory.NoAlert])
@@ -730,7 +730,7 @@ class ReminderRulesTest {
             customCategoryId = 42L
         )
 
-        // detail presentation helper varsa custom category + no alert için Uyarı yok göstermiyor
+        
         assertFalse(shouldShowNoAlertInDetail(itemWithCategoryNoAlert))
         assertNull(reminderDetailStatusText(itemWithCategoryNoAlert))
         assertTrue(isStandaloneCategoryInDetail(itemWithCategoryNoAlert))
@@ -750,11 +750,11 @@ class ReminderRulesTest {
     @Test fun shortNotificationDoesNotNeedBigTextStyle() {
         val shortText = "Kısa bir hatırlatıcı metni"
         assertFalse(needsBigTextStyle(shortText))
-        assertFalse(needsBigTextStyle("1234567890".repeat(8))) // exactly 80 chars
+        assertFalse(needsBigTextStyle("1234567890".repeat(8))) 
     }
 
     @Test fun longNotificationNeedsBigTextStyle() {
-        val longText = "Bu çok uzun bir hatırlatıcı metnidir. ".repeat(4) // > 80 chars
+        val longText = "Bu çok uzun bir hatırlatıcı metnidir. ".repeat(4) 
         assertTrue(longText.length > 80)
         assertTrue(needsBigTextStyle(longText))
 
@@ -795,7 +795,7 @@ class ReminderRulesTest {
         assertEquals("Yumurta", savedItem.checklistItems[1].text)
         assertFalse(savedItem.checklistItems[0].isCompleted)
 
-        // Reload fresh from prefs
+        
         val freshRepo = ReminderRepository(prefs)
         val reloaded = freshRepo.load().first()
         assertTrue(reloaded.isChecklist)
@@ -820,20 +820,20 @@ class ReminderRulesTest {
         val updated = repo.toggleChecklistItem(reminderId, itemId)
         val updatedReminder = updated.first { it.id == reminderId }
 
-        // Item is completed
+        
         val toggledItem = updatedReminder.checklistItems.first { it.id == itemId }
         assertTrue(toggledItem.isCompleted)
         assertNotNull(toggledItem.completedAt)
 
-        // Other item is not completed
+        
         val otherItem = updatedReminder.checklistItems.first { it.id != itemId }
         assertFalse(otherItem.isCompleted)
 
-        // Crucial rule: reminder completion status remains UNCHANGED
+        
         assertFalse(updatedReminder.isCompleted)
         assertNull(updatedReminder.completedAt)
 
-        // Verify persistence roundtrip for toggled item
+        
         val freshRepo = ReminderRepository(prefs)
         val loadedReminder = freshRepo.load().first { it.id == reminderId }
         assertTrue(loadedReminder.checklistItems.first { it.id == itemId }.isCompleted)
@@ -880,7 +880,7 @@ class ReminderRulesTest {
         assertEquals("Real", metadata.title)
         assertEquals("Alışveriş", metadata.text)
 
-        // Verify items are NOT part of the notification metadata
+        
         assertFalse(metadata.text.contains("Süt"))
         assertFalse(metadata.text.contains("Yumurta"))
         assertFalse(metadata.text.contains("Motor yağı"))
@@ -1108,11 +1108,11 @@ class ReminderRulesTest {
         )
         assertEquals(3, reminder.checklistItems.size)
 
-        // User edits: modifies "Ekmek" to "Tam Buğday Ekmek", deletes "Yumurta", adds "Peynir"
+        
         val editedItems = listOf(
             ChecklistItem(id = 101L, text = "Süt", completedAt = 12345L),
             ChecklistItem(id = 102L, text = "Tam Buğday Ekmek", completedAt = null),
-            ChecklistItem(id = 0L, text = "Peynir", completedAt = null) // Newly added item
+            ChecklistItem(id = 0L, text = "Peynir", completedAt = null) 
         )
         val updated = repository.edit(
             id = reminder.id,
@@ -1123,25 +1123,25 @@ class ReminderRulesTest {
         assertEquals("Süpermarket", updatedReminder.text)
         assertEquals(3, updatedReminder.checklistItems.size)
 
-        // Item 101: untouched ID and completedAt preserved
+        
         val sutItem = updatedReminder.checklistItems.first { it.id == 101L }
         assertEquals("Süt", sutItem.text)
         assertEquals(12345L, sutItem.completedAt)
 
-        // Item 102: text updated, ID and completedAt preserved
+        
         val ekmekItem = updatedReminder.checklistItems.first { it.id == 102L }
         assertEquals("Tam Buğday Ekmek", ekmekItem.text)
         assertNull(ekmekItem.completedAt)
 
-        // Item 103: removed
+        
         assertNull(updatedReminder.checklistItems.firstOrNull { it.id == 103L })
 
-        // New item: assigned stable ID > 0
+        
         val peynirItem = updatedReminder.checklistItems.first { it.text == "Peynir" }
         assertTrue(peynirItem.id > 0L)
         assertNull(peynirItem.completedAt)
 
-        // Editing only reminder text must NOT clear or reset checklist
+        
         val textOnlyUpdate = repository.edit(
             id = reminder.id,
             text = "Haftalık Market"
@@ -1325,9 +1325,9 @@ class ReminderRulesTest {
         assertTrue(tracker.animatingIds.isEmpty())
     }
 
-    // --------------------------------------------------
-    // Batch 4: Voice Checklist Creation Tests
-    // --------------------------------------------------
+    
+    
+    
 
     @Test
     fun voiceChecklist_explicitNamedList_extractsTitleAndItems() {
@@ -1443,32 +1443,32 @@ class ReminderRulesTest {
 
     @Test
     fun voiceReminder_normalReminderVerbsPreserved() {
-        // 1. "Ali'yi ara ve toplantıyı hatırlat" -> !isChecklist, full text preserved
+        
         val p1 = VoiceReminderParser.parse("Ali'yi ara ve toplantıyı hatırlat")
         assertFalse(p1.isChecklist)
         assertTrue(p1.checklistItems.isEmpty())
         assertEquals("Ali'yi ara ve toplantıyı hatırlat", p1.text)
 
-        // 2. "annemi ara ve faturayı öde" -> !isChecklist, full text preserved
+        
         val p2 = VoiceReminderParser.parse("annemi ara ve faturayı öde")
         assertFalse(p2.isChecklist)
         assertTrue(p2.checklistItems.isEmpty())
         assertEquals("Annemi ara ve faturayı öde", p2.text)
 
-        // 3. "yarın marketten süt, ekmek ve yumurta al" -> !isChecklist, normal parsed date preserved, remaining full reminder text preserved
+        
         val p3 = VoiceReminderParser.parse("yarın marketten süt, ekmek ve yumurta al")
         assertFalse(p3.isChecklist)
         assertTrue(p3.checklistItems.isEmpty())
         assertEquals("Marketten süt, ekmek ve yumurta al", p3.text)
         assertEquals(LocalDate.now().plusDays(1), p3.dateHint)
 
-        // 4. "alışveriş listesi oluştur süt, ekmek ve yumurta" -> checklist parsing still works
+        
         val p4 = VoiceReminderParser.parse("alışveriş listesi oluştur süt, ekmek ve yumurta")
         assertTrue(p4.isChecklist)
         assertEquals("Alışveriş listesi", p4.text)
         assertEquals(listOf("Süt", "Ekmek", "Yumurta"), p4.checklistItems)
 
-        // 5. "alışveriş listeme süt ve ekmek ekle" -> checklist parsing still works
+        
         val p5 = VoiceReminderParser.parse("alışveriş listeme süt ve ekmek ekle")
         assertTrue(p5.isChecklist)
         assertEquals("Alışveriş listesi", p5.text)
@@ -1495,10 +1495,10 @@ class ReminderRulesTest {
         val prefs = FakeSharedPreferences()
         val repo = CategoryRepository(prefs)
 
-        // Set single color override (start=0, end=null)
+        
         repo.setBuiltInCategoryColor(ReminderCategory.Today, CategoryColorOverride(0, null))
 
-        // Verify loaded from same and fresh repo instance
+        
         val loaded = repo.getBuiltInCategoryColor(ReminderCategory.Today)
         assertNotNull(loaded)
         assertEquals(0, loaded?.start)
@@ -1510,7 +1510,7 @@ class ReminderRulesTest {
         assertEquals(0, freshLoaded?.start)
         assertNull(freshLoaded?.end)
 
-        // Verify single color style rendering (does not fake a second color)
+        
         val style = ReminderCategory.Today.resolveStyle(loaded)
         val c1 = ReminderColorChoices[0].color
         assertEquals(Color(0xFF14151C), style.base)
@@ -1523,7 +1523,7 @@ class ReminderRulesTest {
         val prefs = FakeSharedPreferences()
         val repo = CategoryRepository(prefs)
 
-        // Set two-color gradient override (start=0, end=3)
+        
         repo.setBuiltInCategoryColor(ReminderCategory.Important, CategoryColorOverride(0, 3))
 
         val loaded = repo.getBuiltInCategoryColor(ReminderCategory.Important)
@@ -1535,7 +1535,7 @@ class ReminderRulesTest {
         val freshLoaded = freshRepo.getBuiltInCategoryColor(ReminderCategory.Important)
         assertEquals(CategoryColorOverride(0, 3), freshLoaded)
 
-        // Verify two-color style rendering
+        
         val style = ReminderCategory.Important.resolveStyle(loaded)
         val c1 = ReminderColorChoices[0].color
         val c2 = ReminderColorChoices[3].color
@@ -1549,18 +1549,18 @@ class ReminderRulesTest {
         val prefs = FakeSharedPreferences()
         val repo = CategoryRepository(prefs)
 
-        // Initially two colors (start=2, end=5)
+        
         repo.setBuiltInCategoryColor(ReminderCategory.NoAlert, CategoryColorOverride(2, 5))
         assertEquals(CategoryColorOverride(2, 5), repo.getBuiltInCategoryColor(ReminderCategory.NoAlert))
 
-        // Clear Color 2 -> override with end = null
+        
         repo.setBuiltInCategoryColor(ReminderCategory.NoAlert, CategoryColorOverride(2, null))
         val updated = repo.getBuiltInCategoryColor(ReminderCategory.NoAlert)
         assertNotNull(updated)
         assertEquals(2, updated?.start)
         assertNull(updated?.end)
 
-        // Now clear Color 1 as well -> null override (restores default)
+        
         repo.setBuiltInCategoryColor(ReminderCategory.NoAlert, null as CategoryColorOverride?)
         assertNull(repo.getBuiltInCategoryColor(ReminderCategory.NoAlert))
     }
@@ -1570,9 +1570,9 @@ class ReminderRulesTest {
         val prefs = FakeSharedPreferences()
         val repo = CategoryRepository(prefs)
 
-        // Add custom category with 2 colors
+        
         repo.add(name = "İş Projesi", iconKey = "WORK", accentStart = 2, accentEnd = 6)
-        // Add custom category with 1 color
+        
         repo.add(name = "Kişisel", iconKey = "HOME", accentStart = 4, accentEnd = null)
 
         val categories = repo.load()
@@ -1588,7 +1588,7 @@ class ReminderRulesTest {
         assertEquals(4, homeCat.accentStart)
         assertNull(homeCat.accentEnd)
 
-        // Verify fresh repository instance retains both
+        
         val freshCategories = CategoryRepository(prefs).load()
         val freshWork = freshCategories.first { it.name == "İş Projesi" }
         assertEquals(2, freshWork.accentStart)
@@ -1604,17 +1604,17 @@ class ReminderRulesTest {
         val prefs = FakeSharedPreferences()
         val repo = CategoryRepository(prefs)
 
-        // Initial state: no overrides
+        
         assertNull(repo.getBuiltInCategoryColor(ReminderCategory.Today))
 
-        // User opens editor, modifies temporary in-memory state, but dismisses/cancels (no repo write)
+        
         var tempColor1: Int? = 5
         var tempColor2: Int? = 8
-        // User clicks "Vazgeç" -> temp values discarded, repo not called
+        
         tempColor1 = null
         tempColor2 = null
 
-        // Verify repository remains unchanged
+        
         assertNull(repo.getBuiltInCategoryColor(ReminderCategory.Today))
         assertNull(CategoryRepository(prefs).getBuiltInCategoryColor(ReminderCategory.Today))
     }
@@ -1624,7 +1624,7 @@ class ReminderRulesTest {
         val prefs = FakeSharedPreferences()
         val repo = CategoryRepository(prefs)
 
-        // Override colors for Today and Planned
+        
         repo.setBuiltInCategoryColor(ReminderCategory.Today, CategoryColorOverride(1, 2))
         repo.setBuiltInCategoryColor(ReminderCategory.Planned, CategoryColorOverride(3, 4))
 
@@ -1634,7 +1634,7 @@ class ReminderRulesTest {
         val item1 = ReminderItem(id = 1L, text = "Bugün görevi", createdAt = 1000L, alertAt = todayEpoch)
         val item2 = ReminderItem(id = 2L, text = "Genel not", createdAt = 1000L, alertAt = null)
 
-        // Filtering by ReminderCategory must remain 100% identical
+        
         val todayItems = listOf(item1, item2).inCategory(ReminderCategory.Today, today = now, zone = zone)
         assertEquals(1, todayItems.size)
         assertEquals(1L, todayItems.first().id)
@@ -1643,12 +1643,12 @@ class ReminderRulesTest {
         assertEquals(1, noAlertItems.size)
         assertEquals(2L, noAlertItems.first().id)
 
-        // Category counts must remain identical
+        
         val counts = listOf(item1, item2).categoryCounts(now, zone = zone)
         assertEquals(1, counts[ReminderCategory.Today])
         assertEquals(1, counts[ReminderCategory.NoAlert])
 
-        // Category enum identity / equality is completely unaffected
+        
         assertEquals("Today", ReminderCategory.Today.name)
         assertEquals("Planned", ReminderCategory.Planned.name)
     }

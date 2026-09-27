@@ -29,7 +29,6 @@ import androidx.lifecycle.lifecycleScope
 import com.cagri.bigboscagri.data.*
 import com.cagri.bigboscagri.notifications.*
 import com.cagri.bigboscagri.ui.*
-import com.cagri.bigboscagri.ui.components.NotificationPermissionSheet
 import com.cagri.bigboscagri.ui.theme.BigBosTheme
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -39,9 +38,11 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     private lateinit var repository: ReminderRepository
     private lateinit var categoryRepository: CategoryRepository
+    private lateinit var moodTrackerRepository: MoodTrackerRepository
     private var reminders by mutableStateOf<List<ReminderItem>>(emptyList())
     private var customCategories by mutableStateOf<List<CustomCategory>>(emptyList())
     private var builtInCategoryColors by mutableStateOf<Map<ReminderCategory, CategoryColorOverride>>(emptyMap())
+    private var moodTrackerEntries by mutableStateOf<List<MoodTrackerEntry>>(emptyList())
     private var ready by mutableStateOf(false)
     private var loadFailed by mutableStateOf(false)
     private var exactAllowed by mutableStateOf(false)
@@ -51,7 +52,7 @@ class MainActivity : ComponentActivity() {
     private var pendingLocationShare by mutableStateOf<PendingReminderLocation?>(null)
     private val attemptedLocationPreviews = mutableSetOf<Pair<Long, String>>()
     private val operations = Mutex()
-    private val waiting = mutableSetOf<Long>() // Accessed only under mutationLock on IO.
+    private val waiting = mutableSetOf<Long>() 
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         notificationsAllowed = NotificationManagerCompat.from(this).areNotificationsEnabled()
         if (granted) lifecycleScope.launch {
@@ -70,9 +71,11 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 29) window.isStatusBarContrastEnforced = false
         repository = ReminderRepository(applicationContext)
         categoryRepository = CategoryRepository(applicationContext)
+        moodTrackerRepository = MoodTrackerRepository(applicationContext)
         reminders = try { repository.load() } catch (_: Exception) { emptyList() }
         customCategories = try { categoryRepository.load() } catch (_: Exception) { emptyList() }
         builtInCategoryColors = try { categoryRepository.getBuiltInCategoryColors() } catch (_: Exception) { emptyMap() }
+        moodTrackerEntries = try { moodTrackerRepository.load() } catch (_: Exception) { emptyList() }
         ready = true
         exactAllowed = ReminderScheduler.canScheduleExact(this)
         notificationsAllowed = NotificationManagerCompat.from(this).areNotificationsEnabled()
@@ -92,7 +95,8 @@ class MainActivity : ComponentActivity() {
             BigBosTheme {
                 var reduceBlur by remember { mutableStateOf(preferences.getBoolean("reduce_dynamic_blur", false)) }
                 var reduceAnimations by remember { mutableStateOf(preferences.getBoolean("reduce_animations", false)) }
-                var style by remember { mutableStateOf(DesignStyle.fromPreference(preferences.getString("design_style", "glass"))) }
+                var realPetEnabled by remember { mutableStateOf(preferences.getBoolean("real_pet_enabled", false)) }
+                var style by remember { mutableStateOf(DesignStyle.fromPreference(preferences.getString("design_style", "liquid_glass"))) }
                 var hasCompletedOnboarding by remember { mutableStateOf(preferences.getBoolean("onboarding_completed", false)) }
                 var userName by remember { mutableStateOf(preferences.getString("user_display_name", "") ?: "") }
                 var playFirstHomeIntro by remember { mutableStateOf(false) }
@@ -101,7 +105,8 @@ class MainActivity : ComponentActivity() {
                     com.cagri.bigboscagri.ui.components.LocalDesignStyle provides style,
                     com.cagri.bigboscagri.ui.components.LocalLiquidReduceMotion provides reduceAnimations
                 ) {
-                Crossfade(
+                Box(Modifier.fillMaxSize()) {
+                    Crossfade(
                     targetState = hasCompletedOnboarding,
                     animationSpec = if (reduceAnimations) snap() else tween(240),
                     label = "onboardingCrossfade"
@@ -133,7 +138,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         ReminderScreen(
                             reminders = reminders,
-                            onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl, attachments, location ->
+                            onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl, attachments, voiceRecordings, location ->
                                 var createdId: Long? = null
                                 val success = perform(warnIfBlocked = true) {
                                     val newest = repository.add(
@@ -146,6 +151,7 @@ class MainActivity : ComponentActivity() {
                                         sendImmediateNotification = sendImmediateNotification,
                                         referenceUrl = referenceUrl,
                                         attachments = attachments,
+                                        voiceRecordings = voiceRecordings,
                                         location = location
                                     )
                                     createdId = newest.id
@@ -159,23 +165,34 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onToggleCompleted = { id -> mutate {
-                                val item = repository.toggleCompleted(id).firstOrNull { it.id == id }
-                                ReminderNotifications.cancel(this, id)
+                                repository.toggleCompleted(id)
+                                ReminderNotifications.cancel(this@MainActivity, id)
                                 waiting.remove(id)
                             } },
                             onToggleImportant = { id -> mutate {
                                 val item = repository.toggleImportant(id).firstOrNull { it.id == id }
-                                if (item?.shouldPinNotification == true) ReminderNotifications.show(this, item)
-                                else { ReminderNotifications.cancel(this, id); waiting.remove(id) }
+                                if (item?.shouldPinNotification == true) ReminderNotifications.show(this@MainActivity, item)
+                                else { ReminderNotifications.cancel(this@MainActivity, id); waiting.remove(id) }
                             } },
-                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, location -> mutate {
-                                repository.edit(id, text, accentStart, accentEnd, customCategoryId, checklistItems = checklistItems, starBorderColorIndex = starBorderColorIndex, gradientBlendFraction = gradientBlendFraction, customSolidColorArgb = customSolidColorArgb, attachments = attachments, location = location, updateLocation = true).firstOrNull { it.id == id }
-                                    ?.let { ReminderNotifications.refreshEdited(this, it) }
+                            onEditReminder = { id, text, accentStart, accentEnd, customCategoryId, checklistItems, starBorderColorIndex, gradientBlendFraction, customSolidColorArgb, attachments, voiceRecordings, location, referenceUrl, musicBlocks, contentBlockOrder -> perform {
+                                val before = repository.load().firstOrNull { it.id == id } ?: error("Hatırlatıcı artık mevcut değil")
+                                val updated = repository.edit(id, text, accentStart, accentEnd, customCategoryId, checklistItems = checklistItems,
+                                    starBorderColorIndex = starBorderColorIndex, gradientBlendFraction = gradientBlendFraction,
+                                    customSolidColorArgb = customSolidColorArgb, attachments = attachments, voiceRecordings = voiceRecordings, musicBlocks = musicBlocks,
+                                    location = location, updateLocation = true,
+                                    referenceUrl = referenceUrl, updateReferenceUrl = true,
+                                    contentBlockOrder = contentBlockOrder).firstOrNull { it.id == id }
+
+                                val usedPaths = repository.getAllAttachmentPaths()
+                                AttachmentStorage.deleteAttachmentFilePaths(this@MainActivity, before.attachments.map { it.localPath }.filterNot { it in usedPaths })
+                                val usedVoicePaths = repository.getAllVoiceRecordingPaths()
+                                VoiceRecordingStorage.deleteRecordingPaths(this@MainActivity, before.voiceRecordings.map { it.localPath }.filterNot { it in usedVoicePaths })
+                                updated?.let { runCatching { ReminderNotifications.refreshEdited(this@MainActivity, it) } }
                             } },
                             onSetAlert = { id, at, repeatRule -> mutate {
                                 val item = repository.setAlert(id, at, repeatRule).firstOrNull { it.id == id }
-                                ReminderNotifications.cancel(this, id)
-                                if (item != null && (at == null || item.shouldPinNotification)) ReminderNotifications.show(this, item)
+                                ReminderNotifications.cancel(this@MainActivity, id)
+                                if (item != null && (at == null || item.shouldPinNotification)) ReminderNotifications.show(this@MainActivity, item)
                             } },
                             onSetJournal = { id, mood, text -> mutate {
                                 repository.setJournal(id, mood, text)
@@ -183,19 +200,43 @@ class MainActivity : ComponentActivity() {
                             onDeleteJournal = { id -> mutate {
                                 repository.deleteJournal(id)
                             } },
+                            onSetMood = { id, mood, details -> mutate {
+                                repository.setMood(id, mood, details)
+                            } },
+                            homeMoodEntries = moodTrackerEntries,
+                            onAddHomeMood = { mood, details ->
+                                moodTrackerEntries = moodTrackerRepository.add(mood, details)
+                            },
+                            onClearAllMoods = {
+                                lifecycleScope.launch {
+                                    val success = perform {
+                                        repository.clearAllMoods()
+                                        moodTrackerRepository.clearAll()
+                                    }
+                                    if (success) moodTrackerEntries = emptyList()
+                                }
+                            },
                             onDeleteReminder = { id -> mutate {
                                 val paths = repository.getAttachmentPathsForReminders(setOf(id))
-                                AttachmentStorage.deleteAttachmentFilePaths(paths)
-                                repository.delete(id); ReminderNotifications.cancel(this, id); waiting.remove(id)
+                                val voicePaths = repository.getVoiceRecordingPathsForReminders(setOf(id))
+                                repository.delete(id)
+                                AttachmentStorage.deleteAttachmentFilePaths(this@MainActivity, paths.filterNot { it in repository.getAllAttachmentPaths() })
+                                VoiceRecordingStorage.deleteRecordingPaths(this@MainActivity, voicePaths.filterNot { it in repository.getAllVoiceRecordingPaths() })
+                                ReminderNotifications.cancel(this@MainActivity, id); waiting.remove(id)
                             } },
                             onDeleteReminders = { ids -> mutate {
                                 val paths = repository.getAttachmentPathsForReminders(ids)
-                                AttachmentStorage.deleteAttachmentFilePaths(paths)
+                                val voicePaths = repository.getVoiceRecordingPathsForReminders(ids)
                                 ids.forEach { id ->
-                                    ReminderNotifications.cancel(this, id)
+                                    ReminderNotifications.cancel(this@MainActivity, id)
                                     waiting.remove(id)
                                 }
                                 repository.deleteAll(ids)
+                                AttachmentStorage.deleteAttachmentFilePaths(this@MainActivity, paths.filterNot { it in repository.getAllAttachmentPaths() })
+                                VoiceRecordingStorage.deleteRecordingPaths(this@MainActivity, voicePaths.filterNot { it in repository.getAllVoiceRecordingPaths() })
+                            } },
+                            onBulkSetCategory = { ids, catId -> mutate {
+                                repository.setCustomCategoryForReminders(ids, catId)
                             } },
                             requestedReminderId = openedReminderId,
                             onRequestHandled = { openedReminderId = null; intent.removeExtra(ReminderNotifications.EXTRA_REMINDER_ID) },
@@ -203,19 +244,30 @@ class MainActivity : ComponentActivity() {
                             onReduceDynamicBlurChange = { reduceBlur = it; preferences.edit().putBoolean("reduce_dynamic_blur", it).apply() },
                             reduceAnimations = reduceAnimations,
                             onReduceAnimationsChange = { reduceAnimations = it; preferences.edit().putBoolean("reduce_animations", it).apply() },
+                            realPetEnabled = realPetEnabled,
+                            onRealPetEnabledChange = {
+                                realPetEnabled = it
+                                preferences.edit().putBoolean("real_pet_enabled", it).apply()
+                            },
                             designStyle = style,
                             onDesignStyleChange = { style = it; preferences.edit().putString("design_style", it.preferenceKey).apply() },
                             exactAlarmsAllowed = exactAllowed,
                             onRequestExactAlarms = ::openAlarmAccess,
                             customCategories = customCategories,
-                            onCreateCategory = { name, iconKey, start, end, hide ->
+                            onCreateCategory = { name, iconKey, start, end, hide, useDarkText, blendFraction, customSolidColorArgb ->
                                 mutateCategory("Kategori oluşturulamadı.") {
-                                    categoryRepository.add(name, iconKey, start, end, hide)
+                                    categoryRepository.add(
+                                        name, iconKey, start, end, hide, useDarkText,
+                                        blendFraction, customSolidColorArgb
+                                    )
                                 }
                             },
-                            onEditCategory = { id, name, iconKey, start, end, hide ->
+                            onEditCategory = { id, name, iconKey, start, end, hide, useDarkText, blendFraction, customSolidColorArgb ->
                                 mutateCategory("Kategori güncellenemedi.") {
-                                    categoryRepository.update(id, name, iconKey, start, end, hide)
+                                    categoryRepository.update(
+                                        id, name, iconKey, start, end, hide, useDarkText,
+                                        blendFraction, customSolidColorArgb
+                                    )
                                 }
                             },
                             onDeleteCategory = { id, deleteReminders ->
@@ -250,6 +302,23 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+
+                    if (hasCompletedOnboarding && ready && realPetEnabled) {
+                        com.cagri.bigboscagri.ui.components.RealPetLayer(
+                            reduceAnimations = reduceAnimations,
+                            onCreatePersistentCard = { petText ->
+                                mutate {
+                                    repository.add(
+                                        text = petText,
+                                        sendImmediateNotification = false
+                                    )
+                                }
+                            },
+                            reminders = reminders,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
                 }
             }
         }
@@ -264,17 +333,14 @@ class MainActivity : ComponentActivity() {
             customCategories = try { categoryRepository.load() } catch (_: Exception) { emptyList() }
             builtInCategoryColors = try { categoryRepository.getBuiltInCategoryColors() } catch (_: Exception) { emptyMap() }
         }
+        if (::moodTrackerRepository.isInitialized) {
+            moodTrackerEntries = try { moodTrackerRepository.load() } catch (_: Exception) { emptyList() }
+        }
     }
 
     private fun openNotificationSettings() {
-        val intent = Intent().apply {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
-                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-            } else {
-                action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-                data = Uri.parse("package:$packageName")
-            }
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
         }
         try { startActivity(intent) }
         catch (_: Exception) { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
@@ -288,7 +354,7 @@ class MainActivity : ComponentActivity() {
     private fun openMapsForLocation(reminderId: Long) {
         if (reminders.none { it.id == reminderId }) return
         val prefs = getSharedPreferences("real_pending_location", MODE_PRIVATE)
-        // Commit before switching apps: Android may terminate REAL in the background.
+        
         if (!prefs.edit().putLong("reminder_id", reminderId)
                 .putLong("started_at", System.currentTimeMillis()).commit()) {
             Toast.makeText(this, "Konum seçimi başlatılamadı", Toast.LENGTH_SHORT).show()
@@ -317,11 +383,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Google Maps place/business shares can resolve to a Place-ID/search URL with no literal
-     * coordinates. Keep URL parsing as the first choice; only then use Android's key-free
-     * forward geocoder so a shared cafe/restaurant can still get a static map preview.
-     */
+    
+
+
+
+
     private fun parseAndResolveSharedLocation(text: String): ReminderLocation? {
         val parsed = GoogleMapsShareParser.parse(text) ?: return null
         if (parsed.latitude != null && parsed.longitude != null) return parsed
@@ -379,11 +445,9 @@ class MainActivity : ComponentActivity() {
             }
             return
         }
-        ShareParser.parse(intent)?.let { payload ->
-            pendingShareDraft = payload
-            intent?.removeExtra(Intent.EXTRA_TEXT)
-            intent?.removeExtra(Intent.EXTRA_SUBJECT)
-            intent?.removeExtra(Intent.EXTRA_TITLE)
+        if (intent?.action in listOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE, Intent.ACTION_PROCESS_TEXT)) {
+            startActivity(Intent(intent).setClass(this, AttachmentImportActivity::class.java))
+            intent?.action = null
         }
     }
     private fun mutate(action: () -> Unit) { lifecycleScope.launch { perform(action = action) } }
@@ -403,7 +467,15 @@ class MainActivity : ComponentActivity() {
                                 reminderSnapshot = repository.load()
                                 categorySnapshot = categoryRepository.load()
                                 action()
-                                repository.load() to categoryRepository.load()
+                                val after = repository.load()
+                                val categoriesAfter = categoryRepository.load()
+                                val usedPaths = after.flatMap { it.attachments }.map { it.localPath }.toSet()
+                                AttachmentStorage.deleteAttachmentFilePaths(this@MainActivity,
+                                    reminderSnapshot.orEmpty().flatMap { it.attachments }.map { it.localPath }.filterNot { it in usedPaths })
+                                val usedVoicePaths = after.flatMap { it.voiceRecordings }.map { it.localPath }.toSet()
+                                VoiceRecordingStorage.deleteRecordingPaths(this@MainActivity,
+                                    reminderSnapshot.orEmpty().flatMap { it.voiceRecordings }.map { it.localPath }.filterNot { it in usedVoicePaths })
+                                after to categoriesAfter
                             }
                         }
                     }

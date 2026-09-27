@@ -7,5 +7,8 @@ data class CustomCategory(
     val accentStart: Int,
     val accentEnd: Int? = null,
     val hideFromGeneralLists: Boolean = false,
+    val useDarkText: Boolean = false,
+    val gradientBlendFraction: Float? = null,
+    val customSolidColorArgb: Int? = null,
     val createdAt: Long = System.currentTimeMillis()
 )

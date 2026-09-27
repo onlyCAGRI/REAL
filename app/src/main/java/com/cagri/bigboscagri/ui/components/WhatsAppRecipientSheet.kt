@@ -141,12 +141,12 @@ fun WhatsAppRecipientSheet(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = {} // Prevent click bubbling
+                            onClick = {} 
                         )
                         .padding(horizontal = 24.dp, vertical = 20.dp)
                         .navigationBarsPadding()
                 ) {
-                    // Drag handle
+                    
                     Box(
                         modifier = Modifier
                             .size(width = 38.dp, height = 4.dp)
@@ -156,7 +156,7 @@ fun WhatsAppRecipientSheet(
 
                     Spacer(Modifier.height(20.dp))
 
-                    // Title
+                    
                     Text(
                         text = "WhatsApp numaran",
                         color = Color.White,
@@ -167,7 +167,7 @@ fun WhatsAppRecipientSheet(
 
                     Spacer(Modifier.height(8.dp))
 
-                    // Body
+                    
                     Text(
                         text = "Hatırlatıcılarını hangi WhatsApp numarasına göndereyim?",
                         color = Color(0xFFA4A4AD),
@@ -177,7 +177,7 @@ fun WhatsAppRecipientSheet(
 
                     Spacer(Modifier.height(18.dp))
 
-                    // Input Box
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -220,7 +220,7 @@ fun WhatsAppRecipientSheet(
 
                     Spacer(Modifier.height(24.dp))
 
-                    // Primary Button: "Kaydet"
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -240,7 +240,7 @@ fun WhatsAppRecipientSheet(
 
                     Spacer(Modifier.height(10.dp))
 
-                    // Secondary Button: "Vazgeç"
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

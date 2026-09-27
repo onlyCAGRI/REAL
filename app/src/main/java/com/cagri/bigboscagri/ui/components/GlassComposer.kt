@@ -17,8 +17,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.runtime.key
-import androidx.compose.runtime.saveable.rememberSaveable
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import java.io.File
@@ -31,9 +29,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.style.TextOverflow
-import com.cagri.bigboscagri.ui.reminderDate
 import java.time.LocalDate
 import com.cagri.bigboscagri.speech.TimeOfDay
 import com.cagri.bigboscagri.speech.formatPendingScheduleLabel
@@ -50,10 +45,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -84,18 +77,21 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.data.RecurrenceRule
 import com.cagri.bigboscagri.speech.VoicePhase
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -183,6 +179,12 @@ fun GlassComposer(
         label = "textInset"
     )
     val recording = voicePhase != VoicePhase.Idle
+    DisposableEffect(recording) {
+        RealPetRuntime.setComposerMicActive(recording)
+        onDispose {
+            if (recording) RealPetRuntime.setComposerMicActive(false)
+        }
+    }
     val micColor by animateColorAsState(
         if (recording) Color(0xFF69ACFF) else Color(0xFFE4E4EA),
         if (reduceAnimations) snap() else tween(180),
@@ -205,9 +207,9 @@ fun GlassComposer(
 
     var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
     var isComposerFocused by remember { mutableStateOf(false) }
-    val view = LocalView.current
     val submitInteractionSource = remember { MutableInteractionSource() }
     val micInteractionSource = remember { MutableInteractionSource() }
+    val petMicKick = remember { Animatable(0f) }
 
     val voiceArrivalProgress = remember(isVoiceDraft) {
         Animatable(if (isVoiceDraft && !reduceAnimations) 0f else 1f)
@@ -233,13 +235,67 @@ fun GlassComposer(
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
     val isResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
 
+    val petPrank = RealPetRuntime.prank
+    val latestComposerValue = rememberUpdatedState(value)
+    val latestOnValueChange = rememberUpdatedState(onValueChange)
+
+    LaunchedEffect(petPrank?.token) {
+        val prank = petPrank ?: return@LaunchedEffect
+        if (prank.perchId != REAL_PET_PERCH_COMPOSER || prank.type != RealPetPrankType.ComposerTypedMeow) {
+            return@LaunchedEffect
+        }
+
+        // This prank is real text: append to the user's current draft and keep a local
+        // working copy while animating the characters. Relying on recomposition between
+        // characters could repeatedly overwrite the same stale value.
+        if (isChecklistMode || recording || saving || latestComposerValue.value.isBlank()) {
+            RealPetRuntime.consumePrank(prank.token)
+            return@LaunchedEffect
+        }
+
+        val target = listOf(" meaw", " meaww", " meawww", " meaw meaww")[prank.token % 4]
+        var draft = latestComposerValue.value
+        target.forEach { ch ->
+            draft += ch
+            latestOnValueChange.value(draft)
+            delay(if (reduceAnimations) 22L else 82L)
+        }
+        RealPetRuntime.consumePrank(prank.token)
+    }
+
+    LaunchedEffect(petPrank?.token, reduceAnimations) {
+        val prank = petPrank ?: return@LaunchedEffect
+        if (prank.perchId != REAL_PET_PERCH_COMPOSER_MIC || prank.type != RealPetPrankType.MicNudge) {
+            return@LaunchedEffect
+        }
+        RealPetRuntime.consumePrank(prank.token)
+        if (saving) return@LaunchedEffect
+        if (reduceAnimations) {
+            petMicKick.snapTo(0.14f)
+            delay(180L)
+            petMicKick.snapTo(0f)
+        } else {
+            petMicKick.snapTo(0f)
+            petMicKick.animateTo(1f, tween(110, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)))
+            petMicKick.animateTo(-0.65f, tween(120))
+            petMicKick.animateTo(0.35f, tween(95))
+            petMicKick.animateTo(0f, tween(140))
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            RealPetRuntime.clearComposerTyping()
+        }
+    }
+
     val shouldShimmer = isResumed && isHomeReady && !reduceAnimations && !expanded && !isComposerFocused && !isChecklistMode && !recording && value.isEmpty()
     val shimmerProgress = remember { Animatable(0f) }
 
     LaunchedEffect(shouldShimmer) {
         if (shouldShimmer) {
             delay(800)
-            while (isActive && shouldShimmer) {
+            while (isActive) {
                 shimmerProgress.animateTo(
                     targetValue = 1f,
                     animationSpec = tween(
@@ -402,7 +458,7 @@ fun GlassComposer(
                 .fillMaxSize()
                 .pointerInput(expanded, isLabsOpen) {
                     if (!expanded) {
-                        detectTapGestures { /* consume panel tap */ }
+                        detectTapGestures {  }
                     } else {
                         var totalDragY = 0f
                         val threshold = with(density) { 28.dp.toPx() }
@@ -464,7 +520,7 @@ fun GlassComposer(
                         if (value.isEmpty()) {
                             Text(
                                 when (voicePhase) {
-                                    VoicePhase.Idle -> "Hatırlatıcı ekle"
+                                    VoicePhase.Idle -> RealPetRuntime.placeholderOverride ?: "Aklında ne var?"
                                     VoicePhase.Listening -> "Türkçe dinleniyor…"
                                     VoicePhase.Finishing -> "Metin hazırlanıyor…"
                                 },
@@ -492,6 +548,7 @@ fun GlassComposer(
                         modifier = Modifier
                             .weight(1f)
                             .padding(end = 6.dp)
+                            .realPetPerch(REAL_PET_PERCH_COMPOSER_TEXT)
                             .then(
                                 if (expanded && !isChecklistMode) {
                                     Modifier
@@ -505,15 +562,24 @@ fun GlassComposer(
                     ) {
                         BasicTextField(
                             value = value,
-                            onValueChange = { onValueChange(it.replace("\r", "").replace("\n", " ")) },
+                            onValueChange = { changed ->
+                                val cleaned = changed.replace("\r", "").replace("\n", " ")
+                                if (cleaned != value && !isChecklistMode) RealPetRuntime.noteComposerTyping()
+                                onValueChange(cleaned)
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .then(voiceArrivalModifier)
                                 .focusRequester(focusRequester)
-                                .onFocusChanged { onFocusChanged(it.isFocused) }
+                                .onFocusChanged { focusState ->
+                                    isComposerFocused = focusState.isFocused
+                                    if (!focusState.isFocused) RealPetRuntime.clearComposerTyping()
+                                    onFocusChanged(focusState.isFocused)
+                                }
                                 .semantics { contentDescription = if (isChecklistMode) "Başlık" else "Hatırlatıcı metni" },
                             readOnly = saving,
                             singleLine = isChecklistMode,
+                            visualTransformation = VisualTransformation.None,
                             textStyle = MaterialTheme.typography.bodyLarge.copy(
                                 color = Color(0xFFF7F7F8),
                                 fontSize = 16.sp,
@@ -549,9 +615,9 @@ fun GlassComposer(
                                         } else {
                                             var placeholderTextWidthPx by remember { mutableFloatStateOf(0f) }
 
-                                            // 1. Base Layer: Calm Grey Text (bone-grey for high contrast)
+                                            
                                             Text(
-                                                text = "Hatırlatıcı ekle",
+                                                text = RealPetRuntime.placeholderOverride ?: if (expanded) "Aklında ne var?" else "Add to REAL",
                                                 color = Color(0xFF8E8E96),
                                                 fontSize = 16.sp,
                                                 onTextLayout = { layoutResult ->
@@ -559,10 +625,10 @@ fun GlassComposer(
                                                 }
                                             )
 
-                                            // 2. Shimmer Layer: Pure White Text masked with moving wide gradient mask
+                                            
                                             if (shouldShimmer) {
                                                 Text(
-                                                    text = "Hatırlatıcı ekle",
+                                                    text = RealPetRuntime.placeholderOverride ?: if (expanded) "Aklında ne var?" else "Add to REAL",
                                                     color = Color.White,
                                                     fontSize = 16.sp,
                                                     modifier = Modifier
@@ -674,7 +740,10 @@ fun GlassComposer(
                     onClick = onMicClick,
                     interactionSource = micInteractionSource,
                     enabled = voicePhase != VoicePhase.Finishing && !saving,
-                    modifier = Modifier.size(48.dp).semantics {
+                    modifier = Modifier
+                        .size(48.dp)
+                        .realPetPerch(REAL_PET_PERCH_COMPOSER_MIC)
+                        .semantics {
                         contentDescription = if (recording) "Dinlemeyi bitir" else "Türkçe sesle yaz"
                         stateDescription = when (voicePhase) {
                             VoicePhase.Idle -> "Mikrofon kapalı"
@@ -687,7 +756,13 @@ fun GlassComposer(
                         Modifier
                             .pressScale(micInteractionSource, enabled = voicePhase != VoicePhase.Finishing && !saving, targetScale = 0.95f, reduceAnimations = reduceAnimations)
                             .size(40.dp)
-                            .graphicsLayer { scaleX = micScale; scaleY = micScale }
+                            .graphicsLayer {
+                                val kick = petMicKick.value
+                                scaleX = micScale * (1f + kotlin.math.abs(kick) * 0.025f)
+                                scaleY = micScale * (1f - kotlin.math.abs(kick) * 0.018f)
+                                rotationZ = kick * 7f
+                                translationX = kick * 2.5f
+                            }
                             .background(
                                 if (recording) {
                                     Color(0xFF2D6099).copy(
@@ -788,35 +863,33 @@ fun GlassComposer(
                         }
                     }
 
-                    if (customCategories.isNotEmpty()) {
-                        val selectedCategory = remember(customCategories, selectedCategoryId) {
-                            customCategories.firstOrNull { it.id == selectedCategoryId }
-                        }
-                        val isCatSelected = selectedCategory != null
-                        val catColor = if (isCatSelected) {
-                            ReminderColorChoices.getOrNull(selectedCategory!!.accentStart)?.color ?: Color(0xFF91B9FF)
-                        } else Color(0xFFBABAC3)
+                    val selectedCategory = remember(customCategories, selectedCategoryId) {
+                        customCategories.firstOrNull { it.id == selectedCategoryId }
+                    }
+                    val isCatSelected = selectedCategory != null
+                    val catColor = if (isCatSelected) {
+                        ReminderColorChoices.getOrNull(selectedCategory!!.accentStart)?.color ?: Color(0xFF91B9FF)
+                    } else Color(0xFFBABAC3)
 
-                        IconButton(
-                            onClick = onPickCategory,
-                            enabled = !recording && !saving,
-                            modifier = Modifier.size(40.dp).semantics {
-                                contentDescription = if (isCatSelected) "Kategori: ${selectedCategory!!.name}" else "Kategori seç"
-                            }
-                        ) {
-                            if (isCatSelected) {
-                                CategoryIconGlyph(
-                                    CategoryIcon.fromKey(selectedCategory!!.iconKey),
-                                    Modifier.size(20.dp),
-                                    catColor
-                                )
-                            } else {
-                                ActionIcon(
-                                    ActionGlyph.Note,
-                                    Modifier.size(20.dp),
-                                    catColor
-                                )
-                            }
+                    IconButton(
+                        onClick = onPickCategory,
+                        enabled = !recording && !saving,
+                        modifier = Modifier.size(40.dp).semantics {
+                            contentDescription = if (isCatSelected) "Kategori: ${selectedCategory!!.name}" else "Kategori seç veya oluştur"
+                        }
+                    ) {
+                        if (isCatSelected) {
+                            CategoryIconGlyph(
+                                CategoryIcon.fromKey(selectedCategory!!.iconKey),
+                                Modifier.size(20.dp),
+                                catColor
+                            )
+                        } else {
+                            ActionIcon(
+                                ActionGlyph.Category,
+                                Modifier.size(20.dp),
+                                catColor
+                            )
                         }
                     }
 
@@ -854,6 +927,7 @@ fun GlassComposer(
                             }
                         }
                     }
+
 
                     IconButton(
                         onClick = onToggleChecklistMode,
@@ -923,6 +997,7 @@ fun GlassComposer(
                     }
                 }
             }
+
 
             if (expanded && isChecklistMode) {
                 Column(
@@ -1027,7 +1102,7 @@ fun GlassComposer(
                             translationY = (1f - labsProgress) * with(density) { 8.dp.toPx() }
                         }
                 ) {
-                    // Subtle separation
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1036,7 +1111,7 @@ fun GlassComposer(
                             .background(Color.White.copy(alpha = 0.08f))
                     )
 
-                    // Subtle label: "Real Labs."
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1052,14 +1127,14 @@ fun GlassComposer(
                         )
                     }
 
-                    // WhatsApp Action Row
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val whatsappGreen = Color(0xFF34D399) // restrained WhatsApp green consistent with REAL's dark/glass UI
+                        val whatsappGreen = Color(0xFF34D399) 
                         val iconTint = if (isWhatsAppArmed) whatsappGreen else Color(0xFFBABAC3)
                         val interactionSource = remember { MutableInteractionSource() }
 
@@ -1104,7 +1179,7 @@ fun GlassComposer(
                             }
                         }
 
-                        // Status text BESIDE the icon
+                        
                         AnimatedVisibility(
                             visible = isWhatsAppArmed,
                             enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)),
@@ -1143,14 +1218,16 @@ fun GlassComposer(
         }
     }
 
+    val petPerchModifier = modifier.realPetPerch(REAL_PET_PERCH_COMPOSER)
+
     if (designStyle == DesignStyle.LiquidGlass) {
-        LiquidGlassSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur,
+        LiquidGlassSurface(backdrop, backdropPosition, petPerchModifier, corners, reduceDynamicBlur,
             reduceAnimations = reduceAnimations, content = panelContent)
     } else if (designStyle == DesignStyle.Ice) {
         IcePanel(
             backdrop = backdrop,
             backdropPosition = backdropPosition,
-            modifier = modifier,
+            modifier = petPerchModifier,
             corners = corners,
             reduceDynamicBlur = reduceDynamicBlur,
             blurRadius = 38.dp,
@@ -1161,7 +1238,7 @@ fun GlassComposer(
         GlassPanel(
             backdrop = backdrop,
             backdropPosition = backdropPosition,
-            modifier = modifier,
+            modifier = petPerchModifier,
             corners = corners,
             reduceDynamicBlur = reduceDynamicBlur,
             content = panelContent

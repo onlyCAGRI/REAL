@@ -23,8 +23,8 @@ android {
         applicationId = "com.cagri.bigboscagri"
         minSdk = 26
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.7.1"
+        versionCode = 44
+        versionName = "0.7.7"
 
         buildConfigField("String", "REAL_API_KEY", "\"$realApiKey\"")
     }
@@ -40,8 +40,9 @@ android {
         create("optimized") {
             initWith(getByName("release"))
             isDebuggable = false
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Temporary recovery for the reported optimized DEX VerifyError.
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
         }
@@ -78,6 +79,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // Temporary concept demo: extract a restrained accent from its bundled image.
+    implementation("androidx.palette:palette:1.0.0")
     implementation("org.maplibre.gl:android-sdk:11.8.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

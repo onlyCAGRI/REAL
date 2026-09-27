@@ -43,6 +43,11 @@
             </intent-filter>
         </receiver>
 
+        <activity android:name=".AvatarEditorActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+
+        <!-- Temporary concept demo; remove alongside demo/ and the Settings entry. -->
+        <activity android:name=".demo.CategoryConceptDemoActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -53,12 +58,26 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+        <activity android:name=".AttachmentImportActivity" android:exported="true"
+            android:launchMode="singleTask" android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <provider android:name=".AttachmentFileProvider" android:authorities="${applicationId}.attachments"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/attachment_paths" />
+        </provider>
     </application>
 
 </manifest>

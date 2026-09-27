@@ -88,7 +88,7 @@ fun CategorySelectionOverlay(
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .padding(start = 16.dp, end = 16.dp, bottom = 20.dp)
-                    .pointerInput(Unit) { detectTapGestures { /* consume panel tap */ } },
+                    .pointerInput(Unit) { detectTapGestures {  } },
                 corners = 28.dp,
                 designStyle = designStyle, liquidSheet = true,
                 reduceDynamicBlur = reduceDynamicBlur
@@ -126,7 +126,7 @@ fun CategorySelectionOverlay(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        // Option: Kategori yok
+                        
                         CategoryOptionItem(
                             title = "Kategori yok",
                             isSelected = selectedCategoryId == null,
@@ -179,10 +179,11 @@ fun CategorySelectionOverlay(
                             )
                         }
 
-                        // Custom category options
+                        
                         customCategories.forEach { category ->
-                            val startColor = ReminderColorChoices.getOrNull(category.accentStart)?.color ?: Color(0xFF233F73)
-                            val endColor = category.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
+                            val solidColor = category.customSolidColorArgb?.let { Color(it) }
+                            val startColor = solidColor ?: ReminderColorChoices.getOrNull(category.accentStart)?.color ?: Color(0xFF233F73)
+                            val endColor = solidColor ?: category.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
                             val icon = CategoryIcon.fromKey(category.iconKey)
 
                             CategoryOptionItem(

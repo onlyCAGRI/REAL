@@ -6,15 +6,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Phase 5.1 unit tests for Welcome / Onboarding phase state machine,
- * input validation, and one-time persistence semantics.
- */
+
+
+
+
 class WelcomeOnboardingTest {
 
-    /**
-     * Simulated model of WelcomeScreen's phase and confirmation flow.
-     */
+    
+
+
     private class SimulatedWelcomeCoordinator(
         val onComplete: (String) -> Unit
     ) {
@@ -89,7 +89,7 @@ class WelcomeOnboardingTest {
         assertEquals(1, callCount)
         assertEquals(WelcomePhase.Greeting, coordinator.phase)
 
-        // Second confirm tap or Done action
+        
         val secondAttempt = coordinator.onConfirm()
         assertFalse(secondAttempt)
         assertEquals(1, callCount)
@@ -97,15 +97,15 @@ class WelcomeOnboardingTest {
 
     @Test
     fun onboardingOneTimeSemantics() {
-        // Simulated SharedPreferences map
+        
         val prefs = mutableMapOf<String, Any>()
 
-        // 1. First install: onboarding not completed
+        
         assertFalse(prefs["onboarding_completed"] as? Boolean ?: false)
         assertFalse(prefs["first_home_intro_completed"] as? Boolean ?: false)
         assertEquals("", prefs["user_display_name"] as? String ?: "")
 
-        // 2. User completes onboarding with name "Çağrı"
+        
         val enteredName = "Çağrı"
         val firstHomeIntroAlreadyDone = prefs["first_home_intro_completed"] as? Boolean ?: false
         prefs["onboarding_completed"] = true
@@ -116,16 +116,16 @@ class WelcomeOnboardingTest {
         assertEquals("Çağrı", prefs["user_display_name"] as String)
         assertTrue(playFirstHomeIntro)
 
-        // 3. First home intro completes
+        
         prefs["first_home_intro_completed"] = true
 
-        // 4. Subsequent app launch: onboarding already completed, first home intro already done
+        
         val isCompletedOnRelaunch = prefs["onboarding_completed"] as Boolean
         val isFirstHomeIntroDoneOnRelaunch = prefs["first_home_intro_completed"] as Boolean
         assertTrue(isCompletedOnRelaunch)
         assertTrue(isFirstHomeIntroDoneOnRelaunch)
 
-        // Welcome screen is NOT shown on relaunch
+        
         val showWelcomeOnRelaunch = !isCompletedOnRelaunch
         assertFalse(showWelcomeOnRelaunch)
     }

@@ -1,13 +1,25 @@
 package com.cagri.bigboscagri.ui.components
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +33,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -29,11 +42,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.semantics.Role
@@ -43,6 +58,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cagri.bigboscagri.ui.DesignStyle
+import com.cagri.bigboscagri.AvatarEditorActivity
+import com.cagri.bigboscagri.R
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import java.io.File
+import kotlinx.coroutines.delay
 
 @Composable
 fun AccountMenuOverlay(
@@ -57,6 +78,7 @@ fun AccountMenuOverlay(
     modifier: Modifier = Modifier
 ) {
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val context = LocalContext.current
     val dismissInteraction = remember { MutableInteractionSource() }
     val revealProgress = remember { Animatable(if (reduceAnimations) 1f else 0f) }
 
@@ -106,7 +128,7 @@ fun AccountMenuOverlay(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    GuestAvatar(Modifier.size(44.dp))
+                    ProfileAvatar(Modifier.size(44.dp))
                     Text(
                         text = userName.trim().ifBlank { "Kullanıcı" },
                         color = Color(0xFFF7F7F8),
@@ -116,6 +138,11 @@ fun AccountMenuOverlay(
                     )
                 }
                 Spacer(Modifier.height(12.dp))
+                AccountMenuItem(icon = ActionGlyph.Person, label = "Avatarını düzenle", onClick = {
+                    onDismiss()
+                    context.startActivity(Intent(context, AvatarEditorActivity::class.java))
+                })
+                Spacer(Modifier.height(3.dp))
                 AccountMenuItem(icon = ActionGlyph.Add, label = "Hesap ekle")
                 Spacer(Modifier.height(3.dp))
                 AccountMenuItem(icon = ActionGlyph.Manage, label = "Hesapları yönet")
@@ -171,6 +198,59 @@ fun AccountMenuOverlay(
 }
 
 @Composable
+fun ProfileAvatar(
+    modifier: Modifier = Modifier,
+    liquidFallback: Boolean = false,
+    petPerchId: String? = null
+) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences(AvatarEditorActivity.PROFILE_PREFS, Context.MODE_PRIVATE) }
+    var revision by remember { mutableLongStateOf(prefs.getLong(AvatarEditorActivity.KEY_REVISION, 0L)) }
+
+    DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == AvatarEditorActivity.KEY_REVISION || key == AvatarEditorActivity.KEY_IMAGE_PATH) {
+                revision = prefs.getLong(AvatarEditorActivity.KEY_REVISION, revision + 1L)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    val path = remember(revision) { prefs.getString(AvatarEditorActivity.KEY_IMAGE_PATH, null) }
+    val file = remember(path, revision) { path?.let(::File)?.takeIf { it.exists() } }
+
+    // Avatar pet behaviour is deliberately simple: the real avatar never changes.
+    // The roaming cat itself approaches this perch and places its head in front of it.
+    Box(
+        modifier = modifier
+            .then(if (petPerchId != null) Modifier.realPetPerch(petPerchId) else Modifier)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = if (file != null) 0.04f else 0.11f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        if (file != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(file)
+                    .memoryCacheKey("real-profile-avatar-$revision")
+                    .diskCacheKey("real-profile-avatar-$revision")
+                    .build(),
+                contentDescription = "Profil avatarı",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            ActionIcon(
+                glyph = ActionGlyph.Person,
+                modifier = Modifier.size(if (liquidFallback) 24.dp else 21.dp),
+                color = Color(0xFFF1F1F5)
+            )
+        }
+    }
+}
+
+@Composable
 fun GuestAvatar(modifier: Modifier = Modifier) {
     Box(
         modifier.background(Color.White.copy(alpha = 0.11f), CircleShape),
@@ -201,7 +281,7 @@ private fun AccountMenuItem(
             .background(Color.Transparent, shape)
             .let {
                 if (enabled) {
-                    // Same bounded press/ripple feedback used by ReminderCard.
+                    
                     it.clickable(
                         role = Role.Button,
                         onClickLabel = label,

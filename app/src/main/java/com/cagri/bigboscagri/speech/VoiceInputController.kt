@@ -11,7 +11,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 
-/** All entry points and recognition callbacks run on the main thread. */
+
 class VoiceInputController(
     private val context: Context,
     private val onText: (String) -> Unit,
@@ -63,7 +63,7 @@ class VoiceInputController(
             submitOnce()
             return
         }
-        // stopListening asks for a final result; cancel would discard the tail.
+        
         val currentGeneration = generation
         handler.postDelayed({
             if (generation == currentGeneration && phase == VoicePhase.Finishing) submitOnce()
@@ -71,7 +71,7 @@ class VoiceInputController(
         runCatching { recognizer?.stopListening() }.onFailure { submitOnce() }
     }
 
-    /** Leaving the screen stops recording and preserves the visible draft. */
+    
     fun cancel() {
         if (phase != VoicePhase.Idle) draft?.text?.let(onText)
         reset()
@@ -168,7 +168,7 @@ class VoiceInputController(
         currentDraft?.commitResult(null)
         val text = currentDraft?.text.orEmpty()
         val hasSpoken = currentDraft?.hasSpokenText == true
-        reset() // Invalidates late callbacks before saving or changing screens.
+        reset() 
         if (hasSpoken && text.isNotBlank()) {
             onSubmit(text)
         } else {

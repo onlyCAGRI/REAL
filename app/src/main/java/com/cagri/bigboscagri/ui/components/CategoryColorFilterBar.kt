@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,7 +40,8 @@ fun CategoryColorFilterButton(
     hasFilter: Boolean,
     onClick: () -> Unit,
     selectedColorIndex: Int? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier.size(44.dp),
+    applyLiquidChrome: Boolean = true
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val baseDotColor = Color(0xFFA8A8B2)
@@ -55,8 +57,13 @@ fun CategoryColorFilterButton(
 
     Box(
         modifier = modifier
-            .size(44.dp)
-            .then(if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) Modifier.pressScale(interactionSource, reduceAnimations = LocalLiquidReduceMotion.current, targetScale = 0.97f).liquidChrome(selected = hasFilter) else Modifier)
+            .then(
+                if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) {
+                    Modifier
+                        .pressScale(interactionSource, reduceAnimations = LocalLiquidReduceMotion.current, targetScale = 0.97f)
+                        .then(if (applyLiquidChrome) Modifier.liquidChrome(selected = hasFilter) else Modifier)
+                } else Modifier
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -82,13 +89,19 @@ fun CategoryColorFilterButton(
 fun CategoryEditButton(
     onClick: () -> Unit,
     contentDescription: String = "Kategoriyi düzenle",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier.size(44.dp),
+    applyLiquidChrome: Boolean = true
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
-            .size(44.dp)
-            .then(if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) Modifier.pressScale(interactionSource, reduceAnimations = LocalLiquidReduceMotion.current, targetScale = 0.97f).liquidChrome() else Modifier)
+            .then(
+                if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) {
+                    Modifier
+                        .pressScale(interactionSource, reduceAnimations = LocalLiquidReduceMotion.current, targetScale = 0.97f)
+                        .then(if (applyLiquidChrome) Modifier.liquidChrome() else Modifier)
+                } else Modifier
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -126,13 +139,47 @@ fun CategoryEditButton(
     }
 }
 
-/**
- * Temporary full-header horizontal color selector row.
- * Replaces the entire category header while color filter mode is open.
- * Leftmost option: Clear filter / show all.
- * Followed by the 10 ReminderColorChoices.
- * Horizontally scrollable, single clean circles (no nested circles).
- */
+@Composable
+fun CategoryLiquidActionGroup(
+    hasFilter: Boolean,
+    selectedColorIndex: Int?,
+    onFilterClick: () -> Unit,
+    onEditClick: () -> Unit,
+    editContentDescription: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .width(112.dp)
+            .height(48.dp)
+            .liquidChrome(corners = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        CategoryColorFilterButton(
+            hasFilter = hasFilter,
+            selectedColorIndex = selectedColorIndex,
+            onClick = onFilterClick,
+            modifier = Modifier.size(55.dp, 48.dp),
+            applyLiquidChrome = false
+        )
+        Box(Modifier.width(1.dp).height(26.dp).background(Color.White.copy(alpha = 0.13f)))
+        CategoryEditButton(
+            onClick = onEditClick,
+            contentDescription = editContentDescription,
+            modifier = Modifier.size(55.dp, 48.dp),
+            applyLiquidChrome = false
+        )
+    }
+}
+
+
+
+
+
+
+
+
 @Composable
 fun CategoryColorSelectorHeader(
     selectedColorFilter: Int?,
@@ -144,11 +191,10 @@ fun CategoryColorSelectorHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 10.dp, end = 8.dp, start = 8.dp)
-            .then(if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) Modifier.liquidChrome() else Modifier),
+            .padding(top = 10.dp, end = 8.dp, start = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Horizontally scrollable palette
+        
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -156,7 +202,7 @@ fun CategoryColorSelectorHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 1. Leftmost option: Clear filter / Show all
+            
             val isClearActive = selectedColorFilter == null
             Box(
                 modifier = Modifier
@@ -169,7 +215,7 @@ fun CategoryColorSelectorHeader(
                         shape = CircleShape
                     )
                     .clickable {
-                        onSelectColor(null) // Clears filter and immediately closes selector
+                        onSelectColor(null) 
                     }
                     .semantics { contentDescription = "Filtreyi temizle / Tümünü göster" },
                 contentAlignment = Alignment.Center
@@ -177,7 +223,7 @@ fun CategoryColorSelectorHeader(
                 ActionIcon(ActionGlyph.Close, Modifier.size(13.dp), Color(0xFFC8C8D0))
             }
 
-            // 2. The 10 ReminderColorChoices (Color 1 only)
+            
             ReminderColorChoices.forEachIndexed { index, choice ->
                 val isSelected = selectedColorFilter == index
                 Box(
@@ -191,7 +237,7 @@ fun CategoryColorSelectorHeader(
                             shape = CircleShape
                         )
                         .clickable {
-                            onSelectColor(index) // Sets filter and immediately closes selector
+                            onSelectColor(index) 
                         }
                         .semantics { contentDescription = "${choice.label} rengine göre filtrele" },
                     contentAlignment = Alignment.Center
@@ -205,7 +251,7 @@ fun CategoryColorSelectorHeader(
 
         Spacer(Modifier.width(6.dp))
 
-        // Close button: cancels color-selection mode without altering filter
+        
         IconButton(
             onClick = onClose,
             modifier = Modifier

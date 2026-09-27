@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,10 +49,10 @@ fun openReminderLocationInMaps(context: Context, place: ReminderLocation): Boole
     } catch (_: Exception) { false }
 }
 
-/**
- * A single noninteractive MapLibre preview; the full card opens the system Maps intent.
- * Snapshot branding controls are disabled and REAL renders a compact legal attribution.
- */
+
+
+
+
 @Composable
 fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier = Modifier, onOpen: () -> Unit = {}) {
     val latitude = place.latitude ?: return
@@ -59,8 +60,8 @@ fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier = Modifier, 
     val context = LocalContext.current
 
     var snapshotBitmap by remember(latitude, longitude) { mutableStateOf<Bitmap?>(null) }
-    var width by remember { mutableStateOf(0) }
-    var height by remember { mutableStateOf(0) }
+    var width by remember { mutableIntStateOf(0) }
+    var height by remember { mutableIntStateOf(0) }
 
     Box(
         modifier
@@ -86,9 +87,9 @@ fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier = Modifier, 
                         .build()
                 )
 
-            // MapLibre Android 11.8.0 does not expose Options.withAttribution().
-            // Suppress MapSnapshotter's built-in logo/attribution overlay here and render
-            // REAL's compact legal attribution below instead.
+            
+            
+            
             val snapshotter = object : MapSnapshotter(context, options) {
                 override fun addOverlay(mapSnapshot: MapSnapshot) = Unit
             }
@@ -108,7 +109,7 @@ fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier = Modifier, 
             )
         }
 
-        // Keep attribution inside the rounded safe area and visually subordinate to the map.
+        
         Text(
             text = "© OpenStreetMap contributors · © OpenMapTiles",
             color = Color.White.copy(alpha = 0.22f),

@@ -6,7 +6,10 @@ enum class DesignStyle(val preferenceKey: String) {
     LiquidGlass("liquid_glass");
 
     companion object {
-        fun fromPreference(value: String?): DesignStyle =
-            entries.firstOrNull { it.preferenceKey == value } ?: Glass
+        fun fromPreference(value: String?): DesignStyle = when (value) {
+            LiquidGlass.preferenceKey -> LiquidGlass
+            Ice.preferenceKey, Glass.preferenceKey -> Glass
+            else -> Glass
+        }
     }
 }

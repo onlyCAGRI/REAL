@@ -233,8 +233,8 @@ object NowBarReminderController {
             builder.setRequestPromotedOngoing(true)
         }
 
-        // Mirror the regular reminder notification actions: completion is always available,
-        // while snooze only appears when a scheduled reminder is within the Now Bar window.
+        
+        
         builder.addAction(0, "Tamamla", completePending)
         if (shouldShowSnoozeAction(reminder, now)) {
             builder.addAction(0, "10 dk ertele", snoozePending)

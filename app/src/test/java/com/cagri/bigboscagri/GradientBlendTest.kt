@@ -2,7 +2,6 @@ package com.cagri.bigboscagri
 
 import com.cagri.bigboscagri.data.COLOR_FILTER_DEFAULT
 import com.cagri.bigboscagri.data.DEFAULT_GRADIENT_BLEND_FRACTION
-import com.cagri.bigboscagri.data.GRADIENT_BLEND_FRACTIONS
 import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.data.ReminderRepository
 import com.cagri.bigboscagri.data.filterAndSortReminders

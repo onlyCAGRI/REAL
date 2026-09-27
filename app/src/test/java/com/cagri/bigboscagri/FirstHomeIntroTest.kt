@@ -5,16 +5,16 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Phase 5.2 unit tests for First-Home Entrance Choreography,
- * one-time execution state machine, persistence semantics,
- * stagger progress calculations, and reduceAnimations behavior.
- */
+
+
+
+
+
 class FirstHomeIntroTest {
 
-    /**
-     * Simulated model of MainActivity + ReminderScreen first-home intro state machine.
-     */
+    
+
+
     private class SimulatedFirstHomeCoordinator(
         private val preferences: MutableMap<String, Any> = mutableMapOf()
     ) {
@@ -26,7 +26,7 @@ class FirstHomeIntroTest {
         var composerEntranceProgress: Float = 1f
         var introCompletedCallbackCount: Int = 0
 
-        // Represents local remembered state in ReminderListScreen: val isFirstHome = remember { isFirstHomeIntro }
+        
         private var localIsFirstHome: Boolean = false
 
         fun performLegacyMigration() {
@@ -69,8 +69,8 @@ class FirstHomeIntroTest {
 
         fun onParentFlagChanged(newParentFlag: Boolean) {
             playFirstHomeIntro = newParentFlag
-            // Local running intro is isolated: remember { isFirstHomeIntro } does NOT change
-            // Animatables continue on their coroutines and are NOT forced to 1f
+            
+            
         }
 
         fun onIntroAnimationFinished() {
@@ -97,13 +97,13 @@ class FirstHomeIntroTest {
         assertFalse("First home intro not yet scheduled", coordinator.playFirstHomeIntro)
         assertFalse("First home intro not yet persisted", coordinator.isIntroPersisted())
 
-        // User finishes welcome onboarding
+        
         coordinator.onWelcomeComplete("Çağrı")
         assertTrue("Onboarding marked complete", coordinator.hasCompletedOnboarding)
         assertTrue("playFirstHomeIntro is true for first time", coordinator.playFirstHomeIntro)
         assertTrue("first_home_intro_completed persisted early on onboarding completion", coordinator.isIntroPersisted())
 
-        // User enters Home for the first time
+        
         coordinator.onFirstHomeEnter(reduceAnimations = false, category = null, customCategoryId = null)
         assertTrue("Intro is playing", coordinator.isFirstHomeIntroPlaying)
         assertEquals("Category entrance begins at 0", 0f, coordinator.categoryEntranceProgress, 0.001f)
@@ -111,7 +111,7 @@ class FirstHomeIntroTest {
         assertTrue("first_home_intro_completed is persisted immediately", coordinator.isIntroPersisted())
         assertFalse("Shimmer waiting for intro to finish", coordinator.isHomeReadyForShimmer)
 
-        // Intro animation completes
+        
         coordinator.onIntroAnimationFinished()
         assertFalse("Intro finished playing", coordinator.isFirstHomeIntroPlaying)
         assertEquals("Category entrance reaches 1 on finish", 1f, coordinator.categoryEntranceProgress, 0.001f)
@@ -120,7 +120,7 @@ class FirstHomeIntroTest {
         assertFalse("playFirstHomeIntro is cleared to prevent replays", coordinator.playFirstHomeIntro)
         assertEquals(1, coordinator.introCompletedCallbackCount)
 
-        // Subsequent Home visit (e.g. returning from Category or reopen)
+        
         coordinator.onFirstHomeEnter(reduceAnimations = false, category = null, customCategoryId = null)
         assertFalse("Intro does NOT replay on subsequent Home visit", coordinator.isFirstHomeIntroPlaying)
         assertEquals(1, coordinator.introCompletedCallbackCount)
@@ -131,24 +131,24 @@ class FirstHomeIntroTest {
         val coordinator = SimulatedFirstHomeCoordinator()
         coordinator.onWelcomeComplete("Çağrı")
 
-        // Enter Home -> intro begins running
+        
         coordinator.onFirstHomeEnter(reduceAnimations = false, category = null, customCategoryId = null)
         assertTrue("Intro is playing", coordinator.isFirstHomeIntroPlaying)
         assertEquals(0f, coordinator.categoryEntranceProgress, 0.001f)
         assertEquals(0f, coordinator.composerEntranceProgress, 0.001f)
         assertFalse(coordinator.isHomeReadyForShimmer)
 
-        // Parent state updates playFirstHomeIntro = false (e.g. Activity recomposition or early notify)
+        
         coordinator.onParentFlagChanged(false)
         assertFalse("Parent flag is now false", coordinator.playFirstHomeIntro)
 
-        // Running local intro must NOT be forced to final progress immediately!
+        
         assertTrue("Local intro continues playing", coordinator.isFirstHomeIntroPlaying)
         assertEquals("Category progress remains at running state", 0f, coordinator.categoryEntranceProgress, 0.001f)
         assertEquals("Composer progress remains at running state", 0f, coordinator.composerEntranceProgress, 0.001f)
         assertFalse("Shimmer still waiting for visual settle", coordinator.isHomeReadyForShimmer)
 
-        // Visual animation naturally finishes
+        
         coordinator.onIntroAnimationFinished()
         assertFalse("Intro finished playing", coordinator.isFirstHomeIntroPlaying)
         assertEquals("Category progress reached 1 via animation path", 1f, coordinator.categoryEntranceProgress, 0.001f)
@@ -162,7 +162,7 @@ class FirstHomeIntroTest {
         val coordinator = SimulatedFirstHomeCoordinator()
         coordinator.onWelcomeComplete("Çağrı")
 
-        // 1. When animations enabled: starts at 0, only reaches 1 on finish
+        
         coordinator.onFirstHomeEnter(reduceAnimations = false, category = null, customCategoryId = null)
         assertEquals(0f, coordinator.categoryEntranceProgress, 0.001f)
         assertEquals(0f, coordinator.composerEntranceProgress, 0.001f)
@@ -172,7 +172,7 @@ class FirstHomeIntroTest {
         assertEquals(1f, coordinator.categoryEntranceProgress, 0.001f)
         assertEquals(1f, coordinator.composerEntranceProgress, 0.001f)
 
-        // 2. When reduceAnimations = true: starts and stays at 1f immediately
+        
         val fastCoordinator = SimulatedFirstHomeCoordinator()
         fastCoordinator.onWelcomeComplete("Çağrı")
         fastCoordinator.onFirstHomeEnter(reduceAnimations = true, category = null, customCategoryId = null)
@@ -186,30 +186,30 @@ class FirstHomeIntroTest {
         val coordinator = SimulatedFirstHomeCoordinator()
         coordinator.onWelcomeComplete("Çağrı")
 
-        // First home entrance: shimmer must NOT be ready at intro start
+        
         coordinator.onFirstHomeEnter(reduceAnimations = false, category = null, customCategoryId = null)
         assertFalse("Shimmer is NOT ready while intro is running", coordinator.isHomeReadyForShimmer)
 
-        // Midway (even if parent flag toggles)
+        
         coordinator.onParentFlagChanged(false)
         assertFalse("Shimmer still NOT ready before visual settle", coordinator.isHomeReadyForShimmer)
 
-        // Visual sequence completes
+        
         coordinator.onIntroAnimationFinished()
         assertTrue("Shimmer becomes ready only after visual settle", coordinator.isHomeReadyForShimmer)
     }
 
     @Test
     fun legacyUserMigrationPreventsIntro() {
-        // User who completed onboarding before first_home_intro_completed existed
+        
         val prefs = mutableMapOf<String, Any>("onboarding_completed" to true)
         val coordinator = SimulatedFirstHomeCoordinator(prefs)
 
-        // Legacy migration runs in onCreate
+        
         coordinator.performLegacyMigration()
         assertTrue("first_home_intro_completed marked for legacy user", coordinator.isIntroPersisted())
 
-        // If welcome complete is somehow called again or home entered
+        
         coordinator.onWelcomeComplete("LegacyUser")
         assertFalse("playFirstHomeIntro remains false for legacy user", coordinator.playFirstHomeIntro)
 
@@ -223,17 +223,17 @@ class FirstHomeIntroTest {
         val coordinator = SimulatedFirstHomeCoordinator()
         coordinator.onWelcomeComplete("Çağrı")
 
-        // Enter Home
+        
         coordinator.onFirstHomeEnter(reduceAnimations = false, category = null, customCategoryId = null)
         assertTrue(coordinator.isFirstHomeIntroPlaying)
         assertTrue(coordinator.isIntroPersisted())
 
-        // User taps a category at t = 100ms (navigating away mid-intro)
-        // Previous composition cancelled, now on Category screen
+        
+        
         coordinator.onFirstHomeEnter(reduceAnimations = false, category = "Today", customCategoryId = null)
         assertFalse("Category screen does not play first-home intro", coordinator.isFirstHomeIntroPlaying)
 
-        // User presses Back to return to Home
+        
         coordinator.onFirstHomeEnter(reduceAnimations = false, category = null, customCategoryId = null)
         assertFalse("Intro does not replay after returning from category", coordinator.isFirstHomeIntroPlaying)
         assertTrue(coordinator.isHomeReadyForShimmer)
@@ -244,7 +244,7 @@ class FirstHomeIntroTest {
         val coordinator = SimulatedFirstHomeCoordinator()
         coordinator.onWelcomeComplete("Çağrı")
 
-        // Enter Home with reduceAnimations = true
+        
         coordinator.onFirstHomeEnter(reduceAnimations = true, category = null, customCategoryId = null)
         assertFalse("No intro animation when reduceAnimations = true", coordinator.isFirstHomeIntroPlaying)
         assertTrue("Completion is persisted immediately", coordinator.isIntroPersisted())
@@ -255,27 +255,27 @@ class FirstHomeIntroTest {
 
     @Test
     fun categoryChipStaggerProgressCalculations() {
-        // Stagger formula: startFraction = (index * 45f) / 505f, durationFraction = 280f / 505f
+        
         fun computeChipProgress(index: Int, progress: Float): Float {
             val startFraction = (index * 45f) / 505f
             val durationFraction = 280f / 505f
             return ((progress - startFraction) / durationFraction).coerceIn(0f, 1f)
         }
 
-        // At progress = 0.0: all chips should be 0.0
+        
         for (i in 0 until 6) {
             assertEquals(0f, computeChipProgress(i, 0f), 0.001f)
         }
 
-        // Chip 0 starts at 0.0 and finishes at 280/505 (~0.554)
+        
         assertEquals(0.5f, computeChipProgress(0, 140f / 505f), 0.001f)
         assertEquals(1.0f, computeChipProgress(0, 280f / 505f), 0.001f)
 
-        // Chip 5 starts at 225/505 (~0.446) and finishes at 505/505 (1.0)
+        
         assertEquals(0.0f, computeChipProgress(5, 225f / 505f), 0.001f)
         assertEquals(1.0f, computeChipProgress(5, 1.0f), 0.001f)
 
-        // At progress = 1.0: all chips must be fully settled (1.0)
+        
         for (i in 0 until 6) {
             assertEquals(1.0f, computeChipProgress(i, 1.0f), 0.001f)
         }
@@ -289,7 +289,7 @@ class FirstHomeIntroTest {
         assertEquals("Category offset restored to phase-4-stable 24dp", 24f, categoryOffsetDp, 0.001f)
         assertEquals("Composer offset restored to phase-4-stable 32dp", 32f, composerOffsetDp, 0.001f)
 
-        // Total duration verification: category 505ms, composer starts at 330ms + 340ms = 670ms
+        
         val categoryDurationMs = 505
         val composerStartMs = 330
         val composerDurationMs = 340

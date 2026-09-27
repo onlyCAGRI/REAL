@@ -60,7 +60,7 @@ object NowBarProbe {
         }
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher) // Use existing valid small icon
+            .setSmallIcon(R.mipmap.ic_launcher) 
             .setContentTitle("REAL")
             .setContentText("Now Bar testi aktif")
             .setOngoing(true)
@@ -73,15 +73,15 @@ object NowBarProbe {
             .setExtras(samsungExtras)
             .addAction(0, "Bitir", cancelPending)
 
-        if (Build.VERSION.SDK_INT >= 36) { // Android 16 (API 36) minimum for proper promoted status mapping
-            // In AndroidX Core 1.17+, setRequestPromotedOngoing accepts a boolean
+        if (Build.VERSION.SDK_INT >= 36) { 
+            
             builder.setRequestPromotedOngoing(true)
         }
 
         try {
             nm.notify(NOTIFICATION_ID, builder.build())
         } catch (_: SecurityException) {
-            // Permission missing
+            
         }
     }
 
@@ -115,12 +115,12 @@ object NowBarProbe {
             .setRequestPromotedOngoing(true)
 
         val notification = builder.build()
-        // Determine if notification builder successfully flagged characteristics internally
+        
         return try {
             val flags = notification.flags
-            // Ensure ongoing is respected
+            
             if ((flags and Notification.FLAG_ONGOING_EVENT) == 0) return false
-            // Note: actual promotes checking via Notification API is complex, this asserts compat builder holds
+            
             true
         } catch (e: Exception) {
             false
@@ -129,7 +129,7 @@ object NowBarProbe {
 
     fun buildSettingsIntent(context: Context): Intent? {
         if (Build.VERSION.SDK_INT < 36) return null
-        // Fallback to explicit string if Settings constants are hidden in current compileSdk
+        
         val action = "android.settings.MANAGE_APP_PROMOTED_NOTIFICATIONS"
         val intent = Intent(action).apply {
             putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)

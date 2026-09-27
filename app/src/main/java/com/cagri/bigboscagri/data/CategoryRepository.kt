@@ -6,8 +6,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 data class CategoryColorOverride(
-    val start: Int,
-    val end: Int? = null
+    val start: Int?,
+    val end: Int? = null,
+    val useDarkText: Boolean = false,
+    val gradientBlendFraction: Float? = null,
+    val customSolidColorArgb: Int? = null
 )
 
 class CategoryRepository(private val preferences: SharedPreferences) {
@@ -32,6 +35,9 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                             accentStart = item.optInt("accentStart", 0),
                             accentEnd = if (!item.has("accentEnd") || item.isNull("accentEnd")) null else item.optInt("accentEnd"),
                             hideFromGeneralLists = item.optBoolean("hideFromGeneralLists", false),
+                            useDarkText = item.optBoolean("useDarkText", false),
+                            gradientBlendFraction = if (!item.has("gradientBlendFraction") || item.isNull("gradientBlendFraction")) null else item.optDouble("gradientBlendFraction").toFloat().coerceIn(0f, 1f),
+                            customSolidColorArgb = if (!item.has("customSolidColorArgb") || item.isNull("customSolidColorArgb")) null else item.optInt("customSolidColorArgb"),
                             createdAt = item.optLong("createdAt", System.currentTimeMillis())
                         )
                     )
@@ -48,7 +54,10 @@ class CategoryRepository(private val preferences: SharedPreferences) {
         iconKey: String,
         accentStart: Int,
         accentEnd: Int? = null,
-        hideFromGeneralLists: Boolean = false
+        hideFromGeneralLists: Boolean = false,
+        useDarkText: Boolean = false,
+        gradientBlendFraction: Float? = null,
+        customSolidColorArgb: Int? = null
     ): List<CustomCategory> = synchronized(mutationLock) {
         require(name.isNotBlank()) { "Kategori adı boş olamaz" }
         val now = System.currentTimeMillis()
@@ -61,6 +70,9 @@ class CategoryRepository(private val preferences: SharedPreferences) {
             accentStart = accentStart,
             accentEnd = accentEnd,
             hideFromGeneralLists = hideFromGeneralLists,
+            useDarkText = useDarkText,
+            gradientBlendFraction = gradientBlendFraction?.coerceIn(0f, 1f),
+            customSolidColorArgb = customSolidColorArgb,
             createdAt = now
         )
         val updated = previous + newCategory
@@ -74,7 +86,10 @@ class CategoryRepository(private val preferences: SharedPreferences) {
         iconKey: String,
         accentStart: Int,
         accentEnd: Int? = null,
-        hideFromGeneralLists: Boolean = false
+        hideFromGeneralLists: Boolean = false,
+        useDarkText: Boolean = false,
+        gradientBlendFraction: Float? = null,
+        customSolidColorArgb: Int? = null
     ): List<CustomCategory> = synchronized(mutationLock) {
         require(name.isNotBlank()) { "Kategori adı boş olamaz" }
         val previous = load()
@@ -85,7 +100,10 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                     iconKey = iconKey,
                     accentStart = accentStart,
                     accentEnd = accentEnd,
-                    hideFromGeneralLists = hideFromGeneralLists
+                    hideFromGeneralLists = hideFromGeneralLists,
+                    useDarkText = useDarkText,
+                    gradientBlendFraction = gradientBlendFraction?.coerceIn(0f, 1f),
+                    customSolidColorArgb = customSolidColorArgb
                 )
             } else {
                 item
@@ -120,6 +138,9 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                     .put("accentStart", category.accentStart)
                     .put("accentEnd", category.accentEnd ?: JSONObject.NULL)
                     .put("hideFromGeneralLists", category.hideFromGeneralLists)
+                    .put("useDarkText", category.useDarkText)
+                    .put("gradientBlendFraction", category.gradientBlendFraction?.toDouble() ?: JSONObject.NULL)
+                    .put("customSolidColorArgb", category.customSolidColorArgb ?: JSONObject.NULL)
                     .put("createdAt", category.createdAt)
             )
         }
@@ -138,9 +159,18 @@ class CategoryRepository(private val preferences: SharedPreferences) {
             is Int -> CategoryColorOverride(start = value, end = null)
             is Number -> CategoryColorOverride(start = value.toInt(), end = null)
             is JSONObject -> {
-                val start = value.optInt("start", 0)
+                val start = if (value.has("start") && !value.isNull("start")) value.getInt("start") else null
                 val end = if (value.has("end") && !value.isNull("end")) value.getInt("end") else null
-                CategoryColorOverride(start = start, end = end)
+                val useDarkText = value.optBoolean("useDarkText", false)
+                val gradientBlendFraction = if (!value.has("gradientBlendFraction") || value.isNull("gradientBlendFraction")) null else value.optDouble("gradientBlendFraction").toFloat().coerceIn(0f, 1f)
+                val customSolidColorArgb = if (!value.has("customSolidColorArgb") || value.isNull("customSolidColorArgb")) null else value.optInt("customSolidColorArgb")
+                CategoryColorOverride(
+                    start = start,
+                    end = end,
+                    useDarkText = useDarkText,
+                    gradientBlendFraction = gradientBlendFraction,
+                    customSolidColorArgb = customSolidColorArgb
+                )
             }
             else -> null
         }
@@ -150,9 +180,21 @@ class CategoryRepository(private val preferences: SharedPreferences) {
         val raw = preferences.getString(KEY_BUILTIN_CATEGORY_COLORS, null)
         val json = if (raw != null) runCatching { JSONObject(raw) }.getOrNull() ?: JSONObject() else JSONObject()
         if (override != null) {
-            val obj = JSONObject().put("start", override.start)
+            val obj = JSONObject()
+            if (override.start != null) {
+                obj.put("start", override.start)
+            }
             if (override.end != null) {
                 obj.put("end", override.end)
+            }
+            if (override.useDarkText) {
+                obj.put("useDarkText", true)
+            }
+            if (override.gradientBlendFraction != null) {
+                obj.put("gradientBlendFraction", override.gradientBlendFraction.coerceIn(0f, 1f).toDouble())
+            }
+            if (override.customSolidColorArgb != null) {
+                obj.put("customSolidColorArgb", override.customSolidColorArgb)
             }
             json.put(category.name, obj)
         } else {
@@ -177,9 +219,21 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                         is Int -> put(cat, CategoryColorOverride(start = value, end = null))
                         is Number -> put(cat, CategoryColorOverride(start = value.toInt(), end = null))
                         is JSONObject -> {
-                            val start = value.optInt("start", 0)
+                            val start = if (value.has("start") && !value.isNull("start")) value.getInt("start") else null
                             val end = if (value.has("end") && !value.isNull("end")) value.getInt("end") else null
-                            put(cat, CategoryColorOverride(start = start, end = end))
+                            val useDarkText = value.optBoolean("useDarkText", false)
+                            val gradientBlendFraction = if (!value.has("gradientBlendFraction") || value.isNull("gradientBlendFraction")) null else value.optDouble("gradientBlendFraction").toFloat().coerceIn(0f, 1f)
+                            val customSolidColorArgb = if (!value.has("customSolidColorArgb") || value.isNull("customSolidColorArgb")) null else value.optInt("customSolidColorArgb")
+                            put(
+                                cat,
+                                CategoryColorOverride(
+                                    start = start,
+                                    end = end,
+                                    useDarkText = useDarkText,
+                                    gradientBlendFraction = gradientBlendFraction,
+                                    customSolidColorArgb = customSolidColorArgb
+                                )
+                            )
                         }
                     }
                 }

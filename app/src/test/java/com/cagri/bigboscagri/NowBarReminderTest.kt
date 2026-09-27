@@ -13,11 +13,11 @@ class NowBarReminderTest {
     @Test
     fun testEligibleReminderSelection() {
         val now = 1000000L
-        // A reminder exactly at 14:00 (for example)
+        
         val alertTime = now + 10 * 60 * 1000L
         val reminder = ReminderItem(id = 1L, text = "Toplantı", createdAt = now, alertAt = alertTime)
 
-        // It is eligible because it has alertAt and is not completed and alertAt > now - 30m
+        
         val eligible = listOf(reminder).filter {
             !it.isCompleted && !it.isNoAlert && it.alertAt != null && it.alertAt > now - 30 * 60 * 1000L
         }
@@ -61,8 +61,8 @@ class NowBarReminderTest {
     @Test
     fun testOverlappingRemindersNearestWins() {
         val now = 1000000L
-        val r1 = ReminderItem(id = 1L, text = "R1", createdAt = now, alertAt = now + 10 * 60 * 1000L) // +10m
-        val r2 = ReminderItem(id = 2L, text = "R2", createdAt = now, alertAt = now + 5 * 60 * 1000L) // +5m (nearest)
+        val r1 = ReminderItem(id = 1L, text = "R1", createdAt = now, alertAt = now + 10 * 60 * 1000L) 
+        val r2 = ReminderItem(id = 2L, text = "R2", createdAt = now, alertAt = now + 5 * 60 * 1000L) 
 
         val eligible = listOf(r1, r2).filter {
             !it.isCompleted && !it.isNoAlert && it.alertAt != null && it.alertAt > now - 30 * 60 * 1000L
@@ -83,7 +83,7 @@ class NowBarReminderTest {
             !it.isCompleted && !it.isNoAlert && it.alertAt != null && it.alertAt > now - 30 * 60 * 1000L
         }
 
-        // Tie break by ID (lower ID wins)
+        
         val best = eligible.minWithOrNull(compareBy({ it.alertAt }, { it.id }))
         assertNotNull(best)
         assertEquals(2L, best?.id)
@@ -100,14 +100,14 @@ class NowBarReminderTest {
         var best = eligible.minWithOrNull(compareBy({ it.alertAt }, { it.id }))
         assertNotNull(best)
 
-        // Simulate edit
-        val r1Edited = r1.copy(alertAt = now - 40 * 60 * 1000L) // edited to 40 minutes ago
+        
+        val r1Edited = r1.copy(alertAt = now - 40 * 60 * 1000L) 
 
         eligible = listOf(r1Edited).filter {
             !it.isCompleted && !it.isNoAlert && it.alertAt != null && it.alertAt > now - 30 * 60 * 1000L
         }
         best = eligible.minWithOrNull(compareBy({ it.alertAt }, { it.id }))
-        assertNull(best) // No longer eligible
+        assertNull(best) 
     }
 
     @Test
@@ -121,14 +121,14 @@ class NowBarReminderTest {
         var best = eligible.minWithOrNull(compareBy({ it.alertAt }, { it.id }))
         assertNotNull(best)
 
-        // Complete it
+        
         val r1Completed = r1.toggleCompleted(now)
 
         eligible = listOf(r1Completed).filter {
             !it.isCompleted && !it.isNoAlert && it.alertAt != null && it.alertAt > now - 30 * 60 * 1000L
         }
         best = eligible.minWithOrNull(compareBy({ it.alertAt }, { it.id }))
-        assertNull(best) // Cancels because best becomes null
+        assertNull(best) 
     }
 
     @Test

@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.cagri.bigboscagri.ui.DesignStyle
 import kotlin.math.ceil
 
-/** Functional chrome only; the supplied scene must never contain this surface itself. */
+
 @Composable
 fun LiquidGlassSurface(
     backdrop: GraphicsLayer,
@@ -80,7 +80,7 @@ fun LiquidGlassSurface(
     Box(
         modifier
             .onGloballyPositioned { position = it.positionInRoot() }
-            // Observe without consuming: editing, scrolling and child clicks keep their gestures.
+            
             .pointerInput(materialMotion) {
                 pressed = false
                 if (materialMotion) {
@@ -112,7 +112,7 @@ fun LiquidGlassSurface(
     }
 }
 
-/** No layer capture or shaders: safe for repeated cards and large text-heavy panels. */
+
 @Composable
 fun LiquidGlassContentSurface(
     modifier: Modifier = Modifier,
@@ -159,7 +159,7 @@ fun DesignIconButton(
     }
 }
 
-/** Static optical finish for controls inside the recorded scene (prevents feedback cycles). */
+
 fun Modifier.liquidChrome(corners: Dp = 24.dp, selected: Boolean = false): Modifier {
     val shape = RoundedCornerShape(corners)
     return clip(shape)
@@ -182,7 +182,7 @@ fun liquidContentEdge(): Brush = Brush.verticalGradient(listOf(
     LiquidGlassTokens.contentEdgeTop, LiquidGlassTokens.contentEdgeBottom
 ))
 
-/** Recorded with Home content so the composer sees the same atmosphere as the user. */
+
 fun Modifier.liquidHomeAtmosphere(): Modifier = drawWithCache {
     val atmosphere = Brush.verticalGradient(
         0f to Color.Transparent,
@@ -200,7 +200,7 @@ private fun LiquidBackdrop(
     strength: LiquidGlassStrength, role: LiquidGlassRole, modifier: Modifier
 ) {
     val sample = rememberGraphicsLayer()
-    // RuntimeShader compilation happens once per mounted surface, never per animation frame.
+    
     val shader = remember { runCatching { RuntimeShader(LIQUID_SHADER) }.getOrNull() }
     if (shader == null) {
         Box(modifier.background(LiquidGlassTokens.fallbackBottom))
@@ -240,8 +240,8 @@ private fun LiquidBackdrop(
     })
 }
 
-// Rounded-rectangle signed distance and analytic normal. Samples the actual shared scene,
-// with a padded crop so the lens can see beyond its edge. No time uniform or idle ticker.
+
+
 private const val LIQUID_SHADER = """
 uniform shader scene;
 uniform float2 extent;

@@ -5,14 +5,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.cagri.bigboscagri.ui.DesignStyle
 
-/** Opt-in only. Defaults keep standalone previews and the two original styles unchanged. */
+
 val LocalDesignStyle = staticCompositionLocalOf { DesignStyle.Glass }
 val LocalLiquidReduceMotion = staticCompositionLocalOf { false }
 internal val LocalInsideLiquidGlass = staticCompositionLocalOf { false }
 
 enum class LiquidGlassStrength { Regular, Clear }
 
-/** Sheets use a denser body and never compress when a wheel or list is dragged. */
+
 enum class LiquidGlassRole { Chrome, Sheet }
 
 object LiquidGlassTokens {
@@ -52,6 +52,6 @@ object LiquidGlassTokens {
     const val settleMillis = 200
 }
 
-/** Pure policy shared by capture and effect consumers. Old styles retain their API 31 blur. */
+
 fun shouldCaptureBackdrop(style: DesignStyle, reduceDynamicBlur: Boolean, sdk: Int): Boolean =
     !reduceDynamicBlur && sdk >= if (style == DesignStyle.LiquidGlass) 33 else 31

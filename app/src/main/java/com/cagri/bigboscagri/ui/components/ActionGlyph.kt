@@ -17,25 +17,9 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.Dp
 
-enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Close, Note, Person, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry, MoodFuckOff }
+enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Music, AudioWave, Play, Pause, Close, Note, Category, Photo, File, Person, Cat, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, DragHandle, Sort, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry, MoodFuckOff }
 
-fun journalMoodLabel(mood: JournalMood): String = when (mood) {
-    JournalMood.VERY_GOOD -> "Çok iyi"
-    JournalMood.GOOD -> "İyi"
-    JournalMood.NEUTRAL -> "Normal"
-    JournalMood.HARD -> "Zor"
-    JournalMood.BAD -> "Kötü"
-    JournalMood.HAPPY -> "Mutlu"
-    JournalMood.EXCITED -> "Heyecanlı"
-    JournalMood.CALM -> "Sakin"
-    JournalMood.TIRED -> "Yorgun"
-    JournalMood.BORED -> "Sıkılmış"
-    JournalMood.STRESSED -> "Stresli"
-    JournalMood.ANGRY -> "Sinirli"
-    JournalMood.SAD -> "Üzgün"
-    JournalMood.LOW -> "Keyifsiz"
-    JournalMood.FUCK_OFF -> "F*ck off"
-}
+fun journalMoodLabel(mood: JournalMood): String = mood.label
 
 fun journalMoodGlyph(mood: JournalMood): ActionGlyph = when (mood) {
     JournalMood.VERY_GOOD, JournalMood.HAPPY -> ActionGlyph.MoodVeryGood
@@ -50,9 +34,9 @@ fun journalMoodGlyph(mood: JournalMood): ActionGlyph = when (mood) {
     JournalMood.FUCK_OFF -> ActionGlyph.MoodFuckOff
 }
 
-/**
- * Renders a mood using the same minimal vector icon language across every mood.
- */
+
+
+
 @Composable
 fun MoodGlyph(mood: JournalMood?, size: Dp, tint: Color, fallback: ActionGlyph = ActionGlyph.MoodNeutral) {
     ActionIcon(mood?.let(::journalMoodGlyph) ?: fallback, Modifier.size(size), tint)
@@ -66,6 +50,13 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
             fun line(x1: Float, y1: Float, x2: Float, y2: Float) =
                 drawLine(color, Offset(x1, y1), Offset(x2, y2), strokeWidth = 1.7f, cap = StrokeCap.Round)
             when (glyph) {
+                ActionGlyph.Music -> {
+                    line(9f, 17f, 9f, 5f)
+                    line(9f, 5f, 20f, 3f)
+                    line(20f, 3f, 20f, 15f)
+                    drawOval(color, Offset(3f, 15f), Size(6f, 5f), style = stroke)
+                    drawOval(color, Offset(14f, 13f), Size(6f, 5f), style = stroke)
+                }
                 ActionGlyph.Pin -> {
                     drawPath(Path().apply {
                         moveTo(12f, 22f); cubicTo(9f, 18f, 4.5f, 13f, 4.5f, 9f)
@@ -133,9 +124,95 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     drawArc(color, 0f, 180f, false, Offset(5.5f, 6f), Size(13f, 12f), style = stroke)
                     line(12f, 18f, 12f, 22f)
                 }
+                ActionGlyph.AudioWave -> {
+                    line(4f, 12f, 4f, 12f)
+                    line(7f, 9f, 7f, 15f)
+                    line(10f, 6f, 10f, 18f)
+                    line(13f, 8f, 13f, 16f)
+                    line(16f, 5f, 16f, 19f)
+                    line(19f, 10f, 19f, 14f)
+                }
+                ActionGlyph.Play -> {
+                    drawPath(Path().apply { moveTo(8f, 5f); lineTo(19f, 12f); lineTo(8f, 19f); close() }, color, style = Fill)
+                }
+                ActionGlyph.Pause -> {
+                    drawRoundRect(color, Offset(7f, 5f), Size(3.5f, 14f), CornerRadius(1f, 1f), style = Fill)
+                    drawRoundRect(color, Offset(13.5f, 5f), Size(3.5f, 14f), CornerRadius(1f, 1f), style = Fill)
+                }
                 ActionGlyph.Note -> {
                     drawRoundRect(color, Offset(5f, 3f), Size(14f, 18f), CornerRadius(3f, 3f), style = stroke)
                     line(9f, 8f, 15f, 8f); line(9f, 12f, 15f, 12f); line(9f, 16f, 12f, 16f)
+                }
+                ActionGlyph.Category -> {
+                    // Tabler Icons: category (24x24, outline).
+                    val tablerStroke = Stroke(width = 2f, cap = StrokeCap.Round)
+                    drawRect(color, Offset(4f, 4f), Size(6f, 6f), style = tablerStroke)
+                    drawRect(color, Offset(14f, 4f), Size(6f, 6f), style = tablerStroke)
+                    drawRect(color, Offset(4f, 14f), Size(6f, 6f), style = tablerStroke)
+                    drawCircle(color, radius = 3f, center = Offset(17f, 17f), style = tablerStroke)
+                }
+                ActionGlyph.Photo -> {
+                    // Tabler Icons: library-photo (24x24, outline).
+                    val tablerStroke = Stroke(width = 2f, cap = StrokeCap.Round)
+                    drawRoundRect(
+                        color,
+                        Offset(7f, 3f),
+                        Size(14f, 14f),
+                        CornerRadius(2.667f, 2.667f),
+                        style = tablerStroke
+                    )
+                    drawPath(Path().apply {
+                        moveTo(4.012f, 7.26f)
+                        cubicTo(3.39f, 7.62f, 3f, 8.27f, 3f, 8.997f)
+                        lineTo(3f, 18.997f)
+                        cubicTo(3f, 20.1f, 3.9f, 21f, 5f, 21f)
+                        lineTo(15f, 21f)
+                        cubicTo(15.75f, 21f, 16.158f, 20.615f, 16.5f, 20f)
+                    }, color, style = tablerStroke)
+                    drawCircle(color, radius = 0.9f, center = Offset(17f, 7f))
+                    drawPath(Path().apply {
+                        moveTo(7f, 13f)
+                        lineTo(10.644f, 9.356f)
+                        cubicTo(11.117f, 8.883f, 11.883f, 8.883f, 12.356f, 9.356f)
+                        lineTo(16f, 13f)
+                    }, color, style = tablerStroke)
+                    drawPath(Path().apply {
+                        moveTo(15f, 12f)
+                        lineTo(16.644f, 10.356f)
+                        cubicTo(17.117f, 9.883f, 17.883f, 9.883f, 18.356f, 10.356f)
+                        lineTo(21f, 13f)
+                    }, color, style = tablerStroke)
+                }
+                ActionGlyph.File -> {
+                    // Tabler Icons: files (24x24, outline).
+                    val tablerStroke = Stroke(width = 2f, cap = StrokeCap.Round)
+                    drawPath(Path().apply {
+                        moveTo(15f, 3f)
+                        lineTo(15f, 7f)
+                        cubicTo(15f, 7.55f, 15.45f, 8f, 16f, 8f)
+                        lineTo(20f, 8f)
+                    }, color, style = tablerStroke)
+                    drawPath(Path().apply {
+                        moveTo(18f, 17f)
+                        lineTo(11f, 17f)
+                        cubicTo(9.9f, 17f, 9f, 16.1f, 9f, 15f)
+                        lineTo(9f, 5f)
+                        cubicTo(9f, 3.9f, 9.9f, 3f, 11f, 3f)
+                        lineTo(15f, 3f)
+                        lineTo(20f, 8f)
+                        lineTo(20f, 15f)
+                        cubicTo(20f, 16.1f, 19.1f, 17f, 18f, 17f)
+                    }, color, style = tablerStroke)
+                    drawPath(Path().apply {
+                        moveTo(16f, 17f)
+                        lineTo(16f, 19f)
+                        cubicTo(16f, 20.1f, 15.1f, 21f, 14f, 21f)
+                        lineTo(7f, 21f)
+                        cubicTo(5.9f, 21f, 5f, 20.1f, 5f, 19f)
+                        lineTo(5f, 9f)
+                        cubicTo(5f, 7.9f, 5.9f, 7f, 7f, 7f)
+                        lineTo(9f, 7f)
+                    }, color, style = tablerStroke)
                 }
                 ActionGlyph.Person -> {
                     drawCircle(color, radius = 3.2f, center = Offset(12f, 7.5f), style = if (filled) Fill else stroke)
@@ -144,6 +221,36 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                             moveTo(5.2f, 19.5f)
                             cubicTo(5.8f, 14.8f, 8.6f, 12.8f, 12f, 12.8f)
                             cubicTo(15.4f, 12.8f, 18.2f, 14.8f, 18.8f, 19.5f)
+                        },
+                        color,
+                        style = stroke
+                    )
+                }
+                ActionGlyph.Cat -> {
+                    drawPath(
+                        Path().apply {
+                            moveTo(6f, 8f)
+                            lineTo(5f, 3.5f)
+                            lineTo(9f, 6f)
+                            cubicTo(10f, 5.5f, 11f, 5.2f, 12f, 5.2f)
+                            cubicTo(13f, 5.2f, 14f, 5.5f, 15f, 6f)
+                            lineTo(19f, 3.5f)
+                            lineTo(18f, 8f)
+                            cubicTo(19f, 9.2f, 19.5f, 10.8f, 19.5f, 12.5f)
+                            cubicTo(19.5f, 16.8f, 16.2f, 20f, 12f, 20f)
+                            cubicTo(7.8f, 20f, 4.5f, 16.8f, 4.5f, 12.5f)
+                            cubicTo(4.5f, 10.8f, 5f, 9.2f, 6f, 8f)
+                            close()
+                        },
+                        color,
+                        style = stroke
+                    )
+                    drawCircle(color, radius = 0.9f, center = Offset(9f, 12f))
+                    drawCircle(color, radius = 0.9f, center = Offset(15f, 12f))
+                    drawPath(
+                        Path().apply {
+                            moveTo(10.3f, 15f)
+                            quadraticTo(12f, 16.2f, 13.7f, 15f)
                         },
                         color,
                         style = stroke
@@ -237,12 +344,12 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     line(15f, 12f, 9f, 18f)
                 }
                 ActionGlyph.Repeat -> {
-                    // Top loop: arrow right, curves down
+                    
                     line(6f, 7f, 18f, 7f)
                     line(15f, 4f, 18f, 7f)
                     line(15f, 10f, 18f, 7f)
                     drawArc(color, 270f, 90f, false, Offset(14f, 7f), Size(4f, 4f), style = stroke)
-                    // Bottom loop: arrow left, curves up
+                    
                     line(18f, 17f, 6f, 17f)
                     line(9f, 14f, 6f, 17f)
                     line(9f, 20f, 6f, 17f)
@@ -288,8 +395,22 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     drawRoundRect(color, Offset(4f, 17.5f), Size(4.5f, 4.5f), CornerRadius(1.2f, 1.2f), style = stroke)
                     line(11.5f, 19.75f, 20f, 19.75f)
                 }
+                ActionGlyph.DragHandle -> {
+                    line(5f, 7.5f, 19f, 7.5f)
+                    line(5f, 12f, 19f, 12f)
+                    line(5f, 16.5f, 19f, 16.5f)
+                }
+                ActionGlyph.Sort -> {
+                    // Tabler Icons: arrows-sort (24x24, outline).
+                    line(3f, 9f, 7f, 5f)
+                    line(7f, 5f, 11f, 9f)
+                    line(7f, 5f, 7f, 19f)
+                    line(13f, 15f, 17f, 19f)
+                    line(17f, 19f, 21f, 15f)
+                    line(17f, 5f, 17f, 19f)
+                }
                 ActionGlyph.WhatsApp -> {
-                    // Chat bubble with tail at bottom-left
+                    
                     val bubblePath = Path().apply {
                         moveTo(12f, 3.5f)
                         cubicTo(16.7f, 3.5f, 20.5f, 7.3f, 20.5f, 12f)
@@ -303,7 +424,7 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     }
                     drawPath(bubblePath, color, style = stroke)
 
-                    // Phone handset inside
+                    
                     val phonePath = Path().apply {
                         moveTo(8.5f, 8.8f)
                         cubicTo(8.7f, 8.4f, 9.1f, 8.2f, 9.5f, 8.3f)
@@ -373,8 +494,8 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     drawArc(color, 210f, 120f, false, Offset(8f, 13f), Size(8f, 7f), style = stroke)
                 }
                 ActionGlyph.MoodFuckOff -> {
-                    // Minimal outlined hand with an extended middle finger. Kept intentionally
-                    // simple so it reads cleanly at the same 16dp size as the other mood glyphs.
+                    
+                    
                     drawPath(
                         Path().apply {
                             moveTo(8.2f, 21f)

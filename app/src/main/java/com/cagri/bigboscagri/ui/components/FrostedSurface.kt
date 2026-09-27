@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.*
 import com.cagri.bigboscagri.ui.DesignStyle
 import kotlin.math.ceil
 
-/** Only the panel-sized sample is blurred, at half resolution (one quarter of the pixels). */
+
 @Composable
 fun BlurredBackdrop(backdrop: GraphicsLayer, offset: () -> Offset, radius: Dp, modifier: Modifier) {
     if (Build.VERSION.SDK_INT < 31) return

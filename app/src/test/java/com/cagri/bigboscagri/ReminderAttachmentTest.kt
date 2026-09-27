@@ -137,20 +137,12 @@ class ReminderAttachmentTest {
 
     @Test
     fun deleteReminderCleansUpAttachmentFiles() {
-        val tempFile = File.createTempFile("att_test_", ".jpg")
-        tempFile.writeText("test image data")
-        assertTrue(tempFile.exists())
-
-        val deleted = AttachmentStorage.deleteAttachmentFile(tempFile.absolutePath)
-        assertTrue(deleted)
-        assertFalse(tempFile.exists())
-
-        val tempFile2 = File.createTempFile("att_test_2_", ".png")
-        tempFile2.writeText("test image data 2")
-        assertTrue(tempFile2.exists())
-
-        AttachmentStorage.deleteAttachmentFilePaths(listOf(tempFile2.absolutePath))
-        assertFalse(tempFile2.exists())
+        val root = java.nio.file.Files.createTempDirectory("real-owned").toFile()
+        try {
+            val tempFile = File(root, "photo.jpg").apply { writeText("image") }
+            assertTrue(AttachmentStorage.deleteOwnedFile(root, tempFile.absolutePath))
+            assertFalse(tempFile.exists())
+        } finally { root.deleteRecursively() }
     }
 
     @Test

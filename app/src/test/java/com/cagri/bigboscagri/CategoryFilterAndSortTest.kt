@@ -16,21 +16,21 @@ import org.junit.Test
 
 class CategoryFilterAndSortTest {
 
-    // 1. Color 1 filter matches reminder with exact Color 1
+    
     @Test
     fun color1FilterMatchesReminderWithExactColor1() {
         val reminderBlue = ReminderItem(
             id = 1L,
             text = "Blue reminder",
             createdAt = 1000L,
-            accentStart = 2, // Color 1 = index 2
+            accentStart = 2, 
             accentEnd = null
         )
         val reminderGreen = ReminderItem(
             id = 2L,
             text = "Green reminder",
             createdAt = 2000L,
-            accentStart = 5, // Color 1 = index 5
+            accentStart = 5, 
             accentEnd = null
         )
 
@@ -45,7 +45,7 @@ class CategoryFilterAndSortTest {
         assertEquals(2, filtered.first().accentStart)
     }
 
-    // 2. Color 1 filter excludes reminder with different Color 1
+    
     @Test
     fun color1FilterExcludesReminderWithDifferentColor1() {
         val reminder1 = ReminderItem(
@@ -79,7 +79,7 @@ class CategoryFilterAndSortTest {
         assertFalse(filtered.any { it.id == 3L })
     }
 
-    // 3. Both selected endpoints count; unrelated palette colors do not.
+    
     @Test
     fun eitherSelectedColorMatchesButUnselectedColorsDoNot() {
         val gradient = ReminderItem(
@@ -103,7 +103,7 @@ class CategoryFilterAndSortTest {
         assertTrue(filterAndSortReminders(reminders, colorFilter = 2).isEmpty())
     }
 
-    // 4. Clearing the color filter restores all category reminders
+    
     @Test
     fun clearingColorFilterRestoresAllCategoryReminders() {
         val reminders = listOf(
@@ -113,24 +113,24 @@ class CategoryFilterAndSortTest {
             ReminderItem(id = 4L, text = "Four", createdAt = 4000L, accentStart = 1, accentEnd = 3)
         )
 
-        // Filter active: only color 1
+        
         val filtered = filterAndSortReminders(reminders, colorFilter = 1, sortOrder = ReminderSortOrder.RECENTLY_ADDED)
         assertEquals(2, filtered.size)
 
-        // Filter cleared (null): all restored
+        
         val restored = filterAndSortReminders(reminders, colorFilter = null, sortOrder = ReminderSortOrder.RECENTLY_ADDED)
         assertEquals(4, restored.size)
-        assertEquals(listOf(4L, 3L, 2L, 1L), restored.map { it.id }) // RECENTLY_ADDED order
+        assertEquals(listOf(4L, 3L, 2L, 1L), restored.map { it.id }) 
     }
 
-    // 5. RECENTLY_ADDED uses createdAt descending
+    
     @Test
     fun recentlyAddedUsesCreatedAtDescending() {
         val oldest = ReminderItem(id = 1L, text = "Oldest", createdAt = 1000L)
         val middle = ReminderItem(id = 2L, text = "Middle", createdAt = 2000L)
         val newest = ReminderItem(id = 3L, text = "Newest", createdAt = 3000L)
 
-        // Input in arbitrary order
+        
         val input = listOf(oldest, newest, middle)
 
         val sorted = filterAndSortReminders(
@@ -145,7 +145,7 @@ class CategoryFilterAndSortTest {
         assertEquals(1000L, sorted[2].createdAt)
     }
 
-    // 6. REMINDER_TIME uses alertAt ascending (nearest upcoming first)
+    
     @Test
     fun reminderTimeUsesAlertAtAscending() {
         val farFuture = ReminderItem(id = 1L, text = "Far future", createdAt = 5000L, alertAt = 300000L)
@@ -164,7 +164,7 @@ class CategoryFilterAndSortTest {
         assertEquals(300000L, sorted[2].alertAt)
     }
 
-    // 7. Reminders with null alertAt are placed after scheduled reminders
+    
     @Test
     fun remindersWithNullAlertAtArePlacedAfterScheduledReminders() {
         val scheduled1 = ReminderItem(id = 1L, text = "Scheduled 2pm", createdAt = 100L, alertAt = 2000L)
@@ -178,7 +178,7 @@ class CategoryFilterAndSortTest {
             sortOrder = ReminderSortOrder.REMINDER_TIME
         )
 
-        // Scheduled first (sorted by alertAt ascending: 1000L, 2000L), then unscheduled (sorted by createdAt descending: 500L, 300L)
+        
         assertEquals(listOf(2L, 1L, 3L, 4L), sorted.map { it.id })
         assertEquals(1000L, sorted[0].alertAt)
         assertEquals(2000L, sorted[1].alertAt)
@@ -186,12 +186,12 @@ class CategoryFilterAndSortTest {
         assertEquals(null, sorted[3].alertAt)
     }
 
-    // 8. Tapping/toggling state changes between the two sort modes
+    
     @Test
     fun togglingStateChangesBetweenTheTwoSortModes() {
         var currentMode = ReminderSortOrder.RECENTLY_ADDED
 
-        // Toggle 1
+        
         currentMode = if (currentMode == ReminderSortOrder.RECENTLY_ADDED) {
             ReminderSortOrder.REMINDER_TIME
         } else {
@@ -199,7 +199,7 @@ class CategoryFilterAndSortTest {
         }
         assertEquals(ReminderSortOrder.REMINDER_TIME, currentMode)
 
-        // Toggle 2
+        
         currentMode = if (currentMode == ReminderSortOrder.RECENTLY_ADDED) {
             ReminderSortOrder.REMINDER_TIME
         } else {
@@ -208,7 +208,7 @@ class CategoryFilterAndSortTest {
         assertEquals(ReminderSortOrder.RECENTLY_ADDED, currentMode)
     }
 
-    // 9. Category and color filtering still composes correctly with both sort modes
+    
     @Test
     fun categoryAndColorFilterComposeWithBothSortModes() {
         val reminders = listOf(
@@ -219,11 +219,11 @@ class CategoryFilterAndSortTest {
             ReminderItem(id = 5L, text = "Other Cat - Color 3", createdAt = 6000L, customCategoryId = 99L, accentStart = 3, alertAt = 2000L)
         )
 
-        // Step 1: Category filter
+        
         val inCat42 = reminders.filter { it.customCategoryId == 42L }
 
-        // Test with RECENTLY_ADDED:
-        // Filter Color 3: items 1, 3, 4. Sorted by createdAt descending: 4 (4000L), 3 (3000L), 1 (1000L)
+        
+        
         val recentSort = filterAndSortReminders(
             reminders = inCat42,
             colorFilter = 3,
@@ -231,11 +231,11 @@ class CategoryFilterAndSortTest {
         )
         assertEquals(listOf(4L, 3L, 1L), recentSort.map { it.id })
 
-        // Test with REMINDER_TIME:
-        // Filter Color 3: items 1, 3, 4.
-        // Scheduled: item 1 (alertAt=5000L), item 3 (alertAt=9000L)
-        // Unscheduled: item 4 (alertAt=null)
-        // Order: 1, 3, 4
+        
+        
+        
+        
+        
         val timeSort = filterAndSortReminders(
             reminders = inCat42,
             colorFilter = 3,
@@ -244,7 +244,7 @@ class CategoryFilterAndSortTest {
         assertEquals(listOf(1L, 3L, 4L), timeSort.map { it.id })
     }
 
-    // 10. Neutral / default (no Color 1) filter test
+    
     @Test
     fun neutralColorFilterMatchesRemindersWithNoColor1() {
         val withColor = ReminderItem(id = 1L, text = "Has color", createdAt = 1000L, accentStart = 0)
@@ -261,7 +261,7 @@ class CategoryFilterAndSortTest {
         assertEquals(null, filtered.first().accentStart)
     }
 
-    // 11. Accessibility content description matches exact requested strings
+    
     @Test
     fun sortControlAccessibilityContentDescriptions() {
         fun getContentDescription(order: ReminderSortOrder): String = when (order) {
@@ -281,19 +281,19 @@ class CategoryFilterAndSortTest {
         )
     }
 
-    // 12. Sort preference persistence via SharedPreferences
+    
     @Test
     fun sortPreferencePersistenceInPreferences() {
         val prefs = FakeSharedPreferences()
 
-        // Default when absent
+        
         val initialOrder = when (prefs.getString("sort_order", null)) {
             "reminder_time" -> ReminderSortOrder.REMINDER_TIME
             else -> ReminderSortOrder.RECENTLY_ADDED
         }
         assertEquals(ReminderSortOrder.RECENTLY_ADDED, initialOrder)
 
-        // Save REMINDER_TIME
+        
         prefs.edit().putString("sort_order", "reminder_time").apply()
         val updatedOrder = when (prefs.getString("sort_order", null)) {
             "reminder_time" -> ReminderSortOrder.REMINDER_TIME
@@ -301,7 +301,7 @@ class CategoryFilterAndSortTest {
         }
         assertEquals(ReminderSortOrder.REMINDER_TIME, updatedOrder)
 
-        // Save RECENTLY_ADDED
+        
         prefs.edit().putString("sort_order", "recently_added").apply()
         val revertedOrder = when (prefs.getString("sort_order", null)) {
             "reminder_time" -> ReminderSortOrder.REMINDER_TIME
@@ -310,7 +310,7 @@ class CategoryFilterAndSortTest {
         assertEquals(ReminderSortOrder.RECENTLY_ADDED, revertedOrder)
     }
 
-    // 13. Category color filter isolation and preservation across navigation lifecycle
+    
     @Test
     fun categoryColorFilterIsolationAndPreservation() {
         val categoryFilters = mutableMapOf<String, Int>()
@@ -318,19 +318,19 @@ class CategoryFilterAndSortTest {
         val arabaKey = "custom_1"
         val isKey = "custom_2"
 
-        // In Araba, user selects Blue (index 2)
+        
         categoryFilters[arabaKey] = 2
         assertEquals(2, categoryFilters[arabaKey])
 
-        // User navigates to İş: filter must be isolated and null by default
+        
         val isFilter = categoryFilters[isKey]
         assertEquals(null, isFilter)
 
-        // User returns to Araba: Blue filter must be preserved
+        
         val restoredArabaFilter = categoryFilters[arabaKey]
         assertEquals(2, restoredArabaFilter)
 
-        // In Araba, only Blue reminders are matched
+        
         val arabaReminders = listOf(
             ReminderItem(id = 101L, text = "Motor yağı", createdAt = 1000L, customCategoryId = 1L, accentStart = 2),
             ReminderItem(id = 102L, text = "Lastik hava", createdAt = 2000L, customCategoryId = 1L, accentStart = 5)
@@ -339,20 +339,20 @@ class CategoryFilterAndSortTest {
         assertEquals(1, filtered.size)
         assertEquals(101L, filtered.first().id)
 
-        // Clearing filter in Araba removes only Araba's filter
+        
         categoryFilters.remove(arabaKey)
         assertEquals(null, categoryFilters[arabaKey])
     }
 
-    // 14. Edit mode: secondary panels collapse when user focuses text field, remain collapsed when focus lost, reopen manually
+    
     @Test
     fun editModeSecondaryPanelsCollapseOnFocusAndRemainCollapsed() {
         var secondaryPanelsExpanded = true
 
-        // User enters edit mode via "Düzenle" -> panels are expanded, text field is not auto-focused
+        
         assertEquals(true, secondaryPanelsExpanded)
 
-        // User explicitly focuses the text field -> secondary panels collapse
+        
         fun onTextFieldFocusChanged(isFocused: Boolean) {
             if (isFocused) {
                 secondaryPanelsExpanded = false
@@ -362,32 +362,32 @@ class CategoryFilterAndSortTest {
         onTextFieldFocusChanged(isFocused = true)
         assertEquals(false, secondaryPanelsExpanded)
 
-        // Focus lost (e.g. keyboard dismissed) -> panels do NOT auto-reopen, remain collapsed
+        
         onTextFieldFocusChanged(isFocused = false)
         assertEquals(false, secondaryPanelsExpanded)
 
-        // User manually taps the compact reopen control -> panels expand again
+        
         secondaryPanelsExpanded = true
         assertEquals(true, secondaryPanelsExpanded)
 
-        // User taps text field again -> panels collapse again
+        
         onTextFieldFocusChanged(isFocused = true)
         assertEquals(false, secondaryPanelsExpanded)
     }
 
-    // 15. Checklist spacing: title-to-first-item vertical padding reduced by 6dp
+    
     @Test
     fun checklistTitleToFirstItemSpacingReduction() {
-        val originalSummaryBottomPadding = 6 // dp
-        val originalColumnTopPadding = 4 // dp
-        val originalGap = originalSummaryBottomPadding + originalColumnTopPadding // 10dp
+        val originalSummaryBottomPadding = 6 
+        val originalColumnTopPadding = 4 
+        val originalGap = originalSummaryBottomPadding + originalColumnTopPadding 
 
-        val newSummaryBottomPadding = 2 // dp
-        val newColumnTopPadding = 2 // dp
-        val newGap = newSummaryBottomPadding + newColumnTopPadding // 4dp
+        val newSummaryBottomPadding = 2 
+        val newColumnTopPadding = 2 
+        val newGap = newSummaryBottomPadding + newColumnTopPadding 
 
         val reduction = originalGap - newGap
-        assertEquals(6, reduction) // Exact 6dp reduction in the target 4-6dp range
+        assertEquals(6, reduction) 
     }
 
     @Test

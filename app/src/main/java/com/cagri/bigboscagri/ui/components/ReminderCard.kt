@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
@@ -49,18 +48,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalView
 import com.cagri.bigboscagri.data.CustomCategory
-import com.cagri.bigboscagri.data.JournalMood
 import com.cagri.bigboscagri.data.ReminderItem
+import com.cagri.bigboscagri.data.formatVoiceDuration
 import com.cagri.bigboscagri.ui.reminderDate
 
 fun resolveCategoryStripeColors(category: CustomCategory): Pair<Color, Color> {
@@ -119,6 +116,8 @@ fun ReminderCard(
     showCategoryStripes: Boolean = true,
     isNewlyCreated: Boolean = false,
     onEntryAnimationFinished: (() -> Unit)? = null,
+    journalListMode: Boolean = false,
+    showVoiceSummary: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -149,8 +148,8 @@ fun ReminderCard(
         }
     } else Modifier
 
-    val accentBrush = remember(reminder.accentStart, reminder.accentEnd, reminder.isCompleted, reminder.gradientBlendFraction, reminder.customSolidColorArgb) {
-        reminderAccentBrush(reminder.accentStart, reminder.accentEnd, reminder.isCompleted, reminder.gradientBlendFraction, reminder.customSolidColorArgb)
+    val accentBrush = remember(reminder.accentStart, reminder.accentEnd, reminder.isCompleted, reminder.gradientBlendFraction, reminder.customSolidColorArgb, journalListMode) {
+        reminderAccentBrush(reminder.accentStart, reminder.accentEnd, if (journalListMode) false else reminder.isCompleted, reminder.gradientBlendFraction, reminder.customSolidColorArgb)
     }
     val categoryStripeColors = remember(reminder.customCategoryId, customCategory, showCategoryStripes) {
         if (showCategoryStripes && reminder.customCategoryId != null && customCategory != null) {
@@ -158,7 +157,7 @@ fun ReminderCard(
         } else null
     }
     val textColor by animateColorAsState(
-        if (reminder.isCompleted) Color(0xFF808089) else Color(0xFFF3F3F5),
+        if (journalListMode || !reminder.isCompleted) Color(0xFFF3F3F5) else Color(0xFF808089),
         if (reduceAnimations) snap() else tween(200),
         label = "completionColor"
     )
@@ -205,7 +204,7 @@ fun ReminderCard(
             }
         }
     }
-    val shouldStrikeThrough = reminder.isCompleted && reminder.journal == null
+    val shouldStrikeThrough = !journalListMode && reminder.isCompleted && reminder.journal == null
     val strikethroughProgress = remember(reminder.id) {
         Animatable(if (shouldStrikeThrough) 1f else 0f)
     }
@@ -254,9 +253,19 @@ fun ReminderCard(
             .then(sharedBoundsModifier)
             .then(arrivalModifier)
             .fillMaxWidth()
+            .realPetPerch(realPetReminderPerchId(reminder.id))
             .pressScale(cardInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.985f)
             .clip(shape)
-            .then(if (accentBrush == null) Modifier.background(if (LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass) LiquidGlassTokens.contentColor else Color(0xFF141416)) else Modifier.background(accentBrush))
+            .then(
+                when {
+                    accentBrush != null -> Modifier.background(accentBrush)
+                    LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass && reminder.isCompleted && !journalListMode ->
+                        Modifier.liquidChrome(corners = 22.dp)
+                    LocalDesignStyle.current == com.cagri.bigboscagri.ui.DesignStyle.LiquidGlass ->
+                        Modifier.background(LiquidGlassTokens.contentColor)
+                    else -> Modifier.background(Color(0xFF141416))
+                }
+            )
             .then(if (isSelected) Modifier.background(selectionOverlay) else Modifier)
             .border(borderWidth, borderColor, shape)
             .combinedClickable(
@@ -305,85 +314,106 @@ fun ReminderCard(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 4.dp, end = if (categoryStripeColors != null) 32.dp else 16.dp, top = 8.dp, bottom = 8.dp),
+                .padding(
+                    start = if (journalListMode && !isSelectionMode) 18.dp else 4.dp,
+                    end = if (categoryStripeColors != null) 32.dp else 16.dp,
+                    top = 8.dp,
+                    bottom = 8.dp
+                ),
             verticalAlignment = Alignment.Top
         ) {
-            Box(
-                Modifier.size(48.dp).clip(CircleShape)
-                .then(
-                    if (isSelectionMode) {
-                        Modifier.clickable(
-                            interactionSource = circleInteractionSource,
-                            indication = null,
-                            role = Role.Checkbox,
-                            onClick = onSelectToggle
-                        )
-                    } else {
-                        Modifier.toggleable(
-                            value = reminder.isCompleted,
-                            interactionSource = circleInteractionSource,
-                            indication = null,
-                            role = Role.Checkbox,
-                            onValueChange = {
-                                if (reminder.hasRepeat) {
-                                    RealHaptics.success(view)
-                                    if (!reduceAnimations) {
-                                        recurringAcknowledged = true
-                                    }
-                                    onToggle()
-                                } else {
-                                    if (!reminder.isCompleted) {
+            if (!journalListMode || isSelectionMode) {
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape)
+                    .then(
+                        if (isSelectionMode) {
+                            Modifier.clickable(
+                                interactionSource = circleInteractionSource,
+                                indication = null,
+                                role = Role.Checkbox,
+                                onClick = onSelectToggle
+                            )
+                        } else {
+                            Modifier.toggleable(
+                                value = reminder.isCompleted,
+                                interactionSource = circleInteractionSource,
+                                indication = null,
+                                role = Role.Checkbox,
+                                onValueChange = {
+                                    if (reminder.hasRepeat) {
                                         RealHaptics.success(view)
+                                        if (!reduceAnimations) {
+                                            recurringAcknowledged = true
+                                        }
+                                        onToggle()
                                     } else {
-                                        RealHaptics.toggle(view, on = false)
+                                        if (!reminder.isCompleted) {
+                                            RealHaptics.success(view)
+                                        }
+                                        onToggle()
                                     }
-                                    onToggle()
                                 }
-                            }
-                        )
-                    }
-                )
-                .semantics {
-                    contentDescription = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç")
-                        else if (reminder.isCompleted) "Tamamlamayı geri al" else "Tamamla"
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                Modifier.size(20.dp)
-                    .graphicsLayer {
-                        scaleX = circlePulse.value
-                        scaleY = circlePulse.value
-                    }
-                    .pressScale(circleInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.95f)
-                    .background(
-                        when {
-                            reminder.isCompleted -> circleBgColor
-                            recurringAckAlpha.value > 0.01f -> Color(0xFF94B8F7).copy(alpha = 0.25f * recurringAckAlpha.value)
-                            else -> circleBgColor
-                        },
-                        CircleShape
+                            )
+                        }
                     )
-                    .border(
-                        1.5.dp,
-                        when {
-                            reminder.isCompleted -> circleBorderColor
-                            recurringAckAlpha.value > 0.01f -> Color(0xFF94B8F7).copy(alpha = 0.7f * recurringAckAlpha.value + 0.3f * (1f - recurringAckAlpha.value))
-                            else -> circleBorderColor
-                        },
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (reminder.isCompleted) {
-                    ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color(0xFF1B1B1F))
-                } else if (recurringAckAlpha.value > 0.01f) {
-                    ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color(0xFF94B8F7).copy(alpha = recurringAckAlpha.value))
+                    .semantics {
+                        contentDescription = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç")
+                            else if (reminder.isCompleted) "Tamamlamayı geri al" else "Tamamla"
+                    },
+                    contentAlignment = Alignment.Center
+                ) {
+                    val selectionCircleBg by animateColorAsState(
+                        targetValue = if (isSelected) Color(0xFF91B9FF) else Color.Transparent,
+                        animationSpec = if (reduceAnimations) snap() else tween(120),
+                        label = "selCircleBg"
+                    )
+                    val selectionCircleBorder by animateColorAsState(
+                        targetValue = if (isSelected) Color.Transparent else Color(0xFF626269),
+                        animationSpec = if (reduceAnimations) snap() else tween(120),
+                        label = "selCircleBorder"
+                    )
+                    Box(
+                        Modifier.size(20.dp)
+                            .graphicsLayer {
+                                scaleX = circlePulse.value
+                                scaleY = circlePulse.value
+                            }
+                            .pressScale(circleInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.95f)
+                            .background(
+                                when {
+                                    isSelectionMode -> selectionCircleBg
+                                    reminder.isCompleted -> circleBgColor
+                                    recurringAckAlpha.value > 0.01f -> Color(0xFF94B8F7).copy(alpha = 0.25f * recurringAckAlpha.value)
+                                    else -> circleBgColor
+                                },
+                                CircleShape
+                            )
+                            .border(
+                                1.5.dp,
+                                when {
+                                    isSelectionMode -> selectionCircleBorder
+                                    reminder.isCompleted -> circleBorderColor
+                                    recurringAckAlpha.value > 0.01f -> Color(0xFF94B8F7).copy(alpha = 0.7f * recurringAckAlpha.value + 0.3f * (1f - recurringAckAlpha.value))
+                                    else -> circleBorderColor
+                                },
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isSelectionMode) {
+                            if (isSelected) {
+                                ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color(0xFF1B1B1F))
+                            }
+                        } else if (reminder.isCompleted) {
+                            ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color(0xFF1B1B1F))
+                        } else if (recurringAckAlpha.value > 0.01f) {
+                            ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color(0xFF94B8F7).copy(alpha = recurringAckAlpha.value))
+                        }
+                    }
                 }
             }
-        }
-        Column(Modifier.weight(1f).padding(top = 11.dp, bottom = 10.dp, start = 2.dp)) {
-            Text(
+            Column(Modifier.weight(1f).padding(top = 11.dp, bottom = 10.dp, start = if (journalListMode && !isSelectionMode) 0.dp else 2.dp)) {
+                Text(
                 text = reminder.text,
                 color = textColor,
                 fontSize = 16.sp,
@@ -419,33 +449,36 @@ fun ReminderCard(
                     }
                 }
             )
-            val hasChecklist = reminder.isChecklist && reminder.checklistItems.isNotEmpty()
             val hasJournal = reminder.journal != null
-            if (hasChecklist || hasJournal) {
-                Row(
-                    modifier = Modifier.padding(top = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (hasChecklist) {
-                        val total = reminder.checklistItems.size
-                        val completedCount = reminder.checklistItems.count { it.isCompleted }
-                        val summary = if (completedCount > 0) "$total madde • $completedCount tamamlandı" else "$total madde"
+            if (journalListMode) {
+                reminder.journal?.mood?.let { mood ->
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        MoodGlyph(mood, 13.dp, Color(0xFFA5A5B0))
                         Text(
-                            summary,
+                            journalMoodLabel(mood),
                             color = Color(0xFFA5A5B0),
                             fontSize = 12.sp,
                             lineHeight = 16.sp
                         )
-                        if (hasJournal) {
-                            Text(
-                                " • ",
-                                color = Color(0xFFA5A5B0),
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp
-                            )
-                        }
                     }
-                    if (hasJournal) {
+                }
+                reminder.voiceRecordings.forEach { recording ->
+                    VoicePlaybackRow(
+                        recording = recording,
+                        compact = true,
+                        modifier = Modifier.padding(top = 7.dp)
+                    )
+                }
+            } else {
+                if (hasJournal) {
+                    Row(
+                        modifier = Modifier.padding(top = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             "Günlük",
                             color = Color(0xFFA5A5B0),
@@ -459,17 +492,37 @@ fun ReminderCard(
                         }
                     }
                 }
-            }
-            if (!reminder.isCompleted) reminder.alertAt?.let {
-                val isOverdue = it < System.currentTimeMillis()
-                val dateColor = if (isOverdue) Color(0xFFF87171) else Color(0xFF94B8F7)
-                val alertText = if (reminder.hasRepeat) "${reminderDate(it)} • ${reminder.repeatRule.displayName}" else reminderDate(it)
-                Text(alertText, color = dateColor, fontSize = 11.sp, lineHeight = 16.sp,
-                    modifier = Modifier.padding(top = 5.dp))
-            }
-            reminder.completedAt?.let {
-                Text("Tamamlandı: ${reminderDate(it)}", color = Color(0xFF92929A), fontSize = 11.sp,
-                    lineHeight = 16.sp, modifier = Modifier.padding(top = 5.dp))
+                if (showVoiceSummary) {
+                    reminder.voiceRecordings.firstOrNull()?.let { recording ->
+                        Row(
+                            modifier = Modifier.padding(top = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            ActionIcon(ActionGlyph.Mic, Modifier.size(12.dp), Color(0xFFA5A5B0))
+                            Text(
+                                buildString {
+                                    append(formatVoiceDuration(recording.durationMillis))
+                                    if (reminder.voiceRecordings.size > 1) append(" • ${reminder.voiceRecordings.size} kayıt")
+                                },
+                                color = Color(0xFFA5A5B0),
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                }
+                if (!reminder.isCompleted) reminder.alertAt?.let {
+                    val isOverdue = it < System.currentTimeMillis()
+                    val dateColor = if (isOverdue) Color(0xFFF87171) else Color(0xFF94B8F7)
+                    val alertText = if (reminder.hasRepeat) "${reminderDate(it)} • ${reminder.repeatRule.displayName}" else reminderDate(it)
+                    Text(alertText, color = dateColor, fontSize = 11.sp, lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 5.dp))
+                }
+                reminder.completedAt?.let {
+                    Text("Tamamlandı: ${reminderDate(it)}", color = Color(0xFF92929A), fontSize = 11.sp,
+                        lineHeight = 16.sp, modifier = Modifier.padding(top = 5.dp))
+                }
             }
         }
         if (isSelectionMode) {

@@ -1,5 +1,7 @@
 package com.cagri.bigboscagri.ui.components
 
+import android.annotation.SuppressLint
+
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -24,7 +26,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** One moving neutral selection capsule; never samples the sheet it lives inside. */
+
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun LiquidSegmentedControl(
     labels: List<String>,
@@ -59,7 +62,7 @@ fun LiquidSegmentedControl(
     }
 }
 
-/** The center window of a wheel is static: no per-number blur, shader or animation. */
+
 fun Modifier.liquidWheelWindow(rowHeight: Dp): Modifier = drawWithCache {
     val inset = 2.dp.toPx()
     val origin = Offset(inset, rowHeight.toPx())

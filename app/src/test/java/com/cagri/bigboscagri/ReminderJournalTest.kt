@@ -1,7 +1,6 @@
 package com.cagri.bigboscagri
 
 import com.cagri.bigboscagri.data.JournalMood
-import com.cagri.bigboscagri.data.ReminderItem
 import com.cagri.bigboscagri.data.ReminderRepository
 import org.json.JSONArray
 import org.json.JSONObject
@@ -171,15 +170,15 @@ class ReminderJournalTest {
         val repo = ReminderRepository(prefs)
         val reminder = repo.add("Görev")
         
-        // Complete the reminder
+        
         repo.toggleCompleted(reminder.id)
         assertTrue(repo.load().first().isCompleted)
         
-        // Add journal
+        
         repo.setJournal(reminder.id, JournalMood.VERY_GOOD, "Tamamladım!")
         assertNotNull(repo.load().first().journal)
         
-        // Restore reminder
+        
         repo.toggleCompleted(reminder.id)
         val activeReminder = repo.load().first()
         assertTrue(!activeReminder.isCompleted)

@@ -59,11 +59,11 @@ class WhatsAppRecipientRepository(private val preferences: SharedPreferences) {
 fun normalizePhoneNumber(input: String): String? {
     val digits = input.filter { it.isDigit() }
     return when {
-        // e.g. 0532 123 45 67 (11 digits starting with 05) -> 905321234567
+        
         digits.length == 11 && digits.startsWith("05") -> "9" + digits
-        // e.g. +90 532 123 45 67 or 905321234567 (12 digits starting with 905) -> 905321234567
+        
         digits.length == 12 && digits.startsWith("905") -> digits
-        // e.g. 532 123 45 67 (10 digits starting with 5) -> 905321234567
+        
         digits.length == 10 && digits.startsWith("5") -> "90" + digits
         else -> null
     }
@@ -108,7 +108,7 @@ class WhatsAppDraftCoordinator(
     }
 
     fun onConsentDismissed() {
-        // Dismissing leaves unarmed and ungranted
+        
     }
 
     fun onReminderSubmitted() {
@@ -191,7 +191,7 @@ object WhatsAppSender {
         endpoint: String = WORKER_ENDPOINT
     ): Boolean {
         if (apiKey.isBlank()) {
-            // Missing API key: fail safely without crashing
+            
             return false
         }
         return try {

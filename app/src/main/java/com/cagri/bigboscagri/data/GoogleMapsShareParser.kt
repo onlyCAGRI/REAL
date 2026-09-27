@@ -4,7 +4,7 @@ import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URLDecoder
 
-/** Accept only Google Maps shares. Redirects are followed only to known HTTPS Maps hosts. */
+
 object GoogleMapsShareParser {
     private val urlPattern = Regex("https://[^\\s<>]+", RegexOption.IGNORE_CASE)
     private val number = "-?\\d{1,3}(?:\\.\\d+)?"
@@ -26,13 +26,13 @@ object GoogleMapsShareParser {
             originalUri.host.equals("share.google", true)
         val resolved = if (isShort) resolveShortLink(original)?.takeIf(::isMapsUrl) ?: original else original
         val uri = URI(resolved)
-        // Some mobile shares percent-encode the inner Maps URL/data payload. Inspect both forms.
+        
         val decodedResolved = decodeRepeated(resolved)
         val exactPoint = placePoint.find(resolved)?.let { it.groupValues[1] to it.groupValues[2] }
             ?: placePoint.find(decodedResolved)?.let { it.groupValues[1] to it.groupValues[2] }
             ?: placePathPoint.find(uri.rawPath.orEmpty())?.let { it.groupValues[1] to it.groupValues[2] }
             ?: parseCoordinatesInQuery(uri)
-        // A Maps camera center is not necessarily the place's pin; flag it as approximate.
+        
         val camera = if (exactPoint == null && uri.path.orEmpty().startsWith("/maps/"))
             cameraPoint.find(resolved)?.let { it.groupValues[1] to it.groupValues[2] }
         else null
@@ -115,7 +115,7 @@ object GoogleMapsShareParser {
         } catch (_: Exception) { false }
     }
 
-    private fun resolveRedirects(start: String): String? {
+    private fun resolveRedirects(start: String): String {
         var current = start
         repeat(8) {
             val connection = (URI(current).toURL().openConnection() as HttpURLConnection).apply {

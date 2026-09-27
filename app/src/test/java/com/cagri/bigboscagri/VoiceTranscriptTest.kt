@@ -48,10 +48,10 @@ class VoiceTranscriptTest {
 
     @Test
     fun voiceTranscriptFormatterPromptSentence() {
-        // User test sentence: "yarın saat beşte annemi arıcam ve marketten süt alıcam"
+        
         val full = "yarın saat beşte annemi arıcam ve marketten süt alıcam"
 
-        // When earlier segment was already committed
+        
         val (c2, p2) = VoiceTranscriptFormatter.splitCommittedAndPartial(
             full,
             "yarın saat beşte annemi arıcam",
@@ -60,7 +60,7 @@ class VoiceTranscriptTest {
         assertEquals("yarın saat beşte annemi arıcam", c2)
         assertEquals("ve marketten süt alıcam", p2)
 
-        // When all text is in partial (continuous recognition)
+        
         val (c3, p3) = VoiceTranscriptFormatter.splitCommittedAndPartial(full, "", full)
         assertEquals("yarın saat beşte annemi arıcam ve marketten", c3)
         assertEquals("süt alıcam", p3)
@@ -78,7 +78,7 @@ class VoiceTranscriptTest {
     fun partialLongerThanFinalTrailingWordsNotLost() {
         val draft = VoiceDraft("")
         draft.updatePartial("yarın saat beşte annemi")
-        // Final result emitted by recognizer cut off the trailing word "annemi"
+        
         draft.commitResult("yarın saat beşte")
         assertEquals("yarın saat beşte annemi", draft.committed)
         assertEquals("", draft.partial)
@@ -88,7 +88,7 @@ class VoiceTranscriptTest {
     fun finalRicherThanPartialFinalWins() {
         val draft = VoiceDraft("")
         draft.updatePartial("yarın saat")
-        // Final result has completed additional words
+        
         draft.commitResult("yarın saat beşte")
         assertEquals("yarın saat beşte", draft.committed)
         assertEquals("", draft.partial)
@@ -98,7 +98,7 @@ class VoiceTranscriptTest {
     fun unrelatedPartialAndFinalDoesNotUnsafelyConcatenate() {
         val draft = VoiceDraft("")
         draft.updatePartial("toplantı iptal")
-        // Completely unrelated final result
+        
         draft.commitResult("doktora git")
         assertEquals("doktora git", draft.committed)
         assertEquals("", draft.partial)

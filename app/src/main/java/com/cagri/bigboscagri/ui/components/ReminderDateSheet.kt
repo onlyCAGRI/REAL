@@ -48,7 +48,7 @@ fun ReminderDateSheet(
 ) {
     val now = remember { System.currentTimeMillis() }
     val zone = remember { ZoneId.systemDefault() }
-    val initial = initialMillis?.takeIf { it > now } ?: now + 60 * 60 * 1000L
+    val initial = initialMillis?.takeIf { it > now } ?: (now + 60L * 60L * 1000L)
     val initialZoned = remember(initial) { Instant.ofEpochMilli(initial).atZone(zone) }
     val dateState = rememberDatePickerState(
         initialSelectedDateMillis = initialZoned.toLocalDate()

@@ -92,12 +92,12 @@ fun WhatsAppConsentSheet(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = {} // Prevent click bubbling
+                            onClick = {} 
                         )
                         .padding(horizontal = 24.dp, vertical = 20.dp)
                         .navigationBarsPadding()
                 ) {
-                    // Drag handle
+                    
                     Box(
                         modifier = Modifier
                             .size(width = 38.dp, height = 4.dp)
@@ -107,7 +107,7 @@ fun WhatsAppConsentSheet(
 
                     Spacer(Modifier.height(20.dp))
 
-                    // Title
+                    
                     Text(
                         text = "WhatsApp için internet erişimi",
                         color = Color.White,
@@ -118,7 +118,7 @@ fun WhatsAppConsentSheet(
 
                     Spacer(Modifier.height(10.dp))
 
-                    // Body
+                    
                     Text(
                         text = "Real normal kullanımda internete ihtiyaç duymaz.\nWhatsApp’a da göndermek için yalnızca bu özellik kullanıldığında internet bağlantısı kullanılacak.",
                         color = Color(0xFFA4A4AD),
@@ -128,7 +128,7 @@ fun WhatsAppConsentSheet(
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Question
+                    
                     Text(
                         text = "İzin veriyor musun?",
                         color = Color(0xFFE2E2E8),
@@ -138,7 +138,7 @@ fun WhatsAppConsentSheet(
 
                     Spacer(Modifier.height(26.dp))
 
-                    // Primary Button: "İzin ver"
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -158,7 +158,7 @@ fun WhatsAppConsentSheet(
 
                     Spacer(Modifier.height(10.dp))
 
-                    // Secondary Button: "Şimdi değil"
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()

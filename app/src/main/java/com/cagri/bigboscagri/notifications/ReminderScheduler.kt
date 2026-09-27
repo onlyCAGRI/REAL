@@ -9,7 +9,7 @@ import android.os.Build
 import com.cagri.bigboscagri.data.ReminderRepository
 import com.cagri.bigboscagri.data.nextAlertAfter
 
-/** One system alarm for the next batch; no timer, polling or permanent service. */
+
 object ReminderScheduler {
     fun canScheduleExact(context: Context): Boolean = Build.VERSION.SDK_INT < 31 ||
         context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()

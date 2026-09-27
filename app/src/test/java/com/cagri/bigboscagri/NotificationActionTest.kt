@@ -18,7 +18,7 @@ class NotificationActionTest {
         )
         assertFalse(original.isCompleted)
 
-        // Simulate completeFromNotification logic
+        
         val completed = if (!original.isCompleted && !original.hasRepeat) {
             original.copy(
                 completedAt = 2500L,
@@ -37,7 +37,7 @@ class NotificationActionTest {
         val today19 = LocalDate.of(2026, 9, 19).atTime(19, 0).atZone(zone).toInstant().toEpochMilli()
         val tomorrow19 = LocalDate.of(2026, 9, 20).atTime(19, 0).atZone(zone).toInstant().toEpochMilli()
 
-        // At 19:00, deliverDue had already delivered today's notification and advanced alertAt to tomorrow 19:00
+        
         val recurringReminder = ReminderItem(
             id = 2L,
             text = "Her akşam ilaç",
@@ -47,10 +47,10 @@ class NotificationActionTest {
             repeatRule = RecurrenceRule.DAILY
         )
 
-        // User taps "Tamamla" on today's notification
-        // For recurring reminders, completeFromNotification MUST NOT set completedAt
+        
+        
         val afterComplete = if (!recurringReminder.isCompleted && recurringReminder.hasRepeat) {
-            recurringReminder // completedAt remains null, alertAt remains tomorrow 19:00
+            recurringReminder 
         } else {
             recurringReminder.copy(completedAt = today19)
         }
@@ -61,7 +61,7 @@ class NotificationActionTest {
         assertEquals(today19, afterComplete.anchorAlertAt)
         assertEquals(RecurrenceRule.DAILY, afterComplete.repeatRule)
 
-        // Verify next occurrence is still scheduled for tomorrow
+        
         val nextAlert = listOf(afterComplete).nextAlertAfter(today19)
         assertEquals(tomorrow19, nextAlert)
     }
@@ -82,7 +82,7 @@ class NotificationActionTest {
             repeatRule = RecurrenceRule.DAILY
         )
 
-        // 1. User taps "10 dk ertele"
+        
         val snoozed = recurringReminder.copy(
             alertAt = today1910,
             notifiedAlertAt = null,
@@ -91,18 +91,18 @@ class NotificationActionTest {
         )
 
         assertEquals(today1910, snoozed.alertAt)
-        assertEquals(today19, snoozed.anchorAlertAt) // Anchor preserved!
+        assertEquals(today19, snoozed.anchorAlertAt) 
         assertNull(snoozed.notifiedAlertAt)
 
-        // 2. At 19:10, alarm fires
+        
         assertTrue(snoozed.isAlertDue(today1910))
 
-        // 3. deliverDue calculates next occurrence after 19:10 using anchorAlertAt (19:00)
+        
         val anchor = snoozed.anchorAlertAt ?: snoozed.alertAt!!
         val nextOccurrence = computeNextOccurrence(anchor, snoozed.repeatRule, zone, afterMillis = today1910)
 
         assertNotNull(nextOccurrence)
-        assertEquals(tomorrow19, nextOccurrence) // Exactly tomorrow at 19:00!
+        assertEquals(tomorrow19, nextOccurrence) 
 
         val nextDayReminder = snoozed.copy(
             alertAt = nextOccurrence,
@@ -122,7 +122,7 @@ class NotificationActionTest {
         val alertAt = 200000L
         val snoozeUntil = alertAt + 10 * 60 * 1000L
 
-        // Delivered reminder (notifiedAlertAt == alertAt, so no longer due)
+        
         val deliveredReminder = ReminderItem(
             id = 4L,
             text = "Tek seferlik görev",
@@ -133,7 +133,7 @@ class NotificationActionTest {
         )
         assertFalse(deliveredReminder.isAlertDue(alertAt))
 
-        // User taps "10 dk ertele"
+        
         val snoozed = deliveredReminder.copy(
             alertAt = snoozeUntil,
             notifiedAlertAt = null,
@@ -143,7 +143,7 @@ class NotificationActionTest {
 
         assertEquals(snoozeUntil, snoozed.alertAt)
         assertNull(snoozed.notifiedAlertAt)
-        // At snoozeUntil, it becomes due again
+        
         assertTrue(snoozed.isAlertDue(snoozeUntil))
         assertFalse(snoozed.isAlertDue(snoozeUntil - 1L))
     }
@@ -162,7 +162,7 @@ class NotificationActionTest {
             notifiedAlertAt = alertAt
         )
 
-        // First tap
+        
         val firstSnooze = reminder.copy(
             alertAt = snoozeUntil,
             notifiedAlertAt = null,
@@ -170,7 +170,7 @@ class NotificationActionTest {
             updatedAt = alertAt
         )
 
-        // Second rapid tap (same snoozeUntil calculation window)
+        
         val secondSnooze = firstSnooze.copy(
             alertAt = snoozeUntil,
             notifiedAlertAt = null,
@@ -178,7 +178,7 @@ class NotificationActionTest {
             updatedAt = alertAt
         )
 
-        // State remains identical, only 1 alarm scheduled
+        
         assertEquals(firstSnooze, secondSnooze)
         val next = listOf(secondSnooze).nextAlertAfter(alertAt)
         assertEquals(snoozeUntil, next)
@@ -191,11 +191,11 @@ class NotificationActionTest {
         )
         val deletedId = 999L
 
-        // Finding reminder before action
+        
         val target = items.firstOrNull { it.id == deletedId }
         assertNull(target)
 
-        // Safe no-op leaves list unchanged
+        
         val updated = items.map { if (it.id == deletedId) it.copy(completedAt = 2000L) else it }
         assertEquals(items, updated)
     }
@@ -216,7 +216,7 @@ class NotificationActionTest {
             repeatRule = RecurrenceRule.DAILY
         )
 
-        // UI complete at 14:00 before occurrence has fired
+        
         val afterComplete = reminder.toggleCompleted(now = today14)
 
         assertFalse(afterComplete.isCompleted)
@@ -235,7 +235,7 @@ class NotificationActionTest {
         val today18 = LocalDate.of(2026, 9, 19).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
         val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
 
-        // deliverDue at 18:00 advances alertAt to tomorrow 18:00 and preserves delivered occurrence in notifiedAlertAt
+        
         val delivered = ReminderItem(
             id = 101L,
             text = "Günlük vitamin",
@@ -246,7 +246,7 @@ class NotificationActionTest {
             repeatRule = RecurrenceRule.DAILY
         )
 
-        // Notification action Complete (simulating repository.completeFromNotification)
+        
         val afterComplete = if (!delivered.isCompleted && delivered.hasRepeat) {
             delivered.copy(notifiedAlertAt = null, updatedAt = today18)
         } else delivered.copy(completedAt = today18)
@@ -254,7 +254,7 @@ class NotificationActionTest {
         assertFalse(afterComplete.isCompleted)
         assertNull(afterComplete.completedAt)
         assertNull(afterComplete.notifiedAlertAt)
-        // Still tomorrow 18:00, NOT day after tomorrow
+        
         assertEquals(tomorrow18, afterComplete.alertAt)
 
         val next = listOf(afterComplete).nextAlertAfter(today18)
@@ -268,8 +268,8 @@ class NotificationActionTest {
         val today1830 = today18 + 30 * 60 * 1000L
         val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
 
-        // deliverDue at 18:00 ran. User manually swiped away / dismissed notification.
-        // Persisted state retains notifiedAlertAt = today18
+        
+        
         val reminder = ReminderItem(
             id = 102L,
             text = "Günlük vitamin",
@@ -280,13 +280,13 @@ class NotificationActionTest {
             repeatRule = RecurrenceRule.DAILY
         )
 
-        // Later at 18:30 user completes from app UI
+        
         val afterComplete = reminder.toggleCompleted(now = today1830)
 
         assertFalse(afterComplete.isCompleted)
         assertNull(afterComplete.completedAt)
         assertNull(afterComplete.notifiedAlertAt)
-        // Must stay tomorrow 18:00, no double advance
+        
         assertEquals(tomorrow18, afterComplete.alertAt)
 
         val next = listOf(afterComplete).nextAlertAfter(today1830)
@@ -300,7 +300,7 @@ class NotificationActionTest {
         val today1900 = today18 + 60 * 60 * 1000L
         val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
 
-        // After process death/reboot, state reloaded from storage with notifiedAlertAt
+        
         val reloadedReminder = ReminderItem(
             id = 103L,
             text = "Günlük vitamin",
@@ -330,7 +330,7 @@ class NotificationActionTest {
         val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
         val dayAfterTomorrow18 = LocalDate.of(2026, 9, 21).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
 
-        // Previous occurrence was acknowledged (notifiedAlertAt is null), currently scheduled for tomorrow 18:00
+        
         val reminder = ReminderItem(
             id = 104L,
             text = "Günlük vitamin",
@@ -341,13 +341,13 @@ class NotificationActionTest {
             repeatRule = RecurrenceRule.DAILY
         )
 
-        // At tomorrow 14:00 user completes in UI (early skip of tomorrow 18:00)
+        
         val afterComplete = reminder.toggleCompleted(now = tomorrow14)
 
         assertFalse(afterComplete.isCompleted)
         assertNull(afterComplete.completedAt)
         assertNull(afterComplete.notifiedAlertAt)
-        // Strictly advances beyond tomorrow 18:00 to the following occurrence
+        
         assertEquals(dayAfterTomorrow18, afterComplete.alertAt)
 
         val next = listOf(afterComplete).nextAlertAfter(tomorrow14)
@@ -360,7 +360,7 @@ class NotificationActionTest {
         val today18 = LocalDate.of(2026, 9, 19).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
         val tomorrow18 = LocalDate.of(2026, 9, 20).atTime(18, 0).atZone(zone).toInstant().toEpochMilli()
 
-        // Legacy recurring reminder previously marked completed by old buggy code
+        
         val legacyCompleted = ReminderItem(
             id = 105L,
             text = "Eski tamamlanmış tekrarlı not",
@@ -372,7 +372,7 @@ class NotificationActionTest {
         )
         assertTrue(legacyCompleted.isCompleted)
 
-        // User clicks Undo (toggleCompleted)
+        
         val restored = legacyCompleted.toggleCompleted(now = today18 + 1000L)
 
         assertFalse(restored.isCompleted)

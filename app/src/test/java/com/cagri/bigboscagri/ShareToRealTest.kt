@@ -110,10 +110,10 @@ class ShareToRealTest {
         val payload = SharedPayload(title = "Önemli Doküman", url = "https://docs.google.com/doc/1")
         session.onShareReceived(payload)
 
-        // Must NOT save automatically
+        
         assertTrue(saveCalls.isEmpty())
 
-        // Draft state must be open as share draft
+        
         assertTrue(session.isShareDraft)
         assertEquals("Önemli Doküman", session.text)
         assertEquals("https://docs.google.com/doc/1", session.referenceUrl)
@@ -127,7 +127,7 @@ class ShareToRealTest {
         val payload = SharedPayload(title = "Tasarım Sistemi", url = "https://figma.com/design/123")
         session.onShareReceived(payload)
 
-        // User edits title and selects a category
+        
         session.text = "Tasarım Sistemini İncele"
         session.customCategoryId = 42L
 
@@ -137,7 +137,7 @@ class ShareToRealTest {
                 true
             }
 
-        // Explicit ✓ click
+        
         val saved = session.saveExplicitly(mockOnAdd)
         assertTrue(saved)
         assertEquals(1, saveCalls.size)
@@ -147,7 +147,7 @@ class ShareToRealTest {
         assertEquals(42L, call.categoryId)
         assertEquals("https://figma.com/design/123", call.referenceUrl)
 
-        // Draft state is reset
+        
         assertFalse(session.isShareDraft)
         assertEquals("", session.text)
         assertNull(session.referenceUrl)
@@ -162,10 +162,10 @@ class ShareToRealTest {
         session.onShareReceived(payload)
         assertTrue(session.isShareDraft)
 
-        // User presses Back
+        
         session.onBack()
 
-        // Draft canceled and nothing saved
+        
         assertFalse(session.isShareDraft)
         assertEquals("", session.text)
         assertNull(session.referenceUrl)
@@ -176,13 +176,13 @@ class ShareToRealTest {
     fun onNewIntentUpdatesShareDraft() {
         val session = ShareDraftSession()
 
-        // First share arrives
+        
         val firstPayload = SharedPayload(title = "İlk Bağlantı", url = "https://first.com")
         session.onShareReceived(firstPayload)
         assertEquals("İlk Bağlantı", session.text)
         assertEquals("https://first.com", session.referenceUrl)
 
-        // Second share arrives while app is open (onNewIntent)
+        
         val secondPayload = SharedPayload(title = "İkinci Bağlantı", url = "https://second.com")
         session.onShareReceived(secondPayload)
 

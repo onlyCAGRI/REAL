@@ -8,16 +8,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LiquidGlassStyleTest {
-    @Test fun existingPreferencesKeepTheirMeaning() {
+    @Test fun legacyIceMigratesToFocusGlass() {
         assertEquals(DesignStyle.Glass, DesignStyle.fromPreference("glass"))
-        assertEquals(DesignStyle.Ice, DesignStyle.fromPreference("ice"))
+        assertEquals(DesignStyle.Glass, DesignStyle.fromPreference("ice"))
         assertEquals("glass", DesignStyle.Glass.preferenceKey)
         assertEquals("ice", DesignStyle.Ice.preferenceKey)
     }
 
     @Test fun liquidPreferenceSurvivesRoundTrip() {
         assertEquals("liquid_glass", DesignStyle.LiquidGlass.preferenceKey)
-        DesignStyle.entries.forEach { assertEquals(it, DesignStyle.fromPreference(it.preferenceKey)) }
+        assertEquals(DesignStyle.Glass, DesignStyle.fromPreference(DesignStyle.Glass.preferenceKey))
+        assertEquals(DesignStyle.LiquidGlass, DesignStyle.fromPreference(DesignStyle.LiquidGlass.preferenceKey))
+        assertEquals(DesignStyle.Glass, DesignStyle.fromPreference(DesignStyle.Ice.preferenceKey))
     }
 
     @Test fun missingOrUnknownPreferenceUsesOriginalDefault() {

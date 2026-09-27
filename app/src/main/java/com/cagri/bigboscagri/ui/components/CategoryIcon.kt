@@ -38,7 +38,7 @@ enum class CategoryIcon(val key: String, val label: String) {
             get() = entries.filterNot { it == PET || it == GIFT } + listOf(PET, GIFT)
 
         fun fromKey(key: String): CategoryIcon {
-            // Preserve compatibility with categories saved by the short-lived CAR/GAME build.
+            
             return when {
                 key.equals("CAR", ignoreCase = true) -> PET
                 key.equals("GAME", ignoreCase = true) -> GIFT
@@ -103,7 +103,7 @@ fun CategoryIconGlyph(
                     drawPath(basket, color, style = stroke)
                 }
                 CategoryIcon.HEALTH -> {
-                    // Pharmacy-style medical cross: clearer than a generic circled +.
+                    
                     val pharmacyCross = Path().apply {
                         moveTo(9f, 3.5f)
                         lineTo(15f, 3.5f)
@@ -170,7 +170,7 @@ fun CategoryIconGlyph(
                     drawPath(body, color, style = stroke)
                 }
                 CategoryIcon.PET -> {
-                    // Tabler-inspired paw: four toe pads and one soft central pad.
+                    
                     drawOval(
                         color = color,
                         topLeft = Offset(8.15f, 3.6f),
@@ -302,7 +302,7 @@ fun CategoryIconGlyph(
                     drawPath(bookmark, color, style = stroke)
                 }
                 CategoryIcon.GIFT -> {
-                    // Tabler gift outline, adapted to the app's 24dp stroke language.
+                    
                     drawRoundRect(
                         color,
                         Offset(3f, 8f),

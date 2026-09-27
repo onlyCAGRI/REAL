@@ -36,7 +36,7 @@ class WhatsAppIntegrationTest {
         coordinator = WhatsAppDraftCoordinator(consentRepo, recipientRepo)
     }
 
-    // 0. Phone number normalization
+    
     @Test
     fun testNormalizePhoneNumber() {
         assertEquals("905321234567", normalizePhoneNumber("0532 123 45 67"))
@@ -46,14 +46,14 @@ class WhatsAppIntegrationTest {
         assertEquals("905321234567", normalizePhoneNumber("0532-123-4567"))
         assertEquals("905551234567", normalizePhoneNumber("+90 (555) 123 45 67"))
 
-        // Invalid numbers
+        
         assertNull(normalizePhoneNumber("12345"))
         assertNull(normalizePhoneNumber(""))
-        assertNull(normalizePhoneNumber("0212 123 45 67")) // landline
+        assertNull(normalizePhoneNumber("0212 123 45 67")) 
         assertNull(normalizePhoneNumber("abcdef"))
     }
 
-    // 0b. Recipient persistence
+    
     @Test
     fun testRecipientPersistence() {
         assertFalse(recipientRepo.hasRecipient())
@@ -72,13 +72,13 @@ class WhatsAppIntegrationTest {
         assertNull(recipientRepo.getRecipient())
     }
 
-    // 0c. First tap flow: consent then recipient setup
+    
     @Test
     fun testFirstTapFlowConsentThenRecipient() {
         var consentShown = false
         var recipientShown = false
 
-        // 1. First tap with no consent -> shows consent
+        
         coordinator.handleIconClick(
             onShowConsentDialog = { consentShown = true },
             onShowRecipientDialog = { recipientShown = true }
@@ -87,18 +87,18 @@ class WhatsAppIntegrationTest {
         assertFalse(recipientShown)
         assertFalse(coordinator.isArmed)
 
-        // 2. User grants consent, but recipient is missing -> prompts recipient
+        
         coordinator.onConsentGranted(onShowRecipientDialog = { recipientShown = true })
         assertTrue(consentRepo.hasConsent())
         assertTrue(recipientShown)
-        assertFalse(coordinator.isArmed) // Not armed until recipient is set
+        assertFalse(coordinator.isArmed) 
 
-        // 3. User saves valid recipient -> becomes armed
+        
         coordinator.onRecipientSaved("905321234567")
         assertTrue(recipientRepo.hasRecipient())
         assertTrue(coordinator.isArmed)
 
-        // 4. Once both exist, subsequent tap directly toggles armed/unarmed
+        
         coordinator.handleIconClick(
             onShowConsentDialog = { },
             onShowRecipientDialog = { }
@@ -113,7 +113,7 @@ class WhatsAppIntegrationTest {
     }
 
 
-    // 1. Consent persistence
+    
     @Test
     fun testConsentPersistence() {
         assertFalse("Default consent must be false", consentRepo.hasConsent())
@@ -121,7 +121,7 @@ class WhatsAppIntegrationTest {
         consentRepo.setConsent(true)
         assertTrue("Consent must be true after granting", consentRepo.hasConsent())
 
-        // Verify fresh repository instance reads the persisted data from SharedPreferences
+        
         val freshRepo = WhatsAppConsentRepository(prefs)
         assertTrue("Fresh repository instance must read persisted consent", freshRepo.hasConsent())
 
@@ -130,7 +130,7 @@ class WhatsAppIntegrationTest {
         assertFalse("Fresh repo must also reflect revocation", freshRepo.hasConsent())
     }
 
-    // 2. First tap opens consent flow when not granted
+    
     @Test
     fun testFirstTapOpensConsentFlowWhenNotGranted() {
         assertFalse(consentRepo.hasConsent())
@@ -144,7 +144,7 @@ class WhatsAppIntegrationTest {
         assertFalse("Action must not be armed before consent is granted", coordinator.isArmed)
     }
 
-    // 3. Granting persists consent and arms current draft (when recipient is already configured)
+    
     @Test
     fun testGrantingPersistsConsentAndArmsCurrentDraft() {
         assertFalse(consentRepo.hasConsent())
@@ -157,7 +157,7 @@ class WhatsAppIntegrationTest {
         assertTrue("Granting must immediately arm the WhatsApp action for the current draft", coordinator.isArmed)
     }
 
-    // 4. Dismissing leaves unarmed and ungranted
+    
     @Test
     fun testDismissingLeavesUnarmedAndUngranted() {
         assertFalse(consentRepo.hasConsent())
@@ -169,30 +169,30 @@ class WhatsAppIntegrationTest {
         assertFalse("Dismissing must keep action unarmed", coordinator.isArmed)
     }
 
-    // 5. Second tap directly toggles armed when granted and recipient exists
+    
     @Test
     fun testDirectToggleWhenConsentGranted() {
         consentRepo.setConsent(true)
         recipientRepo.setRecipient("905321234567")
         var consentDialogOpened = false
 
-        // Tap 1: arms the action
+        
         coordinator.handleIconClick { consentDialogOpened = true }
         assertTrue("Tap 1 must arm the action", coordinator.isArmed)
         assertFalse("Consent sheet must NOT be shown when consent is already granted", consentDialogOpened)
 
-        // Tap 2: disarms the action
+        
         coordinator.handleIconClick { consentDialogOpened = true }
         assertFalse("Tap 2 must disarm the action", coordinator.isArmed)
         assertFalse("Consent sheet must NOT be shown when consent is already granted", consentDialogOpened)
 
-        // Tap 3: re-arms the action
+        
         coordinator.handleIconClick { consentDialogOpened = true }
         assertTrue("Tap 3 must re-arm the action", coordinator.isArmed)
         assertFalse(consentDialogOpened)
     }
 
-    // 6. Submitting resets armed state but keeps consent
+    
     @Test
     fun testSubmittingResetsArmedStateButKeepsConsent() {
         consentRepo.setConsent(true)
@@ -205,7 +205,7 @@ class WhatsAppIntegrationTest {
         assertTrue("Consent must remain true after submission", consentRepo.hasConsent())
     }
 
-    // 7. Worker dispatch payload format (id, text, isChecklist, checklistItems)
+    
     @Test
     fun testWorkerDispatchPayloadFormatChecklist() {
         val payloadStr = buildWhatsAppPayloadJson(
@@ -261,7 +261,7 @@ class WhatsAppIntegrationTest {
     }
 
 
-    // 8. Worker dispatch resilience (network failure, non-200, missing key)
+    
     @Test
     fun testWorkerDispatchSuccess() = runBlocking {
         val fakeClient = object : WhatsAppNetworkClient {
@@ -360,12 +360,12 @@ class WhatsAppIntegrationTest {
         assertFalse("Network client must not be called when apiKey is blank", networkCalled)
     }
 
-    // 9. Local reminder persistence independence
+    
     @Test
     fun testLocalReminderPersistenceIndependence() = runBlocking {
         val repo = ReminderRepository(prefs)
 
-        // Step 1: Local reminder is created and persisted immediately
+        
         val created = repo.add(
             text = "Önemli yerel not",
             alertAt = null,
@@ -380,7 +380,7 @@ class WhatsAppIntegrationTest {
         val createdId = created.id
         assertTrue(createdId > 0)
 
-        // Step 2: Simulate Worker dispatch network failure
+        
         WhatsAppSender.networkClient = object : WhatsAppNetworkClient {
             override suspend fun postJson(url: String, apiKey: String, jsonPayload: String): Int {
                 throw IOException("Network offline")
@@ -395,7 +395,7 @@ class WhatsAppIntegrationTest {
         )
         assertFalse("Worker dispatch fails due to network offline", dispatchResult)
 
-        // Step 3: Verify local reminder is completely intact and unaffected
+        
         val reloaded = repo.load()
         val found = reloaded.firstOrNull { it.id == createdId }
         assertNotNull("Local reminder must NOT be deleted or rolled back on worker failure", found)
@@ -406,29 +406,29 @@ class WhatsAppIntegrationTest {
         assertEquals("Madde 2", found?.checklistItems?.get(1)?.text)
     }
 
-    // 10. Real Labs flow: upward drag reveals, downward drag collapses, submit collapses
+    
     @Test
     fun testRealLabsFlowStateTransitions() {
         var isLabsOpen = false
         val onSwipeUp = { isLabsOpen = true }
         val onSwipeDown = { isLabsOpen = false }
 
-        // Initially closed
+        
         assertFalse("Real Labs must be closed by default", isLabsOpen)
 
-        // Deliberate upward drag reveals Real Labs
+        
         onSwipeUp()
         assertTrue("Deliberate upward drag must reveal Real Labs", isLabsOpen)
 
-        // Downward drag collapses Real Labs
+        
         onSwipeDown()
         assertFalse("Downward drag must collapse Real Labs", isLabsOpen)
 
-        // Opening again and then submitting reminder
+        
         onSwipeUp()
         assertTrue(isLabsOpen)
 
-        // On submit: local reminder saved, armed reset, Labs returns to closed
+        
         coordinator.onReminderSubmitted()
         isLabsOpen = false
         assertFalse("Submitting reminder must collapse Real Labs", isLabsOpen)

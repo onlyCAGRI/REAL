@@ -1,6 +1,6 @@
 package com.cagri.bigboscagri.speech
 
-/** One editable draft, even when Android returns several speech segments. */
+
 class VoiceDraft(initialText: String) {
     var committed: String = initialText.trim()
         private set

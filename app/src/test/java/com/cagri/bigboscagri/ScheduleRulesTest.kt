@@ -66,14 +66,14 @@ class ScheduleRulesTest {
         val baseTime = LocalTime.of(10, 30)
         val baseMillis = baseDate.atTime(baseTime).atZone(zone).toInstant().toEpochMilli()
 
-        // Next occurrence immediately after base
+        
         val nextMillis = computeNextOccurrence(baseMillis, RecurrenceRule.DAILY, zone, afterMillis = baseMillis)
         assertNotNull(nextMillis)
         val nextZdt = Instant.ofEpochMilli(nextMillis!!).atZone(zone)
         assertEquals(LocalDate.of(2026, 9, 19), nextZdt.toLocalDate())
         assertEquals(baseTime, nextZdt.toLocalTime())
 
-        // Next occurrence when multiple days have elapsed (e.g., 3 days later)
+        
         val threeDaysLater = baseDate.plusDays(3).atTime(11, 0).atZone(zone).toInstant().toEpochMilli()
         val caughtUpMillis = computeNextOccurrence(baseMillis, RecurrenceRule.DAILY, zone, afterMillis = threeDaysLater)
         assertNotNull(caughtUpMillis)
@@ -84,7 +84,7 @@ class ScheduleRulesTest {
 
     @Test fun weeklyRecurrenceMaintainsDayOfWeek() {
         val zone = ZoneId.of("Europe/Istanbul")
-        val baseDate = LocalDate.of(2026, 9, 18) // Friday
+        val baseDate = LocalDate.of(2026, 9, 18) 
         val baseTime = LocalTime.of(15, 0)
         val baseMillis = baseDate.atTime(baseTime).atZone(zone).toInstant().toEpochMilli()
 
@@ -102,29 +102,29 @@ class ScheduleRulesTest {
 
     @Test fun monthlyRecurrenceHandlesMonthEndClampingAndRestoration() {
         val zone = ZoneId.of("Europe/Istanbul")
-        // Start on January 31st
+        
         val anchorDate = LocalDate.of(2026, 1, 31)
         val time = LocalTime.of(9, 0)
         val anchorMillis = anchorDate.atTime(time).atZone(zone).toInstant().toEpochMilli()
 
-        // Occurrence 1: Feb 2026 (non-leap year, 28 days) -> clamped to Feb 28
+        
         val febMillis = computeNextOccurrence(anchorMillis, RecurrenceRule.MONTHLY, zone, afterMillis = anchorMillis)!!
         val febZdt = Instant.ofEpochMilli(febMillis).atZone(zone)
         assertEquals(LocalDate.of(2026, 2, 28), febZdt.toLocalDate())
         assertEquals(time, febZdt.toLocalTime())
 
-        // Occurrence 2: March 2026 (31 days) -> anchor restores 31st!
+        
         val marchMillis = computeNextOccurrence(anchorMillis, RecurrenceRule.MONTHLY, zone, afterMillis = febMillis)!!
         val marchZdt = Instant.ofEpochMilli(marchMillis).atZone(zone)
         assertEquals(LocalDate.of(2026, 3, 31), marchZdt.toLocalDate())
         assertEquals(time, marchZdt.toLocalTime())
 
-        // Occurrence 3: April 2026 (30 days) -> clamped to 30th
+        
         val aprilMillis = computeNextOccurrence(anchorMillis, RecurrenceRule.MONTHLY, zone, afterMillis = marchMillis)!!
         val aprilZdt = Instant.ofEpochMilli(aprilMillis).atZone(zone)
         assertEquals(LocalDate.of(2026, 4, 30), aprilZdt.toLocalDate())
 
-        // Occurrence 4: May 2026 (31 days) -> anchor restores 31st!
+        
         val mayMillis = computeNextOccurrence(anchorMillis, RecurrenceRule.MONTHLY, zone, afterMillis = aprilMillis)!!
         val mayZdt = Instant.ofEpochMilli(mayMillis).atZone(zone)
         assertEquals(LocalDate.of(2026, 5, 31), mayZdt.toLocalDate())
@@ -132,38 +132,38 @@ class ScheduleRulesTest {
 
     @Test fun yearlyLeapDayRecurrenceRestoresOnLeapYears() {
         val zone = ZoneId.of("Europe/Istanbul")
-        // Start on leap day: Feb 29, 2024
+        
         val anchorDate = LocalDate.of(2024, 2, 29)
         val time = LocalTime.of(12, 0)
         val anchorMillis = anchorDate.atTime(time).atZone(zone).toInstant().toEpochMilli()
 
-        // 2025: non-leap -> clamped to Feb 28
+        
         val occ2025 = computeNextOccurrence(anchorMillis, RecurrenceRule.YEARLY, zone, afterMillis = anchorMillis)!!
         assertEquals(LocalDate.of(2025, 2, 28), Instant.ofEpochMilli(occ2025).atZone(zone).toLocalDate())
 
-        // 2026: non-leap -> clamped to Feb 28
+        
         val occ2026 = computeNextOccurrence(anchorMillis, RecurrenceRule.YEARLY, zone, afterMillis = occ2025)!!
         assertEquals(LocalDate.of(2026, 2, 28), Instant.ofEpochMilli(occ2026).atZone(zone).toLocalDate())
 
-        // 2027: non-leap -> clamped to Feb 28
+        
         val occ2027 = computeNextOccurrence(anchorMillis, RecurrenceRule.YEARLY, zone, afterMillis = occ2026)!!
         assertEquals(LocalDate.of(2027, 2, 28), Instant.ofEpochMilli(occ2027).atZone(zone).toLocalDate())
 
-        // 2028: leap year -> restores Feb 29!
+        
         val occ2028 = computeNextOccurrence(anchorMillis, RecurrenceRule.YEARLY, zone, afterMillis = occ2027)!!
         assertEquals(LocalDate.of(2028, 2, 29), Instant.ofEpochMilli(occ2028).atZone(zone).toLocalDate())
         assertEquals(time, Instant.ofEpochMilli(occ2028).atZone(zone).toLocalTime())
     }
 
     @Test fun repeatRuleJsonPersistenceAndBackwardCompatibility() {
-        // Test all recurrence enum values roundtrip
+        
         for (rule in RecurrenceRule.entries) {
             val json = org.json.JSONObject().put("repeatRule", rule.storageKey)
             val parsed = RecurrenceRule.fromStorage(json.optString("repeatRule"))
             assertEquals(rule, parsed)
         }
 
-        // Test ReminderItem serialization including anchorAlertAt
+        
         val item = ReminderItem(
             id = 42,
             text = "Test Recurrence",
@@ -187,12 +187,12 @@ class ScheduleRulesTest {
         assertEquals("weekly", json.getString("repeatRule"))
         assertEquals(5000L, json.getLong("anchorAlertAt"))
 
-        // Backward compatibility: old JSON without repeatRule or anchorAlertAt
+        
         val legacyJson = org.json.JSONObject()
             .put("id", 101)
             .put("text", "Eski Not")
             .put("alertAt", 7000L)
-            .put("earlyAlertOffsetMinutes", 15) // old early alert field ignored cleanly
+            .put("earlyAlertOffsetMinutes", 15) 
 
         val legacyRule = RecurrenceRule.fromStorage(legacyJson.optString("repeatRule", "").takeIf { it.isNotEmpty() })
         assertEquals(RecurrenceRule.NONE, legacyRule)
@@ -214,10 +214,10 @@ class ScheduleRulesTest {
             repeatRule = RecurrenceRule.DAILY
         )
 
-        // Alarm is due at alertMillis
+        
         assertTrue(note.isAlertDue(alertMillis))
 
-        // Delivery calculation (simulating deliverDue logic)
+        
         val anchor = note.anchorAlertAt ?: note.alertAt!!
         val nextOccurrence = computeNextOccurrence(anchor, note.repeatRule, zone, afterMillis = alertMillis)
         assertNotNull(nextOccurrence)
@@ -229,9 +229,9 @@ class ScheduleRulesTest {
             updatedAt = alertMillis
         )
 
-        // Previous alarm time is no longer due
+        
         assertFalse(updatedNote.isAlertDue(alertMillis))
-        // New alarm time is due at next occurrence
+        
         assertTrue(updatedNote.isAlertDue(nextOccurrence!!))
         assertEquals(alertMillis + 86400000L, nextOccurrence)
         assertEquals(anchor, updatedNote.anchorAlertAt)
@@ -247,13 +247,13 @@ class ScheduleRulesTest {
             repeatRule = RecurrenceRule.NONE
         )
 
-        // Single time: next occurrence must be null
+        
         assertNull(computeNextOccurrence(alertMillis, note.repeatRule, afterMillis = alertMillis))
         assertFalse(note.hasRepeat)
 
-        // Delivery marks notifiedAlertAt = alertAt
+        
         val deliveredNote = note.copy(notifiedAlertAt = note.alertAt)
-        // Never fires again
+        
         assertFalse(deliveredNote.isAlertDue(alertMillis))
         assertFalse(deliveredNote.isAlertDue(alertMillis + 100000L))
         assertNull(computeNextOccurrence(alertMillis, deliveredNote.repeatRule, afterMillis = alertMillis + 100000L))
@@ -261,7 +261,7 @@ class ScheduleRulesTest {
 
     @Test fun repeatSummaryDescriptionGeneratesExpectedTurkishPhrasing() {
         val zone = ZoneId.of("Europe/Istanbul")
-        val testDate = LocalDate.of(2026, 9, 18) // Friday, 18th, September
+        val testDate = LocalDate.of(2026, 9, 18) 
         val testMillis = testDate.atTime(17, 42).atZone(zone).toInstant().toEpochMilli()
 
         assertEquals("Her gün tekrarlanacak", RecurrenceRule.DAILY.repeatSummary(testMillis, zone))
@@ -274,13 +274,13 @@ class ScheduleRulesTest {
     @Test fun coldStartTrackerOnlyAllowsSingleExecutionAndRespectsReduceAnimations() {
         com.cagri.bigboscagri.ui.ColdStartTracker.resetForTesting()
 
-        // When reduceAnimations is true, should never run
+        
         assertFalse(com.cagri.bigboscagri.ui.ColdStartTracker.isEligible(reduceAnimations = true))
 
-        // When reduceAnimations is false, eligible for cold start
+        
         assertTrue(com.cagri.bigboscagri.ui.ColdStartTracker.isEligible(reduceAnimations = false))
 
-        // After execution, not eligible again (e.g. background/foreground or navigation)
+        
         com.cagri.bigboscagri.ui.ColdStartTracker.markExecuted()
         assertFalse(com.cagri.bigboscagri.ui.ColdStartTracker.isEligible(reduceAnimations = false))
         assertFalse(com.cagri.bigboscagri.ui.ColdStartTracker.isEligible(reduceAnimations = true))

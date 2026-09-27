@@ -22,12 +22,11 @@ import com.cagri.bigboscagri.R
 import com.cagri.bigboscagri.data.CategoryRepository
 import com.cagri.bigboscagri.data.CustomCategory
 import com.cagri.bigboscagri.data.ReminderItem
-import com.cagri.bigboscagri.data.ReminderRepository
 import com.cagri.bigboscagri.ui.components.CategoryIcon
 
 object ReminderNotifications {
     const val CHANNEL_ID = "real_reminders_v4"
-    // Legacy channels: "real_reminders", "real_reminders_v2", "real_reminders_v3" (retained to avoid aggressive deletion of user channel state)
+    
     private const val PINNED_CHANNEL_ID = "important_reminders"
     const val EXTRA_REMINDER_ID = "reminder_id"
 
@@ -77,7 +76,6 @@ object ReminderNotifications {
         if (reminder.isChecklist && reminder.alertAt == null && !alerting) return false
         if (reminder.alertAt == null && !reminder.sendImmediateNotification && !alerting && !reminder.shouldPinNotification) return false
         val id = reminder.id
-        val text = reminder.text
         val pinned = reminder.shouldPinNotification
         val channelId = if (pinned && !alerting) PINNED_CHANNEL_ID else CHANNEL_ID
         ensureChannel(context)
@@ -187,7 +185,7 @@ object ReminderNotifications {
             manager.notify(id.hashCode(), notification)
             true
         } catch (_: SecurityException) {
-            false // Permission can change after the preflight check.
+            false 
         }
     }
 
@@ -212,7 +210,7 @@ object ReminderNotifications {
             .filter { it.isOngoing && ownsPinnedNotification(it.notification.channelId, it.notification.category) }
             .map { it.id }
             .toSet()
-        // Reconcile with saved notes if the process stopped between a save and cancellation.
+        
         visible.filter { it !in savedIds }.forEach { manager.cancel(it) }
         if (!canNotify(context, PINNED_CHANNEL_ID)) return
         val categoryRepo = CategoryRepository(context)
@@ -244,16 +242,26 @@ data class ReminderNotificationMetadata(
 )
 
 val CATEGORY_ACCENT_COLORS_ARGB = intArrayOf(
-    0xFF233F73.toInt(), // Gece Mavisi
-    0xFF2C5696.toInt(), // Kobalt
-    0xFF246C7E.toInt(), // Buzul Cyan
-    0xFF276B53.toInt(), // Zümrüt
-    0xFF3C6A48.toInt(), // Yosun Yeşili
-    0xFF8B5D34.toInt(), // Amber
-    0xFF8C4638.toInt(), // Terracotta
-    0xFF873858.toInt(), // Mürdüm
-    0xFF6B3A79.toInt(), // Erik Moru
-    0xFF4C3C82.toInt()  // İris Moru
+    0xFFEFF0F6.toInt(), // Duman Beyazı
+    0xFF292B2D.toInt(), // Jet Siyahı
+    0xFF4558C8.toInt(), // Royal Mavi
+    0xFF263C74.toInt(), // Gece Mavisi
+    0xFF78C9F2.toInt(), // Gökyüzü
+    0xFF2E8793.toInt(), // Petrol
+    0xFF50C4B7.toInt(), // Turkuaz
+    0xFF8ED9B6.toInt(), // Nane
+    0xFF36A269.toInt(), // Zümrüt
+    0xFFDFF37D.toInt(), // Old Flax
+    0xFFE5B84D.toInt(), // Altın
+    0xFFA77952.toInt(), // Bronz
+    0xFFEE5E37.toInt(), // Somon Turuncu
+    0xFFE9786A.toInt(), // Mercan
+    0xFFDE6D98.toInt(), // Gül
+    0xFFA83B5D.toInt(), // Yakut
+    0xFFC85AB4.toInt(), // Fuşya
+    0xFFD9B8F3.toInt(), // Lavanta
+    0xFF8666D6.toInt(), // Menekşe
+    0xFF70436F.toInt()  // Erik
 )
 
 fun getCategoryAccentColorInt(index: Int?): Int? =

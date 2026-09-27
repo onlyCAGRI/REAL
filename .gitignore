@@ -1,33 +1,25 @@
-# Android / Gradle
 .gradle/
 **/build/
 build/
 
-# Keep only the Gradle wrapper under /gradle
 gradle/*
 !gradle/wrapper/
 !gradle/wrapper/**
 
-# Kotlin / local build caches
 .kotlin/
 kotlin/
 
-# Local machine configuration
 local.properties
 
-# IDE
 .idea/
 *.iml
 .DS_Store
 
-# Local Gradle distributions used by helper scripts
 .gradle-dist/
 gradle-dist/
 
-# Generated APK / bundle artifacts
 *.apk
 *.aab
 
-# Temporary files
 *.log
 *.tmp

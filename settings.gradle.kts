@@ -1,4 +1,4 @@
-// Real 0.5.0 — project settings
+
 pluginManagement {
     repositories {
         google()
