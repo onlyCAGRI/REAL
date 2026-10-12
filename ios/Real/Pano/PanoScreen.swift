@@ -107,13 +107,13 @@ struct PanoScreen: View {
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Button { dismiss() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 19, weight: .medium)).foregroundStyle(.white)
+                    RealSymbol("chevron.left", size: 21.8).foregroundStyle(.white)
                         .frame(width: 44, height: 44).liquidGlass(Circle(), role: .chrome)
                 }
                 .accessibilityLabel("Geri")
                 Spacer()
                 Button { withoutAnimation { creating = true } } label: {
-                    Image(systemName: "plus").font(.system(size: 26, weight: .regular)).foregroundStyle(.white).frame(width: 48, height: 48)
+                    RealSymbol("plus", size: 29.9).foregroundStyle(.white).frame(width: 48, height: 48)
                 }
                 .accessibilityLabel("New board")
             }
@@ -192,7 +192,7 @@ struct PanoBoardPeek: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Button(action: onDismiss) {
-                        Image(systemName: "chevron.left").font(.system(size: 19, weight: .medium)).foregroundStyle(PanoColors.ink).frame(width: 44, height: 44)
+                        RealSymbol("chevron.left", size: 21.8).foregroundStyle(PanoColors.ink).frame(width: 44, height: 44)
                     }
                     Spacer()
                     Text("1 PERSON").font(.system(size: 13, weight: .medium)).foregroundStyle(PanoColors.ink)
@@ -212,7 +212,7 @@ struct PanoBoardPeek: View {
                 stackCard(top: 0, height: 230, bg: .white, index: 0) { rowHead("OPEN BOARD", ink: PanoColors.ink, strike: false, action: onOpen) { EmptyView() } }
                 stackCard(top: 112, height: 230, bg: PanoColors.inkDark, index: 1) {
                     rowHead("DELETE BOARD", ink: Color(argb: 0xFF8A8A90), strike: true, action: onRemove) {
-                        Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(PanoColors.danger)
+                        RealSymbol("xmark", size: 12.6).foregroundStyle(PanoColors.danger)
                     }
                 }
                 stackCard(top: 224, height: 256, bg: accent, index: 2) {
@@ -222,7 +222,7 @@ struct PanoBoardPeek: View {
                         HStack(spacing: 0) {
                             Text("INVITE PERSON").font(.system(size: 16)).foregroundStyle(.white).frame(maxWidth: .infinity)
                             Rectangle().fill(accent).frame(width: 1.5)
-                            Image(systemName: "plus").font(.system(size: 20)).foregroundStyle(.white).frame(width: 66)
+                            RealSymbol("plus", size: 23).foregroundStyle(.white).frame(width: 66)
                         }
                         .frame(height: 58)
                         .background(RoundedRectangle(cornerRadius: 29).fill(PanoColors.ink))
@@ -256,7 +256,7 @@ struct PanoBoardPeek: View {
                 HStack {
                     pill().frame(width: 46, height: 27).overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(ink, lineWidth: 2))
                     Spacer()
-                    Image(systemName: "arrow.up.right").font(.system(size: 20, weight: .medium)).foregroundStyle(ink)
+                    RealSymbol("arrow.up.right", size: 23).foregroundStyle(ink)
                 }
                 panoBig(title, 34, color: ink, lines: 1, strike: strike)
             }
@@ -281,7 +281,7 @@ struct PanoNewBoardOverlay: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Button(action: onDismiss) {
-                    Image(systemName: "chevron.left").font(.system(size: 19, weight: .medium)).foregroundStyle(PanoColors.ink).frame(width: 44, height: 44)
+                    RealSymbol("chevron.left", size: 21.8).foregroundStyle(PanoColors.ink).frame(width: 44, height: 44)
                 }
                 Spacer()
                 Text("NEW").font(.system(size: 13, weight: .medium)).foregroundStyle(PanoColors.ink)
@@ -318,7 +318,7 @@ struct PanoNewBoardOverlay: View {
                 HStack(spacing: 0) {
                     Text("CREATE BOARD").font(.system(size: 16)).foregroundStyle(.white).frame(maxWidth: .infinity)
                     Rectangle().fill(PanoColors.accentWarm).frame(width: 1.5)
-                    Image(systemName: "plus").font(.system(size: 20)).foregroundStyle(.white)
+                    RealSymbol("plus", size: 23).foregroundStyle(.white)
                         .rotationEffect(.degrees(ready ? 90 : 0)).frame(width: 68)
                         .animation(.spring(response: 0.4, dampingFraction: 0.5), value: ready)
                 }

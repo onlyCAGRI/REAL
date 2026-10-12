@@ -48,7 +48,7 @@ struct WaterTrackerScreen: View {
                     tabs
                     VStack(alignment: .leading, spacing: 0) {
                         Button { close() } label: {
-                            Image(systemName: "chevron.left").font(.system(size: 17, weight: .medium)).foregroundStyle(.white)
+                            RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                                 .frame(width: 44, height: 44).liquidGlass(Circle(), role: .chrome)
                         }
                         .accessibilityLabel("İçecek ekranını kapat")

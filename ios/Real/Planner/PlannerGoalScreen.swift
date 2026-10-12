@@ -166,7 +166,7 @@ struct PlannerGoalScreen: View {
     private var topBar: some View {
         HStack {
             Button { dismiss() } label: {
-                Image(systemName: "chevron.left").font(.system(size: 19, weight: .medium)).foregroundStyle(.white)
+                RealSymbol("chevron.left", size: 21.8).foregroundStyle(.white)
                     .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Geri")
@@ -297,7 +297,7 @@ struct PlannerGoalScreen: View {
                     Spacer()
                     HStack(spacing: -10) {
                         ProfileAvatar(name: store.ownerName, size: 36).overlay(Circle().strokeBorder(Self.black, lineWidth: 2))
-                        Image(systemName: "plus").font(.system(size: 13)).foregroundStyle(.white)
+                        RealSymbol("plus", size: 14.9).foregroundStyle(.white)
                             .frame(width: 36, height: 36)
                             .background(Circle().fill(Self.black)).overlay(Circle().strokeBorder(Self.faint, lineWidth: 1))
                     }
@@ -338,7 +338,7 @@ struct PlannerGoalScreen: View {
                 HStack {
                     Text("Add a reminder to \(category?.name ?? "")").font(RealFont.inter(14)).foregroundStyle(.white).lineLimit(1)
                     Spacer()
-                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Self.muted)
+                    RealSymbol("chevron.right", size: 13.8).foregroundStyle(Self.muted)
                 }
                 .padding(.horizontal, 20)
                 .frame(height: 52)
@@ -357,7 +357,7 @@ struct PlannerGoalScreen: View {
                     Text("Goals (\(total))").font(RealType.editorialItem).kerning(-1).foregroundStyle(.white)
                     Spacer()
                     Button { composing = true } label: {
-                        Image(systemName: "plus").font(.system(size: 15)).foregroundStyle(.white)
+                        RealSymbol("plus", size: 17.2).foregroundStyle(.white)
                             .frame(width: 40, height: 40).overlay(Circle().strokeBorder(Self.faint, lineWidth: 1))
                     }
                     .accessibilityLabel("Add goal")
@@ -378,7 +378,7 @@ struct PlannerGoalScreen: View {
             }
             Button { composing = true } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: "plus").font(.system(size: 14))
+                    RealSymbol("plus", size: 16.1)
                     Text("Add goal").font(RealFont.inter(14))
                 }
                 .foregroundStyle(accent)
@@ -409,7 +409,7 @@ struct PlannerGoalScreen: View {
                             default: Circle().strokeBorder(Color(argb: 0xFF3A3A42), lineWidth: 1)
                             }
                             if state == 0 {
-                                Image(systemName: "checkmark").font(.system(size: 15, weight: .bold)).foregroundStyle(RealColors.plannerInk)
+                                RealSymbol("checkmark", size: 17.2).foregroundStyle(RealColors.plannerInk)
                             } else {
                                 Text("\(number)").font(RealFont.inter(16)).foregroundStyle(state == 1 ? accent : Color(argb: 0xFF7C7C85))
                             }
@@ -458,7 +458,7 @@ struct PlannerGoalScreen: View {
                     .contentShape(Rectangle())
                     .gesture(reorderGesture(goal.id), including: reorderMode ? .all : .none)
                     Button { path.append(.detail(goal.id)) } label: {
-                        Image(systemName: "pencil").font(.system(size: 15)).foregroundStyle(Self.muted).frame(width: 32, height: 32)
+                        RealSymbol("pencil", size: 17.2).foregroundStyle(Self.muted).frame(width: 32, height: 32)
                     }
                     .accessibilityLabel("Edit goal")
                     Spacer()
@@ -544,7 +544,7 @@ private struct PagerActionButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
+                RealSymbol(symbol, size: 14.9)
                     .foregroundStyle(RealColors.plannerInk)
                     .frame(width: 34, height: 34)
                     .background(Circle().fill(enabled ? accent : accent.opacity(0.3)))
@@ -626,7 +626,7 @@ private struct GoalComposerWindow: View {
                         .focused($focused).submitLabel(.done).onSubmit(submit)
                         .frame(minHeight: 44)
                     Button(action: submit) {
-                        Image(systemName: "plus").font(.system(size: 15, weight: .semibold))
+                        RealSymbol("plus", size: 17.2)
                             .foregroundStyle(text.isEmpty ? Color(argb: 0xFF7C7C85) : RealColors.plannerInk)
                             .frame(width: 44, height: 44)
                             .background(Circle().fill(text.isEmpty ? Color.white.opacity(0.10) : accent))
@@ -667,7 +667,7 @@ private struct CategoryStylePopup: View {
                         Button { store.setCategoryPastel(categoryId, i) } label: {
                             Circle().fill(realCalendarPastels[i]).frame(width: 40, height: 40)
                                 .overlay(Circle().strokeBorder(.white, lineWidth: selected ? 2 : 0))
-                                .overlay { if selected { Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(RealColors.plannerInk) } }
+                                .overlay { if selected { RealSymbol("checkmark", size: 14.9).foregroundStyle(RealColors.plannerInk) } }
                         }
                         if col < 4 { Spacer() }
                     }
@@ -709,7 +709,7 @@ private struct PasteLinkSheet: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: "link").font(.system(size: 22)).foregroundStyle(.white)
+            RealSymbol("link", size: 25.3).foregroundStyle(.white)
                 .frame(width: 58, height: 58)
                 .background(Circle().fill(LinearGradient(colors: [Color(argb: 0xFF6FD6FF).opacity(0.38), Color(argb: 0xFF6FD6FF).opacity(0.12)],
                                                          startPoint: .topLeading, endPoint: .bottomTrailing)))

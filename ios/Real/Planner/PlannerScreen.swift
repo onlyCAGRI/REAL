@@ -54,7 +54,11 @@ struct PlannerScreen: View {
         .background(Color.black.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top) { topBar(isCalendar: isCalendar) }
-        .sheet(item: $addRequest) { request in PlannerQuickAddSheet(request: request).presentationDetents([.medium, .large]) }
+        .overlay {
+            if let request = addRequest {
+                PlannerEventEditor(request: request) { addRequest = nil }.id(request.id).zIndex(10)
+            }
+        }
         .onAppear { withAnimation(.easeOut(duration: 0.56)) { introVisible = true } }
         .onReceive(timer) { now = $0 }
         .simultaneousGesture(DragGesture(minimumDistance: 40).onEnded { value in
@@ -175,7 +179,7 @@ struct PlannerScreen: View {
     private func topBar(isCalendar: Bool) -> some View {
         HStack(spacing: 8) {
             Button { dismiss() } label: {
-                Image(systemName: "chevron.left").font(.system(size: 17, weight: .medium)).foregroundStyle(.white)
+                RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                     .frame(width: 44, height: 44).liquidGlass(Circle())
             }
             .accessibilityLabel("Önceki görünüme dön")
@@ -187,7 +191,7 @@ struct PlannerScreen: View {
                 let base = Date().addingTimeInterval(3600)
                 addRequest = PlannerAddRequest(day: isCalendar ? selectedDay : base, hour: calendar.component(.hour, from: base))
             } label: {
-                Image(systemName: "plus").font(.system(size: 18, weight: .medium)).foregroundStyle(.white)
+                RealSymbol("plus", size: 20.7).foregroundStyle(.white)
                     .frame(width: 44, height: 44).liquidGlass(Circle())
             }
             .padding(.leading, 2)
@@ -256,7 +260,7 @@ struct PlannerScreen: View {
     private func todayPill(isToday: Bool, today: Date) -> some View {
         HStack(spacing: 0) {
             Button { selectedDay = calendar.date(byAdding: .day, value: -1, to: selectedDay)! } label: {
-                Image(systemName: "chevron.left").font(.system(size: 10, weight: .semibold)).frame(width: 24, height: 34)
+                RealSymbol("chevron.left", size: 11.5).frame(width: 24, height: 34)
             }
             .accessibilityLabel("Previous day")
             Button { withAnimation { selectedDay = today } } label: {
@@ -264,7 +268,7 @@ struct PlannerScreen: View {
             }
             .accessibilityLabel("Go to today")
             Button { selectedDay = calendar.date(byAdding: .day, value: 1, to: selectedDay)! } label: {
-                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).frame(width: 24, height: 34)
+                RealSymbol("chevron.right", size: 11.5).frame(width: 24, height: 34)
             }
             .accessibilityLabel("Next day")
         }
@@ -384,7 +388,7 @@ struct PlannerFocusCard: View {
                 PlannerCardBadge(category: category)
                 Spacer()
                 if category != nil {
-                    Image(systemName: "star.fill").font(.system(size: 14)).foregroundStyle(RealColors.plannerInk.opacity(0.65))
+                    RealSymbol("star.fill", size: 16.1).foregroundStyle(RealColors.plannerInk.opacity(0.65))
                         .padding(.trailing, 10)
                 }
                 PlannerChevron()

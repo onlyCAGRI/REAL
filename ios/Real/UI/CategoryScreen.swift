@@ -155,7 +155,7 @@ struct CategoryScreen: View {
                         if let c = colorFilter.flatMap(paletteColor) {
                             Circle().fill(c).frame(width: 16, height: 16)
                         } else {
-                            Image(systemName: "circle.lefthalf.filled").font(.system(size: 16)).foregroundStyle(Color(argb: 0xFFC9CBD3))
+                            RealSymbol("circle.lefthalf.filled", size: 18.4).foregroundStyle(Color(argb: 0xFFC9CBD3))
                         }
                     }
                     .frame(width: 36, height: 36).liquidGlass(Circle())
@@ -196,7 +196,7 @@ struct CategoryScreen: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 Button { withAnimation { colorFilter = nil; filterMode = false } } label: {
-                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color(argb: 0xFFC8C8D0))
+                    RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFFC8C8D0))
                         .frame(width: 34, height: 34).liquidGlass(Circle())
                 }
                 .accessibilityLabel("Filtreyi temizle / Tümünü göster")

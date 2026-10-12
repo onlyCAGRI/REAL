@@ -132,7 +132,7 @@ struct VoiceRecordingBlock: View {
                 Spacer()
                 if editing, let onClose {
                     Button { engine.cancel(); onClose() } label: {
-                        Image(systemName: "xmark").font(.system(size: 13)).foregroundStyle(Color(argb: 0xFFA7A7B0)).frame(width: 32, height: 32)
+                        RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFA7A7B0)).frame(width: 32, height: 32)
                     }
                     .accessibilityLabel("Ses bloğunu kaldır")
                 }
@@ -169,7 +169,7 @@ struct VoiceRecordingBlock: View {
             Button {
                 if engine.recording { if let r = engine.stop() { onRecorded(r) } } else { engine.start() }
             } label: {
-                Image(systemName: "waveform").font(.system(size: 21, weight: .medium))
+                RealSymbol("waveform", size: 24.1)
                     .foregroundStyle(active ? Color(argb: 0xFF91B9FF) : .white).frame(width: 48, height: 48)
             }
             .accessibilityLabel(active ? "Ses kaydını durdur" : "Ses kaydını başlat")
@@ -183,7 +183,7 @@ struct VoiceRecordingBlock: View {
         let playing = engine.playingId == r.id
         return HStack(spacing: 8) {
             Button { engine.togglePlayback(r) } label: {
-                Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 15)).foregroundStyle(Color(argb: 0xFFEAEAF0))
+                RealSymbol(playing ? "pause.fill" : "play.fill", size: 17.2).foregroundStyle(Color(argb: 0xFFEAEAF0))
                     .frame(width: 34, height: 34)
             }
             .accessibilityLabel(playing ? "Ses kaydını duraklat" : "Ses kaydını oynat")
@@ -191,7 +191,7 @@ struct VoiceRecordingBlock: View {
             Text(formatVoiceDuration(r.durationMillis)).font(RealFont.inter(12, .medium)).foregroundStyle(Color(argb: 0xFFB8B8C2)).monospacedDigit()
             if editing {
                 Button { if playing { engine.stopPlayback() }; onRemove(r) } label: {
-                    Image(systemName: "xmark").font(.system(size: 12)).foregroundStyle(Color(argb: 0xFFA7A7B0)).frame(width: 32, height: 32)
+                    RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFFA7A7B0)).frame(width: 32, height: 32)
                 }
                 .accessibilityLabel("Ses kaydını sil")
             }

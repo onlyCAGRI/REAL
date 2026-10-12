@@ -39,7 +39,7 @@ struct PanoBoardScreen: View {
             .overlay(alignment: .topTrailing) { topControls.padding(.top, 10).padding(.trailing, 14) }
             .overlay(alignment: .topLeading) {
                 Button { dismiss() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 17, weight: .medium)).foregroundStyle(.white)
+                    RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                         .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
                 }
                 .padding(12)
@@ -106,7 +106,7 @@ struct PanoBoardScreen: View {
             .overlay(alignment: .topTrailing) {
                 if isSelected && editing {
                     Button { pano.remove(item); selected = nil } label: {
-                        Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                        RealSymbol("xmark", size: 12.6).foregroundStyle(.white)
                             .frame(width: 26, height: 26).background(Circle().fill(PanoColors.danger))
                     }
                     .offset(x: 10, y: -10)
@@ -159,14 +159,14 @@ struct PanoBoardScreen: View {
                 }
             } else {
                 Button { editing = true } label: {
-                    Image(systemName: "pencil").font(.system(size: 16, weight: .medium)).foregroundStyle(.white)
+                    RealSymbol("pencil", size: 18.4).foregroundStyle(.white)
                         .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
                 }
                 .accessibilityLabel("Edit")
                 HStack(spacing: 6) {
                     Text("ME").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
                         .frame(width: 28, height: 28).background(Circle().fill(Color(argb: 0xFF0C0C0E)))
-                    Image(systemName: "plus").font(.system(size: 11)).foregroundStyle(.white.opacity(0.8))
+                    RealSymbol("plus", size: 12.6).foregroundStyle(.white.opacity(0.8))
                 }
                 .padding(.horizontal, 8).frame(height: 40)
                 .liquidGlass(Capsule(), role: .chrome)

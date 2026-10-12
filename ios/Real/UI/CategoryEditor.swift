@@ -203,7 +203,7 @@ struct CategoryEditorSheet: View {
                     if existing != nil {
                         Button { confirmDelete = true } label: {
                             HStack(spacing: 10) {
-                                Image(systemName: "trash").font(.system(size: 16))
+                                RealSymbol("trash", size: 18.4)
                                 Text("Kategoriyi sil").font(RealFont.inter(17, .medium))
                             }
                             .foregroundStyle(Color(argb: 0xFFFF7A82))
@@ -490,7 +490,7 @@ struct CardColorsPanel: View {
                         ZStack {
                             Circle().fill(darkText ? Color(argb: 0xFF2C5696).opacity(0.85) : .white.opacity(0.08))
                             Circle().strokeBorder(darkText ? RealColors.selection : .white.opacity(0.2), lineWidth: 1)
-                            if darkText { Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white) }
+                            if darkText { RealSymbol("checkmark", size: 11.5).foregroundStyle(.white) }
                         }
                         .frame(width: 20, height: 20)
                         Text("Koyu renk metin kullan (Siyah)").font(RealFont.inter(13, .medium))
@@ -517,7 +517,7 @@ private struct ColorChoiceRow: View {
                     if allowNone {
                         let on = selected == nil
                         Button { selected = nil } label: {
-                            Image(systemName: "xmark").font(.system(size: 11, weight: .medium)).foregroundStyle(on ? .white : Color(argb: 0xFF878792))
+                            RealSymbol("xmark", size: 12.6).foregroundStyle(on ? .white : Color(argb: 0xFF878792))
                                 .frame(width: 31, height: 31)
                                 .background(Circle().fill(on ? Color(argb: 0xFF2D2D36) : Color(argb: 0xFF1B1B1F)))
                                 .overlay(Circle().strokeBorder(on ? .white : .white.opacity(0.18), lineWidth: on ? 2.2 : 0.8))

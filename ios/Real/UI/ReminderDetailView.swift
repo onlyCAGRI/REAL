@@ -176,7 +176,7 @@ struct ReminderDetailView: View {
     private func header(_ r: ReminderItem) -> some View {
         HStack {
             Button { dismiss() } label: {
-                Image(systemName: "chevron.left").font(.system(size: 18, weight: .medium)).foregroundStyle(.white)
+                RealSymbol("chevron.left", size: 20.7).foregroundStyle(.white)
                     .frame(width: 40, height: 40).liquidGlass(Circle())
                     .frame(width: 48, height: 48)
             }
@@ -184,7 +184,7 @@ struct ReminderDetailView: View {
             Spacer()
             HStack(spacing: 0) {
                 // Now Bar has no iOS counterpart yet; shown disabled like Android when unavailable.
-                Image(systemName: "pin").font(.system(size: 17)).foregroundStyle(Color(argb: 0xFF66666F))
+                RealSymbol("pin", size: 19.5).foregroundStyle(Color(argb: 0xFF66666F))
                     .frame(width: 48, height: 40)
                     .accessibilityLabel("Now Bar kullanılamıyor")
                 Rectangle().fill(.white.opacity(0.13)).frame(width: 1, height: 18)
@@ -374,7 +374,7 @@ struct ReminderDetailView: View {
                 draft?.anchorAlertAt = nil
                 draft?.repeatRule = .none
                 draft?.durationMinutes = nil
-            } label: { Image(systemName: "xmark").font(.system(size: 14)).foregroundStyle(.white).frame(width: 40, height: 40) }
+            } label: { RealSymbol("xmark", size: 16.1).foregroundStyle(.white).frame(width: 40, height: 40) }
             .accessibilityLabel("Tarih ve saati kaldır")
         }
         .padding(.top, 12)
@@ -383,7 +383,7 @@ struct ReminderDetailView: View {
     private func chip(_ symbol: String, _ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(RealColors.accentBlue)
+                RealSymbol(symbol, size: 20).foregroundStyle(RealColors.accentBlue)
                 Text(label).font(RealFont.inter(selected ? 13 : 12, .medium)).foregroundStyle(selected ? Color(argb: 0xFFE2E8F0) : Color(argb: 0xFFD2D2DA))
             }
             .padding(.horizontal, selected ? 10 : 9).padding(.vertical, 7)
@@ -412,7 +412,7 @@ struct ReminderDetailView: View {
                         draft?.checklistItems = []
                         draft?.isChecklist = false
                         checklistOpen = false
-                    } label: { Image(systemName: "xmark").font(.system(size: 12)).foregroundStyle(Color(argb: 0xFF8E8E98)).frame(width: 28, height: 28) }
+                    } label: { RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFF8E8E98)).frame(width: 28, height: 28) }
                     .accessibilityLabel("Checklist kutusunu kaldır")
                 }
             }
@@ -430,7 +430,7 @@ struct ReminderDetailView: View {
                         ZStack {
                             Circle().fill(item.isCompleted ? Color(argb: 0xFF686873) : .clear)
                             Circle().strokeBorder(item.isCompleted ? .clear : Color(argb: 0xFF5E5E68), lineWidth: 1.5)
-                            if item.isCompleted { Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Color(argb: 0xFF1B1B1F)) }
+                            if item.isCompleted { RealSymbol("checkmark", size: 11.5).foregroundStyle(Color(argb: 0xFF1B1B1F)) }
                         }
                         .frame(width: 20, height: 20)
                         .frame(width: 32, height: 32)
@@ -441,7 +441,7 @@ struct ReminderDetailView: View {
                         }))
                         .font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFF1F1F5))
                         Button { draft?.checklistItems.removeAll { $0.id == item.id } } label: {
-                            Image(systemName: "xmark").font(.system(size: 11)).foregroundStyle(Color(argb: 0xFF7A7A85)).frame(width: 28, height: 28)
+                            RealSymbol("xmark", size: 12.6).foregroundStyle(Color(argb: 0xFF7A7A85)).frame(width: 28, height: 28)
                         }
                     } else {
                         Text(item.text).font(RealFont.inter(15))
@@ -454,7 +454,7 @@ struct ReminderDetailView: View {
             }
             if editing {
                 HStack(spacing: 12) {
-                    Image(systemName: "plus").font(.system(size: 13)).foregroundStyle(RealColors.accentBlue).frame(width: 32, height: 32)
+                    RealSymbol("plus", size: 14.9).foregroundStyle(RealColors.accentBlue).frame(width: 32, height: 32)
                     TextField("", text: $newChecklistText, prompt: Text("Madde ekle").foregroundStyle(Color(argb: 0xFF6C6C76)))
                         .font(RealFont.inter(15))
                         .submitLabel(.next)
@@ -496,7 +496,7 @@ struct ReminderDetailView: View {
 
     private func fileBlock(_ a: ReminderAttachment) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "doc").font(.system(size: 18)).foregroundStyle(RealColors.accentBlue)
+            RealSymbol("doc", size: 20.7).foregroundStyle(RealColors.accentBlue)
                 .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.06)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(a.displayName ?? "Dosya").font(RealFont.inter(14, .medium)).foregroundStyle(.white).lineLimit(1)
@@ -518,7 +518,7 @@ struct ReminderDetailView: View {
             if !editing, let u = URL(string: url.contains("://") ? url : "https://\(url)") { openURL(u) } else if editing { showLinkEditor = true }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "link").font(.system(size: 17)).foregroundStyle(RealColors.accentBlue)
+                RealSymbol("link", size: 19.5).foregroundStyle(RealColors.accentBlue)
                     .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.06)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "") ?? url).font(RealFont.inter(14, .medium)).foregroundStyle(.white).lineLimit(1)
@@ -526,7 +526,7 @@ struct ReminderDetailView: View {
                 }
                 Spacer()
                 if editing { removeButton { draft?.referenceUrl = nil } } else {
-                    Image(systemName: "arrow.up.right").font(.system(size: 13)).foregroundStyle(RealColors.subtext)
+                    RealSymbol("arrow.up.right", size: 14.9).foregroundStyle(RealColors.subtext)
                 }
             }
             .padding(14)
@@ -575,7 +575,7 @@ struct ReminderDetailView: View {
                 .allowsHitTesting(false)
             }
             HStack(spacing: 12) {
-                Image(systemName: "mappin.and.ellipse").font(.system(size: 16)).foregroundStyle(Color(argb: 0xFF8ED7C4))
+                RealSymbol("mappin.and.ellipse", size: 18.4).foregroundStyle(Color(argb: 0xFF8ED7C4))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(l.placeName).font(RealFont.inter(15, .medium)).foregroundStyle(.white).lineLimit(1)
                     if !l.address.isEmpty { Text(l.address).font(RealFont.inter(12)).foregroundStyle(RealColors.subtext).lineLimit(2) }
@@ -643,7 +643,7 @@ struct ReminderDetailView: View {
 
     private func removeButton(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+            RealSymbol("xmark", size: 11.5).foregroundStyle(.white)
                 .frame(width: 26, height: 26).background(Circle().fill(Color(argb: 0xE61E1E24)))
                 .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 0.5))
         }
@@ -683,7 +683,7 @@ struct ReminderDetailView: View {
                             Text("Nasıl geçti? Aklında kalanı yaz.").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
                         }
                         Spacer()
-                        Image(systemName: "plus").font(.system(size: 14, weight: .semibold)).foregroundStyle(RealColors.accentBlue)
+                        RealSymbol("plus", size: 16.1).foregroundStyle(RealColors.accentBlue)
                     }
                     .padding(.horizontal, 20).padding(.vertical, 14)
                     .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), role: .chrome)
@@ -694,7 +694,7 @@ struct ReminderDetailView: View {
             actionBar(r)
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 18)
+        .padding(.bottom, 2) // Android: bar bottom ~36dp above the screen edge
         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.24), value: editing)
         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.24), value: secondaryExpanded)
         .animation(.easeOut(duration: 0.2), value: deleting)
@@ -718,7 +718,7 @@ struct ReminderDetailView: View {
                 }
                 ShareLink(item: r.shareText) {
                     VStack(spacing: 1) {
-                        Image(systemName: "square.and.arrow.up").font(.system(size: 18))
+                        RealSymbol("square.and.arrow.up", size: 20.7)
                         Text("Share").font(RealFont.inter(10))
                     }
                     .foregroundStyle(Color(argb: 0xFFF0F0F4))
@@ -769,14 +769,14 @@ struct ReminderDetailView: View {
                 Button { titleFocused = false; secondaryExpanded.toggle() } label: {
                     HStack(spacing: 6) {
                         Text("Renk ve kategori").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
-                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                        RealSymbol("chevron.right", size: 12.6).foregroundStyle(Color(argb: 0xFF8E8E98))
                             .rotationEffect(.degrees(secondaryExpanded ? 90 : 0))
                     }
                     .padding(.horizontal, 4).padding(.vertical, 8)
                 }
                 Spacer()
                 Button { reordering = true } label: {
-                    Image(systemName: "arrow.up.arrow.down").font(.system(size: 17)).foregroundStyle(Color(argb: 0xFFD2D2DA)).frame(width: 40, height: 40)
+                    RealSymbol("arrow.up.arrow.down", size: 19.5).foregroundStyle(Color(argb: 0xFFD2D2DA)).frame(width: 40, height: 40)
                 }
                 .accessibilityLabel("Sırala")
             }
@@ -805,16 +805,12 @@ struct ReminderDetailView: View {
                                 count: d?.musicBlocks.count) { showMusicSearch = true }
                     QuickAction(symbol: "play.rectangle", label: "Film & Dizi", active: !(d?.mediaBlocks.isEmpty ?? true),
                                 count: d?.mediaBlocks.count) { showMediaSearch = true }
-                    QuickAction(symbol: "link", label: "Bağlantı", active: d?.referenceUrl != nil) { showLinkEditor = true }
                     QuickAction(symbol: "waveform", label: "Ses kaydı", active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
                                 count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
                     QuickAction(symbol: "rectangle.stack", label: "Kart Yığını", active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
                         editingStackCard = CardStackCard()
                     }
                     QuickAction(symbol: "face.smiling", label: "Mood", active: d?.mood != nil) { showMoodPicker = true }
-                    QuickAction(symbol: "book.closed", label: "Günlük", active: d?.journal != nil) {
-                        if draft?.journal == nil { draft?.journal = ReminderJournal(mood: nil, text: "", createdAt: .now, updatedAt: .now) }
-                    }
                 }
                 .padding(.leading, 2).padding(.trailing, 12)
             }
@@ -842,7 +838,7 @@ struct ReminderDetailView: View {
                     } else {
                         Text("Kategori yok").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8E8E98))
                     }
-                    Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                    RealSymbol("chevron.right", size: 13.8).foregroundStyle(Color(argb: 0xFF8E8E98))
                 }
                 .padding(.horizontal, 16).padding(.vertical, 13)
                 .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), role: .sheet)
@@ -925,7 +921,7 @@ private struct DetailAction: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 1) {
-                Image(systemName: symbol).font(.system(size: 18))
+                RealSymbol(symbol, size: 20)
                 Text(label).font(RealFont.inter(10)).lineLimit(1)
             }
             .foregroundStyle(enabled ? color : color.opacity(0.35))
@@ -947,7 +943,7 @@ private struct QuickAction: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 18))
+            RealSymbol(symbol, size: 20)
                 .foregroundStyle(active ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFBABAC3))
                 .frame(width: 40, height: 40)
                 .overlay(alignment: .topTrailing) {
@@ -1283,7 +1279,7 @@ private struct PhotoBlockBody: View {
                 .onTapGesture(perform: onTap)
             if editing {
                 Button(action: remove) {
-                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                    RealSymbol("xmark", size: 11.5).foregroundStyle(.white)
                         .frame(width: 22, height: 22).background(Circle().fill(.black.opacity(0.6)))
                         .frame(width: 44, height: 44)
                 }
@@ -1303,7 +1299,7 @@ private struct PhotoPreview: View {
                 Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             Button { dismiss() } label: {
-                Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                RealSymbol("xmark", size: 17.2).foregroundStyle(.white)
                     .frame(width: 44, height: 44).liquidGlass(Circle())
             }
             .padding(16)
@@ -1394,7 +1390,7 @@ struct AttachmentThumb: View {
             if let image = AttachmentStorage.image(attachment.localPath) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
-                Image(systemName: "doc").font(.system(size: 24)).foregroundStyle(RealColors.subtext)
+                RealSymbol("doc", size: 27.6).foregroundStyle(RealColors.subtext)
             }
         }
         .frame(width: 96, height: 96)

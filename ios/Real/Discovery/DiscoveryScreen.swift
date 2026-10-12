@@ -243,7 +243,7 @@ struct BackCircle: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Image(systemName: "chevron.left").font(.system(size: 17, weight: .medium)).foregroundStyle(.white)
+            RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                 .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
         }
         .buttonStyle(.plain)
@@ -429,7 +429,7 @@ struct PosterArtwork: View {
         ZStack {
             Color(argb: 0xFF1B1B20)
             VStack(spacing: 14) {
-                Image(systemName: "film").font(.system(size: 44, weight: .light)).foregroundStyle(Color(argb: 0xFFDDD4C6))
+                RealSymbol("film", size: 50.6).foregroundStyle(Color(argb: 0xFFDDD4C6))
                 Text(media.title).font(RealFont.inter(titleSize)).foregroundStyle(.white).multilineTextAlignment(.center).lineLimit(4)
             }
             .padding(28)
@@ -576,7 +576,7 @@ private struct PosterDeck: View {
                     else { decide(first, later ? .saveList : .saveDiscovery, fly: CGSize(width: threshold * 6, height: 0)) }
                 } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: "plus").font(.system(size: 16, weight: .medium))
+                        RealSymbol("plus", size: 18.4)
                         Text(kind == .game ? "Oynanacak listeme ekle" : "REAL'e ekle").font(RealFont.inter(13, .medium)).lineLimit(1)
                     }
                     .foregroundStyle(busy ? Color(argb: 0xFF66666C) : .white)
@@ -594,7 +594,7 @@ private struct PosterDeck: View {
 
     private func barIcon(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 19, weight: .regular)).foregroundStyle(busy ? Color(argb: 0xFF66666C) : .white.opacity(0.85))
+            RealSymbol(symbol, size: 21.8).foregroundStyle(busy ? Color(argb: 0xFF66666C) : .white.opacity(0.85))
                 .frame(width: 48, height: 48)
         }
         .buttonStyle(.plain)
@@ -747,7 +747,7 @@ struct MediaBlockView: View {
                 Text(block.type == .MOVIE ? "Film" : "Dizi").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
                 Spacer()
                 if editing {
-                    Button(action: onRemove) { Image(systemName: "xmark").font(.system(size: 13)).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 40, height: 40) }
+                    Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 40, height: 40) }
                         .accessibilityLabel("İçeriği kaldır")
                 }
             }

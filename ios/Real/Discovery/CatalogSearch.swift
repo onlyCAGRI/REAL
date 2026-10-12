@@ -133,7 +133,7 @@ struct MediaSearchSheet: View {
                                 .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).lineLimit(1)
                         }
                         Spacer()
-                        Image(systemName: "plus").font(.system(size: 15)).foregroundStyle(.white)
+                        RealSymbol("plus", size: 17.2).foregroundStyle(.white)
                     }
                     .padding(8).contentShape(Rectangle())
                 }
@@ -177,7 +177,7 @@ struct MusicSearchSheet: View {
                             Text(m.artist).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).lineLimit(1)
                         }
                         Spacer()
-                        Image(systemName: "plus").font(.system(size: 15)).foregroundStyle(.white)
+                        RealSymbol("plus", size: 17.2).foregroundStyle(.white)
                     }
                     .padding(8).contentShape(Rectangle())
                 }
@@ -256,7 +256,7 @@ struct MusicArtwork: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 10).fill(Color(argb: 0xFF26262C))
-            Image(systemName: "music.note").font(.system(size: 16)).foregroundStyle(Color(argb: 0xFFB8B8C2))
+            RealSymbol("music.note", size: 18.4).foregroundStyle(Color(argb: 0xFFB8B8C2))
             if let s = url, let u = URL(string: s.replacingOccurrences(of: "100x100bb", with: "300x300bb")) {
                 AsyncImage(url: u) { p in if let i = p.image { i.resizable().scaledToFill() } }
             }
@@ -323,7 +323,7 @@ struct MusicBlockView: View {
                 Text("Müzik").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
                 Spacer()
                 if editing {
-                    Button(action: onRemove) { Image(systemName: "xmark").font(.system(size: 13)).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 36, height: 36) }
+                    Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 36, height: 36) }
                         .accessibilityLabel("İçeriği kaldır")
                 }
             }
@@ -340,7 +340,7 @@ struct MusicBlockView: View {
                     Button { preview.toggle(block) } label: {
                         Group {
                             if playing && preview.loading { ProgressView().tint(.white).scaleEffect(0.8) }
-                            else { Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 13)) }
+                            else { RealSymbol(playing ? "pause.fill" : "play.fill", size: 14.9) }
                         }
                         .foregroundStyle(.white).frame(width: 36, height: 36)
                     }

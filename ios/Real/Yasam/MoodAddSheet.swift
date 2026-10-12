@@ -197,7 +197,7 @@ struct MoodAddSheet: View {
         }
         .overlay(alignment: .topLeading) {
             Button { if step == 0 { dismiss() } else { step -= 1 } } label: {
-                Image(systemName: "chevron.left").font(.system(size: 18, weight: .medium)).foregroundStyle(.white)
+                RealSymbol("chevron.left", size: 20.7).foregroundStyle(.white)
                     .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
             }
             .padding(.leading, 8).padding(.top, 2)

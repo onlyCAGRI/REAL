@@ -149,6 +149,7 @@ func uncategorizedPastel(_ id: Int64) -> Color {
 
 /// resolveNext24CardColor
 func plannerCardColor(_ reminder: ReminderItem, categories: [CustomCategory]) -> Color {
+    if let i = reminder.plannerColorIndex, realCalendarPastels.indices.contains(i) { return realCalendarPastels[i] }
     if let id = reminder.customCategoryId, let cat = categories.first(where: { $0.id == id }), !cat.name.isEmpty {
         let raw = cat.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(cat.accentStart) ?? Color(argb: 0xFF4558C8)
         return nearestCalendarPastel(raw)

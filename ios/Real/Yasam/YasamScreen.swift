@@ -167,7 +167,7 @@ struct YasamScreen: View {
                               sentence: journalsMode ? "Günlüklerim" : heroSentence,
                               tone: YasamTone.mood(lastMood), hour: hour, revealed: revealed)
             Button(action: close) {
-                Image(systemName: "chevron.left").font(.system(size: 17, weight: .medium)).foregroundStyle(.white)
+                RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                     .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
             }
             .padding(.leading, 22).padding(.top, 8)
@@ -319,7 +319,7 @@ struct YasamScreen: View {
 
     private var micButton: some View {
         Button { placeholder = "Sesli komutlar" } label: {
-            Image(systemName: "waveform").font(.system(size: 20, weight: .medium)).foregroundStyle(.white)
+            RealSymbol("waveform", size: 23).foregroundStyle(.white)
                 .frame(width: 64, height: 64).liquidGlass(Circle())
         }
         .padding(.top, 8).padding(.bottom, 34)
@@ -679,7 +679,7 @@ struct YasamRow<Preview: View, Content: View>: View {
                     Text(label).font(.system(size: 12, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted).lineLimit(1)
                     Spacer()
                     Text(value).font(.system(size: 15, weight: .light)).foregroundStyle(.white).lineLimit(1)
-                    Image(systemName: "chevron.down").font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.6))
+                    RealSymbol("chevron.down", size: 12.6).foregroundStyle(.white.opacity(0.6))
                         .rotationEffect(.degrees(expanded ? 180 : 0))
                         .frame(width: 14).padding(.leading, 14)
                 }
@@ -727,7 +727,7 @@ struct YasamSlideToAdd: View {
                 Capsule().fill(.white.opacity(0.07))
                 Text(label).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6 * (1 - fraction)))
                     .frame(maxWidth: .infinity).padding(.leading, 22)
-                Image(systemName: "arrow.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(.black)
+                RealSymbol("arrow.right", size: 16.1).foregroundStyle(.black)
                     .frame(width: 44, height: 44).background(Circle().fill(.white))
                     .padding(4)
                     .offset(x: drag)

@@ -55,6 +55,7 @@ struct ScheduleSheet: View {
     @State private var hour = 9
     @State private var minute = 0
     @State private var includeYear = false
+    var initialTimeTab = false
     @State private var timeTab = false
     @State private var repeatRule: RecurrenceRule = .none
     @State private var showRepeat = false
@@ -96,7 +97,7 @@ struct ScheduleSheet: View {
             .padding(20)
             .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.22), value: showRepeat)
         }
-        .onAppear(perform: load)
+        .onAppear { load(); if initialTimeTab { timeTab = true } }
     }
 
     private func load() {
@@ -124,7 +125,7 @@ struct ScheduleSheet: View {
                 if repeatRule != .none {
                     Button { showRepeat = true } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: "repeat").font(.system(size: 11)).foregroundStyle(RealColors.accentBlue)
+                            RealSymbol("repeat", size: 12.6).foregroundStyle(RealColors.accentBlue)
                             Text(Recurrence.description(repeatRule, alert: makeDate(year: effectiveYear)?.epochMillis))
                                 .font(RealFont.inter(11, .medium)).foregroundStyle(Color(argb: 0xFFD2D2D8)).lineLimit(1)
                         }
@@ -225,7 +226,7 @@ struct ScheduleSheet: View {
             Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3)
             HStack(spacing: 8) {
                 Button { showRepeat = false } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 17, weight: .medium)).foregroundStyle(.white)
+                    RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                         .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
                 }
                 .accessibilityLabel("Geri dön")
@@ -244,7 +245,7 @@ struct ScheduleSheet: View {
                                 .foregroundStyle(repeatRule == option.0 ? Color(argb: 0xFF82B3FF) : .white)
                             Spacer()
                             if repeatRule == option.0 {
-                                Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(Color(argb: 0xFF82B3FF))
+                                RealSymbol("checkmark", size: 16.1).foregroundStyle(Color(argb: 0xFF82B3FF))
                             }
                         }
                         .padding(.horizontal, 18).padding(.vertical, 15)

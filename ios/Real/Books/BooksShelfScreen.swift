@@ -109,7 +109,7 @@ struct BooksShelfScreen: View {
 
             HStack {
                 ReaderCircleButton(theme: theme, glass: true, action: onBack) {
-                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .medium))
+                    RealSymbol("chevron.left", size: 20.7)
                 }
                 .accessibilityLabel("Geri")
                 Spacer()

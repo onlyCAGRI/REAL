@@ -145,6 +145,8 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     var musicBlocks: [MusicBlock] = []
     var mediaBlocks: [MediaBlock] = []
     var contentBlockLayout: [String: CardBlockPlacement] = [:]
+    /// PlannerEventDetails.colorIndex (Takvim card pastel).
+    var plannerColorIndex: Int?
     /// Weekday set for a WEEKLY repeat (bit0 = Monday ... bit6 = Sunday). 0 = plain single-day repeat.
     var repeatWeekdaysMask: Int = 0
     /// Inclusive last day of a repeat series. nil = repeats forever.
@@ -256,7 +258,7 @@ extension ReminderItem {
              quick24HourUntilAt, notifiedAlertAt, accentStart, accentEnd, repeatRule, anchorAlertAt,
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
-             cardStack, voiceRecordings, musicBlocks, mediaBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout
+             cardStack, voiceRecordings, musicBlocks, mediaBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex
     }
 
     init(from decoder: Decoder) throws {
@@ -298,6 +300,7 @@ extension ReminderItem {
         people = try c.decodeIfPresent([String].self, forKey: .people) ?? []
         contentBlockOrder = try c.decodeIfPresent([String].self, forKey: .contentBlockOrder) ?? []
         contentBlockLayout = try c.decodeIfPresent([String: CardBlockPlacement].self, forKey: .contentBlockLayout) ?? [:]
+        plannerColorIndex = try c.decodeIfPresent(Int.self, forKey: .plannerColorIndex)
     }
 }
 

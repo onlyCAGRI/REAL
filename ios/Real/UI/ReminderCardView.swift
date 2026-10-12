@@ -151,7 +151,7 @@ struct ReminderCardView: View {
             Circle().fill(isSelected ? RealColors.accentBlue : .clear)
             Circle().strokeBorder(isSelected ? RealColors.accentBlue : .white.opacity(0.3), lineWidth: 1.5)
             if isSelected {
-                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Color(argb: 0xFF0F172A))
+                RealSymbol("checkmark", size: 11.5).foregroundStyle(Color(argb: 0xFF0F172A))
             }
         }
         .frame(width: 22, height: 22)

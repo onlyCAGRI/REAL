@@ -116,7 +116,7 @@ struct ComposerBar: View {
                 if showChrome && !navExpanded {
                     HStack {
                         Button { onOpenPlanner?() } label: {
-                            Image(systemName: "calendar").font(.system(size: 19)).foregroundStyle(.white)
+                            RealSymbol("calendar", size: 21.8).foregroundStyle(.white)
                                 .frame(width: 44, height: 44)
                                 .background { Color.clear.liquidGlass(Capsule()).matchedGeometryEffect(id: "dockNav", in: dockNS) }
                                 .frame(width: 48, height: 48)
@@ -138,8 +138,8 @@ struct ComposerBar: View {
             }
         }
         .padding(.horizontal, 16)
-        // Android: dock bottom edge ~30dp above the screen edge (34pt safe area − 4).
-        .padding(.bottom, expanded ? 8 : -4)
+        // Dock bottom edge ~24pt above the screen edge (34pt safe area − 10), just above the home indicator.
+        .padding(.bottom, expanded ? 8 : -10)
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: expanded)
         .animation(.spring(response: 0.34, dampingFraction: 0.85), value: navExpanded)
         .highPriorityGesture(
@@ -160,7 +160,7 @@ struct ComposerBar: View {
 
     private func dockCircle(symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 19)).foregroundStyle(.white)
+            RealSymbol(symbol, size: 21.8).foregroundStyle(.white)
                 .frame(width: 44, height: 44)
                 .liquidGlass(Circle())
                 .frame(width: 48, height: 48)
@@ -188,7 +188,7 @@ struct ComposerBar: View {
     private func navItem(_ label: String, _ symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 1) {
-                Image(systemName: symbol).font(.system(size: 19))
+                RealSymbol(symbol, size: 21.8)
                 Text(label).font(RealFont.inter(12, selected ? .semibold : .medium)).lineLimit(1)
             }
             .foregroundStyle(selected ? Color.white : Color(argb: 0xFFB8B8BE))
@@ -264,7 +264,7 @@ struct ComposerBar: View {
             if checklistMode {
                 let can = !text.trimmingCharacters(in: .whitespaces).isEmpty && checklistItems.contains { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                 Button(action: submit) {
-                    Image(systemName: "checkmark").font(.system(size: 13, weight: .bold))
+                    RealSymbol("checkmark", size: 14.9)
                         .foregroundStyle(can ? .white : Color(argb: 0xFF6B6B74))
                         .frame(width: 30, height: 30)
                         .background(Circle().fill(can ? Color(argb: 0xFF295799) : Color(argb: 0xFF1E1E24)))
@@ -275,7 +275,7 @@ struct ComposerBar: View {
             }
             if !isHome {
                 Button(action: startVoice) {
-                    Image(systemName: "mic").font(.system(size: 20))
+                    RealSymbol("mic", size: 23)
                         .foregroundStyle(voice.phase != .idle ? Color(argb: 0xFF69ACFF) : Color(argb: 0xFFE4E4EA))
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(voice.phase == .listening ? Color(argb: 0xFF2D6099).opacity(0.32 + Double(voice.level) * 0.12) : .clear))
@@ -285,7 +285,7 @@ struct ComposerBar: View {
                 .accessibilityLabel(voice.phase == .listening ? "Dinlemeyi bitir" : "Sesle REAL oluştur")
             } else if isHome && voice.phase != .idle {
                 Button(action: startVoice) {
-                    Image(systemName: "mic.fill").font(.system(size: 20)).foregroundStyle(Color(argb: 0xFF69ACFF))
+                    RealSymbol("mic.fill", size: 23).foregroundStyle(Color(argb: 0xFF69ACFF))
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(Color(argb: 0xFF2D6099).opacity(0.32 + Double(voice.level) * 0.12)))
                         .frame(width: 48, height: 48)
@@ -306,14 +306,14 @@ struct ComposerBar: View {
             if !schedule.isEmpty {
                 Button { withoutAnimation { showDateSheet = true } } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "calendar").font(.system(size: 14)).foregroundStyle(RealColors.accentBlue)
+                        RealSymbol("calendar", size: 16.1).foregroundStyle(RealColors.accentBlue)
                         Text(schedule.summary).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFE2E8F0))
                     }
                     .padding(.horizontal, 9).padding(.vertical, 5)
                     .background(RoundedRectangle(cornerRadius: 12).fill(RealColors.accentBlue.opacity(0.14)))
                 }
                 Button { schedule = ScheduleDraft() } label: {
-                    Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color(argb: 0xFFAAAAB4)).frame(width: 36, height: 40)
+                    RealSymbol("xmark", size: 12.6).foregroundStyle(Color(argb: 0xFFAAAAB4)).frame(width: 36, height: 40)
                 }
                 .accessibilityLabel("Tarihi kaldır")
             } else {
@@ -333,7 +333,6 @@ struct ComposerBar: View {
                 checklistMode.toggle()
                 if checklistMode { checklistItems = [""]; focus = text.isEmpty ? .title : .item(0) }
             }
-            toolButton(important ? "star.fill" : "star", "Önemli", active: important) { important.toggle() }
             if schedule.alertAt == nil {
                 toolButton(sendImmediate ? "bell" : "bell.slash", "Bildirim", active: sendImmediate) { sendImmediate.toggle() }
             }
@@ -344,7 +343,7 @@ struct ComposerBar: View {
 
     private func toolButton(_ symbol: String, _ label: String, active: Bool, tint: Color? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 18))
+            RealSymbol(symbol, size: 20)
                 .foregroundStyle(tint ?? (active ? RealColors.accentBlue : Color(argb: 0xFFBABAC3)))
                 .frame(width: 40, height: 40)
         }
@@ -386,7 +385,7 @@ struct ComposerBar: View {
                         AttachmentStorage.remove(a)
                         attachments.remove(at: index)
                     } label: {
-                        Image(systemName: "xmark").font(.system(size: 7, weight: .bold)).foregroundStyle(Color(argb: 0xFFEEEEF2))
+                        RealSymbol("xmark", size: 8).foregroundStyle(Color(argb: 0xFFEEEEF2))
                             .frame(width: 16, height: 16).background(Circle().fill(Color(argb: 0xE61E1E24)))
                     }
                 }
@@ -409,7 +408,7 @@ struct ComposerBar: View {
                         .onSubmit { checklistEnter(index) }
                     if checklistItems.count > 1 {
                         Button { checklistItems.remove(at: index) } label: {
-                            Image(systemName: "xmark").font(.system(size: 10)).foregroundStyle(Color(argb: 0xFF7A7A85)).frame(width: 24, height: 24)
+                            RealSymbol("xmark", size: 11.5).foregroundStyle(Color(argb: 0xFF7A7A85)).frame(width: 24, height: 24)
                         }
                     }
                 }
@@ -515,7 +514,7 @@ struct CategoryPickerSheet: View {
                     Text("Kategori Seç").font(RealFont.inter(20, .semibold)).foregroundStyle(.white)
                     Spacer()
                     Button(action: close) {
-                        Image(systemName: "xmark").font(.system(size: 15)).foregroundStyle(Color(argb: 0xFFB8B8BE)).frame(width: 40, height: 40)
+                        RealSymbol("xmark", size: 17.2).foregroundStyle(Color(argb: 0xFFB8B8BE)).frame(width: 40, height: 40)
                     }
                     .accessibilityLabel("Kapat")
                 }
@@ -523,11 +522,11 @@ struct CategoryPickerSheet: View {
                 ScrollView {
                     VStack(spacing: 4) {
                         row(isSelected: selected == nil, highlight: selected == nil) {
-                            Image(systemName: "xmark").font(.system(size: 12, weight: .medium)).foregroundStyle(Color(argb: 0xFFC8C8D0))
+                            RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFFC8C8D0))
                                 .frame(width: 34, height: 34).background(Circle().fill(Color(argb: 0xFF2A2A30)))
                         } title: { Text("Kategori yok").font(RealFont.inter(17, .semibold)) } action: { selected = nil; close() }
                         row(isSelected: false, highlight: false) {
-                            Image(systemName: "plus").font(.system(size: 13, weight: .medium)).foregroundStyle(RealColors.accentBlue)
+                            RealSymbol("plus", size: 14.9).foregroundStyle(RealColors.accentBlue)
                                 .frame(width: 34, height: 34).background(Circle().fill(RealColors.accentBlue.opacity(0.14)))
                                 .overlay(Circle().strokeBorder(RealColors.accentBlue.opacity(0.35), lineWidth: 0.8))
                         } title: { Text("Yeni kategori ekle...").font(RealFont.inter(17)) } action: { showNew = true }
@@ -558,7 +557,7 @@ struct CategoryPickerSheet: View {
                 icon()
                 title().foregroundStyle(.white).lineLimit(1)
                 Spacer()
-                if isSelected { Image(systemName: "checkmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white) }
+                if isSelected { RealSymbol("checkmark", size: 17.2).foregroundStyle(.white) }
             }
             .padding(.horizontal, 10).frame(minHeight: 56)
             .background { if highlight { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.05)) } }

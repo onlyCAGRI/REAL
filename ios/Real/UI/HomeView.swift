@@ -353,7 +353,7 @@ struct ModulePlaceholderScreen: View {
         .background(Color.black.ignoresSafeArea())
         .overlay(alignment: .topLeading) {
             Button { dismiss() } label: {
-                Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                     .frame(width: 44, height: 44).liquidGlass(Circle())
             }
             .padding(16)

@@ -185,7 +185,7 @@ struct BooksModuleScreen: View {
                 ZStack(alignment: .top) {
                     HStack(spacing: 14) {
                         ReaderCircleButton(theme: theme, glass: true, action: back) {
-                            Image(systemName: "chevron.left").font(.system(size: 18, weight: .medium))
+                            RealSymbol("chevron.left", size: 20.7)
                         }
                         Text("Kitap").font(.system(size: 26, weight: .medium, design: .serif)).foregroundStyle(theme.text)
                         Spacer()
