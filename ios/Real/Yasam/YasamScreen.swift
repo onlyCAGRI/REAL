@@ -8,8 +8,10 @@ struct YasamScreen: View {
     @Environment(ReminderStore.self) private var store
     @Environment(LifeStore.self) private var life
     @Environment(BookStore.self) private var books
+    @Environment(DiscoveryStore.self) private var discovery
     @Environment(\.dismiss) private var dismiss
     @State private var showBooks = false
+    @State private var discoveryTarget: (kind: DiscoveryKind, list: Bool)?
     @State private var resumeBook: String?
     var onOpenCard: (Int64) -> Void = { _ in }
 
@@ -62,6 +64,15 @@ struct YasamScreen: View {
             .opacity(closing ? 0 : 1)
         }
         .ignoresSafeArea(.container, edges: .bottom)
+        .overlay {
+            if let target = discoveryTarget {
+                DiscoveryScreen(kind: target.kind, startInList: target.list) {
+                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { discoveryTarget = nil }
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .zIndex(4)
+            }
+        }
         .presentationBackground(.clear)
         .onAppear { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9)) { revealed = true } }
         .fullScreenCover(isPresented: $showBooks) { BooksModuleScreen(resumeBookId: resumeBook) }
@@ -229,11 +240,11 @@ struct YasamScreen: View {
                          toggle: { toggle("media") }) {
                     Text(mediaPrompt).font(.system(size: 19, weight: .light)).foregroundStyle(.white)
                 } content: {
-                    YasamTextAction(text: "FİLM / DİZİ ÖNERİ AL  ›", tone: YasamTone.media) { placeholder = "Film & Dizi önerileri" }
-                    YasamTextAction(text: "İZLENECEK LİSTEM  ›", tone: YasamTone.muted) { placeholder = "İzlenecek listem" }
+                    YasamTextAction(text: "FİLM / DİZİ ÖNERİ AL  ›", tone: YasamTone.media) { openDiscovery(.film, list: false) }
+                    YasamTextAction(text: "İZLENECEK LİSTEM" + listCount(.film) + "  ›", tone: YasamTone.muted) { openDiscovery(.film, list: true) }
                     Rectangle().fill(.white.opacity(0.10)).frame(height: 1).padding(.vertical, 4)
-                    YasamTextAction(text: "OYUN ÖNERİ AL  ›", tone: YasamTone.media) { placeholder = "Oyun önerileri" }
-                    YasamTextAction(text: "OYNANACAK LİSTEM  ›", tone: YasamTone.muted) { placeholder = "Oynanacak listem" }
+                    YasamTextAction(text: "OYUN ÖNERİ AL  ›", tone: YasamTone.media) { openDiscovery(.game, list: false) }
+                    YasamTextAction(text: "OYNANACAK LİSTEM" + listCount(.game) + "  ›", tone: YasamTone.muted) { openDiscovery(.game, list: true) }
                 }
             }
             Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
@@ -241,6 +252,15 @@ struct YasamScreen: View {
         .padding(.horizontal, 22).padding(.top, 20)
         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32), value: open)
         .animation(.easeOut(duration: 0.22), value: tab)
+    }
+
+    private func openDiscovery(_ kind: DiscoveryKind, list: Bool) {
+        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { discoveryTarget = (kind, list) }
+    }
+
+    private func listCount(_ kind: DiscoveryKind) -> String {
+        let n = discovery.snapshot(kind).later.count
+        return n > 0 ? " · \(n)" : ""
     }
 
     private func toggle(_ key: String) {

@@ -17,6 +17,7 @@ struct ReminderDetailView: View {
 
     @State private var draft: ReminderItem?
     @State private var secondaryExpanded = false
+    @State private var dockCollapsed = false
     @State private var deleting = false
     @State private var reordering = false
     @State private var newChecklistText = ""
@@ -48,7 +49,8 @@ struct ReminderDetailView: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         if !editing { header(r) } else { Color.clear.frame(height: 4) }
-                        ForEach(blockOrder(r), id: \.self) { key in
+                        CardBlockGrid(keys: blockOrder(r), layout: r.contentBlockLayout, editing: editing,
+                                      onChange: { key, p in draft?.contentBlockLayout[key] = p }) { key in
                             block(key, r).transition(.opacity.combined(with: .scale(scale: 0.97)))
                         }
                         Text(createdLine(r))
@@ -143,6 +145,10 @@ struct ReminderDetailView: View {
             }
         case "location": if let l = r.location { locationBlock(l) }
         case "journal": if let j = r.journal { journalBlock(j) }
+        case "media":
+            if let m = r.mediaBlocks.first(where: { $0.id == id }) {
+                MediaBlockView(block: m, editing: editing) { draft?.mediaBlocks.removeAll { $0.id == id } }
+            }
         default: EmptyView()
         }
     }
@@ -451,6 +457,10 @@ struct ReminderDetailView: View {
     }
 
     private func photoBlock(_ a: ReminderAttachment) -> some View {
+        PhotoBlockBody(attachment: a, editing: editing, onTap: { previewPhoto = a }, remove: { removeAttachment(a) })
+    }
+
+    private func legacyPhotoBlock(_ a: ReminderAttachment) -> some View {
         let image = AttachmentStorage.image(a.localPath)
         let ratio = image.map { max(0.5, min(2, $0.size.width / max($0.size.height, 1))) } ?? 1
         return ZStack(alignment: .topTrailing) {
@@ -630,7 +640,23 @@ struct ReminderDetailView: View {
             if deleting { deletePrompt(r).padding(.bottom, 12).transition(.move(edge: .bottom).combined(with: .opacity)) }
             if editing {
                 if secondaryExpanded { secondaryPanels.padding(.bottom, 12).transition(.opacity.combined(with: .scale(scale: 0.97))) }
-                editDock.padding(.bottom, 10)
+                VStack(spacing: 0) {
+                    // DetailEditDock handle: drag down (>24pt) or tap to collapse, drag up to reopen.
+                    Capsule().fill(.white.opacity(0.55)).frame(width: 40, height: 4)
+                        .frame(maxWidth: .infinity).frame(height: 28).contentShape(Rectangle())
+                        .onTapGesture { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { dockCollapsed.toggle() } }
+                        .gesture(DragGesture(minimumDistance: 4).onEnded { v in
+                            let next = v.translation.height >= 24 ? true : (v.translation.height <= -24 ? false : dockCollapsed)
+                            if next != dockCollapsed { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { dockCollapsed = next } }
+                        })
+                        .accessibilityLabel("Düzenleme dock'u")
+                        .accessibilityValue(dockCollapsed ? "Küçültülmüş" : "Açık")
+                        .accessibilityAddTraits(.isButton)
+                    if !dockCollapsed {
+                        editDock.transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .padding(.bottom, 10)
             } else if r.isCompleted && r.journal == nil && !(r.cardStack?.cards.contains { $0.title == "Nasıl geçti?" } ?? false) {
                 Button(action: addCompletionJournal) {
                     HStack {
@@ -1201,7 +1227,42 @@ private struct BlockReorderSheet: View {
         case "location": return ("Konum", item.location?.placeName ?? "Konum", "mappin")
         case "mood": return ("Mood", item.mood?.label ?? "Mood", "face.smiling")
         case "journal": return ("Günlük", "Günlük notu", "book.closed")
+        case "media": return ("Film / Dizi", item.mediaBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "film")
         default: return (key, "", "square")
+        }
+    }
+}
+
+/// Photo block: natural aspect, or the height chosen with the resize handle (cropped like ContentScale.Crop).
+private struct PhotoBlockBody: View {
+    let attachment: ReminderAttachment
+    let editing: Bool
+    let onTap: () -> Void
+    let remove: () -> Void
+    @Environment(\.cardBlockHeight) private var fixedHeight
+
+    var body: some View {
+        let image = AttachmentStorage.image(attachment.localPath)
+        let ratio = image.map { max(0.5, min(2, $0.size.width / max($0.size.height, 1))) } ?? 1
+        ZStack(alignment: .topTrailing) {
+            Group {
+                if fixedHeight > 0 { Color.clear.frame(maxWidth: .infinity).frame(height: fixedHeight) }
+                else { Color.clear.frame(maxWidth: .infinity).aspectRatio(ratio, contentMode: .fit) }
+            }
+                .overlay {
+                    if let image { Image(uiImage: image).resizable().scaledToFill() } else { RealColors.field }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+            if editing {
+                Button(action: remove) {
+                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 22, height: 22).background(Circle().fill(.black.opacity(0.6)))
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Kaldır")
+            }
         }
     }
 }

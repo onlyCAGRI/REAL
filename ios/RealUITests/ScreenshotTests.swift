@@ -54,6 +54,10 @@ final class ScreenshotTests: XCTestCase {
         shot("bookdetail")
     }
 
+    func test22Film() { capture("film", settle: 3) }
+    func test23FilmDeck() { capture("filmdeck", settle: 3) }
+    func test24Game() { capture("game", settle: 3) }
+
     func test15Yasam() { capture("yasam", settle: 3) }
     func test16Water() { capture("water", settle: 3) }
 

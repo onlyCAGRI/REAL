@@ -8,6 +8,7 @@ struct RealApp: App {
     @State private var life: LifeStore
     @State private var pano: PanoStore
     @State private var books: BookStore
+    @State private var discovery: DiscoveryStore
     private let initialPath: [Route]
 
     init() {
@@ -27,12 +28,16 @@ struct RealApp: App {
             let books = BookStore(persist: false)
             DemoData.seedBooks(books)
             _books = State(initialValue: books)
+            let discovery = DiscoveryStore(persist: false, service: DemoDiscoveryService())
+            discovery.seedDemo()
+            _discovery = State(initialValue: discovery)
             initialPath = DemoData.path(for: args, store: store)
         } else {
             _store = State(initialValue: ReminderStore())
             _life = State(initialValue: LifeStore())
             _pano = State(initialValue: PanoStore())
             _books = State(initialValue: BookStore())
+            _discovery = State(initialValue: DiscoveryStore())
             initialPath = []
         }
     }
@@ -44,6 +49,7 @@ struct RealApp: App {
                 .environment(life)
                 .environment(pano)
                 .environment(books)
+                .environment(discovery)
                 .background(Color.black)
         }
     }
@@ -196,6 +202,9 @@ enum DemoData {
         case "pano": return [.module("Pano")]
         case "water": return [.module("Su")]
         case "books": return [.module("Kitaplar")]
+        case "film": return [.module("Film")]
+        case "filmdeck": return [.module("FilmDeck")]
+        case "game": return [.module("Oyun")]
         case "reader": return [.module("Okuyucu")]
         case "planner24":
             UserDefaults.standard.set("hours_24", forKey: "planner_view_mode")

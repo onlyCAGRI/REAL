@@ -34,6 +34,9 @@ struct RootView: View {
                             YasamScreen(onOpenCard: { id in path.append(.detail(id)) }).toolbar(.hidden, for: .navigationBar)
                         } else if name == "Pano" {
                             PanoScreen()
+                        } else if name == "Film" || name == "FilmDeck" || name == "Oyun" {
+                            DiscoveryScreen(kind: name == "Oyun" ? .game : .film, startInDeck: name == "FilmDeck", onClose: {})
+                                .toolbar(.hidden, for: .navigationBar)
                         } else if name == "Kitaplar" {
                             BooksModuleScreen().toolbar(.hidden, for: .navigationBar)
                         } else if name == "Okuyucu" {
