@@ -110,7 +110,10 @@ enum CategoryIcon: String, CaseIterable, Codable, Identifiable {
         case .gift: return "Hediye"
         }
     }
-    var symbol: String {
+    /// RealSymbol key: draws the Android CategoryIcon glyph.
+    var symbol: String { "cat." + rawValue }
+
+    var sfSymbol: String {
         switch self {
         case .work: return "briefcase"
         case .home: return "house"

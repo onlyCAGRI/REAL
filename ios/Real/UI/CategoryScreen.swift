@@ -183,7 +183,7 @@ struct CategoryScreen: View {
 
     private func glassCircle(symbol: String, label: String, size: CGFloat, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: size * 0.44, weight: .medium)).foregroundStyle(Color(argb: 0xFFC9CBD3))
+            RealSymbol(symbol, size: size * 0.5).foregroundStyle(Color(argb: 0xFFC9CBD3))
                 .frame(width: size, height: size).liquidGlass(Circle())
                 .frame(width: 44, height: 44)
         }

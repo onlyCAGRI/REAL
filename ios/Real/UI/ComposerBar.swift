@@ -535,7 +535,7 @@ struct CategoryPickerSheet: View {
                             row(isSelected: selected == category.id, highlight: selected == category.id) {
                                 let start = paletteColor(category.accentStart) ?? Color(argb: 0xFF233F73)
                                 let end = paletteColor(category.accentEnd) ?? start
-                                Image(systemName: category.icon.symbol).font(.system(size: 13)).foregroundStyle(.white)
+                                RealSymbol(category.icon.symbol, size: 14.9).foregroundStyle(.white)
                                     .frame(width: 34, height: 34)
                                     .background(Circle().fill(LinearGradient(colors: [start, end], startPoint: .topLeading, endPoint: .bottomTrailing)))
                             } title: { Text(category.name).font(RealFont.inter(17)) } action: { selected = category.id; close() }

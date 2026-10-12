@@ -281,7 +281,7 @@ struct CategoryTileView: View {
                     .offset(x: 10)
                 Spacer(minLength: 12)
                 if hero && heroActions != nil {
-                    Image(systemName: visual.symbol).font(.system(size: 20)).foregroundStyle(visual.foreground).frame(width: 48, height: 48)
+                    RealSymbol(visual.symbol, size: 23).foregroundStyle(visual.foreground).frame(width: 48, height: 48)
                 } else {
                     Text("↗").font(RealFont.inter(28)).foregroundStyle(visual.foreground)
                 }
@@ -303,7 +303,7 @@ struct CategoryTileView: View {
                         CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading)
                     }
                     Spacer()
-                    Image(systemName: visual.symbol).font(.system(size: 19)).foregroundStyle(visual.foreground)
+                    RealSymbol(visual.symbol, size: 21.8).foregroundStyle(visual.foreground)
                 }
             }
         }

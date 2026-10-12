@@ -35,7 +35,7 @@ struct PlannerEventEditor: View {
                 .offset(y: appeared ? 0 : 600)
         }
         .onAppear {
-            start = ScheduleDraft(date: initialStart(), hasTime: true)
+            start = Self.draft(initialStart())
             withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.34)) { appeared = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focused = true }
         }
@@ -70,7 +70,7 @@ struct PlannerEventEditor: View {
                     activeTool = nil; withoutAnimation { showStart = true }
                 }
                 tile("Bitiş", endDate.map(Self.ampm) ?? "—") {
-                    endDraft = ScheduleDraft(date: endDate ?? startDate.addingTimeInterval(3600), hasTime: true)
+                    endDraft = Self.draft(endDate ?? startDate.addingTimeInterval(3600))
                     withoutAnimation { showEnd = true }
                 }
             }
@@ -183,7 +183,7 @@ struct PlannerEventEditor: View {
         Button(action: action) {
             HStack(spacing: 7) {
                 if let symbol {
-                    Image(systemName: symbol).font(.system(size: 13)).foregroundStyle(selected ? accent : Color(argb: 0xFFB8B8C0))
+                    RealSymbol(symbol, size: 16).foregroundStyle(selected ? accent : Color(argb: 0xFFB8B8C0))
                 } else {
                     Circle().fill(selected ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFF777780)).frame(width: 7, height: 7)
                 }
@@ -223,6 +223,13 @@ struct PlannerEventEditor: View {
         focused = false
         withAnimation(.timingCurve(0.4, 0, 1, 1, duration: 0.2)) { appeared = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { onDismiss() }
+    }
+
+    private static func draft(_ date: Date) -> ScheduleDraft {
+        var d = ScheduleDraft()
+        d.date = date
+        d.hasTime = true
+        return d
     }
 
     private static func month(_ d: Date) -> String {

@@ -367,7 +367,9 @@ struct RealSymbol: View {
     }
 
     var body: some View {
-        if let m = Self.glyph(name) {
+        if name.hasPrefix("cat."), let icon = CategoryIcon(rawValue: String(name.dropFirst(4))) {
+            CategoryIconGlyph(icon: icon, size: size)
+        } else if let m = Self.glyph(name) {
             ActionIcon(m.0, filled: m.1, size: size)
         } else {
             Image(systemName: name).font(.system(size: size * 0.85))

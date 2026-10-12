@@ -261,7 +261,7 @@ struct CategoryEditorSheet: View {
     private func iconTile(_ option: CategoryIcon) -> some View {
         let on = icon == option
         return Button { icon = option } label: {
-            Image(systemName: option.symbol).font(.system(size: 19)).foregroundStyle(.white)
+            RealSymbol(option.symbol, size: 21.8).foregroundStyle(.white)
                 .frame(maxWidth: .infinity).frame(height: 50)
                 .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(argb: on ? 0xFF2A2A30 : 0xFF1E1E23)))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(on ? Color.white : Color.clear, lineWidth: 2))
@@ -430,7 +430,7 @@ struct CategoryOrderSheet: View {
                             case .custom(let c): return c.visual
                             }
                         }()
-                        Image(systemName: visual.symbol).frame(width: 30, height: 30)
+                        RealSymbol(visual.symbol, size: 20).frame(width: 30, height: 30)
                             .background(Circle().fill(visual.stripe.0)).foregroundStyle(visual.foreground)
                         Text(visual.title)
                     }
