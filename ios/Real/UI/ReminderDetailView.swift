@@ -53,7 +53,8 @@ struct ReminderDetailView: View {
                     VStack(spacing: 12) {
                         if !editing { header(r) } else { Color.clear.frame(height: 4) }
                         CardBlockGrid(keys: blockOrder(r), layout: r.contentBlockLayout, editing: editing,
-                                      onChange: { key, p in draft?.contentBlockLayout[key] = p }) { key in
+                                      onChange: { key, p in draft?.contentBlockLayout[key] = p },
+                                      onDrop: { keys, layout in draft?.contentBlockOrder = keys; draft?.contentBlockLayout = layout }) { key in
                             block(key, r).transition(.opacity.combined(with: .scale(scale: 0.97)))
                         }
                         Text(createdLine(r))
