@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="real_access_sign_in">REAL erişimini görmek için giriş yap.</string>
+    <string name="real_access_gift">Hediye Pro erişimi</string>
+    <string name="real_access_tester">Tester erişimi · Pro dahil</string>
+    <string name="real_access_free">Free hesap</string>
+    <string name="real_access_loading">Hesap erişimi kontrol ediliyor…</string>
+    <string name="real_access_unavailable">Erişim doğrulanamadı. Durumu yenileyebilirsin.</string>
+    <string name="real_access_usage">Bugünkü AI isteği: %1$d / %2$d · 00:00 UTC’de yenilenir</string>
+    <string name="real_access_observe">Test geçişi boyunca mevcut AI erişimi devam eder.</string>
+    <string name="real_access_cached">Çevrimdışı: son doğrulanan erişim gösteriliyor.</string>
+    <string name="real_access_copy_uid">REAL hesap kimliğini kopyala</string>
+    <string name="real_access_refresh">Erişim durumunu yenile</string>
+    <string name="real_access_done">Tamam</string>
+    <string name="real_access_expires">Erişim bitişi: %1$s</string>
+</resources>

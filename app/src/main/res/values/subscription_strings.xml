@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="real_pro_title">REAL Pro</string>
+    <string name="real_pro_settings_summary">Explore Pro and manage store subscriptions</string>
+    <string name="real_pro_intro">More possibilities for your plans, discoveries and personal style.</string>
+    <string name="real_pro_close">Close subscription panel</string>
+    <string name="real_pro_voice">AI assistance for voice commands</string>
+    <string name="real_pro_mood">Personal suggestions after your mood check-in</string>
+    <string name="real_pro_discovery">Discover movies, series and games with AI</string>
+    <string name="real_pro_goals">Advanced goal planning</string>
+    <string name="real_pro_colors">Card colors and category gradients</string>
+    <string name="real_pro_details">What is included?</string>
+    <string name="real_pro_details_subtitle">The planned Pro experience</string>
+    <string name="real_pro_detail_ai">Pro is planned to include AI voice interpretation, mood suggestions and movie, series and game recommendations, plus advanced goals and color customization.</string>
+    <string name="real_pro_detail_free">Basic cards, on-device voice commands and mood logging will remain available without Pro. A single category color will also remain free.</string>
+    <string name="real_pro_detail_limits">AI usage limits and the final plan details will be shown before subscriptions go on sale. This is not an unlimited AI offer.</string>
+    <string name="real_pro_detail_store">On Android, payment will be completed through Google Play. You will see the price, billing period and renewal terms before purchasing. You can manage or cancel a Play subscription in Google Play.</string>
+    <string name="real_pro_detail_data">An AI subscription does not replace your privacy choices. AI permission remains separate. Your existing cards will not be deleted when a subscription ends.</string>
+    <string name="real_pro_soon">Subscriptions are not on sale yet. Plans and prices will appear here when available.</string>
+    <string name="real_pro_loading">Loading plans from Google Play…</string>
+    <string name="real_pro_unavailable">Plans are currently unavailable. You can continue using REAL.</string>
+    <string name="real_pro_store_note">Payment is completed through Google Play. Review the selected plan before continuing.</string>
+    <string name="real_pro_opening">Opening Google Play…</string>
+    <string name="real_pro_pending">Payment is pending. Pro will become available after confirmation.</string>
+    <string name="real_pro_verifying">Verifying your purchase…</string>
+    <string name="real_pro_restoring">Checking your purchases…</string>
+    <string name="real_pro_active">REAL Pro is active for this account.</string>
+    <string name="real_pro_restore">Restore purchases</string>
+    <string name="real_pro_manage">Manage Google Play subscriptions</string>
+    <string name="real_pro_privacy">Privacy policy</string>
+    <string name="real_pro_terms">Subscription terms</string>
+    <string name="real_pro_buy">Subscribe with Google Play</string>
+    <string name="real_pro_later">Not now</string>
+    <string name="real_pro_open_failed">This page could not be opened. Please try again.</string>
+</resources>

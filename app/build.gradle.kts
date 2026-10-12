@@ -1,37 +1,54 @@
-import java.io.FileInputStream
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
+import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
 }
 
-val localProperties = Properties().apply {
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        load(FileInputStream(localPropertiesFile))
+val testerUpdatesEnabled = providers.gradleProperty("REAL_TESTER_UPDATES_ENABLED").orElse("true").get().toBooleanStrict()
+
+val appCheckEnabled = providers.gradleProperty("REAL_APP_CHECK_ENABLED").orElse("true").get().toBooleanStrict()
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        load(FileInputStream(keystorePropertiesFile))
     }
 }
-val realApiKey = localProperties.getProperty("REAL_API_KEY") ?: System.getenv("REAL_API_KEY") ?: ""
+
 
 android {
-    namespace = "com.cagri.bigboscagri"
+    namespace = "com.cagri.real"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.cagri.bigboscagri"
+        buildConfigField("boolean", "REAL_TESTER_UPDATES_ENABLED", testerUpdatesEnabled.toString())
+        buildConfigField("boolean", "REAL_APP_CHECK_ENABLED", appCheckEnabled.toString())
+        applicationId = "com.cagri.real"
         minSdk = 26
         targetSdk = 36
-        versionCode = 44
-        versionName = "0.7.7"
+        versionCode = 55
+        versionName = "0.8.11"
 
-        buildConfigField("String", "REAL_API_KEY", "\"$realApiKey\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+            storePassword = keystoreProperties["storePassword"] as String
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -40,21 +57,27 @@ android {
         create("optimized") {
             initWith(getByName("release"))
             isDebuggable = false
-            // Temporary recovery for the reported optimized DEX VerifyError.
-            isMinifyEnabled = false
+            // R8 validation variant: keep debug signing + Debug App Check
+            // so optimized remains convenient for local/device validation.
+            isMinifyEnabled = true
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
         }
     }
 
+    // Only tester builds merge the install permission. Main/store manifest has none.
+    if (testerUpdatesEnabled) {
+        sourceSets {
+            getByName("debug").manifest.srcFile("src/tester/AndroidManifest.xml")
+            getByName("release").manifest.srcFile("src/tester/AndroidManifest.xml")
+            getByName("optimized").manifest.srcFile("src/tester/AndroidManifest.xml")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     buildFeatures {
@@ -67,7 +90,26 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.fromTarget("17")
+    }
+}
+
 dependencies {
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
+    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-appcheck")
+    implementation("com.google.firebase:firebase-messaging") // Pano push
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
+    add("optimizedImplementation", "com.google.firebase:firebase-appcheck-debug")
+    releaseImplementation("com.google.firebase:firebase-appcheck-playintegrity")
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
     implementation(platform("androidx.compose:compose-bom:2025.05.01"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.core:core-ktx:1.17.0")
@@ -78,10 +120,13 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+    implementation("com.google.mlkit:text-recognition:16.0.1") // On-device, bundled Latin OCR for scanned books.
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.coil-kt:coil-gif:2.7.0") // Pano GIF decoder; same existing Coil version.
     // Temporary concept demo: extract a restrained accent from its bundled image.
     implementation("androidx.palette:palette:1.0.0")
     implementation("org.maplibre.gl:android-sdk:11.8.0")
+    implementation("org.checkerframework:checker-qual:3.43.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

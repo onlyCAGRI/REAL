@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="real_news_title">REAL’den</string>
+    <string name="real_news_unread">%1$d okunmamış duyuru</string>
+    <string name="real_news_close">Kapat</string>
+    <string name="real_news_back">Geri</string>
+    <string name="real_news_add_failed">Eklenemedi. Yeniden deneyebilirsin.</string>
+    <string name="real_news_add">REAL’e ekle</string>
+    <string name="real_news_added">Eklendi</string>
+    <string name="real_news_offline">Yenilenemedi. Kaydedilmiş duyurular gösteriliyor.</string>
+    <string name="real_news_loading">Yükleniyor…</string>
+    <string name="real_news_empty">Henüz duyuru yok.</string>
+    <string name="real_news_refresh">Yenile</string>
+    <string name="real_news_expand">%1$d duyuru · Açmak için dokun</string>
+    <string name="real_news_collapse">Daralt</string>
+</resources>

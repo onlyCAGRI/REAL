@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="real_access_sign_in">Sign in to see your REAL access.</string>
+    <string name="real_access_gift">Gift Pro access</string>
+    <string name="real_access_tester">Tester access · Pro included</string>
+    <string name="real_access_free">Free account</string>
+    <string name="real_access_loading">Checking account access…</string>
+    <string name="real_access_unavailable">Access could not be verified. Please refresh.</string>
+    <string name="real_access_usage">AI requests today: %1$d / %2$d · resets at 00:00 UTC</string>
+    <string name="real_access_observe">During the test rollout, existing AI access continues.</string>
+    <string name="real_access_cached">Offline: showing recently verified access.</string>
+    <string name="real_access_copy_uid">Copy REAL account ID</string>
+    <string name="real_access_refresh">Refresh access</string>
+    <string name="real_access_done">Done</string>
+    <string name="real_access_expires">Access ends: %1$s</string>
+</resources>

@@ -1,0 +1,118 @@
+package com.cagri.real.ui.components.planner
+
+import androidx.compose.ui.graphics.Color
+import com.cagri.real.data.RecurrenceRule
+import com.cagri.real.data.ReminderItem
+import com.cagri.real.data.computeNextRepeat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+internal val PlannerLocale = Locale.forLanguageTag("tr-TR")
+internal val PlannerTimeFormat = DateTimeFormatter.ofPattern("HH:mm", PlannerLocale)
+internal val PlannerPastels = RealCalendarPastels
+internal val PlannerInk = Color(0xFF242322)
+
+internal data class PlannerEventDetails(
+    val durationMinutes: Int? = null,
+    val people: List<String> = emptyList(),
+    val colorIndex: Int = 0
+)
+
+internal data class PlannerEvent(
+    val reminder: ReminderItem,
+    val details: PlannerEventDetails?,
+    val startMillis: Long,
+    val isDateOnly24Hour: Boolean = false,
+    val externalEndMillis: Long? = null,
+    val externalCalendarName: String? = null
+) {
+    val id get() = reminder.id
+    val endMillis get() = externalEndMillis ?: if (isDateOnly24Hour) null else details?.durationMinutes?.let { startMillis + it * 60_000L }
+}
+
+internal fun plannerEvents(
+    reminders: List<ReminderItem>,
+    details: Map<Long, PlannerEventDetails>,
+    zone: ZoneId,
+    rangeStartMillis: Long,
+    rangeEndMillis: Long
+): List<PlannerEvent> = buildList {
+    reminders.forEach { reminder ->
+        val metadata = details[reminder.id]
+        val plannedDay = reminder.plannedDateEpochDay
+        if (plannedDay != null) {
+            val start = LocalDate.ofEpochDay(plannedDay).atStartOfDay(zone).toInstant().toEpochMilli()
+            if (start in rangeStartMillis until rangeEndMillis) {
+                add(PlannerEvent(reminder, metadata, start, isDateOnly24Hour = true))
+            }
+            return@forEach
+        }
+
+        val currentAlert = reminder.alertAt ?: return@forEach
+        if (reminder.repeatRule == RecurrenceRule.NONE) {
+            val dur = metadata?.durationMinutes
+            val end = if (dur != null) currentAlert + dur * 60_000L else currentAlert
+            if (currentAlert < rangeEndMillis && end >= rangeStartMillis) {
+                add(PlannerEvent(reminder, metadata, currentAlert, isDateOnly24Hour = false))
+            }
+            return@forEach
+        }
+
+        val anchor = reminder.anchorAlertAt ?: currentAlert
+        val skipped = reminder.repeatSkippedEpochDays
+        val until = reminder.repeatUntilEpochDay
+        fun next(afterMillis: Long): Long? = computeNextRepeat(
+            baseAlertAt = anchor,
+            rule = reminder.repeatRule,
+            weekdaysMask = reminder.repeatWeekdaysMask,
+            untilEpochDay = until,
+            zone = zone,
+            afterMillis = afterMillis,
+            skippedEpochDays = skipped
+        )
+        // The anchor is the first occurrence; it is only real while it is inside the series and not deleted.
+        val anchorDay = Instant.ofEpochMilli(anchor).atZone(zone).toLocalDate().toEpochDay()
+        val anchorAlive = anchorDay !in skipped && (until == null || anchorDay <= until)
+        var occurrence = when {
+            anchor >= rangeStartMillis -> if (anchorAlive) anchor else next(anchor)
+            else -> next(rangeStartMillis - 1L)
+        }
+        var safety = 0
+        while (occurrence != null && occurrence < rangeEndMillis && safety < 5000) {
+            if (occurrence >= rangeStartMillis) {
+                add(PlannerEvent(reminder, metadata, occurrence, isDateOnly24Hour = false))
+            }
+            occurrence = next(occurrence)
+            safety++
+        }
+    }
+}.sortedBy { it.startMillis }
+
+internal fun PlannerEvent.day(zone: ZoneId): LocalDate = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
+internal fun plannerMonthLabel(day: LocalDate): String = day.format(DateTimeFormatter.ofPattern("MMM", PlannerLocale)).uppercase(PlannerLocale)
+internal fun plannerDayLabel(day: LocalDate): String = day.format(DateTimeFormatter.ofPattern("EEEE", PlannerLocale))
+internal fun plannerInitials(name: String): String = name.trim().split(Regex("\\s+"))
+    .filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1).uppercase(PlannerLocale) }
+
+/** External device events are transient presentation data, never persisted as REAL reminders. */
+internal fun externalPlannerEvents(
+    occurrences: List<com.cagri.real.calendar.CalendarOccurrence>, zone: ZoneId
+): List<PlannerEvent> = occurrences.map { occurrence ->
+    fun localAllDay(value: Long) = Instant.ofEpochMilli(value).atZone(ZoneId.of("UTC"))
+        .toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+    val start = if (occurrence.allDay) localAllDay(occurrence.start) else occurrence.start
+    val end = if (occurrence.allDay) localAllDay(occurrence.end) else occurrence.end
+    PlannerEvent(
+        reminder = ReminderItem(id = -occurrence.eventId, text = occurrence.title, createdAt = start,
+            alertAt = if (occurrence.allDay) null else start,
+            plannedDateEpochDay = if (occurrence.allDay) Instant.ofEpochMilli(start).atZone(zone).toLocalDate().toEpochDay() else null,
+            sendImmediateNotification = false),
+        details = PlannerEventDetails(durationMinutes = if (occurrence.allDay) null else
+            ((end - start) / 60_000L).toInt().coerceIn(1, 1440)),
+        startMillis = start, isDateOnly24Hour = occurrence.allDay,
+        externalEndMillis = end, externalCalendarName = occurrence.calendarName
+    )
+}
