@@ -24,7 +24,13 @@ jobs:
 
       - name: Xcode version
         run: |
+          # Liquid Glass (.glassEffect) needs the iOS 26 SDK / Swift 6.2: select the newest Xcode 26 on the runner.
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          echo "Selecting $XC"
+          if [ -z "$XC" ]; then echo "Xcode 26 not found"; ls /Applications | grep -i xcode; exit 1; fi
+          sudo xcode-select -s "$XC/Contents/Developer"
           xcodebuild -version
+          swift --version
           xcrun simctl list runtimes
 
       - name: Generate Xcode project
