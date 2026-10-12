@@ -61,32 +61,26 @@ jobs:
           grep -E "error:|Test Case .*(passed|failed)|Executed|\*\* " build/xcodebuild.log | tail -300
           exit $status
 
-      - name: Screenshots
-        timeout-minutes: 10
+      - name: Export screenshots
+        if: always()
         run: |
-          set -x
-          UDID=${{ steps.sim.outputs.udid }}
-          APP=build/Build/Products/Debug-iphonesimulator/REAL.app
-          mkdir -p screenshots
-          # perl alarm = portable timeout on macOS runners
-          t() { perl -e 'alarm shift; exec @ARGV' "$@"; }
-          codesign -dv "$APP" || true
-          # Fresh boot: the test run can leave the device in a state where launch blocks.
-          xcrun simctl shutdown "$UDID" || true
-          xcrun simctl boot "$UDID"
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl ui "$UDID" appearance dark || true
-          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 || true
-          t 120 xcrun simctl install "$UDID" "$APP"
-          sleep 10
-          for screen in home category builtin detail checklist planner; do
-            xcrun simctl terminate "$UDID" com.cagri.real || true
-            t 60 xcrun simctl launch "$UDID" com.cagri.real -REALDemo -REALScreen "$screen" || echo "launch failed: $screen"
-            sleep 6
-            t 30 xcrun simctl io "$UDID" screenshot "screenshots/$screen.png" || true
-          done
+          mkdir -p screenshots raw
+          xcrun xcresulttool export attachments --path build/TestResults.xcresult --output-path raw || true
+          python3 - <<'PY'
+          import json, os, shutil
+          try:
+              manifest = json.load(open("raw/manifest.json"))
+          except Exception as e:
+              print("no manifest", e); manifest = []
+          for test in manifest:
+              for a in test.get("attachments", []):
+                  name = a.get("suggestedHumanReadableName") or a["exportedFileName"]
+                  base = name.split("_")[0] if "_" in name else os.path.splitext(name)[0]
+                  ext = os.path.splitext(a["exportedFileName"])[1] or ".png"
+                  shutil.copy(os.path.join("raw", a["exportedFileName"]), os.path.join("screenshots", base + ext))
+                  print(test.get("testIdentifier"), "->", base + ext)
+          PY
           ls -la screenshots
-          xcrun simctl spawn "$UDID" log show --last 3m --predicate 'process == "REAL"' --style compact | tail -40 || true
 
       - name: Upload screenshots
         if: always()
