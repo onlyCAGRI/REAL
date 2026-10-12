@@ -1,0 +1,319 @@
+import Foundation
+
+/// Milliseconds since 1970, same unit the Android app stores, so payloads stay interchangeable.
+typealias EpochMillis = Int64
+/// Days since 1970-01-01 (java.time.LocalDate.toEpochDay).
+typealias EpochDay = Int64
+
+enum AttachmentType: String, Codable { case image = "IMAGE", file = "FILE", textSnippet = "TEXT_SNIPPET" }
+
+struct ReminderAttachment: Codable, Identifiable, Hashable {
+    var id: String
+    var localPath: String = ""
+    var type: AttachmentType = .image
+    var mimeType: String? = nil
+    var displayName: String? = nil
+    var sizeBytes: Int64? = nil
+    var text: String? = nil
+}
+
+enum JournalMood: String, Codable, CaseIterable, Identifiable {
+    case veryGood = "very_good", good, neutral, hard, bad, happy, excited, calm, tired, bored, stressed, angry, sad, low
+    case fuckOff = "fuck_off"
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .veryGood: return "Çok iyi"
+        case .good: return "İyi"
+        case .neutral: return "Normal"
+        case .hard: return "Zor"
+        case .bad: return "Kötü"
+        case .happy: return "Mutlu"
+        case .excited: return "Heyecanlı"
+        case .calm: return "Sakin"
+        case .tired: return "Yorgun"
+        case .bored: return "Sıkılmış"
+        case .stressed: return "Stresli"
+        case .angry: return "Sinirli"
+        case .sad: return "Üzgün"
+        case .low: return "Keyifsiz"
+        case .fuckOff: return "F*ck off"
+        }
+    }
+    var emoji: String {
+        switch self {
+        case .veryGood: return "😄"
+        case .good: return "🙂"
+        case .neutral: return "😐"
+        case .hard: return "😣"
+        case .bad: return "☹️"
+        case .happy: return "😊"
+        case .excited: return "🤩"
+        case .calm: return "😌"
+        case .tired: return "🥱"
+        case .bored: return "😑"
+        case .stressed: return "😰"
+        case .angry: return "😠"
+        case .sad: return "😢"
+        case .low: return "😔"
+        case .fuckOff: return "🖕"
+        }
+    }
+}
+
+struct ReminderJournal: Codable, Hashable {
+    var mood: JournalMood?
+    var text: String
+    var createdAt: EpochMillis
+    var updatedAt: EpochMillis
+}
+
+struct ChecklistItem: Codable, Identifiable, Hashable {
+    var id: Int64
+    var text: String
+    var completedAt: EpochMillis? = nil
+
+    var isCompleted: Bool { completedAt != nil }
+
+    func toggled(now: EpochMillis = .now) -> ChecklistItem {
+        var copy = self
+        copy.completedAt = isCompleted ? nil : now
+        return copy
+    }
+}
+
+struct ReminderLocation: Codable, Hashable {
+    var placeName: String
+    var address: String = ""
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    var mapsUrl: String? = nil
+}
+
+/// One card inside a Card Stack (CardStackBlock.kt).
+struct CardStackCard: Codable, Identifiable, Hashable {
+    var id: String = UUID().uuidString
+    var title: String = ""
+    var body: String = ""
+    var colorArgb: Int? = nil
+    var imageUri: String? = nil
+    var stackGroupId: String? = nil
+}
+
+struct CardStackBlock: Codable, Hashable {
+    var id: String = UUID().uuidString
+    var prompt: String? = nil
+    var cards: [CardStackCard] = []
+    var createdAt: EpochMillis = .now
+}
+
+/// The REAL card. Field names and semantics mirror ReminderItem.kt.
+struct ReminderItem: Codable, Identifiable, Hashable {
+    var id: Int64
+    var text: String
+    var createdAt: EpochMillis
+    var updatedAt: EpochMillis
+    var completedAt: EpochMillis? = nil
+    var isImportant: Bool = false
+    var alertAt: EpochMillis? = nil
+    /// Date-only planning. Keeps a calendar day without inventing a clock time.
+    var plannedDateEpochDay: EpochDay? = nil
+    /// Temporary rolling 24-hour focus bucket.
+    var quick24HourUntilAt: EpochMillis? = nil
+    var notifiedAlertAt: EpochMillis? = nil
+    var accentStart: Int? = nil
+    var accentEnd: Int? = nil
+    var repeatRule: RecurrenceRule = .none
+    var anchorAlertAt: EpochMillis? = nil
+    var customCategoryId: Int64? = nil
+    var isChecklist: Bool = false
+    var checklistItems: [ChecklistItem] = []
+    var sendImmediateNotification: Bool = true
+    var referenceUrl: String? = nil
+    var gradientBlendFraction: Double? = nil
+    var customSolidColorArgb: Int? = nil
+    var useDarkText: Bool = false
+    var attachments: [ReminderAttachment] = []
+    var journal: ReminderJournal? = nil
+    var mood: JournalMood? = nil
+    var location: ReminderLocation? = nil
+    var cardStack: CardStackBlock? = nil
+    /// Weekday set for a WEEKLY repeat (bit0 = Monday ... bit6 = Sunday). 0 = plain single-day repeat.
+    var repeatWeekdaysMask: Int = 0
+    /// Inclusive last day of a repeat series. nil = repeats forever.
+    var repeatUntilEpochDay: EpochDay? = nil
+    /// Local epoch days of single occurrences deleted from a repeating series.
+    var repeatSkippedEpochDays: [EpochDay] = []
+    /// Planner metadata (PlannerEventDetails): duration and people.
+    var durationMinutes: Int? = nil
+    var people: [String] = []
+
+    init(id: Int64, text: String, createdAt: EpochMillis, updatedAt: EpochMillis? = nil) {
+        self.id = id
+        self.text = text
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
+    }
+
+    var isCompleted: Bool { completedAt != nil }
+    var hasRepeat: Bool { repeatRule != .none }
+
+    func isNoAlert(now: EpochMillis = .now) -> Bool {
+        CategoryRules.isNoAlert(completed: isCompleted, alertAt: alertAt, plannedDay: plannedDateEpochDay,
+                                quickUntil: quick24HourUntilAt, categoryId: customCategoryId, now: now)
+    }
+
+    func isQuick24HourActive(now: EpochMillis = .now) -> Bool {
+        CategoryRules.isQuick24HourActive(completed: isCompleted, until: quick24HourUntilAt, now: now)
+    }
+
+    func isIn24HourWindow(now: EpochMillis = .now, calendar: Calendar = .real) -> Bool {
+        let today = calendar.epochDay(ofMillis: now)
+        return CategoryRules.isIn24HourWindow(completed: isCompleted, alertAt: alertAt, plannedDay: plannedDateEpochDay,
+                                              quickUntil: quick24HourUntilAt, now: now, todayEpochDay: today)
+    }
+
+    /// ReminderItem.toggleCompleted: repeating cards roll to their next occurrence instead of completing.
+    func toggledCompleted(now: EpochMillis, calendar: Calendar = .real) -> ReminderItem {
+        var copy = self
+        copy.updatedAt = now
+        if isCompleted {
+            copy.completedAt = nil
+            copy.notifiedAlertAt = nil
+            return copy
+        }
+        if hasRepeat, let alertAt {
+            if notifiedAlertAt != nil {
+                copy.notifiedAlertAt = nil
+                return copy
+            }
+            let anchor = anchorAlertAt ?? alertAt
+            if let next = Recurrence.nextRepeat(base: anchor, rule: repeatRule, weekdaysMask: repeatWeekdaysMask,
+                                                untilEpochDay: repeatUntilEpochDay, after: max(now, alertAt),
+                                                skipped: repeatSkippedEpochDays, calendar: calendar) {
+                copy.alertAt = next
+                copy.anchorAlertAt = anchor
+                copy.notifiedAlertAt = nil
+                return copy
+            }
+        }
+        copy.completedAt = now
+        return copy
+    }
+
+    var gradientBlendResolved: Double { min(max(gradientBlendFraction ?? 0.5, 0), 1) }
+
+    /// buildReminderShareText
+    var shareText: String {
+        guard isChecklist else { return text }
+        let items = checklistItems.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !items.isEmpty else { return text }
+        let lines = items.map { ($0.isCompleted ? "☑ " : "☐ ") + $0.text.trimmingCharacters(in: .whitespaces) }
+        return text.trimmingCharacters(in: .whitespaces) + "\n\n" + lines.joined(separator: "\n")
+    }
+}
+
+extension ReminderItem {
+    // Codable that tolerates missing keys so older JSON (and Android exports) decode cleanly.
+    enum CodingKeys: String, CodingKey {
+        case id, text, createdAt, updatedAt, completedAt, isImportant, alertAt, plannedDateEpochDay,
+             quick24HourUntilAt, notifiedAlertAt, accentStart, accentEnd, repeatRule, anchorAlertAt,
+             customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
+             gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
+             cardStack, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int64.self, forKey: .id)
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        createdAt = try c.decodeIfPresent(EpochMillis.self, forKey: .createdAt) ?? .now
+        updatedAt = try c.decodeIfPresent(EpochMillis.self, forKey: .updatedAt) ?? createdAt
+        completedAt = try c.decodeIfPresent(EpochMillis.self, forKey: .completedAt)
+        isImportant = try c.decodeIfPresent(Bool.self, forKey: .isImportant) ?? false
+        alertAt = try c.decodeIfPresent(EpochMillis.self, forKey: .alertAt)
+        plannedDateEpochDay = try c.decodeIfPresent(EpochDay.self, forKey: .plannedDateEpochDay)
+        quick24HourUntilAt = try c.decodeIfPresent(EpochMillis.self, forKey: .quick24HourUntilAt)
+        notifiedAlertAt = try c.decodeIfPresent(EpochMillis.self, forKey: .notifiedAlertAt)
+        accentStart = try c.decodeIfPresent(Int.self, forKey: .accentStart)
+        accentEnd = try c.decodeIfPresent(Int.self, forKey: .accentEnd)
+        repeatRule = try c.decodeIfPresent(RecurrenceRule.self, forKey: .repeatRule) ?? .none
+        anchorAlertAt = try c.decodeIfPresent(EpochMillis.self, forKey: .anchorAlertAt) ?? alertAt
+        customCategoryId = try c.decodeIfPresent(Int64.self, forKey: .customCategoryId)
+        isChecklist = try c.decodeIfPresent(Bool.self, forKey: .isChecklist) ?? false
+        checklistItems = try c.decodeIfPresent([ChecklistItem].self, forKey: .checklistItems) ?? []
+        sendImmediateNotification = try c.decodeIfPresent(Bool.self, forKey: .sendImmediateNotification) ?? true
+        referenceUrl = try c.decodeIfPresent(String.self, forKey: .referenceUrl)
+        gradientBlendFraction = try c.decodeIfPresent(Double.self, forKey: .gradientBlendFraction)
+        customSolidColorArgb = try c.decodeIfPresent(Int.self, forKey: .customSolidColorArgb)
+        useDarkText = try c.decodeIfPresent(Bool.self, forKey: .useDarkText) ?? false
+        attachments = try c.decodeIfPresent([ReminderAttachment].self, forKey: .attachments) ?? []
+        journal = try c.decodeIfPresent(ReminderJournal.self, forKey: .journal)
+        mood = try c.decodeIfPresent(JournalMood.self, forKey: .mood)
+        location = try c.decodeIfPresent(ReminderLocation.self, forKey: .location)
+        cardStack = try c.decodeIfPresent(CardStackBlock.self, forKey: .cardStack)
+        repeatWeekdaysMask = try c.decodeIfPresent(Int.self, forKey: .repeatWeekdaysMask) ?? 0
+        repeatUntilEpochDay = try c.decodeIfPresent(EpochDay.self, forKey: .repeatUntilEpochDay)
+        repeatSkippedEpochDays = try c.decodeIfPresent([EpochDay].self, forKey: .repeatSkippedEpochDays) ?? []
+        durationMinutes = try c.decodeIfPresent(Int.self, forKey: .durationMinutes)
+        people = try c.decodeIfPresent([String].self, forKey: .people) ?? []
+    }
+}
+
+enum ReminderSortOrder: String, CaseIterable, Codable {
+    case recentlyAdded, reminderTime, oldestFirst, nearestDate
+
+    var label: String {
+        switch self {
+        case .recentlyAdded: return "Son eklenen"
+        case .reminderTime: return "Hatırlatma saati"
+        case .oldestFirst: return "İlk eklenen"
+        case .nearestDate: return "En yakın tarih"
+        }
+    }
+}
+
+/// filterAndSortReminders
+func filterAndSortReminders(_ reminders: [ReminderItem], colorFilter: Int? = nil, sort: ReminderSortOrder,
+                            now: EpochMillis = .now, calendar: Calendar = .real) -> [ReminderItem] {
+    var result = reminders
+    if let colorFilter {
+        result = colorFilter == -1
+            ? result.filter { $0.accentStart == nil }
+            : result.filter { $0.accentStart == colorFilter || $0.accentEnd == colorFilter }
+    }
+    switch sort {
+    case .recentlyAdded:
+        result.sort { $0.createdAt > $1.createdAt }
+    case .oldestFirst:
+        result.sort { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
+    case .nearestDate:
+        func due(_ r: ReminderItem) -> EpochMillis? {
+            r.alertAt ?? r.plannedDateEpochDay.map { calendar.startOfDayMillis(epochDay: $0) }
+        }
+        result.sort { a, b in
+            let da = due(a), db = due(b)
+            if (da == nil) != (db == nil) { return da != nil }
+            let ka = da.map { abs($0 - now) } ?? 0, kb = db.map { abs($0 - now) } ?? 0
+            if ka != kb { return ka < kb }
+            return a.createdAt > b.createdAt
+        }
+    case .reminderTime:
+        result.sort { a, b in
+            if (a.alertAt == nil) != (b.alertAt == nil) { return a.alertAt != nil }
+            if let x = a.alertAt, let y = b.alertAt, x != y { return x < y }
+            return a.createdAt > b.createdAt
+        }
+    }
+    return result
+}
+
+extension EpochMillis {
+    static var now: EpochMillis { EpochMillis(Date().timeIntervalSince1970 * 1000) }
+    var date: Date { Date(timeIntervalSince1970: TimeInterval(self) / 1000) }
+}
+
+extension Date {
+    var epochMillis: EpochMillis { EpochMillis(timeIntervalSince1970 * 1000) }
+}
