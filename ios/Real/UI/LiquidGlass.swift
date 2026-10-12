@@ -24,15 +24,37 @@ extension View {
     func liquidGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole = .dock, dim: Double = 0) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
+            // System glass for refraction, plus the Android tint + bright rim so it reads on REAL's black backgrounds
+            // (plain clear glass is nearly invisible over black).
             self
-                .background { if dim > 0 { shape.fill(Color.black.opacity(dim)) } }
-                .glassEffect(role == .sheet ? Glass.regular : Glass.clear.interactive(), in: shape)
+                .background {
+                    ZStack {
+                        shape.fill(LinearGradient(colors: role == .dock
+                                                  ? [LiquidGlassTokens.dockTintTop, LiquidGlassTokens.dockTintBottom]
+                                                  : [Color(argb: 0x66202022), Color(argb: 0x880D0D0F)],
+                                                  startPoint: .top, endPoint: .bottom))
+                        if dim > 0 { shape.fill(Color.black.opacity(dim)) }
+                    }
+                }
+                .glassEffect(role == .sheet ? Glass.regular : Glass.regular.interactive(), in: shape)
+                .overlay { shape.strokeBorder(Self.rim(role), lineWidth: role == .dock ? LiquidGlassTokens.dockEdgeWidth : 0.65).allowsHitTesting(false) }
         } else {
             fallbackGlass(shape, role: role, dim: dim)
         }
         #else
         fallbackGlass(shape, role: role, dim: dim)
         #endif
+    }
+
+    /// liquidRimBrush / liquidDockRimBrush
+    static func rim(_ role: LiquidGlassRole) -> LinearGradient {
+        role == .dock
+            ? LinearGradient(stops: [.init(color: LiquidGlassTokens.dockEdgeTop, location: 0), .init(color: Color(argb: 0x26FFFFFF), location: 0.25),
+                                     .init(color: Color(argb: 0x14FFFFFF), location: 0.55), .init(color: Color(argb: 0x4DFFFFFF), location: 0.8),
+                                     .init(color: LiquidGlassTokens.dockEdgeBottom, location: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            : LinearGradient(stops: [.init(color: LiquidGlassTokens.edgeTop, location: 0), .init(color: Color(argb: 0x1AFFFFFF), location: 0.22),
+                                     .init(color: LiquidGlassTokens.edgeMiddle, location: 0.52), .init(color: LiquidGlassTokens.edgeBottom, location: 0.82),
+                                     .init(color: Color(argb: 0x38FFFFFF), location: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     @ViewBuilder
@@ -49,12 +71,12 @@ extension View {
                     }
                 }
                 .overlay {
-                    shape.strokeBorder(
-                        LinearGradient(colors: role == .dock
-                                       ? [LiquidGlassTokens.dockEdgeTop, LiquidGlassTokens.dockEdgeBottom.opacity(0.4), LiquidGlassTokens.dockEdgeBottom]
-                                       : [LiquidGlassTokens.edgeTop, LiquidGlassTokens.edgeMiddle, LiquidGlassTokens.edgeBottom],
-                                       startPoint: .top, endPoint: .bottom),
-                        lineWidth: role == .dock ? LiquidGlassTokens.dockEdgeWidth : 0.65)
+                    ZStack {
+                        // Specular sheen: keeps the glass legible where blur is unavailable (e.g. software-rendered simulators).
+                        shape.fill(LinearGradient(colors: [.white.opacity(0.10), .white.opacity(0.02), .clear], startPoint: .top, endPoint: .center))
+                        shape.strokeBorder(Self.rim(role), lineWidth: role == .dock ? LiquidGlassTokens.dockEdgeWidth : 0.65)
+                    }
+                    .allowsHitTesting(false)
                 }
                 .shadow(color: .black.opacity(0.35), radius: 9, y: 3)
     }
