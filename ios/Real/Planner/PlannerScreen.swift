@@ -7,11 +7,14 @@ import Combine
 struct PlannerScreen: View {
     @Environment(ReminderStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.navNamespace) private var nav
     @Binding var path: [Route]
     @State private var selectedDay: Date
     @State private var introVisible = false
     @State private var addRequest: PlannerAddRequest?
     @State private var now = Date()
+    /// Last active Planner view mode (rememberPlannerViewModePreference): "hours_24" or "daily" (New).
+    @AppStorage("planner_view_mode") private var modeRaw = "hours_24"
 
     private let calendar = Calendar.real
     private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
@@ -37,6 +40,41 @@ struct PlannerScreen: View {
             return PlannerCategoryCardData(category: c, stats: stats, surface: plannerSoftPastel(nearestCalendarPastel(raw)))
         }
 
+        let isCalendar = modeRaw != "hours_24"
+        ZStack {
+            if isCalendar {
+                dailyContent(today: today, focus: focus, categoryCards: categoryCards, allDay: allDay, geometry: geometry, events: events)
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: 80)), removal: .opacity.combined(with: .offset(x: 80))))
+            } else {
+                hours24Content(reminders: calendarReminders)
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: -80)), removal: .opacity.combined(with: .offset(x: -80))))
+            }
+        }
+        .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.28), value: isCalendar)
+        .background(Color.black.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top) { topBar(isCalendar: isCalendar) }
+        .sheet(item: $addRequest) { request in PlannerQuickAddSheet(request: request).presentationDetents([.medium, .large]) }
+        .onAppear { withAnimation(.easeOut(duration: 0.56)) { introVisible = true } }
+        .onReceive(timer) { now = $0 }
+        .simultaneousGesture(DragGesture(minimumDistance: 40).onEnded { value in
+            guard abs(value.translation.width) > abs(value.translation.height) * 2 else { return }
+            // Swipe between 24 hour and Takvim like Android; inside Takvim a swipe changes the day.
+            if !isCalendar {
+                if value.translation.width < 0 { modeRaw = "daily" }
+            } else if value.translation.width > 0 && value.startLocation.x < 40 {
+                modeRaw = "hours_24"
+            } else {
+                withAnimation(.spring(duration: 0.35)) {
+                    selectedDay = calendar.date(byAdding: .day, value: value.translation.width < 0 ? 1 : -1, to: selectedDay)!
+                }
+            }
+        })
+    }
+
+    @ViewBuilder
+    private func dailyContent(today: Date, focus: [PlannerEvent], categoryCards: [PlannerCategoryCardData], allDay: [PlannerEvent],
+                              geometry: PlannerTimelineGeometry, events: [PlannerEvent]) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text(Planner.firstName(store.ownerName).map { "Hello, \($0)" } ?? "Hello")
@@ -81,45 +119,83 @@ struct PlannerScreen: View {
             .padding(.horizontal, 10)
             .padding(.top, 24)
         }
-        .background(Color.black.ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .top) { topBar }
-        .overlay(alignment: .bottomTrailing) {
-            Button { addRequest = PlannerAddRequest(day: selectedDay, hour: nil) } label: {
-                Image(systemName: "plus").font(.system(size: 22, weight: .semibold)).foregroundStyle(.black)
-                    .frame(width: 60, height: 60).background(Circle().fill(Color.white))
-                    .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
-            }
-            .padding(22)
-            .accessibilityLabel("Etkinlik ekle")
-        }
-        .sheet(item: $addRequest) { request in PlannerQuickAddSheet(request: request).presentationDetents([.medium, .large]) }
-        .onAppear { withAnimation(.easeOut(duration: 0.56)) { introVisible = true } }
-        .onReceive(timer) { now = $0 }
-        .simultaneousGesture(DragGesture(minimumDistance: 40).onEnded { value in
-            guard abs(value.translation.width) > abs(value.translation.height) * 2 else { return }
-            withAnimation(.spring(duration: 0.35)) {
-                selectedDay = calendar.date(byAdding: .day, value: value.translation.width < 0 ? 1 : -1, to: selectedDay)!
-            }
-        })
     }
 
-    private var topBar: some View {
-        HStack {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold))
-                    .frame(width: 44, height: 44).background(.ultraThinMaterial, in: Circle())
+    /// 24 hour view: PlannerTodayHeader (big dd.MM / month, world clocks) + "Next 24 hours" cards.
+    private func hours24Content(reminders: [ReminderItem]) -> some View {
+        let nowMs = now.epochMillis
+        let end = nowMs + CategoryRules.rolling24HoursMillis
+        let timed = Planner.events(reminders, rangeStart: nowMs, rangeEnd: end, calendar: calendar).filter { !$0.isDateOnly }
+        let manual = reminders.filter { r in
+            r.isQuick24HourActive(now: nowMs) && !(r.alertAt.map { $0 >= nowMs && $0 <= end } ?? false)
+        }.map { PlannerEvent(reminder: $0, startMillis: $0.alertAt ?? $0.createdAt, isDateOnly: $0.alertAt == nil) }
+        let todayDay = calendar.epochDay(of: now)
+        let dateOnly = reminders.filter { !$0.isCompleted && $0.plannedDateEpochDay == todayDay && !$0.isQuick24HourActive(now: nowMs) }
+            .map { PlannerEvent(reminder: $0, startMillis: calendar.startOfDayMillis(epochDay: todayDay), isDateOnly: true) }
+        let items = (manual + dateOnly + timed).sorted { ($0.startMillis, $0.reminder.id) < ($1.startMillis, $1.reminder.id) }
+        let next = items.first { !$0.isDateOnly && $0.startMillis >= nowMs }?.startMillis
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                PlannerTodayHeader(now: now)
+                Color.clear.frame(height: 10)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Next 24 hours").font(RealType.editorialItem).kerning(-1).foregroundStyle(Color(argb: 0xFFF3F1F4))
+                    Text(next24Summary(count: items.count, next: next)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8C8C95))
+                }
+                .padding(.horizontal, 6).padding(.vertical, 8)
+                if items.isEmpty {
+                    Text("Önündeki 24 saatte etkinlik yok.")
+                        .font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF8E8E93))
+                        .frame(maxWidth: .infinity).padding(.vertical, 32)
+                } else {
+                    VStack(spacing: 14) {
+                        ForEach(items) { event in
+                            PlannerNext24Card(event: event, categories: store.categories, ownerName: store.ownerName, now: now)
+                                .onTapGesture { path.append(.detail(event.reminder.id)) }
+                        }
+                    }
+                    .padding(.horizontal, 2).padding(.vertical, 8)
+                }
+                Color.clear.frame(height: 40)
             }
-            .accessibilityLabel("Geri")
-            Spacer()
-            Text("Takvim").font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFB8B8BE))
-            Spacer()
-            Color.clear.frame(width: 44, height: 44)
+            .padding(.horizontal, 12)
         }
-        .foregroundStyle(.white)
+    }
+
+    private func next24Summary(count: Int, next: EpochMillis?) -> String {
+        if count == 0 { return "Nothing planned" }
+        let plans = "\(count) \(count == 1 ? "plan" : "plans")"
+        guard let next else { return plans }
+        let minutes = max(0, (next - now.epochMillis) / 60_000)
+        let countdown = minutes < 1 ? "now" : (minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h \(String(format: "%02d", minutes % 60))m")
+        return "\(plans)  ·  next in \(countdown)"
+    }
+
+    /// Glass back · "24 hour | Takvim" segmented · + (PlannerScreen.kt chrome).
+    private func topBar(isCalendar: Bool) -> some View {
+        HStack(spacing: 8) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left").font(.system(size: 17, weight: .medium)).foregroundStyle(.white)
+                    .frame(width: 44, height: 44).liquidGlass(Circle())
+            }
+            .accessibilityLabel("Önceki görünüme dön")
+            LiquidSegmentedControl(labels: ["24 hour", "Takvim"], selected: Binding(
+                get: { isCalendar ? 1 : 0 },
+                set: { modeRaw = $0 == 1 ? "daily" : "hours_24" }))
+                .frame(height: 44)
+            Button {
+                let base = Date().addingTimeInterval(3600)
+                addRequest = PlannerAddRequest(day: isCalendar ? selectedDay : base, hour: calendar.component(.hour, from: base))
+            } label: {
+                Image(systemName: "plus").font(.system(size: 18, weight: .medium)).foregroundStyle(.white)
+                    .frame(width: 44, height: 44).liquidGlass(Circle())
+            }
+            .padding(.leading, 2)
+            .accessibilityLabel("Yeni etkinlik ekle")
+        }
         .padding(.horizontal, 14)
-        .padding(.bottom, 4)
-        .background(LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        .padding(.top, 10).padding(.bottom, 6)
+        .background(LinearGradient(colors: [.black, .black.opacity(0.85), .black.opacity(0)], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
     }
 
     private func carousel(focus: [PlannerEvent], categories: [PlannerCategoryCardData]) -> some View {
@@ -137,6 +213,7 @@ struct PlannerScreen: View {
                             PlannerCategoryCardView(card: card, width: width)
                         }
                         .buttonStyle(PressScaleStyle(scale: 0.965))
+                        .zoomSource("goal-\(card.category.id)", in: nav)
                         .intro(introVisible, delay: 0.15 + Double(min(focus.count + index, 3)) * 0.09, x: 90)
                     }
                 }
@@ -720,5 +797,103 @@ struct PlannerQuickAddSheet: View {
                 }
             }
         }
+    }
+}
+
+
+/// PlannerTodayHeader: weekday, giant "dd.MM" + month, divider, Türkiye / Almanya clocks.
+struct PlannerTodayHeader: View {
+    let now: Date
+
+    var body: some View {
+        let cal = Calendar.real
+        let c = cal.dateComponents([.day, .month], from: now)
+        let months = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"]
+        HStack(alignment: .center, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(cal.isoWeekday(of: now).full).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF8C8C95)).padding(.bottom, 8)
+                Text(String(format: "%02d.%02d", c.day ?? 1, c.month ?? 1)).font(RealFont.inter(58)).kerning(-2.6)
+                    .foregroundStyle(Color(argb: 0xFFF3F1F4)).lineLimit(1)
+                Text(months[(c.month ?? 1) - 1]).font(RealFont.inter(58)).kerning(-2.2).foregroundStyle(Color(argb: 0xFFF3F1F4))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Rectangle().fill(Color(argb: 0xFF3A3A42)).frame(width: 1, height: 98)
+            VStack(alignment: .leading, spacing: 18) {
+                clock("Europe/Istanbul", "Türkiye")
+                clock("Europe/Berlin", "Almanya")
+            }
+            .frame(width: 118, alignment: .leading)
+            .padding(.leading, 18)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 22)
+    }
+
+    private func clock(_ zone: String, _ label: String) -> some View {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: zone) ?? .current
+        let c = cal.dateComponents([.hour, .minute], from: now)
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)).font(RealFont.inter(22)).kerning(-0.6).foregroundStyle(Color(argb: 0xFFF3F1F4))
+            Text(label).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF85858E))
+        }
+    }
+}
+
+/// PlannerNext24Card: pastel card, title + owner avatar, Start · duration pill · End, progress while running.
+struct PlannerNext24Card: View {
+    let event: PlannerEvent
+    let categories: [CustomCategory]
+    let ownerName: String
+    let now: Date
+
+    private static func amPm(_ millis: EpochMillis) -> String {
+        let c = Calendar.real.dateComponents([.hour, .minute], from: millis.date)
+        let hour = c.hour ?? 0
+        let h = hour == 0 ? 12 : (hour <= 12 ? hour : hour - 12)
+        return String(format: "%d:%02d %@", h, c.minute ?? 0, hour < 12 ? "am" : "pm")
+    }
+
+    var body: some View {
+        let surface = plannerSoftPastel(plannerCardColor(event.reminder, categories: categories))
+        let end = event.endMillis
+        let span: EpochMillis = (!event.isDateOnly && end != nil && end! > event.startMillis) ? end! - event.startMillis : 0
+        let progress: Double = span > 0 ? min(max(Double(now.epochMillis - event.startMillis) / Double(span), 0), 1) : 0
+        let ink = RealColors.plannerInk
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
+                Text(event.reminder.text)
+                    .font(RealType.editorialItem).kerning(-1)
+                    .foregroundStyle(event.reminder.isCompleted ? Color(argb: 0xFF6F6F78) : ink)
+                    .strikethrough(event.reminder.isCompleted)
+                    .lineLimit(2)
+                Spacer(minLength: 12)
+                ProfileAvatar(name: ownerName, size: 32).overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 1.5))
+            }
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(event.isDateOnly ? "All Day" : Self.amPm(event.startMillis)).font(RealFont.inter(22)).kerning(-0.6).foregroundStyle(ink).lineLimit(1)
+                    Text("Start").font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.55))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(event.isDateOnly ? "24h" : (event.reminder.durationMinutes.map { "\($0) min" } ?? "Süre ekle"))
+                    .font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.78))
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(ink.opacity(0.10)))
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(event.isDateOnly || end == nil ? "—" : Self.amPm(end!)).font(RealFont.inter(22)).kerning(-0.6).foregroundStyle(ink).lineLimit(1)
+                    Text("End").font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.55))
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .padding(.top, 26)
+            if span > 0 {
+                Capsule().fill(ink.opacity(0.14)).frame(height: 4)
+                    .overlay(alignment: .leading) { GeometryReader { g in Capsule().fill(ink).frame(width: g.size.width * progress) } }
+                    .padding(.top, 18)
+            }
+        }
+        .padding(22)
+        .background(RoundedRectangle(cornerRadius: 32, style: .continuous).fill(surface))
+        .contentShape(RoundedRectangle(cornerRadius: 32))
     }
 }

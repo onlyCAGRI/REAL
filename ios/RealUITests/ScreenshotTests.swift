@@ -27,6 +27,11 @@ final class ScreenshotTests: XCTestCase {
     func test5Checklist() { capture("checklist") }
     func test6Planner() { capture("planner", settle: 4) }
 
+    func test6bPlanner24() { capture("planner24", settle: 3) }
+
+    func test15Yasam() { capture("yasam", settle: 3) }
+    func test16Water() { capture("water", settle: 3) }
+
     func test8Goal() { capture("goal", settle: 4) }
 
     private func shot(_ name: String) {

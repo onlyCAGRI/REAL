@@ -13,6 +13,7 @@ enum Route: Hashable {
 struct RootView: View {
     @Environment(ReminderStore.self) private var store
     @State private var path: [Route]
+    @Namespace private var nav
 
     init(initialPath: [Route] = []) {
         _path = State(initialValue: initialPath)
@@ -23,15 +24,23 @@ struct RootView: View {
             HomeView(path: $path)
                 .navigationDestination(for: Route.self) { route in
                     switch route {
-                    case .category(let c): CategoryScreen(builtIn: c, customId: nil, path: $path)
-                    case .customCategory(let id): CategoryScreen(builtIn: nil, customId: id, path: $path)
-                    case .detail(let id): ReminderDetailView(reminderId: id)
+                    case .category(let c): CategoryScreen(builtIn: c, customId: nil, path: $path).zoomDestination("cat-builtin:\(c.rawValue)", in: nav)
+                    case .customCategory(let id): CategoryScreen(builtIn: nil, customId: id, path: $path).zoomDestination("cat-custom:\(id)", in: nav)
+                    case .detail(let id): ReminderDetailView(reminderId: id).zoomDestination("card-\(id)", in: nav)
                     case .planner: PlannerScreen(path: $path)
-                    case .goal(let id): PlannerGoalScreen(categoryId: id, path: $path)
-                    case .module(let name): ModulePlaceholderScreen(name: name)
+                    case .goal(let id): PlannerGoalScreen(categoryId: id, path: $path).zoomDestination("goal-\(id)", in: nav)
+                    case .module(let name):
+                        if name == "Yaşam" {
+                            YasamScreen(onOpenCard: { id in path.append(.detail(id)) }).toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Su" {
+                            WaterTrackerScreen().toolbar(.hidden, for: .navigationBar)
+                        } else {
+                            ModulePlaceholderScreen(name: name)
+                        }
                     }
                 }
         }
+        .environment(\.navNamespace, nav)
         .tint(RealColors.accentBlue)
         .preferredColorScheme(.dark)
     }
@@ -39,6 +48,7 @@ struct RootView: View {
 
 struct HomeView: View {
     @Environment(ReminderStore.self) private var store
+    @Environment(\.navNamespace) private var nav
     @Binding var path: [Route]
     @State private var expanded = false
     @State private var selectedIds: Set<Int64> = []
@@ -46,6 +56,7 @@ struct HomeView: View {
     @State private var showNewCategory = false
     @State private var showSettings = false
     @State private var confirmDelete = false
+    @State private var showYasam = false
     @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
 
     private let previewCount = 4
@@ -60,7 +71,7 @@ struct HomeView: View {
                     .padding(.top, 20)
                     .padding(.bottom, 22)
                     .opacity(selectedIds.isEmpty ? 1 : 0)
-                categoryDeck.padding(.horizontal, 16)
+                categoryDeck.padding(.horizontal, 16).zIndex(1)
                 // "Kartlarım" + HomeSortControl (son eklenen ↔ bildirim zamanı).
                 HStack {
                     Text("Kartlarım").font(RealFont.inter(20, .semibold)).foregroundStyle(Color(argb: 0xFFF2F2F4))
@@ -68,10 +79,11 @@ struct HomeView: View {
                     Button {
                         homeSort = homeSort == ReminderSortOrder.reminderTime.rawValue ? ReminderSortOrder.recentlyAdded.rawValue : ReminderSortOrder.reminderTime.rawValue
                     } label: {
-                        Image(systemName: homeSort == ReminderSortOrder.reminderTime.rawValue ? "clock" : "text.alignleft")
-                            .font(.system(size: 17)).foregroundStyle(Color(argb: 0xFFC9CBD3))
+                        Image(systemName: homeSort == ReminderSortOrder.reminderTime.rawValue ? "clock" : "line.3.horizontal.decrease")
+                            .font(.system(size: 16)).foregroundStyle(Color(argb: 0xFFC9CBD3))
                             .contentTransition(.symbolEffect(.replace))
                             .frame(width: 44, height: 44)
+                            .liquidGlass(Circle())
                     }
                     .accessibilityLabel(homeSort == ReminderSortOrder.reminderTime.rawValue
                                         ? "Bildirim zamanına göre sıralanıyor. Son eklenene göre sırala."
@@ -109,7 +121,7 @@ struct HomeView: View {
             if selectedIds.isEmpty {
                 ComposerBar(defaultCategoryId: nil, isHome: true,
                             onOpenPlanner: { path.append(.planner) },
-                            onOpenYasam: { path.append(.module("Yaşam")) },
+                            onOpenYasam: { withoutAnimation { showYasam = true } },
                             onOpenPano: { path.append(.module("Pano")) })
                     .background(alignment: .bottom) {
                         // BottomFade behind the dock so cards dissolve under the glass.
@@ -134,6 +146,12 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showNewCategory) { CategoryEditorSheet(existing: nil) }
         .sheet(isPresented: $showSettings) { SettingsSheet() }
+        .fullScreenCover(isPresented: $showYasam) {
+            YasamScreen(onOpenCard: { id in
+                withoutAnimation { showYasam = false }
+                path.append(.detail(id))
+            })
+        }
         .confirmationDialog("\(selectedIds.count) kart silinsin mi?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Sil", role: .destructive) { store.delete(selectedIds); selectedIds = [] }
             Button("Vazgeç", role: .cancel) {}
@@ -165,7 +183,9 @@ struct HomeView: View {
                                          extendUnderNext: index < visible.count - 1)
                     }
                     .buttonStyle(PressScaleStyle())
+                    .zoomSource("cat-\(item.orderKey)", in: nav)
                     .zIndex(Double(index))
+                    .modifier(StackPin(index: index, count: visible.count))
                     .contextMenu {
                         if case .builtIn(let c) = item {
                             Button("Kategori rengini düzenle", systemImage: "paintpalette") { editingBuiltIn = c }
@@ -210,6 +230,7 @@ struct HomeView: View {
             onLongPress: { toggleSelection(reminder.id) },
             onSwipeTo24Hour: swipe ? { withAnimation { store.moveTo24Hour(reminder.id) } } : nil
         )
+        .zoomSource("card-\(reminder.id)", in: nav)
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -325,5 +346,25 @@ struct ModulePlaceholderScreen: View {
             .padding(16)
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+/// Stacked-card pinning of the home deck (CollectionCategoryCard graphicsLayer): while the list scrolls, each tile
+/// sticks at topInset + index * 60 until the whole stack is compressed, so the deck reads as a stack of titles.
+struct StackPin: ViewModifier {
+    let index: Int
+    let count: Int
+
+    func body(content: Content) -> some View {
+        content.visualEffect { view, proxy in
+            let frame = proxy.frame(in: .scrollView)
+            let natural = frame.minY
+            let stride = max(frame.height - 72, 0)
+            let remaining = CGFloat(count - 1 - index)
+            let lastNatural = natural + remaining * stride
+            let pinned = max(natural, 8 + CGFloat(index) * 60)
+            let final = min(pinned, lastNatural - remaining * 60)
+            return view.offset(y: max(final - natural, 0))
+        }
     }
 }

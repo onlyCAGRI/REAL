@@ -100,6 +100,7 @@ struct ComposerBar: View {
     @State private var showPhotoPicker = false
     @State private var navExpanded = false
     @State private var voice = VoiceInput()
+    @Namespace private var dockNS
     @FocusState private var focus: Field?
 
     private enum Field: Hashable { case title, item(Int) }
@@ -114,7 +115,14 @@ struct ComposerBar: View {
                     .padding(.horizontal, showChrome && !navExpanded ? 56 : 0)
                 if showChrome && !navExpanded {
                     HStack {
-                        dockCircle(symbol: "calendar", label: "Takvim") { onOpenPlanner?() }
+                        Button { onOpenPlanner?() } label: {
+                            Image(systemName: "calendar").font(.system(size: 19)).foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background { Color.clear.liquidGlass(Capsule()).matchedGeometryEffect(id: "dockNav", in: dockNS) }
+                                .frame(width: 48, height: 48)
+                                .contentShape(Circle())
+                        }
+                        .accessibilityLabel("Takvim")
                         Spacer()
                         micCircle
                     }
@@ -126,7 +134,7 @@ struct ComposerBar: View {
                     navigationBar
                     micCircle
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(.opacity)
             }
         }
         .padding(.horizontal, 16)
@@ -173,7 +181,7 @@ struct ComposerBar: View {
         }
         .padding(.horizontal, 5)
         .frame(height: 60)
-        .liquidGlass(Capsule())
+        .background { Color.clear.liquidGlass(Capsule()).matchedGeometryEffect(id: "dockNav", in: dockNS) }
     }
 
     private func navItem(_ label: String, _ symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {

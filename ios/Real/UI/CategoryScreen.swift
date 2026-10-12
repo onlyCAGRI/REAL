@@ -6,6 +6,7 @@ import UIKit
 struct CategoryScreen: View {
     @Environment(ReminderStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.navNamespace) private var nav
     let builtIn: ReminderCategory?
     let customId: Int64?
     @Binding var path: [Route]
@@ -220,30 +221,29 @@ struct CategoryScreen: View {
     // MARK: Hero
 
     private func heroTile(_ visual: CategoryVisual, count: Int, stats: CategoryProgressStats?) -> some View {
-        CategoryTileView(visual: visual, count: count, description: custom?.description ?? "", hero: true)
-            .overlay(alignment: .bottomTrailing) {
-                if let stats {
-                    HStack(spacing: 0) {
-                        Button { withAnimation { showProgress.toggle() } } label: {
-                            ProgressRing(fraction: stats.fraction, active: showProgress).frame(width: 48, height: 48)
-                        }
-                        .accessibilityLabel(showProgress ? "İlerlemeyi gizle" : "Kategori ilerlemesini göster")
-                        Button {
-                            let next: ReminderSortOrder = sort == .recentlyAdded ? .oldestFirst : (sort == .oldestFirst ? .nearestDate : .recentlyAdded)
-                            sortRaw = next.rawValue
-                        } label: {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 19, weight: .regular))
-                                .foregroundStyle(visual.foreground)
-                                .rotationEffect(.degrees(sort == .oldestFirst ? 180 : (sort == .nearestDate || sort == .reminderTime ? 90 : 0)))
-                                .animation(.easeOut(duration: 0.22), value: sortRaw)
-                                .frame(width: 48, height: 48)
-                        }
-                        .accessibilityLabel("Sıralamayı değiştir")
-                    }
-                    .padding(.trailing, 14).padding(.bottom, 26)
-                }
+        CategoryTileView(visual: visual, count: count, description: custom?.description ?? "", hero: true,
+                         heroActions: stats.map { AnyView(heroActions(stats: $0, foreground: visual.foreground)) })
+    }
+
+    private func heroActions(stats: CategoryProgressStats, foreground: Color) -> some View {
+        HStack(spacing: 0) {
+            Button { withAnimation { showProgress.toggle() } } label: {
+                ProgressRing(fraction: stats.fraction, active: showProgress).scaleEffect(1.1).frame(width: 48, height: 48)
             }
+            .accessibilityLabel(showProgress ? "İlerlemeyi gizle" : "Kategori ilerlemesini göster")
+            Button {
+                let next: ReminderSortOrder = sort == .recentlyAdded ? .oldestFirst : (sort == .oldestFirst ? .nearestDate : .recentlyAdded)
+                sortRaw = next.rawValue
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 21, weight: .light))
+                    .foregroundStyle(foreground)
+                    .rotationEffect(.degrees(sort == .oldestFirst ? 180 : (sort == .nearestDate || sort == .reminderTime ? 90 : 0)))
+                    .animation(.easeOut(duration: 0.22), value: sortRaw)
+                    .frame(width: 48, height: 48)
+            }
+            .accessibilityLabel("Sıralamayı değiştir")
+        }
     }
 
     // MARK: Lists
@@ -281,6 +281,7 @@ struct CategoryScreen: View {
             },
             onLongPress: { selectedIds.insert(reminder.id) }
         )
+        .zoomSource("card-\(reminder.id)", in: nav)
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }

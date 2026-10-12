@@ -267,6 +267,8 @@ struct CategoryTileView: View {
     var hero = false
     var extendUnderNext = false
     var isSelected = false
+    /// Hero tile on the category screen: progress ring + sort arrow next to the stacked pills (CategoryHeroActions).
+    var heroActions: AnyView? = nil
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: hero ? 30 : 26, style: .continuous)
@@ -275,23 +277,34 @@ struct CategoryTileView: View {
                 Text(visual.title)
                     .font(hero ? RealType.categoryTitleHero : RealType.categoryTitle)
                     .foregroundStyle(visual.foreground)
-                    .lineLimit(2)
+                    .lineLimit(hero ? 3 : 2)
                     .offset(x: 10)
                 Spacer(minLength: 12)
-                if hero {
-                    Image(systemName: visual.symbol).font(.system(size: 20)).foregroundStyle(visual.foreground)
+                if hero && heroActions != nil {
+                    Image(systemName: visual.symbol).font(.system(size: 20)).foregroundStyle(visual.foreground).frame(width: 48, height: 48)
                 } else {
                     Text("↗").font(RealFont.inter(28)).foregroundStyle(visual.foreground)
                 }
             }
             Spacer().frame(height: hero ? 12 : 14)
-            HStack(spacing: 8) {
-                if showCount { CategoryPill(text: "\(count) kart", foreground: visual.foreground) }
-                if !description.isEmpty {
-                    CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading)
+            if hero, let heroActions {
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if showCount { CategoryPill(text: "\(count) kart", foreground: visual.foreground) }
+                        if !description.isEmpty { CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading) }
+                    }
+                    Spacer()
+                    heroActions
                 }
-                Spacer()
-                if !hero { Image(systemName: visual.symbol).font(.system(size: 19)).foregroundStyle(visual.foreground) }
+            } else {
+                HStack(spacing: 8) {
+                    if showCount { CategoryPill(text: "\(count) kart", foreground: visual.foreground) }
+                    if !description.isEmpty {
+                        CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading)
+                    }
+                    Spacer()
+                    Image(systemName: visual.symbol).font(.system(size: 19)).foregroundStyle(visual.foreground)
+                }
             }
         }
         .padding(.horizontal, 22)
@@ -304,6 +317,7 @@ struct CategoryTileView: View {
     }
 }
 
+/// CategoryPill: outlined capsule, 1pt border at 42% of the foreground.
 struct CategoryPill: View {
     let text: String
     let foreground: Color
@@ -313,9 +327,8 @@ struct CategoryPill: View {
             .font(RealType.categoryPill)
             .foregroundStyle(foreground)
             .lineLimit(1)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(foreground.opacity(0.14)))
-            .overlay(Capsule().strokeBorder(foreground.opacity(0.22), lineWidth: 0.75))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .overlay(Capsule().strokeBorder(foreground.opacity(0.42), lineWidth: 1))
     }
 }

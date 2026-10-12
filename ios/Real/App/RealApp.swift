@@ -5,6 +5,7 @@ import UserNotifications
 struct RealApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store: ReminderStore
+    @State private var life: LifeStore
     private let initialPath: [Route]
 
     init() {
@@ -15,9 +16,13 @@ struct RealApp: App {
             let store = ReminderStore(persist: false)
             DemoData.seed(store)
             _store = State(initialValue: store)
+            let life = LifeStore(persist: false)
+            DemoData.seedLife(life)
+            _life = State(initialValue: life)
             initialPath = DemoData.path(for: args, store: store)
         } else {
             _store = State(initialValue: ReminderStore())
+            _life = State(initialValue: LifeStore())
             initialPath = []
         }
     }
@@ -26,6 +31,7 @@ struct RealApp: App {
         WindowGroup {
             RootView(initialPath: initialPath)
                 .environment(store)
+                .environment(life)
                 .background(Color.black)
         }
     }
@@ -106,6 +112,22 @@ enum DemoData {
         store.replaceAll(reminders: items, categories: categories, ownerName: "Çağrı Gül")
     }
 
+    static func seedLife(_ life: LifeStore) {
+        let now = EpochMillis.now
+        let hour: EpochMillis = 3_600_000
+        let entries = [
+            WaterIntakeEntry(id: "w1", amountMl: 250, createdAt: now - 5 * hour),
+            WaterIntakeEntry(id: "w2", amountMl: 500, createdAt: now - 3 * hour),
+            WaterIntakeEntry(id: "w3", amountMl: 250, createdAt: now - hour),
+            WaterIntakeEntry(id: "c1", amountMl: 200, createdAt: now - 4 * hour, beverage: .coffee),
+        ] + (1...12).map { d in WaterIntakeEntry(id: "h\(d)", amountMl: [1500, 2100, 1800, 900, 2400, 1200][d % 6], createdAt: now - EpochMillis(d) * 24 * hour) }
+        let moodsSeq: [JournalMood] = [.calm, .good, .tired, .happy, .stressed, .good, .veryGood, .neutral]
+        let moods = moodsSeq.enumerated().map { i, m in
+            MoodTrackerEntry(id: now - EpochMillis(i) * 24 * hour, mood: m, details: MoodDetails(loggedAt: now - EpochMillis(i) * 24 * hour - 2 * hour))
+        }
+        life.replaceAll(goal: 2_000, entries: entries, moods: moods)
+    }
+
     static func path(for args: [String], store: ReminderStore) -> [Route] {
         guard let i = args.firstIndex(of: "-REALScreen"), i + 1 < args.count else { return [] }
         switch args[i + 1] {
@@ -113,8 +135,17 @@ enum DemoData {
         case "builtin": return [.category(.planned)]
         case "detail": return [.detail(1)]
         case "checklist": return [.detail(4)]
-        case "planner": return [.planner]
-        case "goal": return [.planner, .goal(1)]
+        case "planner":
+            UserDefaults.standard.set("daily", forKey: "planner_view_mode")
+            return [.planner]
+        case "yasam": return [.module("Yaşam")]
+        case "water": return [.module("Su")]
+        case "planner24":
+            UserDefaults.standard.set("hours_24", forKey: "planner_view_mode")
+            return [.planner]
+        case "goal":
+            UserDefaults.standard.set("daily", forKey: "planner_view_mode")
+            return [.planner, .goal(1)]
         default: return []
         }
     }

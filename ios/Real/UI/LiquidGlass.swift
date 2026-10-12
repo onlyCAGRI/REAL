@@ -101,3 +101,25 @@ struct ShimmerText: View {
             }
     }
 }
+
+/// Shared-element style navigation (Android sharedBounds): the tapped tile/card zooms into its screen and back.
+struct NavNamespaceKey: EnvironmentKey { static let defaultValue: Namespace.ID? = nil }
+
+extension EnvironmentValues {
+    var navNamespace: Namespace.ID? {
+        get { self[NavNamespaceKey.self] }
+        set { self[NavNamespaceKey.self] = newValue }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func zoomSource(_ id: String, in ns: Namespace.ID?) -> some View {
+        if #available(iOS 18.0, *), let ns { self.matchedTransitionSource(id: id, in: ns) } else { self }
+    }
+
+    @ViewBuilder
+    func zoomDestination(_ id: String, in ns: Namespace.ID?) -> some View {
+        if #available(iOS 18.0, *), let ns { self.navigationTransition(.zoom(sourceID: id, in: ns)) } else { self }
+    }
+}
