@@ -1,5 +1,10 @@
 package com.cagri.real.ui.motion
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.CubicBezierEasing
@@ -55,12 +60,15 @@ internal fun rememberRealEntrance(
     totalMs: Int = 1000,
     play: Boolean = true
 ): RealEntranceMotion {
-    val clock = remember(identity, totalMs) { Animatable(if (reduceMotion || !play) totalMs.toFloat() else 0f) }
-    LaunchedEffect(clock, reduceMotion, play) {
-        if (reduceMotion || !play) clock.snapTo(totalMs.toFloat())
+    var played by rememberSaveable(identity) { mutableStateOf(false) }
+    val playThisEntry = remember(identity) { play && !played }
+    val clock = remember(identity, totalMs) { Animatable(if (reduceMotion || !playThisEntry) totalMs.toFloat() else 0f) }
+    LaunchedEffect(clock, reduceMotion, playThisEntry) {
+        played = true
+        if (reduceMotion || !playThisEntry) clock.snapTo(totalMs.toFloat())
         else if (clock.value < totalMs) clock.animateTo(totalMs.toFloat(), tween(totalMs, easing = LinearEasing))
     }
-    return remember(clock, reduceMotion, play) { RealEntranceMotion(clock, !reduceMotion && play) }
+    return remember(clock, reduceMotion, playThisEntry) { RealEntranceMotion(clock, !reduceMotion && playThisEntry) }
 }
 
 /** Visual transform only: does not change grid measurement, placement, size or persisted data. */
@@ -104,7 +112,7 @@ private class RealGrowShape(private val p: Float, private val finalRadius: Float
 internal fun Modifier.realGrow(
     motion: RealEntranceMotion,
     startMs: Int = 0,
-    durationMs: Int = 640,
+    durationMs: Int = 420,
     radius: Dp = 20.dp,
     paused: Boolean = false
 ): Modifier = if (!motion.enabled) this else graphicsLayer {
@@ -124,7 +132,7 @@ internal fun Modifier.realGrow(
 internal fun Modifier.realGrowGlow(
     motion: RealEntranceMotion,
     startMs: Int = 0,
-    durationMs: Int = 640,
+    durationMs: Int = 420,
     radius: Dp = 20.dp,
     paused: Boolean = false
 ): Modifier = if (!motion.enabled) this else drawWithContent {

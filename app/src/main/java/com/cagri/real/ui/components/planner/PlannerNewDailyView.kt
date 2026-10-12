@@ -1,5 +1,7 @@
 package com.cagri.real.ui.components.planner
 
+import androidx.compose.runtime.saveable.rememberSaveable
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -111,10 +113,14 @@ internal fun PlannerNewDailyView(
     val carousel = rememberLazyListState()
     // Entrance choreography (motion only): greeting -> heading -> cards from the right -> ruler -> schedule -> events pop in.
     val intro = rememberPlannerIntro(reduceAnimations)
-    // Coming back from a category screen: title, cards, ruler and events animate in again (like the reference video).
-    val returnTick = revealOrigin?.returnTick ?: 0
-    LaunchedEffect(returnTick) { if (returnTick > 0 && !reduceAnimations) intro.restart(120L) }
-    LaunchedEffect(selectedDay) { carousel.scrollToItem(0) }
+    // Return from a category keeps the underlying day's title, cards and scroll in place.
+    var carouselDay by rememberSaveable { mutableStateOf(selectedDay.toEpochDay()) }
+    LaunchedEffect(selectedDay) {
+        if (carouselDay != selectedDay.toEpochDay()) {
+            carouselDay = selectedDay.toEpochDay()
+            carousel.scrollToItem(0)
+        }
+    }
     LazyColumn(
         Modifier.fillMaxSize().background(Color.Black),
         contentPadding = PaddingValues(top = topPadding + 24.dp, bottom = 28.dp)

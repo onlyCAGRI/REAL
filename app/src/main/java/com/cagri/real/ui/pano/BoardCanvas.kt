@@ -1,5 +1,12 @@
 package com.cagri.real.ui.pano
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.platform.LocalView
+import com.cagri.real.ui.components.LocalLiquidReduceMotion
+import com.cagri.real.ui.components.RealHaptics
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,6 +52,15 @@ fun BoardCanvas(board:PanoBoard,items:List<PanoItem>,viewport:BoardViewport,sele
     val latestItems by rememberUpdatedState(items)
     val latestSelected by rememberUpdatedState(selected)
     val latestEditable by rememberUpdatedState(editable)
+    val reduceMotion = LocalLiquidReduceMotion.current
+    var alignmentVisible by remember(board.id) { mutableStateOf(false) }
+    var lastAlignment by remember(board.id) { mutableStateOf<BoardAlignment?>(null) }
+    val guideAlpha by animateFloatAsState(if (alignmentVisible && editable) 0.55f else 0f,
+        if (reduceMotion) snap() else tween(100), label = "boardAlignmentGuides")
+    val showAlignment: (BoardAlignment?) -> Unit = { value ->
+        alignmentVisible = value != null && (value.guideX != null || value.guideY != null)
+        if (value != null) lastAlignment = value
+    }
     Box(modifier.clipToBounds().boardViewportGestures(density,{latestViewport},{latestItems},onViewport,{controller.viewport(board.id,it)},{onSelect(null)},controlHit={point->latestEditable && latestItems.firstOrNull { it.id==latestSelected }?.let { blockHit(point,it.transform,48f) }==true})){
         BoardBackground(viewport, look)
         // Culling removes off-screen GIF painters and media players from composition.
@@ -57,8 +73,21 @@ fun BoardCanvas(board:PanoBoard,items:List<PanoItem>,viewport:BoardViewport,sele
                 val sy=viewport.y+t.y*viewport.zoom
                 val margin=hypot(t.width,t.height)*viewport.zoom+48f*viewport.zoom
                 if(sx+t.width*viewport.zoom+margin>=0&&sy+t.height*viewport.zoom+margin>=0&&sx-margin<=width&&sy-margin<=height){
-                    key(item.id){BoardBlockFrame(item,board.shared,viewport.zoom,viewport,density,editable && item.id==selected,controller,designStyle,onSelect,editable)}
+                    key(item.id){BoardBlockFrame(item,board.shared,viewport.zoom,viewport,density,editable && item.id==selected,controller,designStyle,onSelect,editable,
+                        neighbours = items.filter { it.id != item.id }.map { it.transform },
+                        gridEnabled = look.supported().pattern != BoardBackgroundPattern.NONE,
+                        onAlignment = showAlignment)}
                 }
+            }
+        }
+        Canvas(Modifier.fillMaxSize().zIndex(Float.MAX_VALUE)) {
+            lastAlignment?.guideX?.let { x ->
+                val screen = (viewport.x + x * viewport.zoom) * density
+                drawLine(Color.White.copy(alpha = guideAlpha), Offset(screen, 0f), Offset(screen, size.height), 1.dp.toPx())
+            }
+            lastAlignment?.guideY?.let { y ->
+                val screen = (viewport.y + y * viewport.zoom) * density
+                drawLine(Color.White.copy(alpha = guideAlpha), Offset(0f, screen), Offset(size.width, screen), 1.dp.toPx())
             }
         }
         if(items.isEmpty())Text("+ Add something to your board",color=Color(0xFF606067),modifier=Modifier.align(Alignment.Center))
@@ -66,32 +95,53 @@ fun BoardCanvas(board:PanoBoard,items:List<PanoItem>,viewport:BoardViewport,sele
 }
 
 @Composable
-private fun BoardBlockFrame(item:PanoItem,shared:Boolean,zoom:Float,viewport:BoardViewport,density:Float,selected:Boolean,controller:PanoController,designStyle:DesignStyle,onSelect:(String?)->Unit,editable:Boolean){
+private fun BoardBlockFrame(item:PanoItem,shared:Boolean,zoom:Float,viewport:BoardViewport,density:Float,selected:Boolean,controller:PanoController,designStyle:DesignStyle,onSelect:(String?)->Unit,editable:Boolean,neighbours:List<BoardTransform>,gridEnabled:Boolean,onAlignment:(BoardAlignment?)->Unit){
     var draft by remember(item.id){mutableStateOf(item.transform)};
     var collapsedHeight by remember(item.id){mutableStateOf<Float?>(null)}
     var dragging by remember{mutableStateOf(false)}
     val currentItem by rememberUpdatedState(item);
     val latestDraft by rememberUpdatedState(draft)
     var startItem by remember(item.id){mutableStateOf(item)}
+    val reduceMotion = LocalLiquidReduceMotion.current
+    val view = LocalView.current
+    val currentNeighbours by rememberUpdatedState(neighbours)
+    val currentAlignment by rememberUpdatedState(onAlignment)
+    val currentZoom by rememberUpdatedState(zoom)
+    val currentGrid by rememberUpdatedState(gridEnabled)
+    // Pointer tracking remains exact; only the final small snap is spring animated.
+    val shownX by animateFloatAsState(draft.x, if (dragging || reduceMotion) snap() else RealMotion.smooth(0.22f), label = "boardSnapX")
+    val shownY by animateFloatAsState(draft.y, if (dragging || reduceMotion) snap() else RealMotion.smooth(0.22f), label = "boardSnapY")
+    DisposableEffect(item.id, editable) {
+        onDispose { if (dragging) { dragging = false; currentAlignment(null) } }
+    }
     LaunchedEffect(item.transform){if(!dragging)draft=item.transform}
     val shape=RoundedCornerShape(18.dp)
     val move=Modifier.pointerInput(item.id,density,editable){detectDragGestures(
         onDragStart={dragging=true;
+            currentAlignment(null)
             startItem=currentItem;
             onSelect(item.id)},
         onDragCancel={dragging=false;
+            currentAlignment(null)
             draft=currentItem.transform},
-        onDragEnd={dragging=false;
-            controller.transform(startItem,latestDraft)},
+        onDragEnd={
+            val before = latestDraft
+            val aligned = alignBoardBlock(before, currentNeighbours, currentZoom, currentGrid)
+            draft = aligned.transform.clamped(item.type)
+            dragging = false
+            currentAlignment(null)
+            if (draft.x != before.x || draft.y != before.y) RealHaptics.tick(view)
+            controller.transform(startItem,draft)},
         onDrag={change,amount->change.consume();
             val d=boardLocalDragToWorld(amount,density,latestDraft.rotation);
-            draft=latestDraft.copy(x=latestDraft.x+d.x,y=latestDraft.y+d.y).clamped(item.type)}
+            draft=latestDraft.copy(x=latestDraft.x+d.x,y=latestDraft.y+d.y).clamped(item.type)
+            currentAlignment(alignBoardBlock(draft, currentNeighbours, currentZoom, currentGrid))}
     )}
     val presentation=LocalBoardRealPresentation.current
     val styleHost=remember(item.id){PanoTextStyleHost()}
     // Reserve the same outer hit area in both modes. Content stays at (x,y),
     // regardless of selection; controls never take space away from the block.
-    Box(Modifier.offset {IntOffset(((viewport.x+draft.x*zoom-48f)*density).roundToInt(),((viewport.y+draft.y*zoom-48f)*density).roundToInt())}
+    Box(Modifier.offset {IntOffset(((viewport.x+shownX*zoom-48f)*density).roundToInt(),((viewport.y+shownY*zoom-48f)*density).roundToInt())}
         .wrapContentSize(Alignment.TopStart,unbounded=true).requiredSize((draft.width+96f).dp,(draft.height+96f).dp).zIndex(draft.z.toFloat())
         .graphicsLayer {
             transformOrigin=TransformOrigin(48f/(draft.width+96f),48f/(draft.height+96f))
@@ -105,8 +155,8 @@ private fun BoardBlockFrame(item:PanoItem,shared:Boolean,zoom:Float,viewport:Boa
             }
         }
         val liftScale by animateFloatAsState(
-            if (dragging) 1.025f else 1f,
-            RealMotion.snappy(0.2f),
+            if (dragging && !reduceMotion) 1.025f else 1f,
+            if (reduceMotion) snap() else RealMotion.snappy(0.2f),
             label = "panoBlockLift"
         )
         Box(

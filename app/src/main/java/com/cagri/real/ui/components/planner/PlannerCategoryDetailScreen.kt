@@ -1,5 +1,8 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.ui.motion.rememberCategoryTitleMotion
+import com.cagri.real.ui.components.RealMotion
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -478,7 +481,8 @@ fun PlannerCategoryDetailScreen(
     cardShape: PlannerCategoryCardShape? = null,
     onCardShapeChange: ((PlannerCategoryCardShape) -> Unit)? = null,
     /** True while the screen is being dismissed: the entrance plays backwards. */
-    closing: Boolean = false
+    closing: Boolean = false,
+    reduceDynamicBlur: Boolean = false
 ) {
     val contextForLink = androidx.compose.ui.platform.LocalContext.current
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
@@ -544,6 +548,7 @@ fun PlannerCategoryDetailScreen(
     }
     val haptic = LocalHapticFeedback.current
     val listState = rememberLazyListState()
+    val categoryTitles = rememberCategoryTitleMotion(listState, true, reduceAnimations, reduceDynamicBlur, delayMs = 600L)
     // While a drag is running the order lives here; null = show ui.goals as given.
     var dragOrder by remember { mutableStateOf<List<Long>?>(null) }
     // Reordering only works while this mode is on (pencil on the progress tile -> check to finish).
@@ -853,10 +858,12 @@ fun PlannerCategoryDetailScreen(
                 val dragging = dragId == goal.id
                 PlannerGoalRow(
                     number = index + 1, goal = goal, active = index == activeIndex,
+                    titleModifier = categoryTitles.title(goal.id),
                     isLast = index == goals.lastIndex, accent = accent, reduce = reduceAnimations,
                     dragging = dragging, dragOffset = { if (dragging) dragDelta else 0f },
                     reorderMode = reorderMode,
-                    modifier = (if (dragging || reduceAnimations) Modifier else Modifier.animateItem())
+                    modifier = (if (dragging || reduceAnimations) Modifier else Modifier.animateItem(
+                        placementSpec = RealMotion.smooth(0.30f), fadeInSpec = null, fadeOutSpec = tween(140)))
                         .plannerIntro(intro, 200, 600, slideY = 140.dp, fade = false)
                         .plannerIntro(intro, 520 + minOf(index, 6) * 55, 380, slideY = 10.dp),
                     readOnly = readOnly,
@@ -1152,6 +1159,7 @@ private fun PlannerGoalRow(
     number: Int, goal: PlannerGoalUi, active: Boolean, isLast: Boolean, accent: Color, reduce: Boolean,
     dragging: Boolean, dragOffset: () -> Float, reorderMode: Boolean, modifier: Modifier = Modifier,
     readOnly: Boolean = false,
+    titleModifier: Modifier = Modifier,
     onToggle: () -> Unit, onEdit: () -> Unit, onOpen: () -> Unit,
     onDragStart: () -> Unit, onDrag: (Float) -> Unit, onDragEnd: () -> Unit
 ) {
@@ -1265,7 +1273,7 @@ private fun PlannerGoalRow(
             Text(
                 goal.title,
                 style = titleStyle,
-                modifier = Modifier.padding(top = 4.dp).clickable(role = Role.Button, onClick = onOpen)
+                modifier = titleModifier.padding(top = 4.dp).clickable(role = Role.Button, onClick = onOpen)
             )
             goal.progress?.takeIf { !goal.done }?.let { p ->
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {

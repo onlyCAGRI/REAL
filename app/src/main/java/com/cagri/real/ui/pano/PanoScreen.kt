@@ -1,5 +1,7 @@
 package com.cagri.real.ui.pano
 
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+
 import androidx.activity.compose.BackHandler
 import com.cagri.real.ui.motion.RealEntrancePop
 import com.cagri.real.ui.motion.realEntrance
@@ -50,6 +52,7 @@ fun PanoScreen(reminders:List<ReminderItem>,designStyle:DesignStyle,onDismiss:()
         DisposableEffect(controller){onDispose{controller.imageLoader.shutdown()}}
         val state by repository.state.collectAsState();
         val message by controller.message.collectAsState()
+        val galleryState = rememberSaveableStateHolder()
         var selectedBoard by rememberSaveable(uid){mutableStateOf<String?>(null)}
         LaunchedEffect(repository,requestedBoard,state.loaded) {
             if (state.loaded && requestedBoard != null) {
@@ -78,7 +81,9 @@ fun PanoScreen(reminders:List<ReminderItem>,designStyle:DesignStyle,onDismiss:()
             if(!state.loaded){Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=androidx.compose.ui.Alignment.Center){CircularProgressIndicator(color=Color.White)}}
             else {
                 val board=state.boards.firstOrNull { it.id==selectedBoard }
-                if(board==null)PanoGallery(state,controller,onDismiss,selfUid=uid,onOpen={selectedBoard=it})
+                if(board==null) galleryState.SaveableStateProvider("gallery") {
+                    PanoGallery(state,controller,onDismiss,selfUid=uid,onOpen={selectedBoard=it})
+                }
                 else CompositionLocalProvider(LocalBoardRealPresentation provides BoardRealPresentation(reminders,categories,uid,onPreviewPhoto={previewPhoto=it},onPreviewCard={stackEditing=false;previewCard=it},onEditStack={stackEditing=true;previewCard=it})) {
                     PanoBoardScreen(board,state,controller,reminders,designStyle,onBack={selectedBoard=null})
                 }

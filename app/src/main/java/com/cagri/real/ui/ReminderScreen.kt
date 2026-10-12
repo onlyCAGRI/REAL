@@ -2,6 +2,8 @@
 
 package com.cagri.real.ui
 
+import com.cagri.real.ui.motion.rememberCategoryTitleMotion
+
 import com.cagri.real.contextcards.accent
 
 import com.cagri.real.ui.components.liquidChrome
@@ -462,23 +464,24 @@ fun ReminderScreen(
     val pullState = remember { DetailPullDismissState() }
     val pullDistancePx = with(pullDensity) { 320.dp.toPx() }
     val pullFlingPx = with(pullDensity) { 700.dp.toPx() }
-    LaunchedEffect(pullState, routeSeekState) {
+    val currentPullRoute by rememberUpdatedState(routeNow)
+    LaunchedEffect(pullState, routeSeekState, pullDistancePx) {
         snapshotFlow { pullState.active to pullState.distancePx }.collectLatest { (active, distance) ->
             if (active) {
                 routeSeekState.seekTo(
                     (distance / pullDistancePx).coerceIn(0f, 1f),
-                    ReminderRoute(category, customCategoryId, null)
+                    currentPullRoute.copy(detailId = null)
                 )
             }
         }
     }
-    val detailPullDismiss = remember(routeSeekState) {
+    val detailPullDismiss = remember(routeSeekState, category, customCategoryId, detailId, pullDistancePx, pullFlingPx) {
         DetailPullDismiss(
             onStart = { pullState.distancePx = 0f; pullState.active = true },
             onDrag = { distance -> pullState.distancePx = distance },
             onEnd = { distance, velocity ->
                 pullState.active = false
-                val commit = distance / pullDistancePx >= 0.33f || velocity >= pullFlingPx
+                val commit = shouldCommitDetailPull(distance, velocity, pullDistancePx, pullFlingPx)
                 if (commit) {
                     detailId = null
                 } else {
@@ -510,7 +513,7 @@ fun ReminderScreen(
     }
     BackHandler(
         enabled = !showSettings && (
-            category != null || customCategoryId != null || (detailId != null && reduceAnimations)
+            (detailId == null && (category != null || customCategoryId != null)) || (detailId != null && reduceAnimations)
         )
     ) {
         if (detailId != null) detailId = null
@@ -981,6 +984,8 @@ private fun ReminderListScreen(
     var pendingMicrophoneAction by rememberSaveable { mutableStateOf(false) }
     var showHomeMood by rememberSaveable { mutableStateOf(false) }
     var showMoodTrackerHistory by rememberSaveable { mutableStateOf(false) }
+    var panoOrigin by remember { mutableStateOf<Offset?>(null) }
+    var yasamOrigin by remember { mutableStateOf<Offset?>(null) }
     var showPano by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(pendingPanoBoardId) { if (pendingPanoBoardId != null) showPano = true }
     var showHomeWidgets by rememberSaveable { mutableStateOf(false) }
@@ -1164,6 +1169,9 @@ private fun ReminderListScreen(
         }
     }
     val listState = rememberLazyListState()
+    val categoryTitles = rememberCategoryTitleMotion(
+        listState, category != null || customCategory != null, reduceAnimations, reduceDynamicBlur
+    )
     val extendLiquidArea by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     val scene = rememberGraphicsLayer()
     var scenePosition by remember { mutableStateOf(Offset.Zero) }
@@ -1501,14 +1509,14 @@ private fun ReminderListScreen(
         com.cagri.real.contextcards.HomeContextCard(
                         moodEntries = allMoodTrackerEntries,
                         reduceAnimations = reduceAnimations,
-                        onOpenWater = { widgetDestination = "water"; showHomeWidgets = true },
+                        onOpenWater = { yasamOrigin = null; widgetDestination = "water"; showHomeWidgets = true },
                         onOpenMood = {
                             homeMoodSelection = JournalMood.NEUTRAL
                             moodOpenedFromContextCard = true
                             showHomeMood = true
                         },
-                        onOpenBooks = { widgetDestination = "books"; showHomeWidgets = true },
-                        onOpenMedia = { widgetDestination = "media"; showHomeWidgets = true },
+                        onOpenBooks = { yasamOrigin = null; widgetDestination = "books"; showHomeWidgets = true },
+                        onOpenMedia = { yasamOrigin = null; widgetDestination = "media"; showHomeWidgets = true },
                         active = isHome
                     ) { activeContextType, renderContextCard ->
         LazyColumn(
@@ -1897,6 +1905,7 @@ private fun ReminderListScreen(
                             reminder, onToggle = { onToggleCompleted(reminder.id) },
                             onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                             reduceAnimations = reduceAnimations,
+                            titleModifier = categoryTitles.title(reminder.id),
                             sharedTransitionScope = sharedTransitionScope,
                             animatedVisibilityScope = animatedVisibilityScope,
                             isSelectionMode = isSelectionMode,
@@ -1919,8 +1928,8 @@ private fun ReminderListScreen(
                             },
                             modifier = Modifier
                                 .then(if (reduceAnimations) Modifier else Modifier.animateItem(
-                                    placementSpec = RealMotion.smooth<IntOffset>(0.35f),
-                                    fadeInSpec = if (isNewlyCreated) null else tween(180),
+                                    placementSpec = RealMotion.smooth<IntOffset>(0.30f),
+                                    fadeInSpec = null,
                                     fadeOutSpec = tween(180)
                                 ))
                                 .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -1939,6 +1948,7 @@ private fun ReminderListScreen(
                         reminder, onToggle = { onToggleCompleted(reminder.id) },
                         onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                         reduceAnimations = reduceAnimations,
+                            titleModifier = categoryTitles.title(reminder.id),
                         sharedTransitionScope = sharedTransitionScope,
                         animatedVisibilityScope = animatedVisibilityScope,
                         isSelectionMode = isSelectionMode,
@@ -1963,8 +1973,8 @@ private fun ReminderListScreen(
                         }) else null,
                         modifier = Modifier
                             .then(if (reduceAnimations) Modifier else Modifier.animateItem(
-                                placementSpec = RealMotion.smooth<IntOffset>(0.35f),
-                                fadeInSpec = if (isNewlyCreated) null else tween(180),
+                                placementSpec = RealMotion.smooth<IntOffset>(0.30f),
+                                fadeInSpec = null,
                                 fadeOutSpec = tween(180)
                             ))
                             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -1981,8 +1991,8 @@ private fun ReminderListScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .then(if (reduceAnimations) Modifier else Modifier.animateItem(
-                                    placementSpec = RealMotion.smooth<IntOffset>(0.35f),
-                                    fadeInSpec = tween(180),
+                                    placementSpec = RealMotion.smooth<IntOffset>(0.30f),
+                                    fadeInSpec = null,
                                     fadeOutSpec = tween(180)
                                 ))
                         ) {
@@ -2002,6 +2012,7 @@ private fun ReminderListScreen(
                                             reminder, onToggle = { onToggleCompleted(reminder.id) },
                                             onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                                             reduceAnimations = reduceAnimations,
+                            titleModifier = categoryTitles.title(reminder.id),
                                             sharedTransitionScope = sharedTransitionScope,
                                             animatedVisibilityScope = animatedVisibilityScope,
                                             isSelectionMode = isSelectionMode,
@@ -2037,6 +2048,7 @@ private fun ReminderListScreen(
                             reminder, onToggle = { onToggleCompleted(reminder.id) },
                             onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                             reduceAnimations = reduceAnimations,
+                            titleModifier = categoryTitles.title(reminder.id),
                             sharedTransitionScope = sharedTransitionScope,
                             animatedVisibilityScope = animatedVisibilityScope,
                             isSelectionMode = isSelectionMode,
@@ -2054,8 +2066,8 @@ private fun ReminderListScreen(
                             },
                             modifier = Modifier
                                 .then(if (reduceAnimations) Modifier else Modifier.animateItem(
-                                    placementSpec = RealMotion.smooth<IntOffset>(0.35f),
-                                    fadeInSpec = tween(180),
+                                    placementSpec = RealMotion.smooth<IntOffset>(0.30f),
+                                    fadeInSpec = null,
                                     fadeOutSpec = tween(180)
                                 ))
                                 .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -2215,6 +2227,9 @@ private fun ReminderListScreen(
                     voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
                     showHomeWidgets = false
                     showPano = true
+                },
+                onModuleOrigin = { module, origin ->
+                    if (module == "pano") panoOrigin = origin else yasamOrigin = origin
                 },
                 onMicClick = onComposerMicClick,
                 micEnabled = !saving && !copyingPhotos && !voiceAiParsing,
@@ -2650,6 +2665,7 @@ private fun ReminderListScreen(
         }
         com.cagri.real.ui.motion.RealModuleTransition(
             visible = showPano,
+            originInRoot = panoOrigin,
             reduceMotion = reduceAnimations,
             modifier = Modifier.zIndex(80f)
         ) {
@@ -2658,6 +2674,7 @@ private fun ReminderListScreen(
         }
         com.cagri.real.ui.motion.RealModuleTransition(
             visible = showHomeWidgets,
+            originInRoot = yasamOrigin,
             reduceMotion = reduceAnimations,
             modifier = Modifier.zIndex(80f)
         ) {

@@ -1212,6 +1212,7 @@ fun PlannerScreen(
                             topPadding = statusTop,
                             reduceAnimations = reduceAnimations,
                             closing = detailCategoryId == null,
+                            reduceDynamicBlur = reduceDynamicBlur,
                             icon = { m, c -> CategoryIconGlyph(CategoryIcon.fromKey(shownCategory.iconKey), m, c) },
                             onBack = { detailCategoryId = null },
                             onDone = { detailCategoryId = null },

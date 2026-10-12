@@ -144,7 +144,7 @@ internal fun CardCompositionGrid(
                     key(blockKey) {
                         val active = dragging == blockKey
                         val animateInsertion = remember(dragState) { editing && blockKey !in mountedBlocks }
-                        val insertion = if (animateInsertion) rememberRealEntrance(reduceAnimations, identity = dragState, totalMs = 700) else null
+                        val insertion = if (animateInsertion) rememberRealEntrance(reduceAnimations, identity = dragState, totalMs = 420) else null
                         var blockCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
                         var placedPosition by remember { mutableStateOf<IntOffset?>(null) }
                         var positionReady by remember { mutableStateOf(false) }
@@ -177,8 +177,8 @@ internal fun CardCompositionGrid(
                                 // Grow: pill gibi açılıp büyür + kenarda kısa ışık halkası (sürükleme sırasında durur).
                                 .then(insertion?.let {
                                     Modifier
-                                        .realGrowGlow(it, durationMs = 640, paused = active || dragState.active)
-                                        .realGrow(it, durationMs = 640, paused = active || dragState.active)
+                                        .realGrowGlow(it, durationMs = 420, paused = active || dragState.active)
+                                        .realGrow(it, durationMs = 420, paused = active || dragState.active)
                                 } ?: Modifier)
                                 .onGloballyPositioned {
                                     blockCoordinates = it

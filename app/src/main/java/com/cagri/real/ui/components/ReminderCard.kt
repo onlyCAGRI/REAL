@@ -1,5 +1,8 @@
 package com.cagri.real.ui.components
 
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.EnterExitState
+
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -128,10 +131,16 @@ fun ReminderCard(
     journalListMode: Boolean = false,
     showVoiceSummary: Boolean = true,
     onSwipeLeftTo24Hour: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    titleModifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
-    val shape = ReminderCardShape
+    val corner = if (!reduceAnimations && animatedVisibilityScope != null) {
+        animatedVisibilityScope.transition.animateFloat(
+            transitionSpec = { RealMotion.smooth(0.32f) }, label = "listCardCorner"
+        ) { if (it == EnterExitState.Visible) 22f else 28f }.value
+    } else 22f
+    val shape = RoundedCornerShape(corner.dp)
     val arrivalProgress = remember(reminder.id) {
         Animatable(if (isNewlyCreated && !reduceAnimations) 0f else 1f)
     }
@@ -242,7 +251,7 @@ fun ReminderCard(
             Modifier.sharedBounds(
                 rememberSharedContentState(key = "reminder-card-${reminder.id}"),
                 animatedVisibilityScope = animatedVisibilityScope,
-                boundsTransform = { _, _ -> tween(320, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)) },
+                boundsTransform = { _, _ -> RealMotion.smooth(0.32f) },
                 clipInOverlayDuringTransition = OverlayClip(shape)
             )
         }
@@ -516,7 +525,7 @@ fun ReminderCard(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
                 onTextLayout = { textLayoutResult = it },
-                modifier = Modifier.drawWithContent {
+                modifier = titleModifier.drawWithContent {
                     drawContent()
                     val progress = strikethroughProgress.value
                     if (progress > 0.001f && !reduceAnimations) {

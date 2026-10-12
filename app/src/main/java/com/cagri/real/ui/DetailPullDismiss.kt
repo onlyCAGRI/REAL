@@ -32,6 +32,10 @@ internal class DetailPullDismiss(
     val onCancel: () -> Unit
 )
 
+internal fun shouldCommitDetailPull(distance: Float, velocity: Float, travel: Float, fling: Float): Boolean =
+    distance.isFinite() && velocity.isFinite() && travel > 0f &&
+        (distance / travel >= 0.33f || (distance / travel >= 0.06f && velocity >= fling))
+
 /**
  * Lets the user grab the main detail card and pull it down. Only downward drags are taken,
  * and only while the detail content is scrolled to the top, so normal scrolling, text
@@ -56,13 +60,19 @@ internal fun Modifier.pullDownToDismiss(callbacks: DetailPullDismiss?, scroll: S
             current.onDrag(total)
             val tracker = VelocityTracker()
             tracker.addPosition(slopChange.uptimeMillis, Offset(0f, total))
-            val finished = verticalDrag(slopChange.id) { change ->
-                total = (total + change.positionChange().y).coerceAtLeast(0f)
-                change.consume()
-                tracker.addPosition(change.uptimeMillis, Offset(0f, total))
-                current.onDrag(total)
+            var delivered = false
+            try {
+                val finished = verticalDrag(slopChange.id) { change ->
+                    total = (total + change.positionChange().y).coerceAtLeast(0f)
+                    change.consume()
+                    tracker.addPosition(change.uptimeMillis, Offset(0f, total))
+                    current.onDrag(total)
+                }
+                delivered = true
+                if (finished) current.onEnd(total, tracker.calculateVelocity().y) else current.onCancel()
+            } finally {
+                if (!delivered) current.onCancel()
             }
-            if (finished) current.onEnd(total, tracker.calculateVelocity().y) else current.onCancel()
         }
     }
 }

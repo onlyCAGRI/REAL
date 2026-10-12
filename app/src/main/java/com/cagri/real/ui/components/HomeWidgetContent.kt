@@ -140,6 +140,7 @@ fun HomeWidgetScreen(
     var opened by rememberSaveable { mutableStateOf(startInJournals) }
     var widgetContentGeneration by remember { mutableIntStateOf(0) }
     val holder = rememberYasamHolder()
+    val homeState = rememberSaveableStateHolder()
     LaunchedEffect(Unit) { onInitialDestinationConsumed(); onStartInJournalsConsumed() }
     // Üst ekran, kitap açıkken navigation bar boşluğunu bırakır (kitap alta kadar çizilsin diye).
     LaunchedEffect(showBooks) { onBooksOpenChange(showBooks) }
@@ -166,8 +167,9 @@ fun HomeWidgetScreen(
     val open = rememberRealEntrance(reduceAnimations, totalMs = 900, play = playOpen)
     LaunchedEffect(Unit) { delay(1000); opened = true }
     // İlk açılışta içerik, daire ekranı açarken hazır beklesin diye 250 ms gecikir.
-    val baseMs = if (playOpen && widgetContentGeneration == 0) 250 else 0
-    val entrance = rememberRealEntrance(reduceAnimations, identity = widgetContentGeneration, totalMs = 1800)
+    val baseMs = if (playOpen && widgetContentGeneration == 0) 100 else 0
+    val entrance = rememberRealEntrance(reduceAnimations, totalMs = 1800,
+        play = playOpen && widgetContentGeneration == 0)
     // Cümle konusu her açılışta (ve modül dönüşünde) değişir.
     val appContext = LocalContext.current.applicationContext
     // rememberSaveable: dönme/süreç yeniden kurulmasında cümle konusu değişmesin; son konu ayrıca kalıcı tutulur.
@@ -222,7 +224,6 @@ fun HomeWidgetScreen(
         if (reduceAnimations) snap() else tween(420, easing = RealEntranceEase),
         label = "yasamDiscoverySlide"
     )
-    val homeState = rememberSaveableStateHolder()
     val homeOnscreen by remember(journalMotion, discovery) {
         derivedStateOf { if (journalMotion) discovery == null else discoverySlide.value < 1f }
     }
@@ -261,7 +262,7 @@ fun HomeWidgetScreen(
                 .background(Color.Black)
         ) {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-                key(widgetContentGeneration) {
+                key(Unit) {
                     YasamScrollContent(
                         modifier = Modifier.weight(1f),
                         entrance = entrance,

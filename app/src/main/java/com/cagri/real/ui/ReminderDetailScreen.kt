@@ -1,5 +1,7 @@
 package com.cagri.real.ui
 
+import androidx.compose.ui.layout.onSizeChanged
+
 import com.cagri.real.ui.components.liquidDockChip
 
 import android.os.Build
@@ -298,6 +300,7 @@ internal fun ReminderDetailScreen(
     val density = LocalDensity.current
     var rootBoxCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var bottomPanelCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var bottomPanelHeightPx by remember { mutableIntStateOf(0) }
     var footerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val contentBlockCoordinates = remember(reminder.id) { mutableMapOf<String, LayoutCoordinates>() }
     LaunchedEffect(editing) {
@@ -732,11 +735,7 @@ internal fun ReminderDetailScreen(
     val chromeAlpha by if (animatedVisibilityScope != null && !reduceAnimations) {
         animatedVisibilityScope.transition.animateFloat(
             transitionSpec = {
-                if (EnterExitState.PreEnter isTransitioningTo EnterExitState.Visible) {
-                    tween(200, delayMillis = 80, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
-                } else {
-                    tween(120, easing = CubicBezierEasing(0.4f, 0f, 1f, 1f))
-                }
+                RealMotion.smooth(0.32f)
             },
             label = "detailChromeAlpha"
         ) { state ->
@@ -803,14 +802,14 @@ internal fun ReminderDetailScreen(
                 }
                 val starSettleScale = remember(reminder.id) { Animatable(1f) }
                 var hasRenderedInitialStar by remember(reminder.id) { mutableStateOf(false) }
-                LaunchedEffect(reminder.isImportant) {
+                LaunchedEffect(reminder.isImportant, reduceAnimations) {
                     if (!hasRenderedInitialStar) {
                         hasRenderedInitialStar = true
                         return@LaunchedEffect
                     }
                     if (reminder.isImportant && !reduceAnimations) {
-                        starSettleScale.snapTo(1.06f)
-                        starSettleScale.animateTo(1.0f, tween(160, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)))
+                        starSettleScale.animateTo(1.16f, tween(80))
+                        starSettleScale.animateTo(1.0f, RealMotion.snappy(0.24f))
                     } else {
                         starSettleScale.snapTo(1.0f)
                     }
@@ -901,13 +900,10 @@ internal fun ReminderDetailScreen(
         label = "detailHeaderSpacerHeight"
     )
 
-    val detailBottomPadding by animateDpAsState(
-        targetValue = if (editing) {
-            if (editDockCollapsed) 132.dp else if (secondaryPanelsExpanded) 440.dp else 290.dp
-        } else if (inlineCardStackEditing) 180.dp else 114.dp,
-        animationSpec = if (reduceAnimations) snap() else tween(220, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)),
-        label = "detailDockContentInset"
-    )
+    // The panel already animates its measured height; applying another animation here lags behind it.
+    val detailBottomPadding = with(LocalDensity.current) {
+        if (bottomPanelHeightPx > 0) bottomPanelHeightPx.toDp() + 16.dp else 114.dp
+    }
 
     DetailLayoutBox(
         Modifier
@@ -1326,7 +1322,12 @@ internal fun ReminderDetailScreen(
                     if (headerSpacerHeight > 0.dp) Spacer(Modifier.height(headerSpacerHeight))
                 } else detailHeader()
 
-                val cardShape = RoundedCornerShape(28.dp)
+                val corner = if (!reduceAnimations && animatedVisibilityScope != null) {
+                    animatedVisibilityScope.transition.animateFloat(
+                        transitionSpec = { RealMotion.smooth(0.32f) }, label = "detailCardCorner"
+                    ) { if (it == EnterExitState.Visible) 28f else 22f }.value
+                } else 28f
+                val cardShape = RoundedCornerShape(corner.dp)
                 val shownAccentStart = if (editing) accentStart else reminder.accentStart
                 val shownAccentEnd = if (editing) accentEnd else reminder.accentEnd
                 val shownBlendFraction = if (editing) gradientBlendFraction else reminder.gradientBlendFraction
@@ -1345,7 +1346,7 @@ internal fun ReminderDetailScreen(
                         Modifier.sharedBounds(
                             rememberSharedContentState(key = "reminder-card-${reminder.id}"),
                             animatedVisibilityScope = animatedVisibilityScope,
-                            boundsTransform = { _, _ -> tween(320, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)) },
+                            boundsTransform = { _, _ -> RealMotion.smooth(0.32f) },
                             clipInOverlayDuringTransition = OverlayClip(cardShape),
                             renderInOverlayDuringTransition = !hasActiveFullscreenOverlay
                         )
@@ -1407,6 +1408,10 @@ internal fun ReminderDetailScreen(
                                 Modifier
                                     .then(sharedCardModifier)
                                     .fillMaxWidth()
+                                    .pullDownToDismiss(
+                                        if (!editing && !inlineCardStackEditing && !deleting && !hasActiveFullscreenOverlay) pullDismiss else null,
+                                        detailContentScroll
+                                    )
                                     .then(if (titleHeight > 0) Modifier.height(titleHeight.dp) else Modifier)
                                     .cardBlockSurface()
                                     .clip(cardShape)
@@ -2118,6 +2123,7 @@ internal fun ReminderDetailScreen(
             Modifier
                 .align(Alignment.BottomCenter)
                 .onGloballyPositioned { bottomPanelCoordinates = it }
+                .onSizeChanged { bottomPanelHeightPx = it.height }
                 .fillMaxWidth()
                 .graphicsLayer { alpha = chromeAlpha }
                 .padding(horizontal = 24.dp, vertical = 18.dp)

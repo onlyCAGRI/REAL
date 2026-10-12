@@ -1,5 +1,7 @@
 package com.cagri.real.ui
 
+import com.cagri.real.ui.components.RealMotion
+
 import androidx.compose.animation.*
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -71,8 +73,8 @@ internal fun DetailEditDock(
         }
         AnimatedVisibility(
             visible = !collapsed,
-            enter = if (reduceAnimations) EnterTransition.None else expandVertically(tween(220, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)), expandFrom = Alignment.Bottom) + fadeIn(tween(160)),
-            exit = if (reduceAnimations) ExitTransition.None else shrinkVertically(tween(180), shrinkTowards = Alignment.Bottom) + fadeOut(tween(120))
+            enter = if (reduceAnimations) EnterTransition.None else expandVertically(RealMotion.smooth(0.28f), expandFrom = Alignment.Bottom) + fadeIn(tween(160)),
+            exit = if (reduceAnimations) ExitTransition.None else shrinkVertically(RealMotion.smooth(0.28f), shrinkTowards = Alignment.Bottom) + fadeOut(tween(120))
         ) {
             Column(Modifier.fillMaxWidth(), content = content)
         }

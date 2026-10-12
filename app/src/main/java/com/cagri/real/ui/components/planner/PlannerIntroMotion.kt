@@ -1,5 +1,7 @@
 package com.cagri.real.ui.components.planner
 
+import androidx.compose.runtime.saveable.rememberSaveable
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.CubicBezierEasing
@@ -62,9 +64,12 @@ internal class PlannerIntro(private val driver: Animatable<Float, AnimationVecto
 
 @Composable
 internal fun rememberPlannerIntro(reduce: Boolean, delayMs: Long = 0L): PlannerIntro {
-    val driver = remember { Animatable(if (reduce) PlannerIntroTotalMs else 0f) }
+    var played by rememberSaveable { mutableStateOf(false) }
+    val playThisEntry = remember { !played }
+    val driver = remember { Animatable(if (reduce || !playThisEntry) PlannerIntroTotalMs else 0f) }
     LaunchedEffect(reduce) {
-        if (reduce) {
+        played = true
+        if (reduce || !playThisEntry) {
             driver.snapTo(PlannerIntroTotalMs)
         } else if (driver.value < PlannerIntroTotalMs) {
             if (delayMs > 0L) delay(delayMs)
