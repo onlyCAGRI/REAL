@@ -129,59 +129,87 @@ struct WaterTrackerScreen: View {
     private func liquid(size: CGSize) -> some View {
         TimelineView(.animation) { timeline in
             Canvas { ctx, canvasSize in
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                engine.step(time: t)
-                let w = canvasSize.width, h = canvasSize.height
-                ctx.fill(Path(CGRect(origin: .zero, size: canvasSize)), with: .linearGradient(Gradient(colors: palette.background),
-                         startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
-                let header = min(148, h * 0.56)
-                func surfaceY(_ x: Double) -> Double {
-                    let natural = engine.surface(x: x, time: t)
-                    return max(header + (natural - 0.24) / 0.76 * (h - header), -72)
-                }
-                var surface = Path()
-                for i in 0...80 {
-                    let x = Double(i) / 80
-                    let p = CGPoint(x: x * w, y: surfaceY(x))
-                    if i == 0 { surface.move(to: p) } else { surface.addLine(to: p) }
-                }
-                var water = surface
-                water.addLine(to: CGPoint(x: w, y: h))
-                water.addLine(to: CGPoint(x: 0, y: h))
-                water.closeSubpath()
-                let centerY = surfaceY(0.5)
-                ctx.drawLayer { layer in
-                    layer.clip(to: water)
-                    layer.fill(Path(CGRect(origin: .zero, size: canvasSize)), with: .linearGradient(Gradient(colors: palette.liquid),
-                               startPoint: CGPoint(x: 0, y: beverage == .water ? 0 : centerY - h * 0.08), endPoint: CGPoint(x: 0, y: h)))
-                    if beverage == .water {
-                        layer.fill(Path(CGRect(x: 0, y: centerY - 16, width: w, height: h * 0.45)),
-                                   with: .linearGradient(Gradient(colors: [Color(argb: 0xFF00B7DD).opacity(0.3), .clear]),
-                                                         startPoint: CGPoint(x: 0, y: centerY - 16), endPoint: CGPoint(x: 0, y: centerY + h * 0.45)))
-                        let ct = t * 0.3
-                        for i in 0..<12 {
-                            let cx = (sin(ct * 0.4 + Double(i) * 1.7) * 0.3 + 0.5 + Double(i) * 0.08).truncatingRemainder(dividingBy: 1) * w
-                            let cy = centerY + h * (0.08 + Double(i % 5) * 0.12 + sin(ct * 0.5 + Double(i) * 2.1) * 0.04)
-                            let r = 22 + sin(ct + Double(i) * 0.9) * 14
-                            let a = min(max(0.025 + sin(ct * 0.7 + Double(i)) * 0.015, 0.01), 0.05)
-                            layer.fill(Path(ellipseIn: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2)),
-                                       with: .radialGradient(Gradient(colors: [.white.opacity(a * 3), .clear]), center: CGPoint(x: cx, y: cy), startRadius: 0, endRadius: r))
-                        }
-                    }
-                }
-                ctx.stroke(surface, with: .color(palette.edge.opacity(0.75)), lineWidth: 1.5)
-                // Big percentage riding the surface.
-                let label = beverage == .water || progress >= 1 ? "\(max(Int((progress * 100).rounded()), 0))%" : amountText(total)
-                let text = ctx.resolve(Text(label).font(.system(size: 72, weight: .bold)).kerning(-3).foregroundColor(palette.number))
-                let textSize = text.measure(in: canvasSize)
-                let textY = min(surfaceY((24 + textSize.width / 2) / max(w, 1)) - 8, h - textSize.height - 10)
-                ctx.draw(text, at: CGPoint(x: 24, y: textY), anchor: .topLeading)
+                drawLiquid(&ctx, canvasSize, timeline.date.timeIntervalSinceReferenceDate)
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { v in engine.disturb(at: v.location.x / max(size.width, 1), strength: min(0.3, (abs(v.velocity.width) + abs(v.velocity.height)) / 6000 + 0.05)) }
-                .onEnded { v in engine.disturb(at: v.location.x / max(size.width, 1), strength: 0.45) })
+                .onChanged { v in disturb(v, width: size.width) }
+                .onEnded { v in engine.disturb(at: Double(v.location.x / max(size.width, 1)), strength: 0.45) })
         }
+    }
+
+    private func disturb(_ v: DragGesture.Value, width: CGFloat) {
+        let speed = abs(v.velocity.width) + abs(v.velocity.height)
+        let strength = min(0.3, Double(speed) / 6000 + 0.05)
+        engine.disturb(at: Double(v.location.x / max(width, 1)), strength: strength)
+    }
+
+    private func surfaceY(_ x: Double, t: Double, h: Double) -> Double {
+        let header = min(148, h * 0.56)
+        let natural = engine.surface(x: x, time: t)
+        return max(header + (natural - 0.24) / 0.76 * (h - header), -72)
+    }
+
+    private func surfacePath(t: Double, w: Double, h: Double) -> Path {
+        var surface = Path()
+        for i in 0...80 {
+            let x = Double(i) / 80
+            let p = CGPoint(x: x * w, y: surfaceY(x, t: t, h: h))
+            if i == 0 { surface.move(to: p) } else { surface.addLine(to: p) }
+        }
+        return surface
+    }
+
+    private func drawCaustics(_ layer: inout GraphicsContext, t: Double, w: Double, h: Double, centerY: Double) {
+        let ct = t * 0.3
+        for i in 0..<12 {
+            let fi = Double(i)
+            let raw: Double = sin(ct * 0.4 + fi * 1.7) * 0.3 + 0.5 + fi * 0.08
+            let cx: Double = raw.truncatingRemainder(dividingBy: 1) * w
+            let wobble: Double = sin(ct * 0.5 + fi * 2.1) * 0.04
+            let row: Double = Double(i % 5) * 0.12
+            let cy: Double = centerY + h * (0.08 + row + wobble)
+            let r: Double = 22 + sin(ct + fi * 0.9) * 14
+            let alpha: Double = min(max(0.025 + sin(ct * 0.7 + fi) * 0.015, 0.01), 0.05)
+            let rect = CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2)
+            let gradient = Gradient(colors: [Color.white.opacity(alpha * 3), Color.clear])
+            layer.fill(Path(ellipseIn: rect), with: .radialGradient(gradient, center: CGPoint(x: cx, y: cy), startRadius: 0, endRadius: r))
+        }
+    }
+
+    private func drawLiquid(_ ctx: inout GraphicsContext, _ canvasSize: CGSize, _ t: Double) {
+        engine.step(time: t)
+        let w = Double(canvasSize.width)
+        let h = Double(canvasSize.height)
+        let full = Path(CGRect(origin: .zero, size: canvasSize))
+        ctx.fill(full, with: .linearGradient(Gradient(colors: palette.background), startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
+        let surface = surfacePath(t: t, w: w, h: h)
+        var water = surface
+        water.addLine(to: CGPoint(x: w, y: h))
+        water.addLine(to: CGPoint(x: 0, y: h))
+        water.closeSubpath()
+        let centerY = surfaceY(0.5, t: t, h: h)
+        let liquidColors = palette.liquid
+        let isWater = beverage == .water
+        ctx.drawLayer { layer in
+            layer.clip(to: water)
+            let start = CGPoint(x: 0, y: isWater ? 0 : centerY - h * 0.08)
+            layer.fill(full, with: .linearGradient(Gradient(colors: liquidColors), startPoint: start, endPoint: CGPoint(x: 0, y: h)))
+            if isWater {
+                let lens = Gradient(colors: [Color(argb: 0xFF00B7DD).opacity(0.3), Color.clear])
+                let lensRect = CGRect(x: 0, y: centerY - 16, width: w, height: h * 0.45)
+                layer.fill(Path(lensRect), with: .linearGradient(lens, startPoint: CGPoint(x: 0, y: centerY - 16), endPoint: CGPoint(x: 0, y: centerY + h * 0.45)))
+                drawCaustics(&layer, t: t, w: w, h: h, centerY: centerY)
+            }
+        }
+        ctx.stroke(surface, with: .color(palette.edge.opacity(0.75)), lineWidth: 1.5)
+        let percent = max(Int((progress * 100).rounded()), 0)
+        let label = beverage == .water || progress >= 1 ? "\(percent)%" : amountText(total)
+        let text = ctx.resolve(Text(label).font(.system(size: 72, weight: .bold)).kerning(-3).foregroundColor(palette.number))
+        let textSize = text.measure(in: canvasSize)
+        let anchorX = (24 + Double(textSize.width) / 2) / max(w, 1)
+        let textY = min(surfaceY(anchorX, t: t, h: h) - 8, h - Double(textSize.height) - 10)
+        ctx.draw(text, at: CGPoint(x: 24, y: textY), anchor: .topLeading)
     }
 
     private func history(height: CGFloat) -> some View {

@@ -662,24 +662,42 @@ struct YasamSlideToAdd: View {
 struct YasamSpark: View {
     let points: [Double]
     let tone: Color
+
     var body: some View {
-        Canvas { ctx, size in
-            if points.count < 2 {
-                var p = Path(); p.move(to: CGPoint(x: 2, y: size.height / 2)); p.addLine(to: CGPoint(x: size.width - 2, y: size.height / 2))
-                ctx.stroke(p, with: .color(tone.opacity(0.25)), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                return
-            }
-            let step = (size.width - 4) / CGFloat(points.count - 1)
-            let pts = points.enumerated().map { CGPoint(x: 2 + CGFloat($0.offset) * step, y: 3 + (1 - ($0.element - 1) / 4) * (size.height - 6)) }
-            var path = Path()
-            path.move(to: pts[0])
-            for i in 1..<pts.count {
-                let mid = (pts[i - 1].x + pts[i].x) / 2
-                path.addCurve(to: pts[i], control1: CGPoint(x: mid, y: pts[i - 1].y), control2: CGPoint(x: mid, y: pts[i].y))
-            }
-            ctx.stroke(path, with: .color(tone), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+        Canvas { ctx, size in Self.draw(&ctx, size: size, points: points, tone: tone) }
+            .frame(height: 34)
+    }
+
+    static func curve(_ pts: [CGPoint]) -> Path {
+        var path = Path()
+        guard let first = pts.first else { return path }
+        path.move(to: first)
+        var i = 1
+        while i < pts.count {
+            let mid = (pts[i - 1].x + pts[i].x) / 2
+            path.addCurve(to: pts[i], control1: CGPoint(x: mid, y: pts[i - 1].y), control2: CGPoint(x: mid, y: pts[i].y))
+            i += 1
         }
-        .frame(height: 34)
+        return path
+    }
+
+    private static func draw(_ ctx: inout GraphicsContext, size: CGSize, points: [Double], tone: Color) {
+        let style = StrokeStyle(lineWidth: 2, lineCap: .round)
+        if points.count < 2 {
+            var p = Path()
+            p.move(to: CGPoint(x: 2, y: size.height / 2))
+            p.addLine(to: CGPoint(x: size.width - 2, y: size.height / 2))
+            ctx.stroke(p, with: .color(tone.opacity(0.25)), style: style)
+            return
+        }
+        let step: CGFloat = (size.width - 4) / CGFloat(points.count - 1)
+        var pts: [CGPoint] = []
+        for (i, v) in points.enumerated() {
+            let norm: CGFloat = CGFloat(1 - (v - 1) / 4)
+            let y: CGFloat = 3 + norm * (size.height - 6)
+            pts.append(CGPoint(x: 2 + CGFloat(i) * step, y: y))
+        }
+        ctx.stroke(curve(pts), with: .color(tone), style: style)
     }
 }
 
@@ -700,25 +718,7 @@ struct YasamMoodHistory: View {
                     let width = geo.size.width * CGFloat(max(points.count, 5)) / 5
                     ScrollView(.horizontal, showsIndicators: false) {
                         VStack(spacing: 6) {
-                            Canvas { ctx, size in
-                                let n = points.count
-                                let cell = size.width / CGFloat(n)
-                                let xs = (0..<n).map { cell * (CGFloat($0) + 0.5) }
-                                let ys = points.map { 8 + (1 - (YasamText.moodScore($0.mood) - 1) / 4) * (size.height - 16) }
-                                var base = Path(); base.move(to: CGPoint(x: 0, y: size.height / 2)); base.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-                                ctx.stroke(base, with: .color(.white.opacity(0.1)), lineWidth: 1)
-                                if n > 1 {
-                                    var path = Path(); path.move(to: CGPoint(x: xs[0], y: ys[0]))
-                                    for i in 1..<n {
-                                        let mid = (xs[i - 1] + xs[i]) / 2
-                                        path.addCurve(to: CGPoint(x: xs[i], y: ys[i]), control1: CGPoint(x: mid, y: ys[i - 1]), control2: CGPoint(x: mid, y: ys[i]))
-                                    }
-                                    ctx.stroke(path.trimmedPath(from: 0, to: drawn), with: .color(.white.opacity(0.55)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-                                }
-                                for i in 0..<n where CGFloat(i) / CGFloat(max(n - 1, 1)) <= drawn + 0.01 {
-                                    ctx.fill(Path(ellipseIn: CGRect(x: xs[i] - 3.5, y: ys[i] - 3.5, width: 7, height: 7)), with: .color(YasamTone.mood(points[i].mood)))
-                                }
-                            }
+                            Canvas { ctx, size in Self.drawChart(&ctx, size: size, points: points, drawn: drawn) }
                             .frame(height: 60)
                             HStack(spacing: 0) {
                                 ForEach(points) { e in
@@ -741,6 +741,34 @@ struct YasamMoodHistory: View {
         }
         .padding(.top, 4)
         .onAppear { withAnimation(.linear(duration: 0.5)) { drawn = 1 } }
+    }
+}
+
+extension YasamMoodHistory {
+    static func drawChart(_ ctx: inout GraphicsContext, size: CGSize, points: [MoodTrackerEntry], drawn: CGFloat) {
+        let n = points.count
+        guard n > 0 else { return }
+        let cell: CGFloat = size.width / CGFloat(n)
+        var pts: [CGPoint] = []
+        for (i, e) in points.enumerated() {
+            let norm: CGFloat = CGFloat(1 - (YasamText.moodScore(e.mood) - 1) / 4)
+            let y: CGFloat = 8 + norm * (size.height - 16)
+            pts.append(CGPoint(x: cell * (CGFloat(i) + 0.5), y: y))
+        }
+        var base = Path()
+        base.move(to: CGPoint(x: 0, y: size.height / 2))
+        base.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+        ctx.stroke(base, with: .color(Color.white.opacity(0.1)), lineWidth: 1)
+        if n > 1 {
+            let path = YasamSpark.curve(pts).trimmedPath(from: 0, to: drawn)
+            ctx.stroke(path, with: .color(Color.white.opacity(0.55)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+        }
+        for i in 0..<n {
+            let reach: CGFloat = CGFloat(i) / CGFloat(max(n - 1, 1))
+            guard reach <= drawn + 0.01 else { continue }
+            let rect = CGRect(x: pts[i].x - 3.5, y: pts[i].y - 3.5, width: 7, height: 7)
+            ctx.fill(Path(ellipseIn: rect), with: .color(YasamTone.mood(points[i].mood)))
+        }
     }
 }
 
