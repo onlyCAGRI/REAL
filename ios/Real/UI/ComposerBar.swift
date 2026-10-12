@@ -133,7 +133,7 @@ struct ComposerBar: View {
         .padding(.bottom, expanded ? 20 : 12)
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: expanded)
         .animation(.spring(response: 0.34, dampingFraction: 0.85), value: navExpanded)
-        .simultaneousGesture(
+        .highPriorityGesture(
             DragGesture(minimumDistance: 20).onEnded { value in
                 guard showChrome else { return }
                 if value.translation.height < -28 { navExpanded = true } else if value.translation.height > 28 { navExpanded = false }

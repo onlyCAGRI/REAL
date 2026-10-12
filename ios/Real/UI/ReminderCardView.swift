@@ -7,6 +7,8 @@ struct ReminderCardView: View {
     let reminder: ReminderItem
     var category: CustomCategory?
     var showCategoryStripes = true
+    /// Günlüklerim list: no completion circle, mood line instead of dates.
+    var journalListMode = false
     var isSelectionMode = false
     var isSelected = false
     var onToggle: () -> Void = {}
@@ -24,10 +26,10 @@ struct ReminderCardView: View {
     }
     private var textColor: Color {
         if useDark { return reminder.isCompleted ? Color(argb: 0xFF55555A) : Color(argb: 0xFF101010) }
-        return reminder.isCompleted ? RealColors.textMuted : RealColors.text
+        return reminder.isCompleted && !journalListMode ? RealColors.textMuted : RealColors.text
     }
     private var subtext: Color { useDark ? Color(argb: 0xFF282832) : RealColors.subtext }
-    private var strike: Bool { reminder.isCompleted && reminder.journal == nil }
+    private var strike: Bool { !journalListMode && reminder.isCompleted && reminder.journal == nil }
     private var stripes: (Color, Color)? {
         guard showCategoryStripes, reminder.customCategoryId != nil, let category else { return nil }
         return category.visual.stripe
@@ -52,7 +54,9 @@ struct ReminderCardView: View {
     private var card: some View {
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return HStack(alignment: .top, spacing: 2) {
-            if !isSelectionMode {
+            if journalListMode && !isSelectionMode {
+                Color.clear.frame(width: 14, height: 1)
+            } else if !isSelectionMode {
                 completionCircle
             } else {
                 Color.clear.frame(width: 12, height: 48)
@@ -154,6 +158,22 @@ struct ReminderCardView: View {
     }
 
     @ViewBuilder private var meta: some View {
+        if journalListMode, let mood = reminder.journal?.mood {
+            HStack(spacing: 6) {
+                Text(mood.emoji).font(.system(size: 13))
+                Text(mood.label)
+            }
+            .font(RealType.cardMetaPrimary)
+            .foregroundStyle(subtext)
+            .padding(.top, 4)
+        }
+        if journalListMode, let text = reminder.journal?.text, !text.isEmpty {
+            Text(text).font(RealFont.inter(14)).foregroundStyle(subtext).lineLimit(3).padding(.top, 4)
+        }
+        if !journalListMode { standardMeta }
+    }
+
+    @ViewBuilder private var standardMeta: some View {
         if reminder.isChecklist && !reminder.checklistItems.isEmpty {
             HStack(spacing: 18) {
                 Text("\(reminder.checklistItems.count) madde")

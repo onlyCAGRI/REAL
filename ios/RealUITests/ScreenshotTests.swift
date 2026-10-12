@@ -65,10 +65,21 @@ final class ScreenshotTests: XCTestCase {
         app.launchArguments = ["-REALDemo", "-REALScreen", "home"]
         app.launch()
         Thread.sleep(forTimeInterval: 2)
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
-        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.82)))
+        // Drag up from the composer capsule (dock row ~92% of the screen height).
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.915))
+        start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.80)))
         Thread.sleep(forTimeInterval: 1.2)
         shot("docknav")
+    }
+
+    func test12CategoryProgress() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "category"]
+        app.launch()
+        let ring = app.buttons["Kategori ilerlemesini göster"]
+        if ring.waitForExistence(timeout: 10) { ring.tap() }
+        Thread.sleep(forTimeInterval: 1.5)
+        shot("categoryprogress")
     }
 
     func test7ComposerExpanded() {

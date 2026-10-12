@@ -244,11 +244,12 @@ struct PlannerGoalScreen: View {
                 if reorderMode { reorderMode = false } else { stylePopup = true }
             } label: {
                 ZStack {
-                    Circle().fill(reorderMode ? RealColors.plannerInk : .clear)
-                    Circle().strokeBorder(RealColors.plannerInk.opacity(0.45), lineWidth: 1)
+                    // The badge sits in the black notch, so it is drawn in the tile colour.
+                    Circle().fill(reorderMode ? accent : .clear)
+                    Circle().strokeBorder(accent.opacity(0.55), lineWidth: 1)
                     Image(systemName: reorderMode ? "checkmark" : "pencil")
                         .font(.system(size: reorderMode ? 13 : 12, weight: .semibold))
-                        .foregroundStyle(reorderMode ? accent : RealColors.plannerInk)
+                        .foregroundStyle(reorderMode ? RealColors.plannerInk : accent)
                 }
                 .frame(width: 30, height: 30)
             }

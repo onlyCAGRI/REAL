@@ -46,11 +46,12 @@ struct HomeView: View {
     @State private var showNewCategory = false
     @State private var showSettings = false
     @State private var confirmDelete = false
+    @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
 
     private let previewCount = 4
 
     var body: some View {
-        let active = store.homeActive()
+        let active = filterAndSortReminders(store.homeActive(), sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded)
         let completed = store.homeCompleted()
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -60,6 +61,23 @@ struct HomeView: View {
                     .padding(.bottom, 22)
                     .opacity(selectedIds.isEmpty ? 1 : 0)
                 categoryDeck.padding(.horizontal, 16)
+                // "Kartlarım" + HomeSortControl (son eklenen ↔ bildirim zamanı).
+                HStack {
+                    Text("Kartlarım").font(RealFont.inter(20, .semibold)).foregroundStyle(Color(argb: 0xFFF2F2F4))
+                    Spacer()
+                    Button {
+                        homeSort = homeSort == ReminderSortOrder.reminderTime.rawValue ? ReminderSortOrder.recentlyAdded.rawValue : ReminderSortOrder.reminderTime.rawValue
+                    } label: {
+                        Image(systemName: homeSort == ReminderSortOrder.reminderTime.rawValue ? "clock" : "text.alignleft")
+                            .font(.system(size: 17)).foregroundStyle(Color(argb: 0xFFC9CBD3))
+                            .contentTransition(.symbolEffect(.replace))
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(homeSort == ReminderSortOrder.reminderTime.rawValue
+                                        ? "Bildirim zamanına göre sıralanıyor. Son eklenene göre sırala."
+                                        : "Son eklenene göre sıralanıyor. Bildirim zamanına göre sırala.")
+                }
+                .padding(.leading, 18).padding(.trailing, 6).padding(.top, 12).padding(.bottom, 12)
                 if active.isEmpty && completed.isEmpty {
                     Text("Bir REAL yaz, gerisini biz hatırlayalım.")
                         .font(RealType.cardTitle)
