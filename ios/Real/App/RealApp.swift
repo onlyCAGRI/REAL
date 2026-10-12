@@ -212,6 +212,7 @@ enum DemoData {
         case "film": return [.module("Film")]
         case "media": return [.detail(14)]
         case "moods": return [.module("Moods")]
+        case "settings": return [.module("Ayarlar")]
         case "filmdeck": return [.module("FilmDeck")]
         case "game": return [.module("Oyun")]
         case "reader": return [.module("Okuyucu")]

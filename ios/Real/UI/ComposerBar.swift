@@ -138,8 +138,8 @@ struct ComposerBar: View {
             }
         }
         .padding(.horizontal, 16)
-        // Dock bottom edge ~24pt above the screen edge (34pt safe area − 10), just above the home indicator.
-        .padding(.bottom, expanded ? 8 : -10)
+        // Dock bottom edge ~20pt above the screen edge (34pt safe area − 14), just above the home indicator.
+        .padding(.bottom, expanded ? 8 : -14)
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: expanded)
         .animation(.spring(response: 0.34, dampingFraction: 0.85), value: navExpanded)
         .highPriorityGesture(

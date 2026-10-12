@@ -37,6 +37,8 @@ struct RootView: View {
                         } else if name == "Film" || name == "FilmDeck" || name == "Oyun" {
                             DiscoveryScreen(kind: name == "Oyun" ? .game : .film, startInDeck: name == "FilmDeck", onClose: {})
                                 .toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Ayarlar" {
+                            SettingsScreen(onBack: {}).toolbar(.hidden, for: .navigationBar)
                         } else if name == "Moods" {
                             MoodHistoryScreen(onAdd: {}).toolbar(.hidden, for: .navigationBar)
                         } else if name == "Kitaplar" {
@@ -66,6 +68,8 @@ struct HomeView: View {
     @State private var editingBuiltIn: ReminderCategory?
     @State private var showNewCategory = false
     @State private var showSettings = false
+    @State private var showAccountMenu = false
+    @State private var showCategoryOrder = false
     @State private var confirmDelete = false
     @State private var showYasam = false
     @State private var showPano = false
@@ -128,18 +132,15 @@ struct HomeView: View {
             .animation(.spring(duration: 0.35), value: active.map(\.id))
         }
         .scrollDismissesKeyboard(.interactively)
+        .hideBottomScrollEdgeEffect()
         .background(RealColors.background.ignoresSafeArea())
+        .overlay(alignment: .bottom) { if selectedIds.isEmpty { BottomFade() } }
         .safeAreaInset(edge: .bottom) {
             if selectedIds.isEmpty {
                 ComposerBar(defaultCategoryId: nil, isHome: true,
                             onOpenPlanner: { path.append(.planner) },
                             onOpenYasam: { withoutAnimation { showYasam = true } },
                             onOpenPano: { showPano = true })
-                    .background(alignment: .bottom) {
-                        // BottomFade behind the dock so cards dissolve under the glass.
-                        LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 44).ignoresSafeArea().allowsHitTesting(false)
-                    }
             } else {
                 SelectionBar(count: selectedIds.count,
                              onStar: {
@@ -157,7 +158,11 @@ struct HomeView: View {
             BuiltInCategoryColorSheet(category: category)
         }
         .sheet(isPresented: $showNewCategory) { CategoryEditorSheet(existing: nil) }
-        .sheet(isPresented: $showSettings) { SettingsSheet() }
+        .realOverlay(isPresented: $showAccountMenu) {
+            AccountMenuOverlay(onSettings: { showSettings = true }, onCategoryOrder: { showCategoryOrder = true })
+        }
+        .fullScreenCover(isPresented: $showSettings) { SettingsScreen { showSettings = false } }
+        .sheet(isPresented: $showCategoryOrder) { CategoryOrderSheet() }
         .fullScreenCover(isPresented: $showPano) { PanoScreen().presentationBackground(.black) }
         .fullScreenCover(isPresented: $showYasam) {
             YasamScreen(onOpenCard: { id in
@@ -178,7 +183,7 @@ struct HomeView: View {
                 .kerning(-0.8)
                 .foregroundStyle(Color(argb: 0xFFF3F2F5))
             Spacer()
-            Button { showSettings = true } label: {
+            Button { withoutAnimation { showAccountMenu = true } } label: {
                 ProfileAvatar(name: store.ownerName, size: 44)
             }
             .accessibilityLabel("Hesap menüsünü aç")
@@ -297,7 +302,19 @@ struct PressScaleStyle: ButtonStyle {
 struct ProfileAvatar: View {
     let name: String
     var size: CGFloat = 44
+    @AppStorage("profile_photo_revision") private var photoRevision: Double = 0
     var body: some View {
+        if photoRevision > 0, let photo = ProfilePhotoStore.load() {
+            Image(uiImage: photo).resizable().scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .id(photoRevision)
+        } else {
+            initialsAvatar
+        }
+    }
+
+    private var initialsAvatar: some View {
         ZStack {
             Circle().fill(LinearGradient(colors: [Color(argb: 0xFF2A2B33), Color(argb: 0xFF15161B)], startPoint: .top, endPoint: .bottom))
             Circle().strokeBorder(.white.opacity(0.14), lineWidth: 0.75)

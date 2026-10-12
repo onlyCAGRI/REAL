@@ -331,8 +331,7 @@ struct PlannerCardBadge: View {
     let category: CustomCategory?
     var size: CGFloat = 42
     var body: some View {
-        RealSymbol(category?.icon.symbol ?? "star.fill", size: 20)
-            .font(.system(size: size * 0.4))
+        RealSymbol(category?.icon.symbol ?? "star.fill", size: size * 0.46)
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(Circle().fill(Color(argb: 0xFF0B0B0D)))
@@ -540,8 +539,7 @@ struct PlannerEventLogo: View {
     let size: CGFloat
 
     var body: some View {
-        RealSymbol(category?.icon.symbol ?? (starred ? "star.fill" : "calendar"))
-            .font(.system(size: size * 0.48))
+        RealSymbol(category?.icon.symbol ?? (starred ? "star.fill" : "calendar"), size: size * 0.55)
             .foregroundStyle(RealColors.plannerInk)
             .frame(width: size, height: size)
             .background(Circle().fill(RealColors.plannerInk.opacity(0.13)))

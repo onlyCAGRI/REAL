@@ -47,15 +47,7 @@ extension View {
     }
 
     /// liquidRimBrush / liquidDockRimBrush
-    static func rim(_ role: LiquidGlassRole) -> LinearGradient {
-        role == .dock
-            ? LinearGradient(stops: [.init(color: LiquidGlassTokens.dockEdgeTop, location: 0), .init(color: Color(argb: 0x26FFFFFF), location: 0.25),
-                                     .init(color: Color(argb: 0x14FFFFFF), location: 0.55), .init(color: Color(argb: 0x4DFFFFFF), location: 0.8),
-                                     .init(color: LiquidGlassTokens.dockEdgeBottom, location: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            : LinearGradient(stops: [.init(color: LiquidGlassTokens.edgeTop, location: 0), .init(color: Color(argb: 0x1AFFFFFF), location: 0.22),
-                                     .init(color: LiquidGlassTokens.edgeMiddle, location: 0.52), .init(color: LiquidGlassTokens.edgeBottom, location: 0.82),
-                                     .init(color: Color(argb: 0x38FFFFFF), location: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
+    static func rim(_ role: LiquidGlassRole) -> LinearGradient { liquidRim(role) }
 
     @ViewBuilder
     private func fallbackGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole, dim: Double) -> some View {
@@ -145,3 +137,44 @@ extension View {
         if #available(iOS 18.0, *), let ns { self.navigationTransition(.zoom(sourceID: id, in: ns)) } else { self }
     }
 }
+
+
+/// ReminderScreen.kt BottomFade: cards dissolve into black under the dock (height = dock + bottom gap + 46dp).
+struct BottomFade: View {
+    var body: some View {
+        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.2), location: 0.6),
+                               .init(color: .black.opacity(0.92), location: 1)], startPoint: .top, endPoint: .bottom)
+            .frame(height: 114)
+            .frame(maxWidth: .infinity)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
+    }
+}
+
+extension View {
+    /// iOS 26 adds a scroll-edge dim/blur behind bottom insets; Android has none (it draws BottomFade instead).
+    @ViewBuilder
+    func hideBottomScrollEdgeEffect() -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            self.scrollEdgeEffectHidden(true, for: .bottom)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+}
+
+/// liquidRimBrush / liquidDockRimBrush
+func liquidRim(_ role: LiquidGlassRole) -> LinearGradient {
+    role == .dock
+        ? LinearGradient(stops: [.init(color: LiquidGlassTokens.dockEdgeTop, location: 0), .init(color: Color(argb: 0x26FFFFFF), location: 0.25),
+                                 .init(color: Color(argb: 0x14FFFFFF), location: 0.55), .init(color: Color(argb: 0x4DFFFFFF), location: 0.8),
+                                 .init(color: LiquidGlassTokens.dockEdgeBottom, location: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        : LinearGradient(stops: [.init(color: LiquidGlassTokens.edgeTop, location: 0), .init(color: Color(argb: 0x1AFFFFFF), location: 0.22),
+                                 .init(color: LiquidGlassTokens.edgeMiddle, location: 0.52), .init(color: LiquidGlassTokens.edgeBottom, location: 0.82),
+                                 .init(color: Color(argb: 0x38FFFFFF), location: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
+}
+

@@ -134,6 +134,11 @@ final class LifeStore {
         save()
     }
 
+    func clearAllMoods() {
+        moods = []
+        save()
+    }
+
     func replaceAll(goal: Int, entries: [WaterIntakeEntry], moods: [MoodTrackerEntry]) {
         goalMl = goal
         self.entries = entries

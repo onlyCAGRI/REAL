@@ -228,8 +228,7 @@ struct PlannerGoalScreen: View {
     private func progressTile(doneCount: Int, total: Int) -> some View {
         ZStack(alignment: .topLeading) {
             NotchedTileShape().fill(accent)
-            RealSymbol(category?.icon.symbol ?? "star.fill", size: 20)
-                .font(.system(size: 14))
+            RealSymbol(category?.icon.symbol ?? "star.fill", size: 17)
                 .foregroundStyle(.white)
                 .frame(width: 34, height: 34)
                 .background(Circle().fill(Self.black))

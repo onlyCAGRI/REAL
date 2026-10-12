@@ -62,6 +62,18 @@ final class ScreenshotTests: XCTestCase {
 
     func test26MediaBlocks() { capture("media", settle: 3) }
 
+    func test27Settings() { capture("settings", settle: 2) }
+
+    func test28AccountMenu() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "home"]
+        app.launch()
+        let avatar = app.buttons["Hesap menüsünü aç"]
+        if avatar.waitForExistence(timeout: 10) { avatar.tap() }
+        Thread.sleep(forTimeInterval: 1.5)
+        shot("accountmenu")
+    }
+
     func test15Yasam() { capture("yasam", settle: 3) }
     func test16Water() { capture("water", settle: 3) }
 

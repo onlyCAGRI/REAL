@@ -344,8 +344,7 @@ struct ReminderDetailView: View {
     private func categoryBadge(_ c: CustomCategory, size: CGFloat) -> some View {
         let start = paletteColor(c.accentStart) ?? Color(argb: 0xFF233F73)
         let end = paletteColor(c.accentEnd) ?? start
-        return RealSymbol(c.icon.symbol, size: 20)
-            .font(.system(size: size * 0.5))
+        return RealSymbol(c.icon.symbol, size: size * 0.55)
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(Circle().fill(LinearGradient(colors: [start, end], startPoint: .topLeading, endPoint: .bottomTrailing)))

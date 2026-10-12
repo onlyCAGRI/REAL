@@ -62,7 +62,9 @@ struct CategoryScreen: View {
             .animation(.spring(duration: 0.35), value: lists.active.map(\.id))
             .animation(.spring(duration: 0.3), value: showProgress)
         }
+        .hideBottomScrollEdgeEffect()
         .background(RealColors.background.ignoresSafeArea())
+        .overlay(alignment: .bottom) { BottomFade() }
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
             if !selectedIds.isEmpty {
@@ -74,10 +76,6 @@ struct CategoryScreen: View {
             } else if builtIn != .completed && builtIn != .journalEntries {
                 ComposerBar(defaultCategoryId: customId, defaultImportant: builtIn == .important,
                             defaultPlannedToday: builtIn == .today || builtIn == .planned)
-                    .background(alignment: .bottom) {
-                        LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 44).ignoresSafeArea().allowsHitTesting(false)
-                    }
             }
         }
         .sheet(isPresented: $showEditor) { CategoryEditorSheet(existing: custom) }
