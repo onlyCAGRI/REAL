@@ -56,28 +56,37 @@ jobs:
         run: |
           mkdir -p build
           set +e
-          xcodebuild test             -project Real.xcodeproj -scheme Real             -destination "id=${{ steps.sim.outputs.udid }}"             -derivedDataPath build             -resultBundlePath build/TestResults.xcresult             CODE_SIGNING_ALLOWED=NO > build/xcodebuild.log 2>&1
+          xcodebuild test             -project Real.xcodeproj -scheme Real             -destination "id=${{ steps.sim.outputs.udid }}"             -derivedDataPath build             -resultBundlePath build/TestResults.xcresult             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/xcodebuild.log 2>&1
           status=$?
           grep -E "error:|Test Case .*(passed|failed)|Executed|\*\* " build/xcodebuild.log | tail -300
           exit $status
 
       - name: Screenshots
+        timeout-minutes: 10
         run: |
           set -x
           UDID=${{ steps.sim.outputs.udid }}
           APP=build/Build/Products/Debug-iphonesimulator/REAL.app
           mkdir -p screenshots
-          xcrun simctl boot "$UDID" || true
+          # perl alarm = portable timeout on macOS runners
+          t() { perl -e 'alarm shift; exec @ARGV' "$@"; }
+          codesign -dv "$APP" || true
+          # Fresh boot: the test run can leave the device in a state where launch blocks.
+          xcrun simctl shutdown "$UDID" || true
+          xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl ui "$UDID" appearance dark || true
           xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 || true
-          xcrun simctl install "$UDID" "$APP"
+          t 120 xcrun simctl install "$UDID" "$APP"
+          sleep 10
           for screen in home category builtin detail checklist planner; do
-            xcrun simctl launch --terminate-running-process "$UDID" com.cagri.real -REALDemo -REALScreen "$screen"
+            xcrun simctl terminate "$UDID" com.cagri.real || true
+            t 60 xcrun simctl launch "$UDID" com.cagri.real -REALDemo -REALScreen "$screen" || echo "launch failed: $screen"
             sleep 6
-            xcrun simctl io "$UDID" screenshot "screenshots/$screen.png"
+            t 30 xcrun simctl io "$UDID" screenshot "screenshots/$screen.png" || true
           done
           ls -la screenshots
+          xcrun simctl spawn "$UDID" log show --last 3m --predicate 'process == "REAL"' --style compact | tail -40 || true
 
       - name: Upload screenshots
         if: always()
