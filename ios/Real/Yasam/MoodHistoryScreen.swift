@@ -123,9 +123,3 @@ struct MoodHistoryScreen: View {
         MoodV2.factorGroups.flatMap(\.1).first { $0.0 == key }?.1 ?? key
     }
 }
-
-struct PressScaleStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.scaleEffect(configuration.isPressed ? 0.985 : 1).animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-}
