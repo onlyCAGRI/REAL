@@ -141,6 +141,7 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     var mood: JournalMood? = nil
     var location: ReminderLocation? = nil
     var cardStack: CardStackBlock? = nil
+    var musicBlocks: [MusicBlock] = []
     var mediaBlocks: [MediaBlock] = []
     var contentBlockLayout: [String: CardBlockPlacement] = [:]
     /// Weekday set for a WEEKLY repeat (bit0 = Monday ... bit6 = Sunday). 0 = plain single-day repeat.
@@ -217,6 +218,7 @@ struct ReminderItem: Codable, Identifiable, Hashable {
         keys += attachments.filter { $0.type == .image }.map { "photos:\($0.id)" }
         keys += attachments.filter { $0.type != .image }.map { "files:\($0.id)" }
         if referenceUrl != nil { keys.append("files:reference") }
+        keys += musicBlocks.map { "music:\($0.id)" }
         keys += mediaBlocks.map { "media:\($0.id)" }
         if location != nil { keys.append("location") }
         if journal != nil || includeJournal { keys.append("journal") }
@@ -252,7 +254,7 @@ extension ReminderItem {
              quick24HourUntilAt, notifiedAlertAt, accentStart, accentEnd, repeatRule, anchorAlertAt,
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
-             cardStack, mediaBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout
+             cardStack, musicBlocks, mediaBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout
     }
 
     init(from decoder: Decoder) throws {
@@ -284,6 +286,7 @@ extension ReminderItem {
         mood = try c.decodeIfPresent(JournalMood.self, forKey: .mood)
         location = try c.decodeIfPresent(ReminderLocation.self, forKey: .location)
         cardStack = try c.decodeIfPresent(CardStackBlock.self, forKey: .cardStack)
+        musicBlocks = try c.decodeIfPresent([MusicBlock].self, forKey: .musicBlocks) ?? []
         mediaBlocks = try c.decodeIfPresent([MediaBlock].self, forKey: .mediaBlocks) ?? []
         repeatWeekdaysMask = try c.decodeIfPresent(Int.self, forKey: .repeatWeekdaysMask) ?? 0
         repeatUntilEpochDay = try c.decodeIfPresent(EpochDay.self, forKey: .repeatUntilEpochDay)

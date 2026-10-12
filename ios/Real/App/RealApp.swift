@@ -126,6 +126,13 @@ enum DemoData {
         add(11, "Sunum slaytları", { $0.alertAt = at(15); $0.durationMinutes = 90; $0.customCategoryId = 1 })
         add(12, "Su iç", { $0.quick24HourUntilAt = now.epochMillis + CategoryRules.rolling24HoursMillis })
         add(13, "Kod incelemesi", { $0.alertAt = at(11); $0.durationMinutes = 30; $0.customCategoryId = 1; $0.completedAt = at(11, 35) })
+        add(14, "Hafta sonu", {
+            $0.musicBlocks = [MusicBlock(title: "bellyache", artist: "Billie Eilish", provider: "iTunes", providerUrl: "https://music.apple.com/tr/search?term=bellyache",
+                                         previewUrl: "https://example.invalid/preview.m4a")]
+            $0.mediaBlocks = [MediaBlock(type: .TV, providerId: "44778", title: "Silo", year: 2023, genre: "Drama, Science-Fiction",
+                                         description: "Silo depicts a ruined and toxic future, when thousands of people live in a giant silo deep underground.",
+                                         provider: "TVmaze", providerUrl: "https://www.tvmaze.com/shows/44778", durationMillis: 3_000_000)]
+        })
 
         store.replaceAll(reminders: items, categories: categories, ownerName: "Çağrı Gül")
     }
@@ -203,6 +210,7 @@ enum DemoData {
         case "water": return [.module("Su")]
         case "books": return [.module("Kitaplar")]
         case "film": return [.module("Film")]
+        case "media": return [.detail(14)]
         case "moods": return [.module("Moods")]
         case "filmdeck": return [.module("FilmDeck")]
         case "game": return [.module("Oyun")]

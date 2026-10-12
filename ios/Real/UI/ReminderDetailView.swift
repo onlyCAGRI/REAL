@@ -18,6 +18,8 @@ struct ReminderDetailView: View {
     @State private var draft: ReminderItem?
     @State private var secondaryExpanded = false
     @State private var dockCollapsed = false
+    @State private var showMusicSearch = false
+    @State private var showMediaSearch = false
     @State private var deleting = false
     @State private var reordering = false
     @State private var newChecklistText = ""
@@ -100,6 +102,12 @@ struct ReminderDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $showMusicSearch) {
+            MusicSearchSheet { m in withAnimation(.spring(duration: 0.3)) { draft?.musicBlocks.append(m) } }
+        }
+        .sheet(isPresented: $showMediaSearch) {
+            MediaSearchSheet { m in withAnimation(.spring(duration: 0.3)) { draft?.mediaBlocks.append(m) } }
+        }
         .fullScreenCover(isPresented: $showMoodPicker) {
             MoodAddSheet(onSaved: { mood, _ in
                 if editing { draft?.mood = mood } else { store.mutate(reminderId) { $0.mood = mood } }
@@ -145,6 +153,10 @@ struct ReminderDetailView: View {
             }
         case "location": if let l = r.location { locationBlock(l) }
         case "journal": if let j = r.journal { journalBlock(j) }
+        case "music":
+            if let m = r.musicBlocks.first(where: { $0.id == id }) {
+                MusicBlockView(block: m, editing: editing) { draft?.musicBlocks.removeAll { $0.id == id } }
+            }
         case "media":
             if let m = r.mediaBlocks.first(where: { $0.id == id }) {
                 MediaBlockView(block: m, editing: editing) { draft?.mediaBlocks.removeAll { $0.id == id } }
@@ -783,6 +795,10 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "camera", label: "Kamera ile fotoğraf ekle", active: false) { showCamera = true }
                     QuickAction(symbol: "doc", label: "Dosya ekle", active: false,
                                 count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
+                    QuickAction(symbol: "music.note", label: "Müzik", active: !(d?.musicBlocks.isEmpty ?? true),
+                                count: d?.musicBlocks.count) { showMusicSearch = true }
+                    QuickAction(symbol: "play.rectangle", label: "Film & Dizi", active: !(d?.mediaBlocks.isEmpty ?? true),
+                                count: d?.mediaBlocks.count) { showMediaSearch = true }
                     QuickAction(symbol: "link", label: "Bağlantı", active: d?.referenceUrl != nil) { showLinkEditor = true }
                     QuickAction(symbol: "rectangle.stack", label: "Kart Yığını", active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
                         editingStackCard = CardStackCard()
@@ -1227,6 +1243,7 @@ private struct BlockReorderSheet: View {
         case "location": return ("Konum", item.location?.placeName ?? "Konum", "mappin")
         case "mood": return ("Mood", item.mood?.label ?? "Mood", "face.smiling")
         case "journal": return ("Günlük", "Günlük notu", "book.closed")
+        case "music": return ("Müzik", item.musicBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "music.note")
         case "media": return ("Film / Dizi", item.mediaBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "film")
         default: return (key, "", "square")
         }
