@@ -90,10 +90,15 @@ jobs:
           path: ios/screenshots
           if-no-files-found: ignore
 
-      - name: Package simulator app
+      - name: Package simulator app (Appetize)
         if: success()
         run: |
-          cd build/Build/Products/Debug-iphonesimulator
+          xcodebuild build -project Real.xcodeproj -scheme Real -configuration Release \
+            -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build-appetize ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/appetize.log 2>&1 || { tail -80 build/appetize.log; exit 1; }
+          cd build-appetize/Build/Products/Release-iphonesimulator
+          lipo -info REAL.app/REAL
           zip -qry "$GITHUB_WORKSPACE/REAL-simulator.zip" REAL.app
 
       - name: Upload simulator app

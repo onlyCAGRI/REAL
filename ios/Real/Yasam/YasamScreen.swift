@@ -7,7 +7,10 @@ import UIKit
 struct YasamScreen: View {
     @Environment(ReminderStore.self) private var store
     @Environment(LifeStore.self) private var life
+    @Environment(BookStore.self) private var books
     @Environment(\.dismiss) private var dismiss
+    @State private var showBooks = false
+    @State private var resumeBook: String?
     var onOpenCard: (Int64) -> Void = { _ in }
 
     @State private var revealed = false
@@ -61,6 +64,7 @@ struct YasamScreen: View {
         .ignoresSafeArea(.container, edges: .bottom)
         .presentationBackground(.clear)
         .onAppear { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9)) { revealed = true } }
+        .fullScreenCover(isPresented: $showBooks) { BooksModuleScreen(resumeBookId: resumeBook) }
         .fullScreenCover(isPresented: $showWater) { WaterTrackerScreen().presentationBackground(.black) }
         .fullScreenCover(isPresented: $showMoodAdd) { MoodAddSheet() }
         .alert(placeholder ?? "", isPresented: Binding(get: { placeholder != nil }, set: { if !$0 { placeholder = nil } })) {
@@ -123,7 +127,12 @@ struct YasamScreen: View {
             return "Bugün \(YasamText.litres(w.today)) L su içtin, hedefe \(YasamText.litres(w.goal - w.today)) L kaldı."
         case 1: return YasamText.yesterday(ml: w.yesterday, mood: yesterdayMood) ?? "Dün nasıl geçti? Bugün nasıl gidiyor?"
         case 2: return lastMood.map { "En son ruh halin \($0.label) idi. Şimdi nasılsın?" } ?? "Bugün ruh halin nasıl?"
-        case 3: return "Rafında yeni bir kitap için zaman var mı?"
+        case 3:
+            if let last = books.lastRead {
+                if let p = last.percent { return "Kitabın %\(p)'de. Bu akşam birkaç sayfa okumaya ne dersin?" }
+                return "\(last.book.title) seni bekliyor."
+            }
+            return "Rafında yeni bir kitap için zaman var mı?"
         case 4: return "\(mediaPrompt) Sana bir film, dizi ya da oyun önerelim."
         default:
             if let p = journalPreview {
@@ -203,10 +212,18 @@ struct YasamScreen: View {
                 }
             }
             if tab != 1 {
-                YasamRow(label: "KİTAP", value: "Rafını aç", expanded: open == "book", index: 3, revealed: revealed, toggle: { toggle("book") }) {
-                    Text("Rafını aç").font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
+                let last = books.lastRead
+                YasamRow(label: "KİTAP", value: last?.percent.map { "%\($0)" } ?? last?.book.title ?? "Rafını aç",
+                         expanded: open == "book", index: 3, revealed: revealed, toggle: { toggle("book") }) {
+                    if let last { YasamBookPreview(book: last.book, percent: last.percent) }
+                    else { Text("Rafını aç").font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7)) }
                 } content: {
-                    YasamTextAction(text: "RAFINI AÇ  ›", tone: YasamTone.book) { placeholder = "Kitaplar" }
+                    if let last {
+                        YasamTextAction(text: "OKUMAYA DEVAM ET  ›", tone: YasamTone.book) { resumeBook = last.book.id; showBooks = true }
+                        YasamTextAction(text: "RAFI AÇ  ›", tone: YasamTone.muted) { resumeBook = nil; showBooks = true }
+                    } else {
+                        YasamTextAction(text: "RAFINI AÇ  ›", tone: YasamTone.book) { resumeBook = nil; showBooks = true }
+                    }
                 }
                 YasamRow(label: "FİLM & DİZİ · OYUN", value: "Öneri al", expanded: open == "media", index: 4, revealed: revealed,
                          toggle: { toggle("media") }) {
@@ -578,6 +595,48 @@ struct YasamWaterHero: View {
 }
 
 /// Hairline-separated row: mono label, thin value, rotating chevron, always-visible preview, expandable actions.
+/// YasamBookPreview: the book's main colour as a small box plus a thin progress bar.
+struct YasamBookPreview: View {
+    let book: Book
+    let percent: Int?
+    @Environment(BookStore.self) private var books
+
+    var body: some View {
+        let base = books.coverImage(book).flatMap(CoverPalette.dominant) ?? coverBaseColor(book)
+        let tone = base.luminance < 0.25 ? base.blend(.white, by: 0.35) : base
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 5)
+                .fill(LinearGradient(colors: [tone, tone.blend(.black, by: 0.2)], startPoint: .top, endPoint: .bottom))
+                .frame(width: 34, height: 48)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(book.author.isEmpty ? book.title : "\(book.title) by \(book.author)")
+                    .font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
+                if let percent {
+                    GeometryReader { g in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2).fill(.white.opacity(0.10))
+                            RoundedRectangle(cornerRadius: 2).fill(tone).frame(width: g.size.width * CGFloat(min(max(percent, 0), 100)) / 100)
+                        }
+                    }
+                    .frame(height: 4)
+                }
+            }
+        }
+    }
+}
+
+extension Color {
+    /// Linear sRGB mix (Compose lerp equivalent).
+    func blend(_ other: Color, by t: Double) -> Color {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        UIColor(self).getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        UIColor(other).getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        let t = CGFloat(t)
+        return Color(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t, opacity: a1 + (a2 - a1) * t)
+    }
+}
+
 struct YasamRow<Preview: View, Content: View>: View {
     let label: String
     let value: String

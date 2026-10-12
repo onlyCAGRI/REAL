@@ -41,6 +41,19 @@ final class ScreenshotTests: XCTestCase {
         shot("panoboard")
     }
 
+    func test19Books() { capture("books", settle: 3) }
+    func test20Reader() { capture("reader", settle: 3) }
+
+    func test21BookDetail() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "books"]
+        app.launch()
+        let book = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Limandaki Defter'")).firstMatch
+        if book.waitForExistence(timeout: 10) { book.tap() }
+        Thread.sleep(forTimeInterval: 2)
+        shot("bookdetail")
+    }
+
     func test15Yasam() { capture("yasam", settle: 3) }
     func test16Water() { capture("water", settle: 3) }
 

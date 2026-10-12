@@ -34,6 +34,10 @@ struct RootView: View {
                             YasamScreen(onOpenCard: { id in path.append(.detail(id)) }).toolbar(.hidden, for: .navigationBar)
                         } else if name == "Pano" {
                             PanoScreen()
+                        } else if name == "Kitaplar" {
+                            BooksModuleScreen().toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Okuyucu" {
+                            BooksModuleScreen(resumeBookId: "demo_txt").toolbar(.hidden, for: .navigationBar)
                         } else if name == "Su" {
                             WaterTrackerScreen().toolbar(.hidden, for: .navigationBar)
                         } else {

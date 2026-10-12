@@ -7,6 +7,7 @@ struct RealApp: App {
     @State private var store: ReminderStore
     @State private var life: LifeStore
     @State private var pano: PanoStore
+    @State private var books: BookStore
     private let initialPath: [Route]
 
     init() {
@@ -23,11 +24,15 @@ struct RealApp: App {
             let pano = PanoStore(persist: false)
             DemoData.seedPano(pano, store: store)
             _pano = State(initialValue: pano)
+            let books = BookStore(persist: false)
+            DemoData.seedBooks(books)
+            _books = State(initialValue: books)
             initialPath = DemoData.path(for: args, store: store)
         } else {
             _store = State(initialValue: ReminderStore())
             _life = State(initialValue: LifeStore())
             _pano = State(initialValue: PanoStore())
+            _books = State(initialValue: BookStore())
             initialPath = []
         }
     }
@@ -38,6 +43,7 @@ struct RealApp: App {
                 .environment(store)
                 .environment(life)
                 .environment(pano)
+                .environment(books)
                 .background(Color.black)
         }
     }
@@ -134,6 +140,34 @@ enum DemoData {
         life.replaceAll(goal: 2_000, entries: entries, moods: moods)
     }
 
+    static func seedBooks(_ books: BookStore) {
+        let text = """
+        BİRİNCİ BÖLÜM
+
+        Sabahın ilk ışıkları pencereden süzülürken kasaba henüz uyanmamıştı. Denizden gelen hafif rüzgâr, limandaki teknelerin direklerini birbirine vurdurup ince bir çan sesi çıkarıyordu.
+
+        Elif, mutfaktaki eski masaya oturdu ve defterini açtı. Her sabah olduğu gibi önce bugünün tarihini yazdı, sonra uzun uzun pencereye baktı. Yazmak istediği şey aklındaydı ama kelimeler bir türlü bir araya gelmiyordu.
+
+        Kahvesinden bir yudum aldı. Sokağın karşısındaki fırından taze ekmek kokusu geliyordu. Belki de bugün, diye düşündü, hikâyeyi en baştan değil ortasından anlatmalıyım.
+
+        İKİNCİ BÖLÜM
+
+        Öğleden sonra liman kalabalıklaştı. Balıkçılar ağlarını kurutuyor, çocuklar iskelenin ucundan suya taş atıyordu. Elif defterini koltuğunun altına sıkıştırıp yürüyüşe çıktı.
+        """
+        let id = "demo_txt"
+        try? text.data(using: .utf8)?.write(to: books.directory.appendingPathComponent("\(id).txt"))
+        let list: [Book] = [
+            Book(id: id, title: "Limandaki Defter", author: "Deniz Arda", category: "Roman", fileName: "\(id).txt", format: "txt"),
+            Book(id: "demo_2", title: "Akhilleus'un Şarkısı", author: "Madeline Miller", category: "Roman", pageCount: 412),
+            Book(id: "demo_3", title: "Sefiller", author: "Victor Hugo", category: "Roman", pageCount: 1460),
+            Book(id: "demo_4", title: "Küçük Prens", author: "Antoine de Saint-Exupéry", category: "Roman", pageCount: 96),
+            Book(id: "demo_5", title: "Atomik Alışkanlıklar", author: "James Clear", category: "Kişisel Gelişim", pageCount: 320),
+            Book(id: "demo_6", title: "Derin Çalışma", author: "Cal Newport", category: "Kişisel Gelişim", pageCount: 296),
+        ]
+        for b in list { try? books.add(b) }
+        books.savePosition(list[1], page: 8)
+    }
+
     static func seedPano(_ pano: PanoStore, store: ReminderStore) {
         let a = PanoBoard(title: "Olmuyo (Genel)", shared: true)
         let b = PanoBoard(title: "Okkk", shared: false)
@@ -161,6 +195,8 @@ enum DemoData {
         case "yasam": return [.module("Yaşam")]
         case "pano": return [.module("Pano")]
         case "water": return [.module("Su")]
+        case "books": return [.module("Kitaplar")]
+        case "reader": return [.module("Okuyucu")]
         case "planner24":
             UserDefaults.standard.set("hours_24", forKey: "planner_view_mode")
             return [.planner]
