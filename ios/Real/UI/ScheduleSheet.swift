@@ -7,7 +7,7 @@ struct ScheduleSheet: View {
     @State private var working: ScheduleDraft = ScheduleDraft()
     @State private var hasUntil = false
 
-    private let calendar = Calendar.real
+    let calendar = Calendar.real
 
     var body: some View {
         NavigationStack {

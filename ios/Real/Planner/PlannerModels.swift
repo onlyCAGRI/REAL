@@ -99,10 +99,10 @@ enum Planner {
 
 // MARK: - Calendar pastels (PlannerCalendarColors.kt)
 
-let realCalendarPastels: [Color] = [
+let realCalendarPastels: [Color] = ([
     0xFFF7E1E6, 0xFFFFD6A5, 0xFFE6D6F7, 0xFFD6EAD4, 0xFFFEF3B0,
     0xFFE6D6E7, 0xFFFFC1B6, 0xFFD0F0ED, 0xFFEAD8B0, 0xFFDCE6F7,
-].map { Color(argb: $0) }
+] as [UInt32]).map { Color(argb: $0) }
 
 private func hsl(_ c: Color) -> (h: Double, s: Double, l: Double) {
     let (r, g, b, _) = c.rgba

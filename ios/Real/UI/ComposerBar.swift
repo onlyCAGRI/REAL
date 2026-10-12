@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Draft schedule chosen in the composer or the detail screen (ReminderDateSheet).
 struct ScheduleDraft: Equatable {

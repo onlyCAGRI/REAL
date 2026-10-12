@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 extension Color {
     /// 0xAARRGGBB, the same encoding Compose Color(Long) and Android ARGB ints use.

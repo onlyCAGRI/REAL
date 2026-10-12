@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// List card (ReminderCard.kt): completion circle, title with animated strike-through,
 /// checklist/journal/date meta, category stripes and the white ring for starred cards.

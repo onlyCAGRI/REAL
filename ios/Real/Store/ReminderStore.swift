@@ -77,8 +77,9 @@ final class ReminderStore {
 
     /// Home deck order (resolveHomeCategoryOrder): 24 hour and Günlüklerim are not part of the deck.
     var homeCategoryOrder: [OrderedCategory] {
-        let all: [OrderedCategory] = [ReminderCategory.planned, .important, .noAlert, .completed].map { .builtIn($0) }
-            + categories.map { .custom($0) }
+        let builtIns: [OrderedCategory] = [ReminderCategory.planned, .important, .noAlert, .completed].map { OrderedCategory.builtIn($0) }
+        let customs: [OrderedCategory] = categories.map { OrderedCategory.custom($0) }
+        let all = builtIns + customs
         guard !categoryOrderKeys.isEmpty else { return all }
         let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.orderKey, $0) })
         let ordered = categoryOrderKeys.compactMap { byKey[$0] }

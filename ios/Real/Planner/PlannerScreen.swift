@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Combine
 
 /// Takvim, "New" daily presentation (PlannerNewDailyView.kt): greeting, Focus carousel of starred cards
