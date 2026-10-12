@@ -29,6 +29,18 @@ final class ScreenshotTests: XCTestCase {
 
     func test6bPlanner24() { capture("planner24", settle: 3) }
 
+    func test17Pano() { capture("pano", settle: 3) }
+
+    func test18PanoBoard() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "pano"]
+        app.launch()
+        let first = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'OLMUYO'")).firstMatch
+        if first.waitForExistence(timeout: 10) { first.tap() }
+        Thread.sleep(forTimeInterval: 2)
+        shot("panoboard")
+    }
+
     func test15Yasam() { capture("yasam", settle: 3) }
     func test16Water() { capture("water", settle: 3) }
 

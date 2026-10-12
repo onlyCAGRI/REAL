@@ -62,7 +62,7 @@ struct YasamScreen: View {
         .presentationBackground(.clear)
         .onAppear { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9)) { revealed = true } }
         .fullScreenCover(isPresented: $showWater) { WaterTrackerScreen().presentationBackground(.black) }
-        .sheet(isPresented: $showMoodAdd) { MoodAddSheet() }
+        .fullScreenCover(isPresented: $showMoodAdd) { MoodAddSheet() }
         .alert(placeholder ?? "", isPresented: Binding(get: { placeholder != nil }, set: { if !$0 { placeholder = nil } })) {
             Button("Tamam", role: .cancel) {}
         } message: { Text("Bu modül iOS'a sıradaki adımda taşınıyor.") }
@@ -297,6 +297,11 @@ enum YasamTone {
     static let muted = Color(argb: 0xFF9A9AA2)
 
     static func mood(_ m: JournalMood?) -> Color {
+        if let m { return YasamTone.legacy(m) }
+        return moodDefault
+    }
+
+    static func legacy(_ m: JournalMood?) -> Color {
         switch m {
         case nil, .good?, .neutral?: return moodDefault
         case .veryGood?, .happy?, .excited?: return Color(argb: 0xFFFFB86F)

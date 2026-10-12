@@ -98,11 +98,10 @@ struct ReminderDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $showMoodPicker) {
-            MoodPickerSheet(selected: draft?.mood ?? stored?.mood) { mood in
+        .fullScreenCover(isPresented: $showMoodPicker) {
+            MoodAddSheet(onSaved: { mood, _ in
                 if editing { draft?.mood = mood } else { store.mutate(reminderId) { $0.mood = mood } }
-            }
-            .presentationDetents([.medium])
+            })
         }
         .sheet(isPresented: $reordering) {
             if let r = shown { BlockReorderSheet(keys: blockOrder(r), item: r) { draft?.contentBlockOrder = $0 } }
@@ -588,12 +587,12 @@ struct ReminderDetailView: View {
     }
 
     private func moodBlock(_ mood: JournalMood) -> some View {
-        let tint = moodTint(mood)
+        let tint = MoodV2.tint(mood)
         return HStack(spacing: 14) {
-            Text(mood.emoji).font(.system(size: 52)).frame(width: 72, height: 72)
+            MoodFace(mood: mood, tint: tint).frame(width: 72, height: 72)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Mood").font(RealFont.inter(12)).foregroundStyle(tint)
-                Text(mood.label).font(RealFont.inter(21, .semibold)).foregroundStyle(Color(argb: 0xFFF7F7F9))
+                Text(MoodV2.families[MoodV2.familyIndex(mood)].title).font(RealFont.inter(21, .semibold)).foregroundStyle(Color(argb: 0xFFF7F7F9))
             }
             Spacer()
             if editing { removeButton { draft?.mood = nil } }

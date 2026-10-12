@@ -6,6 +6,7 @@ struct RealApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store: ReminderStore
     @State private var life: LifeStore
+    @State private var pano: PanoStore
     private let initialPath: [Route]
 
     init() {
@@ -19,10 +20,14 @@ struct RealApp: App {
             let life = LifeStore(persist: false)
             DemoData.seedLife(life)
             _life = State(initialValue: life)
+            let pano = PanoStore(persist: false)
+            DemoData.seedPano(pano, store: store)
+            _pano = State(initialValue: pano)
             initialPath = DemoData.path(for: args, store: store)
         } else {
             _store = State(initialValue: ReminderStore())
             _life = State(initialValue: LifeStore())
+            _pano = State(initialValue: PanoStore())
             initialPath = []
         }
     }
@@ -32,6 +37,7 @@ struct RealApp: App {
             RootView(initialPath: initialPath)
                 .environment(store)
                 .environment(life)
+                .environment(pano)
                 .background(Color.black)
         }
     }
@@ -128,6 +134,20 @@ enum DemoData {
         life.replaceAll(goal: 2_000, entries: entries, moods: moods)
     }
 
+    static func seedPano(_ pano: PanoStore, store: ReminderStore) {
+        let a = PanoBoard(title: "Olmuyo (Genel)", shared: true)
+        let b = PanoBoard(title: "Okkk", shared: false)
+        var c = PanoBoard(title: "Djfkfkggl", shared: true)
+        c.role = "MEMBER"
+        let items: [PanoItem] = [
+            PanoItem(boardId: a.id, type: .text, transform: BoardTransform(x: 0, y: 40, width: 240, height: 140, z: 1), text: "Sprint fikirleri: dock morph, takvim, Yaşam"),
+            PanoItem(boardId: a.id, type: .card, transform: BoardTransform(x: 30, y: 220, width: 300, height: 120, z: 2), reminderId: 1),
+            PanoItem(boardId: a.id, type: .checklist, transform: BoardTransform(x: 0, y: 380, width: 260, height: 190, z: 3),
+                     checklist: [PanoChecklistEntry(text: "Logo", done: true), PanoChecklistEntry(text: "Renkler"), PanoChecklistEntry(text: "Kartlar")]),
+        ]
+        pano.replaceAll(boards: [a, b, c], items: [a.id: items])
+    }
+
     static func path(for args: [String], store: ReminderStore) -> [Route] {
         guard let i = args.firstIndex(of: "-REALScreen"), i + 1 < args.count else { return [] }
         switch args[i + 1] {
@@ -139,6 +159,7 @@ enum DemoData {
             UserDefaults.standard.set("daily", forKey: "planner_view_mode")
             return [.planner]
         case "yasam": return [.module("Yaşam")]
+        case "pano": return [.module("Pano")]
         case "water": return [.module("Su")]
         case "planner24":
             UserDefaults.standard.set("hours_24", forKey: "planner_view_mode")

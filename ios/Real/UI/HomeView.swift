@@ -32,6 +32,8 @@ struct RootView: View {
                     case .module(let name):
                         if name == "Yaşam" {
                             YasamScreen(onOpenCard: { id in path.append(.detail(id)) }).toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Pano" {
+                            PanoScreen()
                         } else if name == "Su" {
                             WaterTrackerScreen().toolbar(.hidden, for: .navigationBar)
                         } else {
@@ -57,6 +59,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var confirmDelete = false
     @State private var showYasam = false
+    @State private var showPano = false
     @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
 
     private let previewCount = 4
@@ -122,7 +125,7 @@ struct HomeView: View {
                 ComposerBar(defaultCategoryId: nil, isHome: true,
                             onOpenPlanner: { path.append(.planner) },
                             onOpenYasam: { withoutAnimation { showYasam = true } },
-                            onOpenPano: { path.append(.module("Pano")) })
+                            onOpenPano: { showPano = true })
                     .background(alignment: .bottom) {
                         // BottomFade behind the dock so cards dissolve under the glass.
                         LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
@@ -146,6 +149,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showNewCategory) { CategoryEditorSheet(existing: nil) }
         .sheet(isPresented: $showSettings) { SettingsSheet() }
+        .fullScreenCover(isPresented: $showPano) { PanoScreen().presentationBackground(.black) }
         .fullScreenCover(isPresented: $showYasam) {
             YasamScreen(onOpenCard: { id in
                 withoutAnimation { showYasam = false }
