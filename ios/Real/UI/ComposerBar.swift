@@ -138,7 +138,8 @@ struct ComposerBar: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.bottom, expanded ? 20 : 12)
+        // Android: dock bottom edge ~30dp above the screen edge (34pt safe area − 4).
+        .padding(.bottom, expanded ? 8 : -4)
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: expanded)
         .animation(.spring(response: 0.34, dampingFraction: 0.85), value: navExpanded)
         .highPriorityGesture(

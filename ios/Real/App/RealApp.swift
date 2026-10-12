@@ -203,6 +203,7 @@ enum DemoData {
         case "water": return [.module("Su")]
         case "books": return [.module("Kitaplar")]
         case "film": return [.module("Film")]
+        case "moods": return [.module("Moods")]
         case "filmdeck": return [.module("FilmDeck")]
         case "game": return [.module("Oyun")]
         case "reader": return [.module("Okuyucu")]

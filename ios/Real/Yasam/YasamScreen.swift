@@ -24,6 +24,7 @@ struct YasamScreen: View {
     @State private var waterHistoryOpen = false
     @State private var showWater = false
     @State private var showMoodAdd = false
+    @State private var showMoodHistory = false
     @State private var placeholder: String?
     @State private var heroTopic = Int.random(in: 0..<6)
     @State private var contentID = 0
@@ -78,6 +79,9 @@ struct YasamScreen: View {
         .fullScreenCover(isPresented: $showBooks) { BooksModuleScreen(resumeBookId: resumeBook) }
         .fullScreenCover(isPresented: $showWater) { WaterTrackerScreen().presentationBackground(.black) }
         .fullScreenCover(isPresented: $showMoodAdd) { MoodAddSheet() }
+        .fullScreenCover(isPresented: $showMoodHistory) {
+            MoodHistoryScreen(onAdd: { showMoodHistory = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showMoodAdd = true } })
+        }
         .alert(placeholder ?? "", isPresented: Binding(get: { placeholder != nil }, set: { if !$0 { placeholder = nil } })) {
             Button("Tamam", role: .cancel) {}
         } message: { Text("Bu modül iOS'a sıradaki adımda taşınıyor.") }
@@ -205,7 +209,7 @@ struct YasamScreen: View {
                     YasamTextAction(text: moodHistoryOpen ? "GEÇMİŞİ GİZLE  ‹" : "GEÇMİŞİ AÇ  ›", tone: YasamTone.muted) {
                         withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { moodHistoryOpen.toggle() }
                     }
-                    if moodHistoryOpen { YasamMoodHistory(onAdd: { showMoodAdd = true }).transition(.opacity.combined(with: .move(edge: .top))) }
+                    if moodHistoryOpen { YasamMoodHistory(onAdd: { showMoodAdd = true }, onMore: { showMoodHistory = true }).transition(.opacity.combined(with: .move(edge: .top))) }
                 }
                 YasamRow(label: "GÜNLÜKLERİM", value: "Bugün yaz", expanded: open == "journal", index: 2, revealed: revealed,
                          toggle: { toggle("journal") }) {
@@ -789,6 +793,7 @@ struct YasamSpark: View {
 struct YasamMoodHistory: View {
     @Environment(LifeStore.self) private var life
     let onAdd: () -> Void
+    var onMore: () -> Void = {}
     @State private var drawn: CGFloat = 0
 
     var body: some View {
@@ -820,7 +825,7 @@ struct YasamMoodHistory: View {
                     .defaultScrollAnchor(.trailing)
                 }
                 .frame(height: 100)
-                YasamTextAction(text: "DAHA FAZLA  ›", tone: YasamTone.muted, action: onAdd)
+                YasamTextAction(text: "DAHA FAZLA  ›", tone: YasamTone.muted, action: onMore)
             }
         }
         .padding(.top, 4)

@@ -486,26 +486,34 @@ private struct PosterDeck: View {
         }
     }
 
-    @ViewBuilder
     private func poster(_ item: DiscoveryCard, depth: Int, width: CGFloat, height: CGFloat) -> some View {
         let d = CGFloat(depth)
-        let scale = 1 - d * 0.045
         let front = depth == 0
+        let scale: CGFloat = 1 - d * 0.045
+        let lift: CGFloat = -d * (10 + 0.045 * height / 2)
+        let fade: Double = later && front ? 1 : 1 - Double(d) * 0.1
+        let raw: CGFloat = offset.width / threshold * 7 + offset.height / threshold * 2
+        let angle: Double = front ? Double(max(-24, min(24, raw))) : 0
+        let shift: CGSize = front ? offset : .zero
+        return posterFace(item, front: front, width: width, height: height)
+            .scaleEffect(scale)
+            .offset(y: lift)
+            .opacity(fade)
+            .offset(shift)
+            .rotationEffect(.degrees(angle))
+            .zIndex(Double(10 - depth))
+            .animation(.spring(response: 0.42, dampingFraction: 0.85), value: depth)
+            .gesture(drag(item), including: front ? .all : .subviews)
+            .onTapGesture { if front && !busy { onOpenDetails(item) } }
+    }
+
+    private func posterFace(_ item: DiscoveryCard, front: Bool, width: CGFloat, height: CGFloat) -> some View {
         PosterArtwork(media: item.media)
             .frame(width: width, height: height)
             .overlay(alignment: .topLeading) { if front { leftLabels(item) } }
             .overlay(alignment: .topTrailing) { if front { rightLabels(item) } }
             .overlay { if front && busy { ProgressView().tint(.white) } }
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .scaleEffect(scale)
-            .offset(y: -d * (10 + 0.045 * height / 2))
-            .opacity(later && front ? 1 : 1 - d * 0.1)
-            .offset(front ? offset : .zero)
-            .rotationEffect(.degrees(front ? Double(max(-24, min(24, offset.width / threshold * 7 + offset.height / threshold * 2))) : 0))
-            .zIndex(Double(10 - depth))
-            .animation(.spring(response: 0.42, dampingFraction: 0.85), value: depth)
-            .gesture(drag(item), including: front ? .all : .subviews)
-            .onTapGesture { if front && !busy { onOpenDetails(item) } }
             .accessibilityElement()
             .accessibilityLabel(item.media.title)
             .accessibilityAddTraits(front ? .isButton : [])

@@ -144,11 +144,12 @@ struct GlassEdgesOverlay: View {
     var body: some View {
         VStack(spacing: 0) {
             LinearGradient(colors: [background, background.opacity(0.85), background.opacity(0)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 64).ignoresSafeArea(edges: .top)
+                .frame(height: 110)
             Spacer()
             LinearGradient(colors: [background.opacity(0), background.opacity(0.85), background], startPoint: .top, endPoint: .bottom)
-                .frame(height: 140).ignoresSafeArea(edges: .bottom)
+                .frame(height: 170)
         }
+        .ignoresSafeArea()
         .allowsHitTesting(false)
     }
 }

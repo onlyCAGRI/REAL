@@ -37,6 +37,8 @@ struct RootView: View {
                         } else if name == "Film" || name == "FilmDeck" || name == "Oyun" {
                             DiscoveryScreen(kind: name == "Oyun" ? .game : .film, startInDeck: name == "FilmDeck", onClose: {})
                                 .toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Moods" {
+                            MoodHistoryScreen(onAdd: {}).toolbar(.hidden, for: .navigationBar)
                         } else if name == "Kitaplar" {
                             BooksModuleScreen().toolbar(.hidden, for: .navigationBar)
                         } else if name == "Okuyucu" {
