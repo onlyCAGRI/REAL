@@ -15,6 +15,8 @@ struct ReminderAttachment: Codable, Identifiable, Hashable {
     var displayName: String? = nil
     var sizeBytes: Int64? = nil
     var text: String? = nil
+    /// "REAL_TEXT_BLOCK" marks a standalone text box added from the edit dock.
+    var sourceTitle: String? = nil
 }
 
 enum JournalMood: String, Codable, CaseIterable, Identifiable {
@@ -148,6 +150,8 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     /// Planner metadata (PlannerEventDetails): duration and people.
     var durationMinutes: Int? = nil
     var people: [String] = []
+    /// Detail block order (contentBlockOrder): keys like "text", "checklist", "photos:<id>".
+    var contentBlockOrder: [String] = []
 
     init(id: Int64, text: String, createdAt: EpochMillis, updatedAt: EpochMillis? = nil) {
         self.id = id
@@ -202,6 +206,30 @@ struct ReminderItem: Codable, Identifiable, Hashable {
         return copy
     }
 
+    /// cardContentKeys: which detail blocks this card has, in natural order.
+    func cardContentKeys(includeEmptyChecklist: Bool = false, includeJournal: Bool = false) -> [String] {
+        var keys = ["text"]
+        if let stack = cardStack, !stack.cards.isEmpty { keys.append("card_stack") }
+        if mood != nil { keys.append("mood") }
+        if !checklistItems.isEmpty || includeEmptyChecklist { keys.append("checklist") }
+        keys += attachments.filter { $0.type == .image }.map { "photos:\($0.id)" }
+        keys += attachments.filter { $0.type != .image }.map { "files:\($0.id)" }
+        if referenceUrl != nil { keys.append("files:reference") }
+        if location != nil { keys.append("location") }
+        if journal != nil || includeJournal { keys.append("journal") }
+        return keys
+    }
+
+    /// resolveCardContentOrder: saved order first, new blocks appended.
+    func resolvedBlockOrder(_ active: [String]) -> [String] {
+        var ordered: [String] = []
+        for key in contentBlockOrder {
+            if active.contains(key) { if !ordered.contains(key) { ordered.append(key) } }
+            else if !key.contains(":") { active.filter { $0.split(separator: ":").first.map(String.init) == key && !ordered.contains($0) }.forEach { ordered.append($0) } }
+        }
+        return ordered + active.filter { !ordered.contains($0) }
+    }
+
     var gradientBlendResolved: Double { min(max(gradientBlendFraction ?? 0.5, 0), 1) }
 
     /// buildReminderShareText
@@ -221,7 +249,7 @@ extension ReminderItem {
              quick24HourUntilAt, notifiedAlertAt, accentStart, accentEnd, repeatRule, anchorAlertAt,
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
-             cardStack, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people
+             cardStack, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder
     }
 
     init(from decoder: Decoder) throws {
@@ -258,6 +286,7 @@ extension ReminderItem {
         repeatSkippedEpochDays = try c.decodeIfPresent([EpochDay].self, forKey: .repeatSkippedEpochDays) ?? []
         durationMinutes = try c.decodeIfPresent(Int.self, forKey: .durationMinutes)
         people = try c.decodeIfPresent([String].self, forKey: .people) ?? []
+        contentBlockOrder = try c.decodeIfPresent([String].self, forKey: .contentBlockOrder) ?? []
     }
 }
 

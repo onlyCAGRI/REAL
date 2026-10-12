@@ -2,399 +2,825 @@ import SwiftUI
 import UIKit
 import PhotosUI
 import MapKit
+import UniformTypeIdentifiers
 
-/// Card detail (ReminderDetailScreen.kt): every content block of a REAL is edited here.
+/// Card detail (ReminderDetailScreen.kt). View mode: the card itself as the top block (text, divider,
+/// status / schedule / category), the content blocks under it in their saved order, and the glass bottom bar
+/// (Tamamla · Düzenle · Share · Sil). Edit mode: everything edits a draft; the edit dock adds blocks one by one
+/// (Metin, Tarih, Konum, Checklist, Fotoğraf, Kamera, Dosya, Kart Yığını, Mood) and "Renk ve kategori" opens
+/// the colour picker + category row. Kaydet commits the draft, Vazgeç drops it.
 struct ReminderDetailView: View {
     @Environment(ReminderStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     let reminderId: Int64
 
-    @State private var title = ""
-    @State private var schedule = ScheduleDraft()
-    @State private var categoryId: Int64?
-    @State private var showDateSheet = false
-    @State private var showCategoryPicker = false
-    @State private var showColorSheet = false
-    @State private var showDeleteDialog = false
+    @State private var draft: ReminderItem?
+    @State private var secondaryExpanded = false
+    @State private var deleting = false
+    @State private var reordering = false
     @State private var newChecklistText = ""
+    @State private var checklistOpen = false
+    @State private var showDateSheet = false
+    @State private var schedule = ScheduleDraft()
+    @State private var showCategoryPicker = false
+    @State private var categorySelection: Int64?
+    @State private var showPhotoPicker = false
+    @State private var photoItems: [PhotosPickerItem] = []
+    @State private var showCamera = false
+    @State private var showFileImporter = false
+    @State private var showLocationEditor = false
+    @State private var showLinkEditor = false
     @State private var editingStackCard: CardStackCard?
-    @State private var photoSelection: [PhotosPickerItem] = []
-    @State private var linkDraft = ""
-    @State private var editingLink = false
-    @State private var editingLocation = false
+    @State private var showMoodPicker = false
+    @State private var previewPhoto: ReminderAttachment?
     @FocusState private var titleFocused: Bool
 
-    private var reminder: ReminderItem? { store.reminder(reminderId) }
+    private var stored: ReminderItem? { store.reminder(reminderId) }
+    private var editing: Bool { draft != nil }
+    /// What the screen shows: the draft while editing, the stored card otherwise.
+    private var shown: ReminderItem? { draft ?? stored }
 
     var body: some View {
-        Group {
-            if let reminder {
-                content(reminder)
-            } else {
-                Color.black.onAppear { dismiss() }
-            }
-        }
-        .background(RealColors.background.ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
-    }
-
-    private func content(_ r: ReminderItem) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                topBar(r)
-                headerCard(r)
-                infoRows(r)
-                checklistSection(r)
-                journalSection(r)
-                cardStackSection(r)
-                photosSection(r)
-                linkSection(r)
-                locationSection(r)
-                footer(r)
-                Color.clear.frame(height: 40)
-            }
-            .padding(.horizontal, 16)
-        }
-        .scrollDismissesKeyboard(.interactively)
-        .onAppear {
-            title = r.text
-            schedule = ScheduleDraft(from: r)
-            categoryId = r.customCategoryId
-            linkDraft = r.referenceUrl ?? ""
-        }
-        .onChange(of: schedule) { _, new in store.mutate(reminderId) { new.apply(to: &$0) } }
-        .onChange(of: categoryId) { _, new in store.mutate(reminderId) { $0.customCategoryId = new } }
-        .onChange(of: titleFocused) { _, focused in if !focused { commitTitle() } }
-        .onDisappear(perform: commitTitle)
-        .onChange(of: photoSelection) { _, items in importPhotos(items) }
-        .sheet(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
-        .sheet(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId).presentationDetents([.medium, .large]) }
-        .sheet(isPresented: $showColorSheet) { ReminderColorSheet(reminderId: reminderId).presentationDetents([.medium, .large]) }
-        .sheet(item: $editingStackCard) { card in CardStackEditor(reminderId: reminderId, card: card) }
-        .sheet(isPresented: $editingLocation) { LocationEditor(reminderId: reminderId).presentationDetents([.medium]) }
-        .confirmationDialog("Kart silinsin mi?", isPresented: $showDeleteDialog, titleVisibility: .visible) {
-            if r.hasRepeat, let occurrence = Recurrence.nextDeletableOccurrence(r, now: .now) {
-                Button("Sadece \(RealDates.dayLabel(occurrence.date))", role: .destructive) {
-                    store.deleteOccurrence(reminderId, occurrence: occurrence)
-                }
-                Button("Tüm seri", role: .destructive) { store.delete([reminderId]) }
-            } else {
-                Button("Sil", role: .destructive) { store.delete([reminderId]) }
-            }
-            Button("Vazgeç", role: .cancel) {}
-        }
-    }
-
-    private func commitTitle() {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != reminder?.text else { return }
-        store.mutate(reminderId) { $0.text = trimmed }
-    }
-
-    // MARK: Sections
-
-    private func topBar(_ r: ReminderItem) -> some View {
-        HStack(spacing: 10) {
-            circleButton("chevron.left", label: "Geri") { dismiss() }
-            Spacer()
-            circleButton(r.isImportant ? "star.fill" : "star", label: "Önemli") {
-                store.mutate(reminderId) { $0.isImportant.toggle() }
-            }
-            ShareLink(item: r.shareText) {
-                Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44).background(.ultraThinMaterial, in: Circle())
-            }
-            circleButton("trash", label: "Sil") { showDeleteDialog = true }
-        }
-        .foregroundStyle(.white)
-        .padding(.top, 8)
-    }
-
-    private func circleButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 16, weight: .semibold))
-                .frame(width: 44, height: 44).background(.ultraThinMaterial, in: Circle())
-        }
-        .accessibilityLabel(label)
-    }
-
-    private func headerCard(_ r: ReminderItem) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
-        let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: false,
-                                            blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
-        let ink: Color = r.useDarkText ? Color(argb: 0xFF101010) : .white
-        return VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 12) {
-                Button { withAnimation { store.toggleCompleted(reminderId) } } label: {
-                    ZStack {
-                        Circle().strokeBorder(ink.opacity(r.isCompleted ? 0 : 0.6), lineWidth: 1.8)
-                        if r.isCompleted {
-                            Circle().fill(ink.opacity(0.85))
-                            Image(systemName: "checkmark").font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(r.useDarkText ? .white : .black)
+        ZStack(alignment: .bottom) {
+            Color.black.ignoresSafeArea()
+            if let r = shown {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        if !editing { header(r) } else { Color.clear.frame(height: 4) }
+                        ForEach(blockOrder(r), id: \.self) { key in
+                            block(key, r).transition(.opacity.combined(with: .scale(scale: 0.97)))
                         }
                     }
-                    .frame(width: 26, height: 26)
-                    .padding(.top, 4)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, editing ? (secondaryExpanded ? 520 : 300) : 130)
+                    .animation(.spring(duration: 0.3), value: blockOrder(r))
                 }
-                .accessibilityLabel(r.isCompleted ? "Tamamlamayı geri al" : "Tamamla")
-                TextField("Hatırlatıcı metni", text: $title, axis: .vertical)
-                    .font(RealFont.inter(26))
-                    .kerning(-0.6)
-                    .foregroundStyle(ink)
-                    .strikethrough(r.isCompleted)
-                    .focused($titleFocused)
-                    .lineLimit(1...8)
-            }
-            if let category = store.category(r.customCategoryId) {
-                HStack(spacing: 6) {
-                    Image(systemName: category.icon.symbol)
-                    Text(category.name)
-                }
-                .font(RealFont.inter(13, .medium))
-                .foregroundStyle(ink.opacity(0.8))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Capsule().fill(ink.opacity(0.12)))
+                .scrollDismissesKeyboard(.interactively)
+                bottomColumn(r)
+            } else {
+                Color.clear.onAppear { dismiss() }
             }
         }
-        .padding(22)
-        .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
-        .background {
-            if let accent { shape.fill(accent) } else { shape.fill(RealColors.cardSurface) }
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
+        .onChange(of: schedule) { _, new in
+            if editing { new.apply(to: &draft!) } else { store.mutate(reminderId) { new.apply(to: &$0) } }
         }
-        .overlay(shape.strokeBorder(r.isImportant ? Color.white.opacity(0.85) : Color.white.opacity(0.1), lineWidth: r.isImportant ? 1.25 : 0.75))
+        .sheet(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categorySelection).presentationDetents([.medium, .large]) }
+        .onChange(of: categorySelection) { _, new in draft?.customCategoryId = new }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
+        .onChange(of: photoItems) { _, items in importPhotos(items) }
+        .fullScreenCover(isPresented: $showCamera) { CameraPicker { data in addAttachment(AttachmentStorage.save(data)) }.ignoresSafeArea() }
+        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result { urls.forEach { addAttachment(AttachmentStorage.saveFile($0)) } }
+        }
+        .sheet(isPresented: $showLocationEditor) {
+            LocationEditor(initial: draft?.location) { draft?.location = $0 }.presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showLinkEditor) {
+            LinkEditor(initial: draft?.referenceUrl ?? "") { draft?.referenceUrl = $0 }.presentationDetents([.height(220)])
+        }
+        .sheet(item: $editingStackCard) { card in
+            CardStackEditor(card: card, isNew: shown?.cardStack?.cards.contains { $0.id == card.id } != true) { updated in
+                updateStack { stack in
+                    if let updated {
+                        if let i = stack.cards.firstIndex(where: { $0.id == updated.id }) { stack.cards[i] = updated } else { stack.cards.append(updated) }
+                    } else {
+                        stack.cards.removeAll { $0.id == card.id }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showMoodPicker) {
+            MoodPickerSheet(selected: draft?.mood ?? stored?.mood) { mood in
+                if editing { draft?.mood = mood } else { store.mutate(reminderId) { $0.mood = mood } }
+            }
+            .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $reordering) {
+            if let r = shown { BlockReorderSheet(keys: blockOrder(r), item: r) { draft?.contentBlockOrder = $0 } }
+        }
+        .fullScreenCover(item: $previewPhoto) { a in PhotoPreview(attachment: a) }
     }
 
-    private func infoRows(_ r: ReminderItem) -> some View {
-        VStack(spacing: 0) {
-            DetailRow(icon: "calendar", title: "Tarih", value: schedule.isEmpty ? "Uyarı yok" : schedule.summary) { showDateSheet = true }
-            if let pattern = Recurrence.patternLabel(r) {
-                Divider().overlay(Color.white.opacity(0.06))
-                DetailRow(icon: "repeat", title: "Tekrar", value: pattern) { showDateSheet = true }
-            }
-            if let minutes = r.durationMinutes, let alert = r.alertAt {
-                Divider().overlay(Color.white.opacity(0.06))
-                DetailRow(icon: "hourglass", title: "Süre",
-                          value: "\(Planner.durationLabel(minutes: Int64(minutes))) · Bitiş: \(RealDates.time((alert + Int64(minutes) * 60_000).date))") { showDateSheet = true }
-            }
-            Divider().overlay(Color.white.opacity(0.06))
-            DetailRow(icon: "square.grid.2x2", title: "Kategori", value: store.category(r.customCategoryId)?.name ?? "Kategori yok") {
-                showCategoryPicker = true
-            }
-            Divider().overlay(Color.white.opacity(0.06))
-            DetailRow(icon: "paintpalette", title: "Renk", value: colorLabel(r)) { showColorSheet = true }
-            if r.isQuick24HourActive() {
-                Divider().overlay(Color.white.opacity(0.06))
-                DetailRow(icon: "clock.arrow.circlepath", title: "24 hour", value: "Listeden çıkar") {
-                    store.mutate(reminderId) { $0.quick24HourUntilAt = nil }
-                }
-            }
-        }
-        .detailSurface()
-    }
+    // MARK: Block order
 
-    private func colorLabel(_ r: ReminderItem) -> String {
-        if r.customSolidColorArgb != nil { return "Özel renk" }
-        let names = [r.accentStart, r.accentEnd].compactMap { $0 }.compactMap { reminderColorChoices.indices.contains($0) ? reminderColorChoices[$0].label : nil }
-        return names.isEmpty ? "Varsayılan" : names.joined(separator: " → ")
+    private func blockOrder(_ r: ReminderItem) -> [String] {
+        let active = r.cardContentKeys(includeEmptyChecklist: editing && checklistOpen, includeJournal: false)
+        return r.resolvedBlockOrder(active)
     }
 
     @ViewBuilder
-    private func checklistSection(_ r: ReminderItem) -> some View {
-        DetailSection(title: "Checklist", trailing: r.isChecklist ? "\(r.checklistItems.filter(\.isCompleted).count)/\(r.checklistItems.count)" : nil) {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(r.checklistItems) { item in
-                    HStack(spacing: 12) {
-                        Button { store.toggleChecklistItem(reminderId, itemId: item.id) } label: {
-                            Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 20))
-                                .foregroundStyle(item.isCompleted ? RealColors.accentBlue : Color(argb: 0xFF626269))
-                        }
-                        Text(item.text)
-                            .font(RealFont.inter(15))
-                            .foregroundStyle(item.isCompleted ? RealColors.textMuted : RealColors.text)
-                            .strikethrough(item.isCompleted)
-                        Spacer()
-                        Button {
-                            store.mutate(reminderId) { $0.checklistItems.removeAll { $0.id == item.id } }
-                        } label: { Image(systemName: "xmark").font(.system(size: 11)) }
-                            .foregroundStyle(RealColors.textMuted)
-                    }
-                    .padding(.vertical, 6)
+    private func block(_ key: String, _ r: ReminderItem) -> some View {
+        let kind = key.split(separator: ":").first.map(String.init) ?? key
+        let id = key.contains(":") ? String(key.split(separator: ":", maxSplits: 1)[1]) : ""
+        switch kind {
+        case "text": textBlock(r)
+        case "card_stack": if let stack = r.cardStack { CardStackDeck(stack: stack, editing: editing, onEdit: { editingStackCard = $0 },
+                                                                       onAdd: { editingStackCard = CardStackCard() }) }
+        case "mood": if let mood = r.mood { moodBlock(mood) }
+        case "checklist": checklistBlock(r)
+        case "photos": if let a = r.attachments.first(where: { $0.id == id }) { photoBlock(a) }
+        case "files":
+            if id == "reference", let url = r.referenceUrl { linkBlock(url) }
+            else if let a = r.attachments.first(where: { $0.id == id }) {
+                if a.sourceTitle == "REAL_TEXT_BLOCK" { textBoxBlock(a, r) } else { fileBlock(a) }
+            }
+        case "location": if let l = r.location { locationBlock(l) }
+        case "journal": if let j = r.journal { journalBlock(j) }
+        default: EmptyView()
+        }
+    }
+
+    // MARK: Header
+
+    private func header(_ r: ReminderItem) -> some View {
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left").font(.system(size: 18, weight: .medium)).foregroundStyle(.white)
+                    .frame(width: 40, height: 40).liquidGlass(Circle())
+                    .frame(width: 48, height: 48)
+            }
+            .accessibilityLabel("Geri")
+            Spacer()
+            HStack(spacing: 0) {
+                // Now Bar has no iOS counterpart yet; shown disabled like Android when unavailable.
+                Image(systemName: "pin").font(.system(size: 17)).foregroundStyle(Color(argb: 0xFF66666F))
+                    .frame(width: 48, height: 40)
+                    .accessibilityLabel("Now Bar kullanılamıyor")
+                Rectangle().fill(.white.opacity(0.13)).frame(width: 1, height: 18)
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    store.mutate(reminderId) { $0.isImportant.toggle() }
+                } label: {
+                    Image(systemName: r.isImportant ? "star.fill" : "star").font(.system(size: 18))
+                        .foregroundStyle(r.isImportant ? Color(argb: 0xFFEACB75) : Color(argb: 0xFFC9CBD3))
+                        .frame(width: 48, height: 40)
+                        .background(r.isImportant ? Color(argb: 0xFFEACB75).opacity(0.08) : .clear)
+                        .contentTransition(.symbolEffect(.replace))
                 }
+                .accessibilityLabel(r.isImportant ? "Önemli işaretini kaldır" : "Önemli olarak işaretle")
+            }
+            .frame(width: 97, height: 40)
+            .liquidGlass(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+    }
+
+    // MARK: Text block (the card itself)
+
+    private func textBlock(_ r: ReminderItem) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+        let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: r.isCompleted,
+                                            blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
+        let dark = r.useDarkText
+        let struck = r.isCompleted && r.journal == nil
+        let ink: Color = dark ? (struck ? Color(argb: 0xFF55555A) : Color(argb: 0xFF101010)) : (struck ? Color(argb: 0xFF9999A2) : Color(argb: 0xFFF4F4F6))
+        return VStack(alignment: .leading, spacing: 0) {
+            if editing {
+                TextField("Hatırlatıcı metni", text: Binding(get: { draft?.text ?? "" }, set: { draft?.text = $0 }), axis: .vertical)
+                    .font(RealFont.inter(21))
+                    .lineSpacing(10)
+                    .foregroundStyle(dark ? Color(argb: 0xFF101010) : .white)
+                    .tint(dark ? Color(argb: 0xFF101010) : Color(argb: 0xFF82B3FF))
+                    .focused($titleFocused)
+                    .frame(minHeight: 96, alignment: .topLeading)
+                    .onChange(of: titleFocused) { _, f in if f { secondaryExpanded = false } }
+                if !r.isCompleted, r.alertAt != nil { scheduleChips(r) }
+            } else {
+                Text(r.text.isEmpty ? "Boş not" : r.text)
+                    .font(RealFont.inter(21))
+                    .lineSpacing(10)
+                    .foregroundStyle(ink)
+                    .strikethrough(struck, color: ink)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Rectangle().fill(dark ? Color(argb: 0xFF101010).opacity(0.2) : Color(argb: 0xFF38383F)).frame(height: 1)
+                    .padding(.top, 24).padding(.bottom, 18)
+                statusArea(r)
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 25)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if let accent { shape.fill(accent) }
+            else { shape.fill(LinearGradient(colors: [Color(argb: 0xFF18181A), LiquidGlassTokens.contentColor], startPoint: .top, endPoint: .bottom)) }
+        }
+        .overlay { if r.isImportant { shape.strokeBorder(Color.white.opacity(0.85), lineWidth: 1.25) } }
+    }
+
+    /// Status line under the divider: "Planlı • Bugün, 10:00", duration / end, repeat summary, category.
+    @ViewBuilder
+    private func statusArea(_ r: ReminderItem) -> some View {
+        let category = store.category(r.customCategoryId)
+        let standaloneCategory = !r.isCompleted && r.alertAt == nil && r.plannedDateEpochDay == nil && !r.isQuick24HourActive() && category != nil
+        if standaloneCategory, let category {
+            HStack(spacing: 10) {
+                categoryBadge(category, size: 32)
+                Text(category.name).font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFE2E2E8))
+            }
+        } else {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: r.isCompleted ? "checkmark" : "note.text")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(RealColors.accentBlue)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 3) {
+                    let status = statusText(r, hasCategory: category != nil)
+                    if let status {
+                        if r.isCompleted {
+                            Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
+                        } else if let alert = r.alertAt {
+                            HStack(spacing: 6) {
+                                Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
+                                Text("•").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF6B6B75))
+                                Text(RealDates.reminder(alert)).font(RealFont.inter(14, .medium))
+                                    .foregroundStyle(alert < EpochMillis.now ? RealColors.overdue : RealColors.accentBlue)
+                            }
+                            if let dur = r.durationMinutes {
+                                HStack(spacing: 6) {
+                                    Text("Süre: \(dur) dk")
+                                    Text("•").foregroundStyle(Color(argb: 0xFF6B6B75))
+                                    Text("Bitiş: \(RealDates.time((alert + Int64(dur) * 60_000).date))")
+                                }
+                                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 2)
+                            }
+                            if let repeatText = repeatSummary(r) {
+                                Text(repeatText).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
+                            }
+                        } else if let day = r.plannedDateEpochDay {
+                            HStack(spacing: 6) {
+                                Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
+                                Text("•").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF6B6B75))
+                                Text(RealDates.planned(day)).font(RealFont.inter(14, .medium)).foregroundStyle(RealColors.accentBlue)
+                            }
+                        } else {
+                            Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
+                        }
+                    }
+                    if let category {
+                        HStack(spacing: 6) {
+                            categoryBadge(category, size: 16)
+                            Text(category.name).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFC4C4CE))
+                        }
+                        .padding(.top, 1)
+                    }
+                }
+            }
+        }
+    }
+
+    private func statusText(_ r: ReminderItem, hasCategory: Bool) -> String? {
+        if r.isCompleted { return "Tamamlandı" }
+        if r.isQuick24HourActive() { return "24 hour" }
+        if r.alertAt == nil && r.plannedDateEpochDay == nil { return hasCategory ? nil : "Uyarı yok" }
+        return "Planlı"
+    }
+
+    /// RecurrenceRule.repeatSummary ("Her Pazartesi tekrarlanacak").
+    private func repeatSummary(_ r: ReminderItem) -> String? {
+        guard r.repeatRule != .none, let base = r.anchorAlertAt ?? r.alertAt else { return nil }
+        if let pattern = Recurrence.patternLabel(r) { return pattern }
+        let cal = Calendar.real
+        let d = base.date
+        switch r.repeatRule {
+        case .daily: return "Her gün tekrarlanacak"
+        case .weekly: return "Her \(cal.isoWeekday(of: d).full) tekrarlanacak"
+        case .monthly:
+            let day = cal.component(.day, from: d)
+            let suffix: String
+            switch day {
+            case 2, 7, 12, 17, 20, 22, 27: suffix = "'si"
+            case 3, 4, 13, 14, 23, 24: suffix = "'ü"
+            case 9, 10, 19, 29, 30: suffix = "'u"
+            case 6, 16, 26: suffix = "'sı"
+            default: suffix = "'i"
+            }
+            return "Her ayın \(day)\(suffix) tekrarlanacak"
+        case .yearly: return "Her yıl \(cal.component(.day, from: d)) \(turkishMonths[cal.component(.month, from: d) - 1]) tekrarlanacak"
+        case .none: return nil
+        }
+    }
+
+    private func categoryBadge(_ c: CustomCategory, size: CGFloat) -> some View {
+        let start = paletteColor(c.accentStart) ?? Color(argb: 0xFF233F73)
+        let end = paletteColor(c.accentEnd) ?? start
+        return Image(systemName: c.icon.symbol)
+            .font(.system(size: size * 0.5))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Circle().fill(LinearGradient(colors: [start, end], startPoint: .topLeading, endPoint: .bottomTrailing)))
+    }
+
+    /// Edit-mode schedule chips under the text: date, repeat, duration, end, clear.
+    private func scheduleChips(_ r: ReminderItem) -> some View {
+        HStack(spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    chip("calendar", RealDates.reminder(r.alertAt!), selected: true) { openSchedule(r) }
+                    if r.hasRepeat {
+                        chip("repeat", Recurrence.description(r.repeatRule, alert: r.anchorAlertAt ?? r.alertAt), selected: false) { openSchedule(r) }
+                    }
+                    chip("note.text", r.durationMinutes.map { "Süre: \($0) min" } ?? "Süre ekle", selected: false) {
+                        let options = [nil, 15, 30, 45, 60, 90, 120]
+                        let i = options.firstIndex(of: r.durationMinutes) ?? 0
+                        draft?.durationMinutes = options[(i + 1) % options.count]
+                    }
+                    let end = r.durationMinutes.map { RealDates.time((r.alertAt! + Int64($0) * 60_000).date) } ?? "—"
+                    chip("calendar", "Bitiş: \(end)", selected: false) { openSchedule(r) }
+                }
+            }
+            Button {
+                draft?.alertAt = nil
+                draft?.anchorAlertAt = nil
+                draft?.repeatRule = .none
+                draft?.durationMinutes = nil
+            } label: { Image(systemName: "xmark").font(.system(size: 14)).foregroundStyle(.white).frame(width: 40, height: 40) }
+            .accessibilityLabel("Tarih ve saati kaldır")
+        }
+        .padding(.top, 12)
+    }
+
+    private func chip(_ symbol: String, _ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(RealColors.accentBlue)
+                Text(label).font(RealFont.inter(selected ? 13 : 12, .medium)).foregroundStyle(selected ? Color(argb: 0xFFE2E8F0) : Color(argb: 0xFFD2D2DA))
+            }
+            .padding(.horizontal, selected ? 10 : 9).padding(.vertical, 7)
+            .liquidGlass(RoundedRectangle(cornerRadius: 12, style: .continuous), role: .chrome)
+        }
+    }
+
+    private func openSchedule(_ r: ReminderItem) {
+        schedule = ScheduleDraft(from: r)
+        showDateSheet = true
+    }
+
+    // MARK: Content blocks
+
+    private func checklistBlock(_ r: ReminderItem) -> some View {
+        let items = r.checklistItems
+        let done = items.filter(\.isCompleted).count
+        let summary = items.isEmpty ? "" : (done > 0 ? "\(items.count) madde • \(done) tamamlandı" : "\(items.count) madde")
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Checklist").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
+                if !summary.isEmpty { Text("  •  \(summary)").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B5)).lineLimit(1) }
+                Spacer()
+                if editing {
+                    Button {
+                        draft?.checklistItems = []
+                        draft?.isChecklist = false
+                        checklistOpen = false
+                    } label: { Image(systemName: "xmark").font(.system(size: 12)).foregroundStyle(Color(argb: 0xFF8E8E98)).frame(width: 28, height: 28) }
+                    .accessibilityLabel("Checklist kutusunu kaldır")
+                }
+            }
+            .padding(.horizontal, 4).padding(.vertical, 2)
+            ForEach(items) { item in
                 HStack(spacing: 12) {
-                    Image(systemName: "plus").foregroundStyle(RealColors.textMuted).frame(width: 20)
-                    TextField("Madde ekle", text: $newChecklistText)
+                    Button {
+                        UISelectionFeedbackGenerator().selectionChanged()
+                        if editing {
+                            draft?.checklistItems = items.map { $0.id == item.id ? $0.toggled() : $0 }
+                        } else {
+                            withAnimation(.easeOut(duration: 0.18)) { store.toggleChecklistItem(reminderId, itemId: item.id) }
+                        }
+                    } label: {
+                        ZStack {
+                            Circle().fill(item.isCompleted ? Color(argb: 0xFF686873) : .clear)
+                            Circle().strokeBorder(item.isCompleted ? .clear : Color(argb: 0xFF5E5E68), lineWidth: 1.5)
+                            if item.isCompleted { Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Color(argb: 0xFF1B1B1F)) }
+                        }
+                        .frame(width: 20, height: 20)
+                        .frame(width: 32, height: 32)
+                    }
+                    if editing {
+                        TextField("", text: Binding(get: { item.text }, set: { v in
+                            draft?.checklistItems = (draft?.checklistItems ?? []).map { $0.id == item.id ? ChecklistItem(id: $0.id, text: v, completedAt: $0.completedAt) : $0 }
+                        }))
+                        .font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFF1F1F5))
+                        Button { draft?.checklistItems.removeAll { $0.id == item.id } } label: {
+                            Image(systemName: "xmark").font(.system(size: 11)).foregroundStyle(Color(argb: 0xFF7A7A85)).frame(width: 28, height: 28)
+                        }
+                    } else {
+                        Text(item.text).font(RealFont.inter(15))
+                            .foregroundStyle(item.isCompleted ? Color(argb: 0xFF6E6E77) : Color(argb: 0xFFF1F1F5))
+                            .strikethrough(item.isCompleted, color: Color(argb: 0xFF6E6E77))
+                            .opacity(item.isCompleted ? 0.65 : 1)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            if editing {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus").font(.system(size: 13)).foregroundStyle(RealColors.accentBlue).frame(width: 32, height: 32)
+                    TextField("", text: $newChecklistText, prompt: Text("Madde ekle").foregroundStyle(Color(argb: 0xFF6C6C76)))
                         .font(RealFont.inter(15))
-                        .submitLabel(.done)
+                        .submitLabel(.next)
                         .onSubmit {
                             let t = newChecklistText.trimmingCharacters(in: .whitespaces)
                             guard !t.isEmpty else { return }
-                            store.mutate(reminderId) {
-                                $0.isChecklist = true
-                                $0.checklistItems.append(ChecklistItem(id: .now, text: t))
-                            }
+                            let next = max(EpochMillis.now, (draft?.checklistItems.map(\.id).max() ?? 0) + 1)
+                            draft?.checklistItems.append(ChecklistItem(id: next, text: t))
+                            draft?.isChecklist = true
                             newChecklistText = ""
                         }
                 }
-                .padding(.vertical, 6)
             }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardContentChrome(corners: 22)
+    }
+
+    private func photoBlock(_ a: ReminderAttachment) -> some View {
+        let image = AttachmentStorage.image(a.localPath)
+        let ratio = image.map { max(0.5, min(2, $0.size.width / max($0.size.height, 1))) } ?? 1
+        return ZStack(alignment: .topTrailing) {
+            Group {
+                if let image { Image(uiImage: image).resizable().scaledToFill() } else { RealColors.field }
+            }
+            .frame(maxWidth: .infinity)
+            .aspectRatio(ratio, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .contentShape(Rectangle())
+            .onTapGesture { previewPhoto = a }
+            if editing { removeButton { removeAttachment(a) } }
         }
     }
 
-    private func journalSection(_ r: ReminderItem) -> some View {
-        DetailSection(title: "Günlük", trailing: r.journal?.mood.map { "\($0.emoji) \($0.label)" }) {
-            VStack(alignment: .leading, spacing: 12) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(JournalMood.allCases) { mood in
-                            let on = r.journal?.mood == mood
-                            Button {
-                                store.mutate(reminderId) { item in
-                                    var j = item.journal ?? ReminderJournal(mood: nil, text: "", createdAt: .now, updatedAt: .now)
-                                    j.mood = on ? nil : mood
-                                    j.updatedAt = .now
-                                    item.journal = j
-                                }
-                            } label: {
-                                Text("\(mood.emoji) \(mood.label)")
-                                    .font(RealFont.inter(13))
-                                    .padding(.horizontal, 12)
-                                    .frame(height: 34)
-                                    .background(Capsule().fill(on ? RealColors.accentBlue.opacity(0.9) : Color.white.opacity(0.06)))
-                                    .foregroundStyle(on ? .black : .white)
-                            }
+    private func fileBlock(_ a: ReminderAttachment) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "doc").font(.system(size: 18)).foregroundStyle(RealColors.accentBlue)
+                .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.06)))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(a.displayName ?? "Dosya").font(RealFont.inter(14, .medium)).foregroundStyle(.white).lineLimit(1)
+                if let size = a.sizeBytes { Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).font(RealFont.inter(12)).foregroundStyle(RealColors.subtext) }
+            }
+            Spacer()
+            if editing { removeButton { removeAttachment(a) } } else {
+                ShareLink(item: AttachmentStorage.directory.appendingPathComponent(a.localPath)) {
+                    Image(systemName: "square.and.arrow.up").foregroundStyle(RealColors.subtext)
+                }
+            }
+        }
+        .padding(14)
+        .cardContentChrome(corners: 22)
+    }
+
+    private func linkBlock(_ url: String) -> some View {
+        Button {
+            if !editing, let u = URL(string: url.contains("://") ? url : "https://\(url)") { openURL(u) } else if editing { showLinkEditor = true }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "link").font(.system(size: 17)).foregroundStyle(RealColors.accentBlue)
+                    .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.06)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "") ?? url).font(RealFont.inter(14, .medium)).foregroundStyle(.white).lineLimit(1)
+                    Text(url).font(RealFont.inter(12)).foregroundStyle(RealColors.subtext).lineLimit(1)
+                }
+                Spacer()
+                if editing { removeButton { draft?.referenceUrl = nil } } else {
+                    Image(systemName: "arrow.up.right").font(.system(size: 13)).foregroundStyle(RealColors.subtext)
+                }
+            }
+            .padding(14)
+            .cardContentChrome(corners: 22)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// CardStandaloneTextBox: a free text box that carries the card colour.
+    private func textBoxBlock(_ a: ReminderAttachment, _ r: ReminderItem) -> some View {
+        let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: false, blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        return ZStack(alignment: .topTrailing) {
+            Group {
+                if editing {
+                    TextField("Metin", text: Binding(get: { a.text ?? "" }, set: { v in
+                        draft?.attachments = (draft?.attachments ?? []).map { item in
+                            var copy = item
+                            if item.id == a.id { copy.text = v }
+                            return copy
                         }
-                    }
-                }
-                JournalTextField(reminderId: reminderId, initial: r.journal?.text ?? "")
-            }
-        }
-    }
-
-    private func cardStackSection(_ r: ReminderItem) -> some View {
-        DetailSection(title: "Kartlar", trailing: r.cardStack.map { "\($0.cards.count)" }) {
-            VStack(alignment: .leading, spacing: 12) {
-                if let cards = r.cardStack?.cards, !cards.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(cards) { card in
-                                StackCardView(card: card).onTapGesture { editingStackCard = card }
-                            }
-                        }
-                    }
-                }
-                Button {
-                    editingStackCard = CardStackCard()
-                } label: {
-                    Label("Kart ekle", systemImage: "rectangle.stack.badge.plus")
-                        .font(RealFont.inter(14, .medium))
-                }
-                .foregroundStyle(RealColors.accentBlue)
-            }
-        }
-    }
-
-    private func photosSection(_ r: ReminderItem) -> some View {
-        DetailSection(title: "Fotoğraflar", trailing: r.attachments.isEmpty ? nil : "\(r.attachments.count)") {
-            VStack(alignment: .leading, spacing: 12) {
-                if !r.attachments.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(r.attachments) { attachment in
-                                AttachmentThumb(attachment: attachment)
-                                    .contextMenu {
-                                        Button("Kaldır", systemImage: "trash", role: .destructive) {
-                                            AttachmentStorage.remove(attachment)
-                                            store.mutate(reminderId) { $0.attachments.removeAll { $0.id == attachment.id } }
-                                        }
-                                    }
-                            }
-                        }
-                    }
-                }
-                PhotosPicker(selection: $photoSelection, maxSelectionCount: 10, matching: .images) {
-                    Label("Fotoğraf ekle", systemImage: "photo.badge.plus").font(RealFont.inter(14, .medium))
-                }
-                .foregroundStyle(RealColors.accentBlue)
-            }
-        }
-    }
-
-    private func linkSection(_ r: ReminderItem) -> some View {
-        DetailSection(title: "Bağlantı", trailing: nil) {
-            HStack {
-                TextField("https://", text: $linkDraft)
-                    .font(RealFont.inter(15))
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .onSubmit {
-                        let t = linkDraft.trimmingCharacters(in: .whitespaces)
-                        store.mutate(reminderId) { $0.referenceUrl = t.isEmpty ? nil : t }
-                    }
-                if let url = r.referenceUrl.flatMap(normalizedURL) {
-                    Button { openURL(url) } label: { Image(systemName: "arrow.up.right.square") }
-                        .foregroundStyle(RealColors.accentBlue)
-                        .accessibilityLabel("Bağlantıyı aç")
-                }
-            }
-        }
-    }
-
-    private func normalizedURL(_ raw: String) -> URL? {
-        let t = raw.trimmingCharacters(in: .whitespaces)
-        guard !t.isEmpty else { return nil }
-        return URL(string: t.contains("://") ? t : "https://\(t)")
-    }
-
-    private func locationSection(_ r: ReminderItem) -> some View {
-        DetailSection(title: "Konum", trailing: nil) {
-            VStack(alignment: .leading, spacing: 10) {
-                if let location = r.location {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(location.placeName).font(RealFont.inter(15, .medium)).foregroundStyle(.white)
-                        if !location.address.isEmpty { Text(location.address).font(RealFont.inter(13)).foregroundStyle(RealColors.subtext) }
-                    }
-                    HStack(spacing: 18) {
-                        Button("Haritada aç") { openInMaps(location) }
-                        Button("Düzenle") { editingLocation = true }
-                        Button("Kaldır", role: .destructive) { store.mutate(reminderId) { $0.location = nil } }
-                    }
-                    .font(RealFont.inter(14, .medium))
+                    }), axis: .vertical)
                 } else {
-                    Button { editingLocation = true } label: {
-                        Label("Konum ekle", systemImage: "mappin.and.ellipse").font(RealFont.inter(14, .medium))
-                    }
-                    .foregroundStyle(RealColors.accentBlue)
+                    Text(a.text ?? "").textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                 }
+            }
+            .font(RealFont.inter(16))
+            .foregroundStyle(r.useDarkText ? Color(argb: 0xFF101010) : .white)
+            .padding(18)
+            .frame(maxWidth: .infinity, minHeight: 80, alignment: .topLeading)
+            .background { if let accent { shape.fill(accent) } else { shape.fill(LiquidGlassTokens.contentColor) } }
+            .overlay(shape.strokeBorder(.white.opacity(0.08), lineWidth: 0.7))
+            if editing { removeButton { removeAttachment(a) } }
+        }
+    }
+
+    private func locationBlock(_ l: ReminderLocation) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let lat = l.latitude, let lon = l.longitude {
+                let coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                Map(initialPosition: .region(MKCoordinateRegion(center: coord, latitudinalMeters: 900, longitudinalMeters: 900)), interactionModes: []) {
+                    Marker(l.placeName, coordinate: coord)
+                }
+                .environment(\.colorScheme, .dark)
+                .frame(height: 150)
+                .allowsHitTesting(false)
+            }
+            HStack(spacing: 12) {
+                Image(systemName: "mappin.and.ellipse").font(.system(size: 16)).foregroundStyle(Color(argb: 0xFF8ED7C4))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(l.placeName).font(RealFont.inter(15, .medium)).foregroundStyle(.white).lineLimit(1)
+                    if !l.address.isEmpty { Text(l.address).font(RealFont.inter(12)).foregroundStyle(RealColors.subtext).lineLimit(2) }
+                }
+                Spacer()
+                if editing {
+                    removeButton { draft?.location = nil }
+                } else {
+                    Button("Haritada aç") { openInMaps(l) }.font(RealFont.inter(13, .medium)).foregroundStyle(RealColors.accentBlue)
+                }
+            }
+            .padding(14)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .cardContentChrome(corners: 22)
+        .onTapGesture { if editing { showLocationEditor = true } }
+    }
+
+    private func journalBlock(_ j: ReminderJournal) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Günlük").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
+                Spacer()
+                if let mood = j.mood { Text("\(mood.emoji) \(mood.label)").font(RealFont.inter(12)).foregroundStyle(RealColors.subtext) }
+            }
+            if editing {
+                TextField("Günlük notu", text: Binding(get: { draft?.journal?.text ?? "" }, set: { draft?.journal?.text = $0; draft?.journal?.updatedAt = .now }), axis: .vertical)
+                    .font(RealFont.inter(15)).lineLimit(2...12)
+            } else {
+                Text(j.text.isEmpty ? "Günlük notu" : j.text).font(RealFont.inter(15)).foregroundStyle(j.text.isEmpty ? RealColors.textMuted : Color(argb: 0xFFE9E9EF))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Text(RealDates.reminder(j.createdAt)).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF6F6F78))
+        }
+        .padding(18)
+        .cardContentChrome(corners: 22)
+    }
+
+    private func moodBlock(_ mood: JournalMood) -> some View {
+        let tint = moodTint(mood)
+        return HStack(spacing: 14) {
+            Text(mood.emoji).font(.system(size: 52)).frame(width: 72, height: 72)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Mood").font(RealFont.inter(12)).foregroundStyle(tint)
+                Text(mood.label).font(RealFont.inter(21, .semibold)).foregroundStyle(Color(argb: 0xFFF7F7F9))
+            }
+            Spacer()
+            if editing { removeButton { draft?.mood = nil } }
+        }
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(LinearGradient(colors: [tint.opacity(0.30), Color(argb: 0xFF121214)], startPoint: .top, endPoint: .bottom)))
+        .onTapGesture { if editing { showMoodPicker = true } }
+    }
+
+    private func moodTint(_ mood: JournalMood) -> Color {
+        switch mood {
+        case .veryGood, .happy, .excited: return Color(argb: 0xFFF2C94C)
+        case .good, .calm: return Color(argb: 0xFF8ED9B6)
+        case .neutral, .bored: return Color(argb: 0xFF9AA8FF)
+        case .tired, .low: return Color(argb: 0xFFB4A7D6)
+        case .hard, .stressed, .sad: return Color(argb: 0xFF78A9F2)
+        case .bad, .angry, .fuckOff: return Color(argb: 0xFFEE6E5E)
+        }
+    }
+
+    private func removeButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                .frame(width: 26, height: 26).background(Circle().fill(Color(argb: 0xE61E1E24)))
+                .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 0.5))
+        }
+        .padding(8)
+        .accessibilityLabel("Kaldır")
+    }
+
+    // MARK: Bottom column
+
+    private func bottomColumn(_ r: ReminderItem) -> some View {
+        VStack(spacing: 0) {
+            if deleting { deletePrompt(r).padding(.bottom, 12).transition(.move(edge: .bottom).combined(with: .opacity)) }
+            if editing {
+                if secondaryExpanded { secondaryPanels.padding(.bottom, 12).transition(.opacity.combined(with: .scale(scale: 0.97))) }
+                editDock.padding(.bottom, 10)
+            } else if r.isCompleted && r.journal == nil && !(r.cardStack?.cards.contains { $0.title == "Nasıl geçti?" } ?? false) {
+                Button(action: addCompletionJournal) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Günlük ekle").font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
+                            Text("Nasıl geçti? Aklında kalanı yaz.").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                        }
+                        Spacer()
+                        Image(systemName: "plus").font(.system(size: 14, weight: .semibold)).foregroundStyle(RealColors.accentBlue)
+                    }
+                    .padding(.horizontal, 20).padding(.vertical, 14)
+                    .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), role: .chrome)
+                }
+                .padding(.bottom, 12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            actionBar(r)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 18)
+        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.24), value: editing)
+        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.24), value: secondaryExpanded)
+        .animation(.easeOut(duration: 0.2), value: deleting)
+    }
+
+    private func actionBar(_ r: ReminderItem) -> some View {
+        HStack(spacing: 0) {
+            if editing {
+                DetailAction(label: "Vazgeç", symbol: "xmark") { draft = nil; secondaryExpanded = false; checklistOpen = false }
+                DetailAction(label: "Kaydet", symbol: "checkmark", color: Color(argb: 0xFF91B9FF),
+                             enabled: !(draft?.text.trimmingCharacters(in: .whitespaces).isEmpty ?? true)) { saveDraft() }
+            } else {
+                DetailAction(label: r.isCompleted ? "Geri al" : "Tamamla", symbol: r.isCompleted ? "arrow.uturn.backward" : "checkmark", enabled: !deleting) {
+                    if !r.isCompleted { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+                    withAnimation { store.toggleCompleted(reminderId) }
+                }
+                DetailAction(label: "Düzenle", symbol: "pencil", enabled: !deleting) {
+                    draft = r
+                    categorySelection = r.customCategoryId
+                    checklistOpen = !r.checklistItems.isEmpty
+                }
+                ShareLink(item: r.shareText) {
+                    VStack(spacing: 1) {
+                        Image(systemName: "square.and.arrow.up").font(.system(size: 18))
+                        Text("Share").font(RealFont.inter(10))
+                    }
+                    .foregroundStyle(Color(argb: 0xFFF0F0F4))
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                }
+                .disabled(deleting)
+                DetailAction(label: "Sil", symbol: "trash") { deleting.toggle() }
+            }
+        }
+        .padding(.horizontal, 6)
+        .liquidGlass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    /// DeleteReminderPrompt: plain delete, or "only this / this and future" for a repeating card.
+    private func deletePrompt(_ r: ReminderItem) -> some View {
+        let occurrence = Recurrence.nextDeletableOccurrence(r, now: .now)
+        let scoped = r.hasRepeat && occurrence != nil
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(scoped ? "Tekrarlayan etkinlik silinsin mi?" : "Hatırlatıcı silinsin mi?")
+                .font(RealFont.inter(16, .semibold)).foregroundStyle(Color(argb: 0xFFF5F5F8))
+            Text(scoped ? "Yalnızca sıradaki tekrarı ya da sıradaki tekrardan itibaren tüm tekrarları silebilirsin. Önceki tekrarlar korunur. Bu işlem geri alınamaz."
+                 : "Bu not listenden ve bildirim panelinden kaldırılacak. Bu işlem geri alınamaz.")
+                .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFB4B4BE))
+            if scoped, let occurrence {
+                Button("Sadece sıradaki tekrarı sil") { deleting = false; store.deleteOccurrence(reminderId, occurrence: occurrence) }
+                    .font(RealFont.inter(14, .semibold)).foregroundStyle(Color(argb: 0xFFFFA4AA))
+                Button("Bu ve sonraki tüm tekrarları sil") { deleting = false; store.deleteThisAndFuture(reminderId, occurrence: occurrence) }
+                    .font(RealFont.inter(14, .semibold)).foregroundStyle(Color(argb: 0xFFFFA4AA))
+                Button("Vazgeç") { deleting = false }.font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFE9E9EF))
+            } else {
+                HStack {
+                    Button("Vazgeç") { deleting = false }.font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFE9E9EF))
+                    Spacer()
+                    Button("Sil") { deleting = false; store.delete([reminderId]) }.font(RealFont.inter(14, .semibold)).foregroundStyle(Color(argb: 0xFFFFA4AA))
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous), role: .sheet)
+    }
+
+    /// Edit dock: "Renk ve kategori" toggle + sort, then the one-by-one add buttons.
+    private var editDock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button { titleFocused = false; secondaryExpanded.toggle() } label: {
+                    HStack(spacing: 6) {
+                        Text("Renk ve kategori").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
+                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                            .rotationEffect(.degrees(secondaryExpanded ? 90 : 0))
+                    }
+                    .padding(.horizontal, 4).padding(.vertical, 8)
+                }
+                Spacer()
+                Button { reordering = true } label: {
+                    Image(systemName: "arrow.up.arrow.down").font(.system(size: 17)).foregroundStyle(Color(argb: 0xFFD2D2DA)).frame(width: 40, height: 40)
+                }
+                .accessibilityLabel("Sırala")
+            }
+            .padding(.horizontal, 2)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    let d = draft
+                    QuickAction(symbol: "text.alignleft", label: "Metin kutusu ekle", active: d?.attachments.contains { $0.sourceTitle == "REAL_TEXT_BLOCK" } ?? false) {
+                        addAttachment(ReminderAttachment(id: UUID().uuidString, type: .textSnippet, text: "", sourceTitle: "REAL_TEXT_BLOCK"))
+                    }
+                    QuickAction(symbol: "calendar", label: "Tarih / Saat", active: d?.alertAt != nil || d?.plannedDateEpochDay != nil) {
+                        if let d { openSchedule(d) }
+                    }
+                    QuickAction(symbol: "mappin", label: "Konum", active: d?.location != nil) { showLocationEditor = true }
+                    QuickAction(symbol: "checklist", label: "Checklist", active: checklistOpen || !(d?.checklistItems.isEmpty ?? true),
+                                count: d?.checklistItems.count) {
+                        checklistOpen = true
+                        draft?.isChecklist = true
+                    }
+                    QuickAction(symbol: "photo", label: "Fotoğraf ekle", active: false,
+                                count: d?.attachments.filter { $0.type == .image }.count) { showPhotoPicker = true }
+                    QuickAction(symbol: "camera", label: "Kamera ile fotoğraf ekle", active: false) { showCamera = true }
+                    QuickAction(symbol: "doc", label: "Dosya ekle", active: false,
+                                count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
+                    QuickAction(symbol: "link", label: "Bağlantı", active: d?.referenceUrl != nil) { showLinkEditor = true }
+                    QuickAction(symbol: "rectangle.stack", label: "Kart Yığını", active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
+                        editingStackCard = CardStackCard()
+                    }
+                    QuickAction(symbol: "face.smiling", label: "Mood", active: d?.mood != nil) { showMoodPicker = true }
+                    QuickAction(symbol: "book.closed", label: "Günlük", active: d?.journal != nil) {
+                        if draft?.journal == nil { draft?.journal = ReminderJournal(mood: nil, text: "", createdAt: .now, updatedAt: .now) }
+                    }
+                }
+                .padding(.leading, 2).padding(.trailing, 12)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    private var secondaryPanels: some View {
+        VStack(spacing: 8) {
+            PaletteGradientPicker(
+                start: Binding(get: { draft?.accentStart }, set: { draft?.accentStart = $0; draft?.customSolidColorArgb = nil }),
+                end: Binding(get: { draft?.accentEnd }, set: { draft?.accentEnd = $0; draft?.customSolidColorArgb = nil }),
+                blend: Binding(get: { draft?.gradientBlendResolved ?? 0.5 }, set: { draft?.gradientBlendFraction = $0 }),
+                darkText: Binding(get: { draft?.useDarkText ?? false }, set: { draft?.useDarkText = $0 }))
+                .padding(16)
+                .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), role: .sheet)
+            Button { titleFocused = false; showCategoryPicker = true } label: {
+                HStack {
+                    Text("Kategori").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
+                    Spacer()
+                    if let c = store.category(draft?.customCategoryId) {
+                        categoryBadge(c, size: 18)
+                        Text(c.name).font(RealType.categoryPill).foregroundStyle(.white)
+                    } else {
+                        Text("Kategori yok").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                    }
+                    Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                }
+                .padding(.horizontal, 16).padding(.vertical, 13)
+                .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), role: .sheet)
             }
         }
     }
 
-    private func openInMaps(_ location: ReminderLocation) {
-        if let lat = location.latitude, let lon = location.longitude {
-            let item = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)))
-            item.name = location.placeName
-            item.openInMaps()
-        } else if let url = location.mapsUrl.flatMap(URL.init(string:)) {
-            openURL(url)
-        } else {
-            let q = "\(location.placeName) \(location.address)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            if let url = URL(string: "http://maps.apple.com/?q=\(q)") { openURL(url) }
-        }
+    // MARK: Actions
+
+    private func saveDraft() {
+        guard var d = draft else { return }
+        if !d.isChecklist && !d.checklistItems.isEmpty { d.isChecklist = true }
+        if d.checklistItems.isEmpty { d.isChecklist = false }
+        if let j = d.journal, j.text.trimmingCharacters(in: .whitespaces).isEmpty, j.mood == nil { d.journal = nil }
+        d.contentBlockOrder = d.resolvedBlockOrder(d.cardContentKeys())
+        store.update(d)
+        draft = nil
+        secondaryExpanded = false
+        checklistOpen = false
     }
 
-    private func footer(_ r: ReminderItem) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Oluşturuldu: \(RealDates.reminder(r.createdAt))")
-            if r.updatedAt != r.createdAt { Text("Düzenlendi: \(RealDates.reminder(r.updatedAt))") }
-            if let done = r.completedAt { Text("Tamamlandı: \(RealDates.reminder(done))") }
-        }
-        .font(RealType.cardMeta)
-        .foregroundStyle(Color(argb: 0xFF6F6F78))
-        .padding(.horizontal, 6)
+    private func addAttachment(_ a: ReminderAttachment?) {
+        guard let a else { return }
+        if editing { draft?.attachments.append(a) } else { store.mutate(reminderId) { $0.attachments.append(a) } }
+    }
+
+    private func removeAttachment(_ a: ReminderAttachment) {
+        draft?.attachments.removeAll { $0.id == a.id }
+    }
+
+    private func updateStack(_ change: (inout CardStackBlock) -> Void) {
+        var stack = shown?.cardStack ?? CardStackBlock()
+        change(&stack)
+        let value: CardStackBlock? = stack.cards.isEmpty ? nil : stack
+        if editing { draft?.cardStack = value } else { store.mutate(reminderId) { $0.cardStack = value } }
+    }
+
+    /// Completed card: "Nasıl geçti?" card added to the stack and opened for writing.
+    private func addCompletionJournal() {
+        let card = CardStackCard(id: "completed_journal_\(EpochMillis.now)", title: "Nasıl geçti?", body: "")
+        editingStackCard = card
     }
 
     private func importPhotos(_ items: [PhotosPickerItem]) {
@@ -402,134 +828,173 @@ struct ReminderDetailView: View {
         Task {
             var added: [ReminderAttachment] = []
             for item in items {
-                if let data = try? await item.loadTransferable(type: Data.self), let attachment = AttachmentStorage.save(data) {
-                    added.append(attachment)
-                }
+                if let data = try? await item.loadTransferable(type: Data.self), let a = AttachmentStorage.save(data) { added.append(a) }
             }
             await MainActor.run {
-                store.mutate(reminderId) { $0.attachments.append(contentsOf: added) }
-                photoSelection = []
+                added.forEach { addAttachment($0) }
+                photoItems = []
             }
+        }
+    }
+
+    private func openInMaps(_ l: ReminderLocation) {
+        if let lat = l.latitude, let lon = l.longitude {
+            let item = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)))
+            item.name = l.placeName
+            item.openInMaps()
+        } else {
+            let q = "\(l.placeName) \(l.address)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            if let url = URL(string: "http://maps.apple.com/?q=\(q)") { openURL(url) }
         }
     }
 }
 
 // MARK: - Building blocks
 
-struct DetailRow: View {
-    let icon: String
-    let title: String
-    let value: String
+/// Bottom bar action: icon over a 10pt label (DetailAction).
+private struct DetailAction: View {
+    let label: String
+    let symbol: String
+    var color = Color(argb: 0xFFF0F0F4)
+    var enabled = true
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: icon).font(.system(size: 15)).foregroundStyle(RealColors.subtext).frame(width: 22)
-                Text(title).font(RealFont.inter(15)).foregroundStyle(RealColors.text)
-                Spacer()
-                Text(value).font(RealFont.inter(14)).foregroundStyle(RealColors.accentBlue).lineLimit(1)
-                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color(argb: 0xFF55555D))
+            VStack(spacing: 1) {
+                Image(systemName: symbol).font(.system(size: 18))
+                Text(label).font(RealFont.inter(10)).lineLimit(1)
             }
-            .padding(.horizontal, 18)
-            .frame(minHeight: 52)
+            .foregroundStyle(enabled ? color : color.opacity(0.35))
+            .frame(maxWidth: .infinity, minHeight: 56)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressScaleStyle(scale: 0.96))
+        .disabled(!enabled)
     }
 }
 
-struct DetailSection<Content: View>: View {
-    let title: String
-    let trailing: String?
-    @ViewBuilder let content: Content
+/// Edit dock round icon with an optional count (DetailQuickActionButton).
+private struct QuickAction: View {
+    let symbol: String
+    let label: String
+    var active = false
+    var count: Int? = nil
+    let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 18))
+                .foregroundStyle(active ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFBABAC3))
+                .frame(width: 40, height: 40)
+                .overlay(alignment: .topTrailing) {
+                    if let count, count > 0 {
+                        Text("\(count)").font(.system(size: 10, weight: .semibold)).foregroundStyle(Color(argb: 0xFF91B9FF)).offset(x: -3, y: 3)
+                    }
+                }
+        }
+        .buttonStyle(PressScaleStyle(scale: 0.96))
+        .accessibilityLabel(label)
+    }
+}
+
+/// Production card stack deck: active card in front, neighbours peeking above and below; tap a peek to bring it forward.
+struct CardStackDeck: View {
+    let stack: CardStackBlock
+    var editing = false
+    var onEdit: (CardStackCard) -> Void = { _ in }
+    var onAdd: () -> Void = {}
+    @State private var active = 0
+
+    var body: some View {
+        let cards = stack.cards
+        let current = min(active, max(cards.count - 1, 0))
+        VStack(spacing: -318) {
+            if current > 0 {
+                card(cards[current - 1], index: current - 1).scaleEffect(0.94).opacity(0.75)
+                    .onTapGesture { withAnimation(.easeInOut(duration: 0.39)) { active = current - 1 } }
+                    .zIndex(0)
+            }
+            if !cards.isEmpty {
+                card(cards[current], index: current)
+                    .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
+                    .onTapGesture { onEdit(cards[current]) }
+                    .zIndex(2)
+            }
+            if current + 1 < cards.count {
+                card(cards[current + 1], index: current + 1).scaleEffect(0.94).opacity(0.75)
+                    .onTapGesture { withAnimation(.easeInOut(duration: 0.39)) { active = current + 1 } }
+                    .zIndex(1)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if editing {
+                Button(action: onAdd) {
+                    Text("+ Kart ekle").font(RealFont.inter(12, .medium)).foregroundStyle(.white.opacity(0.8))
+                        .padding(.horizontal, 14).padding(.vertical, 8).liquidGlass(Capsule(), role: .chrome)
+                }
+                .offset(y: 18)
+            }
+        }
+        .padding(.bottom, editing ? 22 : 0)
+    }
+
+    private func card(_ c: CardStackCard, index: Int) -> some View {
+        let color = c.colorArgb.map { Color(argbInt: $0) } ?? Color(argb: 0xFF292B2D)
+        let hasImage = c.imageUri != nil
+        let fg: Color = hasImage || luminance(color) < 0.48 ? .white : Color(argb: 0xFF161616)
+        let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(title.uppercased()).font(RealFont.inter(11, .medium)).kerning(1).foregroundStyle(Color(argb: 0xFF85858E))
+                Text("KART 0\(index + 1)")
+                    .font(RealFont.inter(10)).kerning(1.2).foregroundStyle(fg.opacity(0.9))
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Capsule().fill(hasImage ? Color.black.opacity(0.36) : .clear))
+                    .overlay(Capsule().strokeBorder(fg.opacity(0.55), lineWidth: 1))
                 Spacer()
-                if let trailing { Text(trailing).font(RealFont.inter(12)).foregroundStyle(RealColors.subtext) }
+                if stack.cards.count > 1 {
+                    Text("\(index + 1)/\(stack.cards.count)").font(RealFont.inter(11)).foregroundStyle(fg.opacity(0.6))
+                }
             }
-            content
-        }
-        .padding(18)
-        .detailSurface()
-    }
-}
-
-extension View {
-    func detailSurface() -> some View {
-        frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(RealColors.cardSurface))
-            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.white.opacity(0.06), lineWidth: 0.75))
-    }
-}
-
-/// Keeps typing local and saves on pause, so the whole store is not rewritten per keystroke.
-struct JournalTextField: View {
-    @Environment(ReminderStore.self) private var store
-    let reminderId: Int64
-    let initial: String
-    @State private var text = ""
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        TextField("Günlük notu", text: $text, axis: .vertical)
-            .font(RealFont.inter(15))
-            .lineLimit(2...12)
-            .focused($focused)
-            .onAppear { text = initial }
-            .onChange(of: focused) { _, f in if !f { save() } }
-            .onDisappear(perform: save)
-    }
-
-    private func save() {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard t != (store.reminder(reminderId)?.journal?.text ?? "") else { return }
-        store.mutate(reminderId) { item in
-            if t.isEmpty && item.journal?.mood == nil { item.journal = nil; return }
-            var j = item.journal ?? ReminderJournal(mood: nil, text: "", createdAt: .now, updatedAt: .now)
-            j.text = t
-            j.updatedAt = .now
-            item.journal = j
-        }
-    }
-}
-
-struct StackCardView: View {
-    let card: CardStackCard
-    var body: some View {
-        let color = card.colorArgb.map { Color(argbInt: $0) } ?? Color(argb: 0xFF22232A)
-        VStack(alignment: .leading, spacing: 8) {
-            if let path = card.imageUri, let image = AttachmentStorage.image(path) {
-                Image(uiImage: image).resizable().scaledToFill().frame(height: 80).clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            if !card.title.isEmpty { Text(card.title).font(RealFont.inter(16, .semibold)).lineLimit(2) }
-            if !card.body.isEmpty { Text(card.body).font(RealFont.inter(13)).lineLimit(5).opacity(0.85) }
             Spacer(minLength: 0)
+            if !c.title.isEmpty { Text(c.title).font(RealFont.inter(28)).kerning(-0.6).foregroundStyle(fg).lineLimit(3) }
+            if !c.body.isEmpty { Text(c.body).font(RealFont.inter(14)).lineSpacing(6).foregroundStyle(fg.opacity(0.9)).lineLimit(10) }
         }
-        .foregroundStyle(color.rgba.r * 0.3 + color.rgba.g * 0.59 + color.rgba.b * 0.11 > 0.6 ? Color.black : Color.white)
-        .padding(14)
-        .frame(width: 170, height: 200, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(color))
+        .padding(.horizontal, 24).padding(.vertical, 22)
+        .frame(maxWidth: .infinity, minHeight: 390, alignment: .topLeading)
+        .background {
+            ZStack {
+                shape.fill(color)
+                if let path = c.imageUri, let img = AttachmentStorage.image(path) {
+                    Image(uiImage: img).resizable().scaledToFill()
+                    LinearGradient(colors: [.black.opacity(0.06), .black.opacity(0.22), .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
+                }
+            }
+            .clipShape(shape)
+        }
+        .overlay(shape.strokeBorder(.white.opacity(0.24), lineWidth: 0.9))
+    }
+
+    private func luminance(_ c: Color) -> Double {
+        let (r, g, b, _) = c.rgba
+        func lin(_ v: Double) -> Double { v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
     }
 }
 
 struct CardStackEditor: View {
-    @Environment(ReminderStore.self) private var store
     @Environment(\.dismiss) private var dismiss
-    let reminderId: Int64
     @State var card: CardStackCard
-
-    private var isNew: Bool { store.reminder(reminderId)?.cardStack?.cards.contains { $0.id == card.id } != true }
+    let isNew: Bool
+    /// nil = delete the card.
+    let onSave: (CardStackCard?) -> Void
+    @State private var photo: PhotosPickerItem?
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Başlık", text: $card.title)
-                TextField("Metin", text: $card.body, axis: .vertical).lineLimit(3...10)
+                TextField("Metin", text: $card.body, axis: .vertical).lineLimit(3...12)
                 Section("Renk") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 10) {
                         ForEach(reminderColorChoices) { choice in
@@ -540,14 +1005,12 @@ struct CardStackEditor: View {
                         }
                     }
                 }
+                Section("Görsel") {
+                    PhotosPicker(selection: $photo, matching: .images) { Label(card.imageUri == nil ? "Görsel ekle" : "Görseli değiştir", systemImage: "photo") }
+                    if card.imageUri != nil { Button("Görseli kaldır", role: .destructive) { card.imageUri = nil } }
+                }
                 if !isNew {
-                    Button("Kartı sil", role: .destructive) {
-                        store.mutate(reminderId) { item in
-                            item.cardStack?.cards.removeAll { $0.id == card.id }
-                            if item.cardStack?.cards.isEmpty == true { item.cardStack = nil }
-                        }
-                        dismiss()
-                    }
+                    Button("Kartı sil", role: .destructive) { onSave(nil); dismiss() }
                 }
             }
             .navigationTitle(isNew ? "Yeni kart" : "Kart")
@@ -555,72 +1018,228 @@ struct CardStackEditor: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") {
-                        store.mutate(reminderId) { item in
-                            var stack = item.cardStack ?? CardStackBlock()
-                            if let i = stack.cards.firstIndex(where: { $0.id == card.id }) { stack.cards[i] = card } else { stack.cards.append(card) }
-                            item.cardStack = stack
-                        }
-                        dismiss()
+                    Button("Kaydet") { onSave(card); dismiss() }
+                        .disabled(card.title.trimmingCharacters(in: .whitespaces).isEmpty && card.body.trimmingCharacters(in: .whitespaces).isEmpty && card.imageUri == nil)
+                }
+            }
+            .onChange(of: photo) { _, item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self), let a = AttachmentStorage.save(data) {
+                        await MainActor.run { card.imageUri = a.localPath }
                     }
-                    .disabled(card.title.trimmingCharacters(in: .whitespaces).isEmpty && card.body.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
     }
 }
 
+/// Place search (MKLocalSearch) or a typed name/address.
 struct LocationEditor: View {
-    @Environment(ReminderStore.self) private var store
     @Environment(\.dismiss) private var dismiss
-    let reminderId: Int64
-    @State private var name = ""
-    @State private var address = ""
+    let initial: ReminderLocation?
+    let onSave: (ReminderLocation?) -> Void
+    @State private var query = ""
+    @State private var results: [MKMapItem] = []
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    TextField("Yer ara", text: $query)
+                        .submitLabel(.search)
+                        .onSubmit(search)
+                }
+                ForEach(results, id: \.self) { item in
+                    Button {
+                        let c = item.placemark.coordinate
+                        onSave(ReminderLocation(placeName: item.name ?? query, address: item.placemark.title ?? "",
+                                                latitude: c.latitude, longitude: c.longitude))
+                        dismiss()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name ?? "").foregroundStyle(.white)
+                            Text(item.placemark.title ?? "").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if !query.isEmpty {
+                    Button("“\(query)” olarak kaydet") { onSave(ReminderLocation(placeName: query)); dismiss() }
+                }
+                if initial != nil {
+                    Button("Konumu kaldır", role: .destructive) { onSave(nil); dismiss() }
+                }
+            }
+            .navigationTitle("Konum")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } } }
+            .onAppear { query = initial?.placeName ?? "" }
+        }
+    }
+
+    private func search() {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        MKLocalSearch(request: request).start { response, _ in
+            results = response?.mapItems ?? []
+        }
+    }
+}
+
+private struct LinkEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    let initial: String
+    let onSave: (String?) -> Void
+    @State private var text = ""
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Yer adı", text: $name)
-                TextField("Adres", text: $address, axis: .vertical)
+                TextField("https://", text: $text).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
             }
-            .navigationTitle("Konum")
+            .navigationTitle("Bağlantı")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Kaydet") {
-                        let n = name.trimmingCharacters(in: .whitespaces)
-                        store.mutate(reminderId) { $0.location = n.isEmpty ? nil : ReminderLocation(placeName: n, address: address) }
+                        let t = text.trimmingCharacters(in: .whitespaces)
+                        onSave(t.isEmpty ? nil : t)
                         dismiss()
                     }
                 }
             }
-            .onAppear {
-                let l = store.reminder(reminderId)?.location
-                name = l?.placeName ?? ""
-                address = l?.address ?? ""
+            .onAppear { text = initial.isEmpty ? (UIPasteboard.general.url?.absoluteString ?? "") : initial }
+        }
+    }
+}
+
+private struct MoodPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let selected: JournalMood?
+    let onPick: (JournalMood?) -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
+                    ForEach(JournalMood.allCases) { mood in
+                        Button { onPick(mood); dismiss() } label: {
+                            VStack(spacing: 6) {
+                                Text(mood.emoji).font(.system(size: 34))
+                                Text(mood.label).font(RealFont.inter(12)).foregroundStyle(.white)
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(RoundedRectangle(cornerRadius: 18).fill(selected == mood ? RealColors.accentBlue.opacity(0.25) : .white.opacity(0.05)))
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .navigationTitle("Mood")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
+                if selected != nil { ToolbarItem(placement: .destructiveAction) { Button("Kaldır") { onPick(nil); dismiss() } } }
             }
         }
     }
 }
 
-struct AttachmentThumb: View {
+/// İçerik Sıralaması: drag blocks into a new order.
+private struct BlockReorderSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State var keys: [String]
+    let item: ReminderItem
+    let onSave: ([String]) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(keys, id: \.self) { key in
+                    let d = describe(key)
+                    HStack(spacing: 12) {
+                        Image(systemName: d.2).foregroundStyle(RealColors.accentBlue).frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(d.0).foregroundStyle(.white)
+                            Text(d.1).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                }
+                .onMove { keys.move(fromOffsets: $0, toOffset: $1) }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle("İçerik Sıralaması")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Bitti") { onSave(keys); dismiss() } }
+            }
+        }
+    }
+
+    private func describe(_ key: String) -> (String, String, String) {
+        let kind = key.split(separator: ":").first.map(String.init) ?? key
+        switch kind {
+        case "text": return ("Not Metni", item.text.isEmpty ? "Boş not" : item.text, "note.text")
+        case "card_stack": return ("Kart Yığını", "\(item.cardStack?.cards.count ?? 0) kart", "rectangle.stack")
+        case "checklist": return ("Checklist", "\(item.checklistItems.count) madde", "checklist")
+        case "photos": return ("Fotoğraf", "", "photo")
+        case "files": return (key == "files:reference" ? "Bağlantı" : "Dosya", "", "doc")
+        case "location": return ("Konum", item.location?.placeName ?? "Konum", "mappin")
+        case "mood": return ("Mood", item.mood?.label ?? "Mood", "face.smiling")
+        case "journal": return ("Günlük", "Günlük notu", "book.closed")
+        default: return (key, "", "square")
+        }
+    }
+}
+
+private struct PhotoPreview: View {
+    @Environment(\.dismiss) private var dismiss
     let attachment: ReminderAttachment
     var body: some View {
-        Group {
-            if let image = AttachmentStorage.image(attachment.localPath) {
-                Image(uiImage: image).resizable().scaledToFill()
-            } else {
-                Image(systemName: "doc").font(.system(size: 24)).foregroundStyle(RealColors.subtext)
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            if let img = AttachmentStorage.image(attachment.localPath) {
+                Image(uiImage: img).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            Button { dismiss() } label: {
+                Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                    .frame(width: 44, height: 44).liquidGlass(Circle())
+            }
+            .padding(16)
         }
-        .frame(width: 96, height: 96)
-        .background(RealColors.field)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
-/// Photos are copied into Application Support/attachments (AttachmentStorage.kt).
+/// UIImagePickerController camera wrapper (CardCameraSheet).
+struct CameraPicker: UIViewControllerRepresentable {
+    let onImage: (Data) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: CameraPicker
+        init(_ parent: CameraPicker) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage, let data = image.jpegData(compressionQuality: 0.9) { parent.onImage(data) }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.dismiss() }
+    }
+}
+
+/// Photos and files are copied into Application Support/attachments (AttachmentStorage.kt).
 enum AttachmentStorage {
     static var directory: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("attachments")
@@ -642,12 +1261,44 @@ enum AttachmentStorage {
         return ReminderAttachment(id: id, localPath: name, type: .image, mimeType: "image/jpeg", displayName: name, sizeBytes: Int64(jpeg.count))
     }
 
+    static func saveFile(_ url: URL) -> ReminderAttachment? {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let id = UUID().uuidString
+        let name = "\(id)-\(url.lastPathComponent)"
+        let target = directory.appendingPathComponent(name)
+        do { try FileManager.default.copyItem(at: url, to: target) } catch { return nil }
+        let size = (try? FileManager.default.attributesOfItem(atPath: target.path))?[.size] as? Int64
+        let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+        let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
+        return ReminderAttachment(id: id, localPath: name, type: isImage ? .image : .file, mimeType: mime,
+                                  displayName: url.lastPathComponent, sizeBytes: size)
+    }
+
     static func image(_ path: String) -> UIImage? {
         guard !path.isEmpty else { return nil }
         return UIImage(contentsOfFile: directory.appendingPathComponent(path).path)
     }
 
     static func remove(_ attachment: ReminderAttachment) {
+        guard !attachment.localPath.isEmpty else { return }
         try? FileManager.default.removeItem(at: directory.appendingPathComponent(attachment.localPath))
+    }
+}
+
+/// Shared by journal list cells.
+struct AttachmentThumb: View {
+    let attachment: ReminderAttachment
+    var body: some View {
+        Group {
+            if let image = AttachmentStorage.image(attachment.localPath) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Image(systemName: "doc").font(.system(size: 24)).foregroundStyle(RealColors.subtext)
+            }
+        }
+        .frame(width: 96, height: 96)
+        .background(RealColors.field)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }

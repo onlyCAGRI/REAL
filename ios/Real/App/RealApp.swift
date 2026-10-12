@@ -70,7 +70,18 @@ enum DemoData {
             items.append(r)
         }
         add(1, "Tasarım incelemesi", { $0.alertAt = at(10); $0.durationMinutes = 60; $0.customCategoryId = 1; $0.isImportant = true
-            $0.people = ["Ayşe Demir", "Mert Kaya"] })
+            $0.people = ["Ayşe Demir", "Mert Kaya"]
+            $0.accentStart = 2; $0.accentEnd = 18; $0.gradientBlendFraction = 0.5
+            $0.isChecklist = true
+            $0.checklistItems = [ChecklistItem(id: 11, text: "Ana sayfa akışı", completedAt: base), ChecklistItem(id: 12, text: "Kart detay blokları"),
+                                 ChecklistItem(id: 13, text: "Takvim focus kartları")]
+            $0.referenceUrl = "https://www.figma.com/file/real-ios"
+            $0.location = ReminderLocation(placeName: "Kolektif House Levent", address: "Esentepe, Talatpaşa Cd. No:5, Şişli/İstanbul",
+                                           latitude: 41.0786, longitude: 29.0107)
+            $0.cardStack = CardStackBlock(prompt: nil, cards: [
+                CardStackCard(title: "Gündem", body: "Dock, detay ve takvim ekranlarını Android ile karşılaştır.", colorArgb: Int(Int32(bitPattern: 0xFF4558C8))),
+                CardStackCard(title: "Notlar", body: "Liquid Glass yüzeyler iOS 26'da gerçek materyal.", colorArgb: Int(Int32(bitPattern: 0xFFDAB7F3))),
+            ]) })
         add(2, "Haftalık planlama", { $0.alertAt = at(13, 30); $0.durationMinutes = 45; $0.customCategoryId = 1
             $0.repeatRule = .weekly; $0.repeatWeekdaysMask = Weekday.monday.bit | Weekday.wednesday.bit | Weekday.friday.bit | cal.isoWeekday(of: today).bit })
         add(3, "Koşu 5K", { $0.alertAt = at(18); $0.durationMinutes = 40; $0.customCategoryId = 3; $0.isImportant = true })
@@ -103,6 +114,7 @@ enum DemoData {
         case "detail": return [.detail(1)]
         case "checklist": return [.detail(4)]
         case "planner": return [.planner]
+        case "goal": return [.planner, .goal(1)]
         default: return []
         }
     }

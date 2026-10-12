@@ -131,7 +131,7 @@ struct PlannerScreen: View {
                             .intro(introVisible, delay: 0.15 + Double(min(index, 3)) * 0.09, x: 90)
                     }
                     ForEach(Array(categories.enumerated()), id: \.element.category.id) { index, card in
-                        Button { path.append(.customCategory(card.category.id)) } label: {
+                        Button { path.append(.goal(card.category.id)) } label: {
                             PlannerCategoryCardView(card: card, width: width)
                         }
                         .buttonStyle(PressScaleStyle(scale: 0.965))

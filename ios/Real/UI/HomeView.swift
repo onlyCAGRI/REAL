@@ -6,6 +6,8 @@ enum Route: Hashable {
     case customCategory(Int64)
     case detail(Int64)
     case planner
+    case goal(Int64)
+    case module(String)
 }
 
 struct RootView: View {
@@ -25,6 +27,8 @@ struct RootView: View {
                     case .customCategory(let id): CategoryScreen(builtIn: nil, customId: id, path: $path)
                     case .detail(let id): ReminderDetailView(reminderId: id)
                     case .planner: PlannerScreen(path: $path)
+                    case .goal(let id): PlannerGoalScreen(categoryId: id, path: $path)
+                    case .module(let name): ModulePlaceholderScreen(name: name)
                     }
                 }
         }
@@ -85,7 +89,15 @@ struct HomeView: View {
         .background(RealColors.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom) {
             if selectedIds.isEmpty {
-                ComposerBar(defaultCategoryId: nil, onOpenPlanner: { path.append(.planner) })
+                ComposerBar(defaultCategoryId: nil, isHome: true,
+                            onOpenPlanner: { path.append(.planner) },
+                            onOpenYasam: { path.append(.module("Yaşam")) },
+                            onOpenPano: { path.append(.module("Pano")) })
+                    .background(alignment: .bottom) {
+                        // BottomFade behind the dock so cards dissolve under the glass.
+                        LinearGradient(colors: [.clear, .black.opacity(0.85), .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 140).ignoresSafeArea().allowsHitTesting(false)
+                    }
             } else {
                 SelectionBar(count: selectedIds.count,
                              onStar: {
@@ -273,5 +285,27 @@ struct SelectionBar: View {
         .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.75))
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
+    }
+}
+
+/// Yaşam and Pano are not part of the iOS scope yet; the dock keeps their entries like Android.
+struct ModulePlaceholderScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    let name: String
+    var body: some View {
+        VStack(spacing: 14) {
+            Text(name).font(RealType.editorialTitle).kerning(-2.2).foregroundStyle(Color(argb: 0xFFF3F1F4))
+            Text("iOS sürümünde yakında").font(RealType.editorialSubtitle).foregroundStyle(Color(argb: 0xFF8C8C95))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.ignoresSafeArea())
+        .overlay(alignment: .topLeading) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                    .frame(width: 44, height: 44).liquidGlass(Circle())
+            }
+            .padding(16)
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 }

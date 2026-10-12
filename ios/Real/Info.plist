@@ -29,6 +29,12 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sesle REAL oluşturmak için mikrofon kullanılır.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Söylediklerini karta yazmak için konuşma tanıma kullanılır.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Kartına fotoğraf çekmek için kamera kullanılır.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Kartlarına fotoğraf eklemek için fotoğraflarına erişim gerekir.</string>
 	<key>UIApplicationSceneManifest</key>

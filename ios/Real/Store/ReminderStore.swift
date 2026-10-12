@@ -11,6 +11,11 @@ final class ReminderStore {
     private(set) var builtInColors: [ReminderCategory: CategoryColorOverride] = [:]
     var categoryOrderKeys: [String] = []
     var ownerName: String = ""
+    /// Planner goal screen state (UI-only prefs on Android): goal order, pastel, card shape, link.
+    private(set) var goalOrder: [Int64: [Int64]] = [:]
+    private(set) var categoryPastel: [Int64: Int] = [:]
+    private(set) var categoryCardShape: [Int64: String] = [:]
+    private(set) var categoryLinks: [Int64: String] = [:]
 
     private let fileURL: URL
     private let persist: Bool
@@ -23,6 +28,10 @@ final class ReminderStore {
         var builtInColors: [String: CategoryColorOverride]
         var categoryOrderKeys: [String]
         var ownerName: String
+        var goalOrder: [Int64: [Int64]]? = nil
+        var categoryPastel: [Int64: Int]? = nil
+        var categoryCardShape: [Int64: String]? = nil
+        var categoryLinks: [Int64: String]? = nil
     }
 
     init(fileURL: URL? = nil, persist: Bool = true) {
@@ -45,13 +54,19 @@ final class ReminderStore {
         })
         categoryOrderKeys = snap.categoryOrderKeys
         ownerName = snap.ownerName
+        goalOrder = snap.goalOrder ?? [:]
+        categoryPastel = snap.categoryPastel ?? [:]
+        categoryCardShape = snap.categoryCardShape ?? [:]
+        categoryLinks = snap.categoryLinks ?? [:]
     }
 
     private func save() {
         guard persist else { return }
         let snap = Snapshot(reminders: reminders, categories: categories,
                             builtInColors: Dictionary(uniqueKeysWithValues: builtInColors.map { ($0.key.rawValue, $0.value) }),
-                            categoryOrderKeys: categoryOrderKeys, ownerName: ownerName)
+                            categoryOrderKeys: categoryOrderKeys, ownerName: ownerName,
+                            goalOrder: goalOrder, categoryPastel: categoryPastel,
+                            categoryCardShape: categoryCardShape, categoryLinks: categoryLinks)
         guard let data = try? JSONEncoder().encode(snap) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
@@ -198,6 +213,22 @@ final class ReminderStore {
             }
         }
     }
+
+    /// "Bu ve sonraki tüm tekrarları sil": the series ends the day before the chosen occurrence.
+    func deleteThisAndFuture(_ id: Int64, occurrence: EpochMillis) {
+        guard let item = reminder(id) else { return }
+        let day = calendar.epochDay(ofMillis: occurrence)
+        let anchorDay = calendar.epochDay(ofMillis: item.anchorAlertAt ?? item.alertAt ?? occurrence)
+        if day <= anchorDay { delete([id]); return }
+        mutate(id) { $0.repeatUntilEpochDay = day - 1 }
+    }
+
+    // MARK: Planner goal screen prefs
+
+    func setGoalOrder(_ categoryId: Int64, _ ids: [Int64]) { goalOrder[categoryId] = ids; save() }
+    func setCategoryPastel(_ categoryId: Int64, _ index: Int?) { categoryPastel[categoryId] = index; save() }
+    func setCategoryCardShape(_ categoryId: Int64, _ shape: String) { categoryCardShape[categoryId] = shape; save() }
+    func setCategoryLink(_ categoryId: Int64, _ link: String?) { categoryLinks[categoryId] = link; save() }
 
     // MARK: Category mutations
 
