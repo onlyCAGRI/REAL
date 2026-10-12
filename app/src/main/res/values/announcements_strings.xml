@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="real_news_title">From REAL</string>
+    <string name="real_news_unread">%1$d unread announcements</string>
+    <string name="real_news_close">Close</string>
+    <string name="real_news_back">Back</string>
+    <string name="real_news_add_failed">Could not add. Please try again.</string>
+    <string name="real_news_add">Add to REAL</string>
+    <string name="real_news_added">Added</string>
+    <string name="real_news_offline">Could not refresh. Saved announcements remain available.</string>
+    <string name="real_news_loading">Loading…</string>
+    <string name="real_news_empty">You’re all caught up.</string>
+    <string name="real_news_refresh">Refresh</string>
+    <string name="real_news_expand">%1$d announcements · Tap to expand</string>
+    <string name="real_news_collapse">Collapse</string>
+</resources>

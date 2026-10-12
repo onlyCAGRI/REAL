@@ -1,0 +1,12 @@
+REAL Pet artwork notice
+
+The white cat artwork used by REAL Pet was supplied by the project owner from GameDev Kitty asset packs purchased/downloaded separately from itch.io:
+
+- Cute Kitten Animation RUN
+- Cute Kitten Animation Idle
+- Sleeping Kittens / white kitten artwork
+
+The artwork is licensed separately from the REAL application source code. The asset files are embedded for use inside the application and must not be redistributed as standalone stock/assets except as permitted by the original GameDev Kitty license/terms.
+
+Source creator: GameDev Kitty
+https://gamedev-kitty.itch.io/

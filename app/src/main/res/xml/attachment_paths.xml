@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path name="attachments" path="reminder_attachments/" />
+    <files-path name="pano_assets" path="pano_assets/" />
+    <cache-path name="shared_category_assets" path="shared_categories/" />
+</paths>

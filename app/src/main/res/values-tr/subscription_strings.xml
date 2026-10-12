@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="real_pro_title">REAL Pro</string>
+    <string name="real_pro_settings_summary">Pro’yu keşfet, mağaza aboneliklerini yönet</string>
+    <string name="real_pro_intro">Planların, keşiflerin ve kendi tarzın için daha fazlası.</string>
+    <string name="real_pro_close">Abonelik panelini kapat</string>
+    <string name="real_pro_voice">Sesli komutlarda yapay zekâ desteği</string>
+    <string name="real_pro_mood">Ruh haline göre kişisel öneriler</string>
+    <string name="real_pro_discovery">Yapay zekâyla film, dizi ve oyun keşfi</string>
+    <string name="real_pro_goals">Gelişmiş hedef planlama</string>
+    <string name="real_pro_colors">Kart renkleri ve kategori geçiş renkleri</string>
+    <string name="real_pro_details">Neler dahil?</string>
+    <string name="real_pro_details_subtitle">Pro için hazırlanan özellikler</string>
+    <string name="real_pro_detail_ai">Pro; sesli komutların yapay zekâyla yorumlanmasını, ruh hali önerilerini, film, dizi ve oyun önerilerini, gelişmiş hedefleri ve renk kişiselleştirmesini kapsayacak.</string>
+    <string name="real_pro_detail_free">Temel kartlar, cihazda çözülen sesli komutlar ve ruh hali kaydı Pro olmadan da kullanılabilecek. Kategoriler için tek renk seçimi ücretsiz kalacak.</string>
+    <string name="real_pro_detail_limits">Yapay zekâ kullanım sınırları ve son plan ayrıntıları abonelikler satışa açılmadan belirtilecek. Sınırsız yapay zekâ kullanımı sunulmuyor.</string>
+    <string name="real_pro_detail_store">Android’de ödeme Google Play üzerinden tamamlanacak. Satın almadan önce fiyatı, ödeme dönemini ve yenileme koşullarını göreceksin. Play aboneliğini Google Play’den yönetebilir veya iptal edebilirsin.</string>
+    <string name="real_pro_detail_data">Yapay zekâ aboneliği, gizlilik tercihlerini değiştirmez. Yapay zekâ izni ayrı kalır. Abonelik sona erdiğinde mevcut kartların silinmez.</string>
+    <string name="real_pro_soon">Abonelikler henüz satışa açılmadı. Planlar ve fiyatlar hazır olduğunda burada görünecek.</string>
+    <string name="real_pro_loading">Planlar Google Play’den alınıyor…</string>
+    <string name="real_pro_unavailable">Planlara şu anda ulaşılamıyor. REAL’i kullanmaya devam edebilirsin.</string>
+    <string name="real_pro_store_note">Ödeme Google Play üzerinden tamamlanır. Devam etmeden seçili planın koşullarını incele.</string>
+    <string name="real_pro_opening">Google Play açılıyor…</string>
+    <string name="real_pro_pending">Ödeme bekleniyor. Pro, ödeme doğrulandıktan sonra açılacak.</string>
+    <string name="real_pro_verifying">Satın alma doğrulanıyor…</string>
+    <string name="real_pro_restoring">Satın almaların kontrol ediliyor…</string>
+    <string name="real_pro_active">Bu hesapta REAL Pro etkin.</string>
+    <string name="real_pro_restore">Satın almaları geri yükle</string>
+    <string name="real_pro_manage">Google Play aboneliklerini yönet</string>
+    <string name="real_pro_privacy">Gizlilik politikası</string>
+    <string name="real_pro_terms">Abonelik koşulları</string>
+    <string name="real_pro_buy">Google Play ile abone ol</string>
+    <string name="real_pro_later">Şimdi değil</string>
+    <string name="real_pro_open_failed">Sayfa açılamadı. Lütfen tekrar dene.</string>
+</resources>
