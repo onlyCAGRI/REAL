@@ -19,6 +19,7 @@ struct ReminderDetailView: View {
     @State private var secondaryExpanded = false
     @State private var dockCollapsed = false
     @State private var showMusicSearch = false
+    @State private var voiceRecorderOpen = false
     @State private var showMediaSearch = false
     @State private var deleting = false
     @State private var reordering = false
@@ -131,7 +132,7 @@ struct ReminderDetailView: View {
     // MARK: Block order
 
     private func blockOrder(_ r: ReminderItem) -> [String] {
-        let active = r.cardContentKeys(includeEmptyChecklist: editing && checklistOpen, includeJournal: false)
+        let active = r.cardContentKeys(includeEmptyChecklist: editing && checklistOpen, includeVoiceRecorder: editing && voiceRecorderOpen, includeJournal: false)
         return r.resolvedBlockOrder(active)
     }
 
@@ -153,6 +154,11 @@ struct ReminderDetailView: View {
             }
         case "location": if let l = r.location { locationBlock(l) }
         case "journal": if let j = r.journal { journalBlock(j) }
+        case "voice":
+            VoiceRecordingBlock(recordings: r.voiceRecordings, editing: editing,
+                                onRecorded: { rec in draft?.voiceRecordings.append(rec) },
+                                onRemove: { rec in draft?.voiceRecordings.removeAll { $0.id == rec.id } },
+                                onClose: { voiceRecorderOpen = false; draft?.voiceRecordings = [] })
         case "music":
             if let m = r.musicBlocks.first(where: { $0.id == id }) {
                 MusicBlockView(block: m, editing: editing) { draft?.musicBlocks.removeAll { $0.id == id } }
@@ -800,6 +806,8 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "play.rectangle", label: "Film & Dizi", active: !(d?.mediaBlocks.isEmpty ?? true),
                                 count: d?.mediaBlocks.count) { showMediaSearch = true }
                     QuickAction(symbol: "link", label: "Bağlantı", active: d?.referenceUrl != nil) { showLinkEditor = true }
+                    QuickAction(symbol: "waveform", label: "Ses kaydı", active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
+                                count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
                     QuickAction(symbol: "rectangle.stack", label: "Kart Yığını", active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
                         editingStackCard = CardStackCard()
                     }
@@ -1243,6 +1251,7 @@ private struct BlockReorderSheet: View {
         case "location": return ("Konum", item.location?.placeName ?? "Konum", "mappin")
         case "mood": return ("Mood", item.mood?.label ?? "Mood", "face.smiling")
         case "journal": return ("Günlük", "Günlük notu", "book.closed")
+        case "voice": return ("Ses", "\(item.voiceRecordings.count) kayıt", "waveform")
         case "music": return ("Müzik", item.musicBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "music.note")
         case "media": return ("Film / Dizi", item.mediaBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "film")
         default: return (key, "", "square")
