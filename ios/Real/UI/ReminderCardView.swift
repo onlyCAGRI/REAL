@@ -263,6 +263,7 @@ struct CategoryTileView: View {
     let visual: CategoryVisual
     let count: Int
     var description: String = ""
+    var showCount = true
     var hero = false
     var extendUnderNext = false
     var isSelected = false
@@ -285,7 +286,7 @@ struct CategoryTileView: View {
             }
             Spacer().frame(height: hero ? 12 : 14)
             HStack(spacing: 8) {
-                CategoryPill(text: "\(count) kart", foreground: visual.foreground)
+                if showCount { CategoryPill(text: "\(count) kart", foreground: visual.foreground) }
                 if !description.isEmpty {
                     CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading)
                 }

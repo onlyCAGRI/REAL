@@ -152,8 +152,11 @@ struct CustomCategory: Codable, Identifiable, Hashable {
     var customSolidColorArgb: Int? = nil
     var description: String = ""
     var createdAt: EpochMillis = .now
+    /// "REAL takviminde göster"; nil (older data) means shown.
+    var showInCalendar: Bool? = nil
 
     var icon: CategoryIcon { CategoryIcon.from(key: iconKey) }
+    var isShownInCalendar: Bool { showInCalendar ?? true }
 }
 
 /// Home deck entries in their saved order (OrderedCategoryItem).

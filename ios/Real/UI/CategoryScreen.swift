@@ -74,8 +74,8 @@ struct CategoryScreen: View {
                 ComposerBar(defaultCategoryId: customId, defaultImportant: builtIn == .important,
                             defaultPlannedToday: builtIn == .today || builtIn == .planned)
                     .background(alignment: .bottom) {
-                        LinearGradient(colors: [.clear, .black.opacity(0.85), .black], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 130).ignoresSafeArea().allowsHitTesting(false)
+                        LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 44).ignoresSafeArea().allowsHitTesting(false)
                     }
             }
         }

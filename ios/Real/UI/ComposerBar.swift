@@ -141,8 +141,8 @@ struct ComposerBar: View {
         )
         .onChange(of: expanded) { _, e in if e { navExpanded = false } }
         .onAppear(perform: reset)
-        .sheet(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule).presentationDetents([.large]) }
-        .sheet(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId).presentationDetents([.medium, .large]) }
+        .realOverlay(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
+        .realOverlay(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId) }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
         .onChange(of: photoItems) { _, items in importPhotos(items) }
     }
@@ -295,7 +295,7 @@ struct ComposerBar: View {
     private var toolRow: some View {
         HStack(spacing: 4) {
             if !schedule.isEmpty {
-                Button { showDateSheet = true } label: {
+                Button { withoutAnimation { showDateSheet = true } } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "calendar").font(.system(size: 14)).foregroundStyle(RealColors.accentBlue)
                         Text(schedule.summary).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFE2E8F0))
@@ -308,11 +308,11 @@ struct ComposerBar: View {
                 }
                 .accessibilityLabel("Tarihi kaldır")
             } else {
-                toolButton("calendar", "Tarih seç", active: false) { showDateSheet = true }
+                toolButton("calendar", "Tarih seç", active: false) { withoutAnimation { showDateSheet = true } }
             }
             let cat = store.category(categoryId)
             toolButton(cat?.icon.symbol ?? "square.grid.2x2", "Kategori seç", active: cat != nil,
-                       tint: cat.map { paletteColor($0.accentStart) ?? RealColors.accentBlue }) { showCategoryPicker = true }
+                       tint: cat.map { paletteColor($0.accentStart) ?? RealColors.accentBlue }) { withoutAnimation { showCategoryPicker = true } }
             ZStack(alignment: .topTrailing) {
                 toolButton("plus", "Fotoğraf ekle", active: !attachments.isEmpty) { showPhotoPicker = true }
                 if !attachments.isEmpty {
@@ -493,50 +493,68 @@ struct ComposerBar: View {
     }
 }
 
-/// Category chooser used by the composer and the detail screen.
+/// "Kategori Seç" glass panel (CategorySelectionOverlay.kt): Kategori yok, Yeni kategori ekle…, then every category.
 struct CategoryPickerSheet: View {
     @Environment(ReminderStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
     @Binding var selected: Int64?
     @State private var showNew = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                Button {
-                    selected = nil
-                    dismiss()
-                } label: {
-                    row(symbol: "circle.dashed", name: "Kategori yok", color: .gray, isSelected: selected == nil)
+        OverlayPanel { close in
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("Kategori Seç").font(RealFont.inter(20, .semibold)).foregroundStyle(.white)
+                    Spacer()
+                    Button(action: close) {
+                        Image(systemName: "xmark").font(.system(size: 15)).foregroundStyle(Color(argb: 0xFFB8B8BE)).frame(width: 40, height: 40)
+                    }
+                    .accessibilityLabel("Kapat")
                 }
-                ForEach(store.categories) { category in
-                    Button {
-                        selected = category.id
-                        dismiss()
-                    } label: {
-                        row(symbol: category.icon.symbol, name: category.name, color: category.visual.stripe.0,
-                            isSelected: selected == category.id)
+                .padding(.bottom, 10)
+                ScrollView {
+                    VStack(spacing: 4) {
+                        row(isSelected: selected == nil, highlight: selected == nil) {
+                            Image(systemName: "xmark").font(.system(size: 12, weight: .medium)).foregroundStyle(Color(argb: 0xFFC8C8D0))
+                                .frame(width: 34, height: 34).background(Circle().fill(Color(argb: 0xFF2A2A30)))
+                        } title: { Text("Kategori yok").font(RealFont.inter(17, .semibold)) } action: { selected = nil; close() }
+                        row(isSelected: false, highlight: false) {
+                            Image(systemName: "plus").font(.system(size: 13, weight: .medium)).foregroundStyle(RealColors.accentBlue)
+                                .frame(width: 34, height: 34).background(Circle().fill(RealColors.accentBlue.opacity(0.14)))
+                                .overlay(Circle().strokeBorder(RealColors.accentBlue.opacity(0.35), lineWidth: 0.8))
+                        } title: { Text("Yeni kategori ekle...").font(RealFont.inter(17)) } action: { showNew = true }
+                        Rectangle().fill(.white.opacity(0.10)).frame(height: 1).padding(.vertical, 6).padding(.horizontal, 4)
+                        ForEach(store.categories) { category in
+                            row(isSelected: selected == category.id, highlight: selected == category.id) {
+                                let start = paletteColor(category.accentStart) ?? Color(argb: 0xFF233F73)
+                                let end = paletteColor(category.accentEnd) ?? start
+                                Image(systemName: category.icon.symbol).font(.system(size: 13)).foregroundStyle(.white)
+                                    .frame(width: 34, height: 34)
+                                    .background(Circle().fill(LinearGradient(colors: [start, end], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                            } title: { Text(category.name).font(RealFont.inter(17)) } action: { selected = category.id; close() }
+                        }
                     }
                 }
-                Button { showNew = true } label: { Label("Yeni kategori", systemImage: "plus") }
+                .frame(maxHeight: 420)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .navigationTitle("Kategori")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Bitti") { dismiss() } } }
-            .sheet(isPresented: $showNew) { CategoryEditorSheet(existing: nil) { selected = $0.id } }
+            .padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 16)
         }
+        .sheet(isPresented: $showNew) { CategoryEditorSheet(existing: nil) { selected = $0.id } }
     }
 
-    private func row(symbol: String, name: String, color: Color, isSelected: Bool) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 14))
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(color))
-            Text(name).foregroundStyle(.white)
-            Spacer()
-            if isSelected { Image(systemName: "checkmark").foregroundStyle(RealColors.accentBlue) }
+    private func row<Icon: View, Title: View>(isSelected: Bool, highlight: Bool, @ViewBuilder icon: () -> Icon,
+                                              @ViewBuilder title: () -> Title, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                icon()
+                title().foregroundStyle(.white).lineLimit(1)
+                Spacer()
+                if isSelected { Image(systemName: "checkmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white) }
+            }
+            .padding(.horizontal, 10).frame(minHeight: 56)
+            .background { if highlight { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.05)) } }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(PressScaleStyle(scale: 0.98))
     }
 }

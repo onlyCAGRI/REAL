@@ -51,6 +51,11 @@ struct ReminderDetailView: View {
                         ForEach(blockOrder(r), id: \.self) { key in
                             block(key, r).transition(.opacity.combined(with: .scale(scale: 0.97)))
                         }
+                        Text(createdLine(r))
+                            .font(RealFont.inter(14))
+                            .foregroundStyle(Color(argb: 0xFF8C8C95))
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.top, 4).padding(.trailing, 6)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
@@ -64,11 +69,11 @@ struct ReminderDetailView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
+        .realOverlay(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
         .onChange(of: schedule) { _, new in
             if editing { new.apply(to: &draft!) } else { store.mutate(reminderId) { new.apply(to: &$0) } }
         }
-        .sheet(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categorySelection).presentationDetents([.medium, .large]) }
+        .realOverlay(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categorySelection) }
         .onChange(of: categorySelection) { _, new in draft?.customCategoryId = new }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
         .onChange(of: photoItems) { _, items in importPhotos(items) }
@@ -103,6 +108,15 @@ struct ReminderDetailView: View {
             if let r = shown { BlockReorderSheet(keys: blockOrder(r), item: r) { draft?.contentBlockOrder = $0 } }
         }
         .fullScreenCover(item: $previewPhoto) { a in PhotoPreview(attachment: a) }
+    }
+
+    /// "Oluşturuldu · Pazartesi • 12 Eki 2026, 18:21"
+    private func createdLine(_ r: ReminderItem) -> String {
+        let cal = Calendar.real
+        let d = r.createdAt.date
+        let c = cal.dateComponents([.year, .month, .day], from: d)
+        let months = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
+        return "Oluşturuldu · \(cal.isoWeekday(of: d).full) • \(c.day ?? 1) \(months[(c.month ?? 1) - 1]) \(c.year ?? 2026), \(RealDates.time(d))"
     }
 
     // MARK: Block order
@@ -356,7 +370,7 @@ struct ReminderDetailView: View {
 
     private func openSchedule(_ r: ReminderItem) {
         schedule = ScheduleDraft(from: r)
-        showDateSheet = true
+        withoutAnimation { showDateSheet = true }
     }
 
     // MARK: Content blocks
@@ -762,14 +776,14 @@ struct ReminderDetailView: View {
 
     private var secondaryPanels: some View {
         VStack(spacing: 8) {
-            PaletteGradientPicker(
+            CardColorsPanel(
                 start: Binding(get: { draft?.accentStart }, set: { draft?.accentStart = $0; draft?.customSolidColorArgb = nil }),
                 end: Binding(get: { draft?.accentEnd }, set: { draft?.accentEnd = $0; draft?.customSolidColorArgb = nil }),
                 blend: Binding(get: { draft?.gradientBlendResolved ?? 0.5 }, set: { draft?.gradientBlendFraction = $0 }),
-                darkText: Binding(get: { draft?.useDarkText ?? false }, set: { draft?.useDarkText = $0 }))
-                .padding(16)
-                .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), role: .sheet)
-            Button { titleFocused = false; showCategoryPicker = true } label: {
+                darkText: Binding(get: { draft?.useDarkText ?? false }, set: { draft?.useDarkText = $0 }),
+                isStarred: draft?.isImportant ?? false)
+                .liquidGlass(RoundedRectangle(cornerRadius: 28, style: .continuous), role: .sheet)
+            Button { titleFocused = false; withoutAnimation { showCategoryPicker = true } } label: {
                 HStack {
                     Text("Kategori").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
                     Spacer()

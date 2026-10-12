@@ -25,7 +25,9 @@ struct PlannerScreen: View {
         let today = calendar.startOfDay(for: now)
         let dayStart = calendar.startOfDay(for: selectedDay)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
-        let events = Planner.events(store.reminders, rangeStart: dayStart.epochMillis, rangeEnd: dayEnd.epochMillis, calendar: calendar)
+        let hiddenFromCalendar = Set(store.categories.filter { !$0.isShownInCalendar }.map(\.id))
+        let calendarReminders = store.reminders.filter { !($0.customCategoryId.map(hiddenFromCalendar.contains) ?? false) }
+        let events = Planner.events(calendarReminders, rangeStart: dayStart.epochMillis, rangeEnd: dayEnd.epochMillis, calendar: calendar)
         let focus = Planner.focusEvents(events, day: selectedDay, calendar: calendar)
         let allDay = events.filter(\.isDateOnly)
         let geometry = PlannerTimelineGeometry.daily(events, day: selectedDay, calendar: calendar)
@@ -682,7 +684,7 @@ struct PlannerQuickAddSheet: View {
                     TextField("Kişiler (virgülle)", text: $peopleText)
                 }
                 Toggle("Önemli (Focus)", isOn: $important)
-                Button { showCategory = true } label: {
+                Button { withoutAnimation { showCategory = true } } label: {
                     LabeledContent("Kategori", value: store.category(categoryId)?.name ?? "Kategori yok")
                 }
             }
@@ -706,7 +708,7 @@ struct PlannerQuickAddSheet: View {
                     .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            .sheet(isPresented: $showCategory) { CategoryPickerSheet(selected: $categoryId).presentationDetents([.medium]) }
+            .realOverlay(isPresented: $showCategory) { CategoryPickerSheet(selected: $categoryId) }
             .onAppear {
                 let cal = Calendar.real
                 if let hour = request.hour {

@@ -113,8 +113,8 @@ struct HomeView: View {
                             onOpenPano: { path.append(.module("Pano")) })
                     .background(alignment: .bottom) {
                         // BottomFade behind the dock so cards dissolve under the glass.
-                        LinearGradient(colors: [.clear, .black.opacity(0.85), .black], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 140).ignoresSafeArea().allowsHitTesting(false)
+                        LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 44).ignoresSafeArea().allowsHitTesting(false)
                     }
             } else {
                 SelectionBar(count: selectedIds.count,

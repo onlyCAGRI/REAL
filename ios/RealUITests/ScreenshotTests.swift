@@ -82,6 +82,38 @@ final class ScreenshotTests: XCTestCase {
         shot("categoryprogress")
     }
 
+    func test13Pickers() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "home"]
+        app.launch()
+        let field = app.textFields.firstMatch.exists ? app.textFields.firstMatch : app.textViews.firstMatch
+        if field.waitForExistence(timeout: 10) { field.tap(); field.typeText("Toplantı") }
+        let date = app.buttons["Tarih seç"]
+        if date.waitForExistence(timeout: 5) { date.tap() }
+        Thread.sleep(forTimeInterval: 1.5)
+        shot("datepicker")
+        let cancel = app.buttons["İptal"]
+        if cancel.waitForExistence(timeout: 3) { cancel.tap() }
+        Thread.sleep(forTimeInterval: 1)
+        let cat = app.buttons["Kategori seç"]
+        if cat.waitForExistence(timeout: 5) { cat.tap() }
+        Thread.sleep(forTimeInterval: 1.5)
+        shot("categorypicker")
+    }
+
+    func test14CategoryEditor() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "category"]
+        app.launch()
+        let edit = app.buttons["Kategoriyi düzenle"]
+        if edit.waitForExistence(timeout: 10) { edit.tap() }
+        Thread.sleep(forTimeInterval: 1.5)
+        shot("categoryeditor")
+        app.swipeUp()
+        Thread.sleep(forTimeInterval: 1)
+        shot("categoryeditor2")
+    }
+
     func test7ComposerExpanded() {
         let app = XCUIApplication()
         app.launchArguments = ["-REALDemo", "-REALScreen", "home"]
