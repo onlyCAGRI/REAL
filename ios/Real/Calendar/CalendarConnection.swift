@@ -306,7 +306,7 @@ struct CalendarConnectionScreen: View {
         connection.reconcile(reminders.reminders)
     }
 
-    private func section<C: View>(_ title: String, footer: String? = nil, @ViewBuilder content: () -> C) -> some View {
+    private func section<C: View>(_ title: String, footer: String? = nil, @ViewBuilder content: @escaping () -> C) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             SettingsSectionHeader(title: title.uppercased(with: Locale(identifier: "tr_TR")))
             SettingsGlassGroup { content() }
