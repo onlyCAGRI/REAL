@@ -181,3 +181,24 @@ func liquidRim(_ role: LiquidGlassRole) -> LinearGradient {
                                  .init(color: Color(argb: 0x38FFFFFF), location: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 
+
+/// Android's status bar is ~24dp; the Dynamic Island safe area is ~62pt, which pushed every iOS header visibly lower.
+/// This lifts content 14pt into the top safe area (never closer than 48pt) on notch / Dynamic Island devices. It is
+/// computed from the window inset and applied absolutely, so nesting it is harmless.
+struct LiftedTopSafeArea: ViewModifier {
+    static let lift: CGFloat = 14
+
+    func body(content: Content) -> some View {
+        let top = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow ?? ($0 as? UIWindowScene)?.windows.first }
+            .first?.safeAreaInsets.top ?? 0
+        let lifted = top >= 44 ? top - Self.lift : top
+        content
+            .safeAreaPadding(.top, lifted)
+            .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
+extension View {
+    func liftedTopSafeArea() -> some View { modifier(LiftedTopSafeArea()) }
+}

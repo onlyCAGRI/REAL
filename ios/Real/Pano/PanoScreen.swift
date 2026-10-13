@@ -93,7 +93,7 @@ struct PanoScreen: View {
             }
             .presentationBackground(.clear)
         }
-        .fullScreenCover(item: $openBoard) { b in PanoBoardScreen(boardId: b.id) }
+        .fullScreenCover(item: $openBoard) { b in PanoBoardScreen(boardId: b.id).liftedTopSafeArea() }
         .alert("Delete board?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete", role: .destructive) { if let d = deleting { pano.deleteBoard(d.id) }; deleting = nil }
             Button("Cancel", role: .cancel) { deleting = nil }

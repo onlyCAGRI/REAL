@@ -58,7 +58,26 @@ struct RealApp: App {
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        NotificationScheduler.registerCategories()
         return true
+    }
+
+    /// NotificationActionReceiver: "Tamamla" completes (repeats move on), "10 dk ertele" snoozes, a tap opens the card.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard let id = response.notification.request.content.userInfo["reminderId"] as? Int64 else { return }
+        await MainActor.run {
+            let store = ReminderStore.current
+            switch response.actionIdentifier {
+            case NotificationScheduler.completeAction:
+                if let r = store?.reminder(id), !r.isCompleted { store?.toggleCompleted(id) }
+                NotificationScheduler.removeDelivered(id)
+            case NotificationScheduler.snoozeAction:
+                store?.snooze(id)
+            case UNNotificationDefaultActionIdentifier:
+                NotificationCenter.default.post(name: .realOpenReminder, object: nil, userInfo: ["reminderId": id])
+            default: break
+            }
+        }
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {

@@ -76,9 +76,9 @@ struct YasamScreen: View {
         }
         .presentationBackground(.clear)
         .onAppear { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9)) { revealed = true } }
-        .fullScreenCover(isPresented: $showBooks) { BooksModuleScreen(resumeBookId: resumeBook) }
-        .fullScreenCover(isPresented: $showWater) { WaterTrackerScreen().presentationBackground(.black) }
-        .fullScreenCover(isPresented: $showMoodAdd) { MoodAddSheet() }
+        .fullScreenCover(isPresented: $showBooks) { BooksModuleScreen(resumeBookId: resumeBook).liftedTopSafeArea() }
+        .fullScreenCover(isPresented: $showWater) { WaterTrackerScreen().liftedTopSafeArea().presentationBackground(.black) }
+        .fullScreenCover(isPresented: $showMoodAdd) { MoodAddSheet().liftedTopSafeArea() }
         .sheet(isPresented: $showJournalSheet) {
             YasamJournalSheet { text in
                 _ = store.addReminder(text: YasamJournalSheet.title()) { r in
@@ -89,6 +89,7 @@ struct YasamScreen: View {
         }
         .fullScreenCover(isPresented: $showMoodHistory) {
             MoodHistoryScreen(onAdd: { showMoodHistory = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showMoodAdd = true } })
+                .liftedTopSafeArea()
         }
     }
 

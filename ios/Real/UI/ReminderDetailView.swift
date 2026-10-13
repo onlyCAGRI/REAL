@@ -131,6 +131,7 @@ struct ReminderDetailView: View {
             MoodAddSheet(onSaved: { mood, _ in
                 if editing { draft?.mood = mood } else { store.mutate(reminderId) { $0.mood = mood } }
             })
+            .liftedTopSafeArea()
         }
         .sheet(isPresented: $reordering) {
             if let r = shown { BlockReorderSheet(keys: blockOrder(r), item: r) { draft?.contentBlockOrder = $0 } }

@@ -34,6 +34,9 @@ final class ReminderStore {
         var categoryLinks: [Int64: String]? = nil
     }
 
+    /// The live store, for notification actions handled by the app delegate.
+    static weak var current: ReminderStore?
+
     init(fileURL: URL? = nil, persist: Bool = true) {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -61,6 +64,7 @@ final class ReminderStore {
     }
 
     private func save() {
+        NotificationScheduler.categories = categories
         guard persist else { return }
         let snap = Snapshot(reminders: reminders, categories: categories,
                             builtInColors: Dictionary(uniqueKeysWithValues: builtInColors.map { ($0.key.rawValue, $0.value) }),
@@ -150,7 +154,9 @@ final class ReminderStore {
         configure?(&item)
         reminders.append(item)
         save()
+        NotificationScheduler.categories = categories
         NotificationScheduler.schedule(item)
+        NotificationScheduler.postImmediateIfNeeded(item)
         return item
     }
 
@@ -181,6 +187,7 @@ final class ReminderStore {
         reminders[index] = reminders[index].toggledCompleted(now: .now, calendar: calendar)
         save()
         NotificationScheduler.schedule(reminders[index])
+        if reminders[index].isCompleted { NotificationScheduler.removeDelivered(id) }
     }
 
     func toggleChecklistItem(_ reminderId: Int64, itemId: Int64) {
@@ -198,6 +205,17 @@ final class ReminderStore {
         reminders.removeAll { ids.contains($0.id) }
         save()
         ids.forEach(NotificationScheduler.cancel)
+        ids.forEach(NotificationScheduler.removeDelivered)
+    }
+
+    /// NotificationActionReceiver ACTION_SNOOZE_10: move the alert 10 minutes ahead, keeping the series anchor.
+    func snooze(_ id: Int64, millis: EpochMillis = NotificationScheduler.snoozeMillis) {
+        mutate(id) { r in
+            guard !r.isCompleted else { return }
+            r.anchorAlertAt = r.anchorAlertAt ?? r.alertAt
+            r.alertAt = .now + millis
+            r.notifiedAlertAt = nil
+        }
     }
 
     /// "Sadece bu gün": skip one occurrence of a repeating series, the series itself stays.
@@ -280,42 +298,3 @@ final class ReminderStore {
     }
 }
 
-/// Local notifications for timed cards (ReminderScheduler + ReminderNotifications).
-enum NotificationScheduler {
-    static var enabled = true
-
-    static func requestAuthorization() {
-        guard enabled else { return }
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
-    }
-
-    static func schedule(_ item: ReminderItem) {
-        guard enabled else { return }
-        cancel(item.id)
-        guard !item.isCompleted, let alert = item.alertAt, alert > .now else { return }
-        let content = UNMutableNotificationContent()
-        content.title = item.text.isEmpty ? "REAL" : item.text
-        if item.isChecklist {
-            let open = item.checklistItems.filter { !$0.isCompleted }.count
-            content.body = "\(open) madde kaldı"
-        } else if item.hasRepeat {
-            content.body = Recurrence.description(item.repeatRule, alert: item.anchorAlertAt ?? alert)
-        }
-        content.sound = .default
-        content.userInfo = ["reminderId": item.id]
-        let comps = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: alert.date)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "reminder-\(item.id)", content: content, trigger: trigger))
-    }
-
-    static func cancel(_ id: Int64) {
-        guard enabled else { return }
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["reminder-\(id)"])
-    }
-
-    static func reschedule(_ items: [ReminderItem]) {
-        guard enabled else { return }
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
-        items.forEach(schedule)
-    }
-}

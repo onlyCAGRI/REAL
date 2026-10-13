@@ -141,7 +141,7 @@ struct SettingsScreen: View {
             Button("Kapat", role: .cancel) {}
         }
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
-        .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false } }
+        .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false }.liftedTopSafeArea() }
         .alert("Tüm mood kayıtlarını sil?", isPresented: $showClearMoods) {
             Button("Sil", role: .destructive) {
                 life.clearAllMoods()

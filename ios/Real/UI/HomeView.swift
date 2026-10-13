@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import UIKit
 
 enum Route: Hashable {
@@ -54,6 +55,7 @@ struct RootView: View {
                     }
                 }
         }
+        .liftedTopSafeArea()
         .environment(\.navNamespace, nav)
         .tint(RealColors.accentBlue)
         .preferredColorScheme(.dark)
@@ -67,6 +69,10 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .realOpenReminder)) { note in
+            if let id = note.userInfo?["reminderId"] as? Int64, store.reminder(id) != nil { path.append(.detail(id)) }
+        }
+        .onAppear { ReminderStore.current = store }
         .onAppear { if store.ownerName.trimmingCharacters(in: .whitespaces).isEmpty || ProcessInfo.processInfo.arguments.contains("-REALWelcome") { showWelcome = true } }
     }
 }
@@ -176,22 +182,26 @@ struct HomeView: View {
         .realOverlay(isPresented: $showAccountMenu) {
             AccountMenuOverlay(onSettings: { showSettings = true }, onCategoryOrder: { showCategoryOrder = true })
         }
-        .fullScreenCover(isPresented: $showSettings) { SettingsScreen { showSettings = false } }
+        .fullScreenCover(isPresented: $showSettings) { SettingsScreen { showSettings = false }.liftedTopSafeArea() }
         .sheet(isPresented: $showCategoryOrder) { CategoryOrderSheet() }
-        .fullScreenCover(isPresented: $showPano) { PanoScreen().presentationBackground(.black) }
+        .fullScreenCover(isPresented: $showPano) { PanoScreen().liftedTopSafeArea().presentationBackground(.black) }
         .fullScreenCover(item: $contextTarget) { target in
-            switch target {
-            case .water: WaterTrackerScreen().presentationBackground(.black)
-            case .mood: MoodAddSheet()
-            case .book: BooksModuleScreen(resumeBookId: books.books.last { books.page($0) > 0 }?.id)
-            case .media: DiscoveryScreen(kind: .film) { contextTarget = nil }
+            Group {
+                switch target {
+                case .water: WaterTrackerScreen().presentationBackground(.black)
+                case .mood: MoodAddSheet()
+                case .book: BooksModuleScreen(resumeBookId: books.books.last { books.page($0) > 0 }?.id)
+                case .media: DiscoveryScreen(kind: .film) { contextTarget = nil }
+                }
             }
+            .liftedTopSafeArea()
         }
         .fullScreenCover(isPresented: $showYasam) {
             YasamScreen(onOpenCard: { id in
                 withoutAnimation { showYasam = false }
                 path.append(.detail(id))
             })
+            .liftedTopSafeArea()
         }
         .confirmationDialog("\(selectedIds.count) kart silinsin mi?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Sil", role: .destructive) { store.delete(selectedIds); selectedIds = [] }
