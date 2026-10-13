@@ -32,6 +32,8 @@ struct WelcomeScreen: View {
     @Environment(LifeStore.self) private var life
     @State private var auth = RealAuth.shared
     @State private var authError: String?
+    @State private var sound = WelcomeSound()
+    @Environment(\.scenePhase) private var scenePhase
 
     private let privacyOrigin = "https://real-privacy-staging.realapp.workers.dev"
 
@@ -72,7 +74,8 @@ struct WelcomeScreen: View {
             }
         }
         .onAppear(perform: startStory)
-        .onDisappear { introTask?.cancel() }
+        .onDisappear { introTask?.cancel(); sound.stop() }
+        .onChange(of: scenePhase) { _, newPhase in if newPhase == .background { sound.stop() } }
         .alert("Veri kullanımı", isPresented: $showDataUse) { Button("Tamam", role: .cancel) {} } message: {
             Text("iOS sürümünde notların ve kayıtların yalnızca bu cihazda saklanıyor. AI özellikleri isteğe bağlıdır; kullanmadan önce ayrıca izin istenir.")
         }
@@ -196,13 +199,12 @@ struct WelcomeScreen: View {
 
     // MARK: Word story
 
+    /// One word every two beats of the welcome music (120 BPM), so each word lands on the sound.
+    private static let wordSeconds = 1.0
     private static let words: [(String, Double)] = [
-        ("Your past.", 0.50), ("Memories.", 0.55),
-        ("Your present.", 0.50), ("Moments.", 0.55),
-        ("Your future.", 0.50), ("Possibilities.", 0.65),
-        ("Someday.", 0.55), ("Today.", 0.65),
-        ("Make it happen.", 0.80), ("Make it REAL.", 1.15)
-    ]
+        "Your past.", "Memories.", "Your present.", "Moments.", "Your future.", "Possibilities.",
+        "Someday.", "Today.", "Make it happen.", "Make it REAL."
+    ].map { ($0, wordSeconds) }
 
     /// Each word: in over the first 18% (7pt up, 0.97 → 1), held, out over the last 18% (4pt further, to 1.015).
     private var wordStory: some View {
@@ -216,13 +218,19 @@ struct WelcomeScreen: View {
 
     private func startStory() {
         introTask = Task { @MainActor in
+            sound.prepare()
             try? await Task.sleep(for: .milliseconds(350))
+            sound.start()                                   // the music's first note is the first word
+            // Each word is placed against the start time, so the words never drift off the music.
+            let clock = ContinuousClock(), start = clock.now
+            var elapsed = 0.0
             for (index, word) in Self.words.enumerated() {
                 if Task.isCancelled || wordsDone { return }
                 wordIndex = index
                 wordProgress = 0
                 withAnimation(.timingCurve(0, 0, 0.58, 1, duration: word.1)) { wordProgress = 1 } // CSS ease-out
-                try? await Task.sleep(for: .seconds(word.1))
+                elapsed += word.1
+                try? await clock.sleep(until: start.advanced(by: .seconds(elapsed)))
             }
             if !Task.isCancelled && !wordsDone { wordsDone = true; runIntro() }
         }
@@ -231,6 +239,7 @@ struct WelcomeScreen: View {
     private func skipStory() {
         guard !wordsDone else { return }
         introTask?.cancel()
+        sound.fadeOut()
         wordsDone = true
         runIntro()
     }
