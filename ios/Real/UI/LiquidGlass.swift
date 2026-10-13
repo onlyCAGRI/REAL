@@ -145,9 +145,12 @@ extension View {
 /// ReminderScreen.kt BottomFade: cards dissolve into black under the dock (height = dock + bottom gap + 46dp).
 struct BottomFade: View {
     var body: some View {
-        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.2), location: 0.6),
-                               .init(color: .black.opacity(0.92), location: 1)], startPoint: .top, endPoint: .bottom)
-            .frame(height: 114)
+        // Tall and dark enough that cards scrolling under the dock (and the strip under it) fade into black
+        // instead of showing through around the composer.
+        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.45), location: 0.4),
+                               .init(color: .black.opacity(0.88), location: 0.68), .init(color: .black, location: 1)],
+                       startPoint: .top, endPoint: .bottom)
+            .frame(height: 170)
             .frame(maxWidth: .infinity)
             // Pinned to the screen bottom, keyboard included: while typing it stays behind the keyboard instead of
             // riding up and darkening the cards around the open composer.
