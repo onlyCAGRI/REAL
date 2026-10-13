@@ -230,11 +230,14 @@ struct BackendDiscoveryService: DiscoveryService {
 
     func recommend(kind: DiscoveryKind, type: String, filters: Set<String>, platforms: Set<String>, exclude: [String]) async throws -> [DiscoveryCard] {
         do {
+            try await AiConsent.require(.discovery)
             return kind == .film
                 ? try await films(type: type, filters: filters, exclude: exclude)
                 : try await games(filters: filters, platforms: platforms, exclude: exclude)
         } catch let e as BookError {
             throw e
+        } catch let declined as AiConsent.Declined {
+            throw BookError.message(declined.localizedDescription)
         } catch {
             throw BookError.message(RealBackend.message(for: error))
         }

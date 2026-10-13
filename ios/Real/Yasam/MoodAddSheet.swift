@@ -171,11 +171,22 @@ struct MoodAddSheet: View {
     @State private var factorKeys: Set<String> = []
     @State private var expandedGroups: Set<String> = []
     @State private var lastHaptic = 2
+    /// Set after saving (signed in): the sheet turns into the AI suggestions for that mood (MoodSuggestionsScreen).
+    @State private var suggestFor: (mood: JournalMood, details: MoodDetails)?
 
     private var nearest: Int { min(max(Int(progress.rounded()), 0), 4) }
     private var ambient: Color { MoodV2.lerpColor(progress) }
 
     var body: some View {
+        if let s = suggestFor {
+            MoodSuggestionsView(mood: s.mood, details: s.details) { dismiss() }
+                .transition(.opacity)
+        } else {
+            entry
+        }
+    }
+
+    private var entry: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             LinearGradient(colors: [Color.black.lerp(ambient, 0.42), Color(argb: 0xFF0B0B0D), .black], startPoint: .top, endPoint: .bottom)
@@ -231,9 +242,19 @@ struct MoodAddSheet: View {
         default:
             let saved: JournalMood = mood == .fuckOff ? .bad : mood
             let details = MoodDetails(scope: scope ?? .daily, descriptors: Array(descriptorKeys), energy: nil, factors: Array(factorKeys), loggedAt: .now)
-            if let onSaved { onSaved(saved, details) } else { life.addMood(saved, details: details) }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            dismiss()
+            if let onSaved {
+                onSaved(saved, details)
+                dismiss()
+            } else {
+                life.addMood(saved, details: details)
+                // The mood is already saved; signed-in accounts get ideas for it (consent is asked there).
+                if RealAuth.shared.account != nil {
+                    withAnimation(.easeOut(duration: 0.25)) { suggestFor = (saved, details) }
+                } else {
+                    dismiss()
+                }
+            }
         }
     }
 
