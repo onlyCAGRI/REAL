@@ -51,14 +51,67 @@ enum MusicCatalog {
     }
 }
 
-/// MediaCatalog.search: TV from TVmaze (public). Movies: the Worker's TheTVDB search needs a REAL sign-in, so iOS uses
-/// the public iTunes movie catalog until sign-in exists.
+/// MediaCatalog.search: TV from TVmaze (public). Movies from TheTVDB through the REAL Worker (/api/media-search,
+/// RealMediaCatalogClient on Android) when signed in; the public iTunes movie catalog otherwise or if the Worker fails.
 enum MediaCatalog {
     static func search(_ query: String, type: MediaType) async throws -> [MediaBlock] {
-        type == .TV ? try await tvmaze(query) : try await itunesMovies(query)
+        if type == .TV { return try await tvmaze(query) }
+        if await MainActor.run(body: { RealAuth.shared.account != nil }),
+           let movies = try? await theTVDBMovies(query), !movies.isEmpty {
+            return movies
+        }
+        return try await itunesMovies(query)
     }
 
-    static func attribution(_ type: MediaType) -> String { type == .TV ? "TVmaze" : "iTunes • Türkiye kataloğu" }
+    @MainActor static func attribution(_ type: MediaType) -> String {
+        type == .TV ? "TVmaze" : (RealAuth.shared.account != nil ? "TheTVDB" : "iTunes • Türkiye kataloğu")
+    }
+
+    /// RealMediaCatalogClient.searchMovies: TheTVDB V4 via the Worker (no TheTVDB key on the device).
+    static func theTVDBMovies(_ query: String, title: String? = nil, year: Int? = nil) async throws -> [MediaBlock] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return [] }
+        var body: [String: Any] = ["type": "movie", "query": String(trimmed.prefix(200))]
+        if let title, !title.isEmpty { body["title"] = title }
+        if let year, year > 0 { body["year"] = year }
+        let json = try await RealBackend.post("/api/media-search", body, timeout: 15)
+        var seen = Set<String>()
+        return ((json["results"] as? [[String: Any]]) ?? []).compactMap { item in
+            guard let name = (item["title"] as? String)?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { return nil }
+            let providerId = (item["providerId"] ?? item["id"]).map { "\($0)" }
+            let link = secureUrl(item["providerUrl"] as? String) ?? "https://thetvdb.com"
+            guard seen.insert(providerId ?? link + name.lowercased()).inserted else { return nil }
+            let year = (item["year"] as? Int).flatMap { $0 > 0 ? $0 : nil }
+            return MediaBlock(type: .MOVIE, providerId: providerId, title: name, subtitle: year.map { "\($0) • Film" } ?? "Film",
+                              year: year, genre: (item["genre"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+                              description: (item["description"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+                              artworkUrl: secureUrl(item["artworkUrl"] as? String),
+                              provider: (item["provider"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "TheTVDB", providerUrl: link)
+        }
+    }
+
+    /// MediaCatalog.resolveMovie / resolveTv: the catalog entry for an AI-suggested title (exact title, year ±1 when known).
+    static func resolve(title: String, year: Int?, type: MediaType) async -> MediaBlock? {
+        let results: [MediaBlock]
+        if type == .TV {
+            results = (try? await tvmaze(title)) ?? []
+        } else {
+            results = (try? await theTVDBMovies(title, title: title, year: year)) ?? []
+        }
+        let target = DiscoveryRanking.normalized(title)
+        guard !target.isEmpty else { return nil }
+        let exact = results.filter { DiscoveryRanking.normalized($0.title) == target }
+        if let year, year > 0 {
+            if let hit = exact.first(where: { $0.year.map { abs($0 - year) <= 1 } ?? false }) { return hit }
+            if exact.count == 1, exact[0].year == nil { return exact[0] }
+            let close = results.filter { r in
+                let n = DiscoveryRanking.normalized(r.title)
+                return !n.isEmpty && (n.contains(target) || target.contains(n)) && (r.year.map { abs($0 - year) <= 1 } ?? false)
+            }
+            return close.count == 1 ? close[0] : nil
+        }
+        return exact.first
+    }
 
     private static func tvmaze(_ query: String) async throws -> [MediaBlock] {
         let json = try await getJSON(URL(string: "https://api.tvmaze.com/search/shows?q=\(encoded(query))")!) as? [[String: Any]] ?? []

@@ -159,7 +159,7 @@ struct DiscoveryScreen: View {
         error = nil
         Task {
             do {
-                try await discovery.fetch(kind, type: kind == .film ? type : "GAME", filters: filters)
+                try await discovery.fetch(kind, type: kind == .film ? type : "GAME", filters: filters, platforms: kind == .game ? platforms : [])
                 withAnimation(.easeOut(duration: 0.3)) { page = .discover }
             } catch let e {
                 error = e.localizedDescription

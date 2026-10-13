@@ -136,9 +136,9 @@ final class DiscoveryStore {
         UserDefaults.standard.set(data, forKey: kind == .film ? "real_media_discovery" : "real_game_discovery")
     }
 
-    func fetch(_ kind: DiscoveryKind, type: String, filters: Set<String>) async throws {
+    func fetch(_ kind: DiscoveryKind, type: String, filters: Set<String>, platforms: Set<String> = []) async throws {
         let prior = snapshot(kind)
-        let cards = try await service.recommend(kind: kind, type: type, filters: filters, exclude: Array(prior.excluded.suffix(40)))
+        let cards = try await service.recommend(kind: kind, type: type, filters: filters, platforms: platforms, exclude: Array(prior.excluded.suffix(40)))
         guard !cards.isEmpty else { throw BookError.message("Kataloglarda doğrulanmış bir sonuç bulunamadı. Tekrar deneyebilirsin.") }
         var s = snapshot(kind)
         let excluded = Set(s.excluded)
@@ -218,48 +218,85 @@ enum DiscoveryRanking {
 // MARK: Services
 
 protocol DiscoveryService {
-    func recommend(kind: DiscoveryKind, type: String, filters: Set<String>, exclude: [String]) async throws -> [DiscoveryCard]
-    var available: Bool { get }
+    func recommend(kind: DiscoveryKind, type: String, filters: Set<String>, platforms: Set<String>, exclude: [String]) async throws -> [DiscoveryCard]
+    @MainActor var available: Bool { get }
 }
 
-/// /api/media-recommendations and /api/game-recommendations need a REAL (Firebase) sign-in + App Check token.
-/// iOS sign-in is not configured yet, so this reports the same message Android shows when no user is signed in.
+/// MediaDiscoveryRepository / GameDiscoveryRepository (Android): /api/media-recommendations and /api/game-recommendations
+/// with the REAL sign-in + App Check headers. Film / series candidates come back as titles and are verified against the
+/// catalogs (TheTVDB movies, TVmaze series) before they reach the deck; games arrive already IGDB-verified.
 struct BackendDiscoveryService: DiscoveryService {
-    static let origin = "https://real-backend-staging.cagrigul1907.workers.dev"
-    var idToken: () async -> String? = { nil }
+    @MainActor var available: Bool { RealAuth.shared.account != nil }
 
-    var available: Bool { false }
-
-    func recommend(kind: DiscoveryKind, type: String, filters: Set<String>, exclude: [String]) async throws -> [DiscoveryCard] {
-        guard let token = await idToken() else { throw BookError.message("Öneriler için REAL'e giriş yap.") }
-        var request = URLRequest(url: URL(string: Self.origin + (kind == .film ? "/api/media-recommendations" : "/api/game-recommendations"))!)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 25
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["type": type, "filters": Array(filters), "exclude": exclude])
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true else {
-            throw BookError.message("Öneriler şu anda alınamadı. Biraz sonra tekrar dene.")
+    func recommend(kind: DiscoveryKind, type: String, filters: Set<String>, platforms: Set<String>, exclude: [String]) async throws -> [DiscoveryCard] {
+        do {
+            return kind == .film
+                ? try await films(type: type, filters: filters, exclude: exclude)
+                : try await games(filters: filters, platforms: platforms, exclude: exclude)
+        } catch let e as BookError {
+            throw e
+        } catch {
+            throw BookError.message(RealBackend.message(for: error))
         }
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let list = (json?["candidates"] as? [[String: Any]]) ?? []
-        return list.prefix(12).compactMap { item in
+    }
+
+    private func films(type: String, filters: Set<String>, exclude: [String]) async throws -> [DiscoveryCard] {
+        let json = try await RealBackend.post("/api/media-recommendations",
+                                              ["type": type, "filters": Array(filters), "exclude": Array(exclude.suffix(40))], timeout: 25)
+        guard let list = json["candidates"] as? [[String: Any]] else { throw BookError.message("Öneri yanıtı geçersiz.") }
+        let valid = Set(DiscoveryFilter.film.map(\.key))
+        // Verify up to 12 candidates against the catalogs, a few at a time, keeping the AI's order.
+        return await withTaskGroup(of: (Int, DiscoveryCard?).self) { group in
+            var results: [(Int, DiscoveryCard?)] = []
+            for (index, item) in list.prefix(12).enumerated() {
+                if index >= 3, let done = await group.next() { results.append(done) }
+                group.addTask {
+                    guard let title = (item["title"] as? String)?.trimmingCharacters(in: .whitespaces), !title.isEmpty,
+                          let kind = MediaType(rawValue: ((item["type"] as? String) ?? "").uppercased()),
+                          type == "BOTH" || kind.rawValue == type else { return (index, nil) }
+                    let year = (item["year"] as? Int).flatMap { $0 > 0 ? $0 : nil }
+                    guard let media = await MediaCatalog.resolve(title: String(title.prefix(180)), year: year, type: kind) else { return (index, nil) }
+                    let tags = ((item["tags"] as? [String]) ?? []).filter { valid.contains($0) }
+                    return (index, DiscoveryCard(media: media, tags: tags, reason: String(((item["reason"] as? String) ?? "").prefix(220))))
+                }
+            }
+            for await done in group { results.append(done) }
+            return results.sorted { $0.0 < $1.0 }.compactMap { $0.1 }
+        }
+    }
+
+    private func games(filters: Set<String>, platforms: Set<String>, exclude: [String]) async throws -> [DiscoveryCard] {
+        let json: [String: Any]
+        do {
+            json = try await RealBackend.post("/api/game-recommendations",
+                                              ["filters": Array(filters), "platforms": Array(platforms), "exclude": Array(exclude.suffix(40))], timeout: 40)
+        } catch let failure as RealBackend.Failure where failure.status == 503 {
+            throw BookError.message("Oyun kataloğu şu anda hazır değil.")
+        }
+        guard let list = json["games"] as? [[String: Any]] else { throw BookError.message("Öneri yanıtı geçersiz.") }
+        let valid = Set(DiscoveryFilter.game.map(\.key))
+        let cards: [DiscoveryCard] = list.compactMap { item in
             guard let title = (item["title"] as? String)?.trimmingCharacters(in: .whitespaces), !title.isEmpty else { return nil }
-            let t = MediaType(rawValue: ((item["type"] as? String) ?? "MOVIE").uppercased()) ?? .MOVIE
-            let media = MediaBlock(type: t, providerId: item["providerId"] as? String, title: title, year: item["year"] as? Int,
-                                   genre: item["genre"] as? String, description: item["description"] as? String,
-                                   artworkUrl: item["artworkUrl"] as? String, provider: (item["provider"] as? String) ?? "TheTVDB",
-                                   providerUrl: (item["providerUrl"] as? String) ?? "https://thetvdb.com")
-            return DiscoveryCard(media: media, tags: (item["tags"] as? [String]) ?? [], reason: String(((item["reason"] as? String) ?? "").prefix(220)))
+            let genres = (item["genres"] as? [Any])?.compactMap { ($0 as? String) ?? (($0 as? [String: Any])?["name"] as? String) } ?? []
+            let shorts = (item["platforms"] as? [Any])?.compactMap { ($0 as? String) ?? (($0 as? [String: Any])?["short"] as? String) } ?? []
+            let art = (item["artworkUrl"] as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil }
+            let media = MediaBlock(type: .MOVIE, providerId: (item["providerId"]).map { "\($0)" }, title: title,
+                                   year: (item["year"] as? Int).flatMap { $0 > 0 ? $0 : nil },
+                                   genre: genres.isEmpty ? nil : genres.joined(separator: ", "),
+                                   description: item["description"] as? String, artworkUrl: art, provider: "IGDB",
+                                   providerUrl: (item["providerUrl"] as? String) ?? "https://www.igdb.com")
+            return DiscoveryCard(media: media, tags: ((item["tags"] as? [String]) ?? []).filter { valid.contains($0) },
+                                 reason: String(((item["reason"] as? String) ?? "").prefix(220)), platforms: shorts)
         }
+        if cards.isEmpty { throw BookError.message("IGDB'de doğrulanmış bir oyun bulunamadı. Tekrar deneyebilirsin.") }
+        return cards
     }
 }
 
 /// Screenshot / demo mode: returns the seeded deck without the network.
 struct DemoDiscoveryService: DiscoveryService {
-    var available: Bool { true }
-    func recommend(kind: DiscoveryKind, type: String, filters: Set<String>, exclude: [String]) async throws -> [DiscoveryCard] {
+    @MainActor var available: Bool { true }
+    func recommend(kind: DiscoveryKind, type: String, filters: Set<String>, platforms: Set<String>, exclude: [String]) async throws -> [DiscoveryCard] {
         try await Task.sleep(nanoseconds: 1_200_000_000)
         let store = DiscoveryStore(persist: false, service: self)
         store.seedDemo()

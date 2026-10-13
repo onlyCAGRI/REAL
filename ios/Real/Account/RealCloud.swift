@@ -5,19 +5,46 @@ import Foundation
 enum RealBackend {
     static let origin = "https://real-backend-staging.cagrigul1907.workers.dev"
 
-    struct Failure: Error { let status: Int }
+    /// A non-2xx answer; `code` is the worker's `error` field when it sent one (e.g. PRO_REQUIRED).
+    struct Failure: Error { let status: Int; var code: String? = nil }
 
-    static func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
+    static func request(_ path: String, method: String = "GET", body: Data? = nil, timeout: TimeInterval = 30) async throws -> Data {
         guard let url = URL(string: origin + path) else { throw URLError(.badURL) }
-        var request = URLRequest(url: url, timeoutInterval: 30)
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         for (key, value) in try await RealAuth.requestHeaders() { request.setValue(value, forHTTPHeaderField: key) }
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else { throw Failure(status: status) }
+        guard (200..<300).contains(status) else {
+            let code = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+            throw Failure(status: status, code: code)
+        }
         return data
+    }
+
+    /// POST a JSON object, return the decoded JSON object.
+    static func post(_ path: String, _ body: [String: Any], timeout: TimeInterval = 30) async throws -> [String: Any] {
+        let data = try await request(path, method: "POST", body: try JSONSerialization.data(withJSONObject: body), timeout: timeout)
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw Failure(status: -1) }
+        return json
+    }
+
+    /// aiServiceFailureMessage (Android): a short Turkish line for an AI / catalog request that failed.
+    static func message(for error: Error) -> String {
+        if error is AppCheckUnavailable { return "Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene." }
+        if (error as? URLError)?.code == .userAuthenticationRequired { return "Bunun için REAL'e giriş yap." }
+        if let urlError = error as? URLError, urlError.code == .notConnectedToInternet { return "İnternet bağlantısı yok." }
+        guard let failure = error as? Failure else { return "Şu anda yapılamadı. Biraz sonra tekrar dene." }
+        switch (failure.status, failure.code ?? "") {
+        case (401, _): return "Bunun için REAL'e giriş yap."
+        case (403, "PRO_REQUIRED"): return "Bu özellik REAL Pro ile açılıyor."
+        case (403, "APP_CHECK_REQUIRED"): return "Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene."
+        case (429, _): return "Bugünkü AI kullanım hakkın doldu. Yarın tekrar dene."
+        case (503, _): return "Katalog şu anda hazır değil. Biraz sonra tekrar dene."
+        default: return "Şu anda yapılamadı. Biraz sonra tekrar dene."
+        }
     }
 }
 
