@@ -53,13 +53,14 @@ enum RealBackend {
 /// Writing changes back from iOS and downloading photo / voice files come in the next step.
 @MainActor
 enum RealCloudRestore {
-    struct Summary { let cards: Int; let categories: Int; let moods: Int; let categoryOrder: Bool }
+    struct Summary { let cards: Int; let categories: Int; let moods: Int; let categoryOrder: Bool; let files: Int }
 
     static func run(store: ReminderStore, life: LifeStore) async throws -> Summary {
         var cards: [Int64: ReminderItem] = [:]
         var categories: [Int64: CustomCategory] = [:]
         var moods: [Int64: MoodTrackerEntry] = [:]
         var categoryOrder: String?? = nil         // nil: never seen · .some(nil): removed · .some(value)
+        var files: [Int64: [RealCloudFiles.Ref]] = [:]   // photos / files / voice notes kept in REAL's cloud, per card
         let decoder = JSONDecoder()
         var cursor: Int64 = 0
         var pages = 0
@@ -78,7 +79,7 @@ enum RealCloudRestore {
                 guard let payload = record["payload"] as? [String: Any],
                       let json = try? JSONSerialization.data(withJSONObject: payload) else {
                     switch kind {
-                    case "CARD": cards[id] = nil
+                    case "CARD": cards[id] = nil; files[id] = nil
                     case "CATEGORY": categories[id] = nil
                     case "MOOD": moods[id] = nil
                     default: break
@@ -87,7 +88,9 @@ enum RealCloudRestore {
                 }
                 _ = json
                 switch kind {
-                case "CARD": if let card = decodeCard(payload, decoder) { cards[id] = card }
+                case "CARD":
+                    if let card = decodeCard(payload, decoder) { cards[id] = card }
+                    files[id] = RealCloudFiles.refs(in: payload, cardId: id)
                 case "CATEGORY": if let category = decodeCategory(payload, decoder) { categories[id] = category }
                 case "MOOD": if let mood = decodeMood(payload, decoder) { moods[id] = mood }
                 default: break // planner details, water and preferences arrive with full sync
@@ -99,7 +102,7 @@ enum RealCloudRestore {
             guard hasMore, next > cursor, pages < 500 else { break }
             cursor = next
         }
-        // Files live in REAL's cloud storage; until file sync exists, photo / voice / file blocks without a local copy are hidden.
+        // Files without a copy on this iPhone are left out for now and come back one by one as they download.
         let restoredCards = cards.values.map { card -> ReminderItem in
             var c = card
             c.attachments = c.attachments.filter { $0.type == .textSnippet || !$0.localPath.isEmpty }
@@ -113,8 +116,10 @@ enum RealCloudRestore {
         if case .some(let raw) = categoryOrder {
             store.setCategoryOrder((raw ?? "").split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
         }
+        let pendingFiles = files.filter { cards[$0.key] != nil }.flatMap { $0.value }
+        if !pendingFiles.isEmpty { Task { await RealCloudFiles.download(pendingFiles, into: store) } }
         return Summary(cards: restoredCards.count, categories: categories.count, moods: moods.count,
-                       categoryOrder: (categoryOrder ?? nil) != nil)
+                       categoryOrder: (categoryOrder ?? nil) != nil, files: pendingFiles.count)
     }
 
     // MARK: Android wire format → iOS models (missing keys get the defaults the iOS models use)
@@ -168,5 +173,78 @@ enum RealCloudRestore {
             p["details"] = details
         }
         return decode(MoodTrackerEntry.self, p, decoder)
+    }
+}
+
+/// AndroidSyncBinaries.prepareDownload (iOS): a card's photos, files and voice notes live in REAL's cloud storage as
+/// blobs (/api/cloud/v1/attachments/<blobId>/content). They are saved next to the iPhone's own attachments under a
+/// stable name (cloud_<blobId>) so a second restore does not download them again, then put back on their card.
+@MainActor
+enum RealCloudFiles {
+    struct Ref {
+        let cardId: Int64
+        let voice: Bool
+        let blobId: String
+        let row: [String: Any]
+    }
+
+    static func refs(in payload: [String: Any], cardId: Int64) -> [Ref] {
+        var out: [Ref] = []
+        for (key, voice) in [("attachments", false), ("voiceRecordings", true)] {
+            for row in (payload[key] as? [[String: Any]]) ?? [] {
+                guard let blob = row["blobId"] as? String, blob.range(of: "^[A-Za-z0-9_-]{8,80}$", options: .regularExpression) != nil else { continue }
+                out.append(Ref(cardId: cardId, voice: voice, blobId: blob, row: row))
+            }
+        }
+        return out
+    }
+
+    private static func fileName(_ ref: Ref) -> String {
+        let mime = ((ref.row["mimeType"] as? String) ?? (ref.voice ? "audio/mp4" : "")).lowercased()
+        let ext: String
+        switch mime {
+        case "image/jpeg", "image/jpg": ext = "jpg"
+        case "image/png": ext = "png"
+        case "image/webp": ext = "webp"
+        case "image/heic": ext = "heic"
+        case "application/pdf": ext = "pdf"
+        case "audio/mpeg": ext = "mp3"
+        case "audio/mp4", "audio/aac", "audio/m4a", "audio/x-m4a": ext = "m4a"
+        default: ext = ref.voice ? "m4a" : "bin"
+        }
+        return "cloud_\(ref.blobId).\(ext)"
+    }
+
+    static func download(_ refs: [Ref], into store: ReminderStore) async {
+        for ref in refs {
+            let name = fileName(ref)
+            let url = AttachmentStorage.directory.appendingPathComponent(name)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                guard let data = try? await RealBackend.request("/api/cloud/v1/attachments/\(ref.blobId)/content", timeout: 60),
+                      !data.isEmpty, (try? data.write(to: url, options: .atomic)) != nil else { continue }
+            }
+            attach(ref, fileName: name, store: store)
+        }
+    }
+
+    /// Puts the downloaded file back on its card (unless the card has gone or already has it).
+    private static func attach(_ ref: Ref, fileName: String, store: ReminderStore) {
+        var row = ref.row
+        row["localPath"] = fileName
+        row["blobId"] = nil
+        guard store.reminder(ref.cardId) != nil, let data = try? JSONSerialization.data(withJSONObject: row) else { return }
+        if ref.voice {
+            guard let recording = try? JSONDecoder().decode(ReminderVoiceRecording.self, from: data) else { return }
+            store.mutate(ref.cardId) { card in
+                if let i = card.voiceRecordings.firstIndex(where: { $0.id == recording.id }) { card.voiceRecordings[i].localPath = fileName }
+                else { card.voiceRecordings.append(recording) }
+            }
+        } else {
+            guard let attachment = try? JSONDecoder().decode(ReminderAttachment.self, from: data) else { return }
+            store.mutate(ref.cardId) { card in
+                if let i = card.attachments.firstIndex(where: { $0.id == attachment.id }) { card.attachments[i].localPath = fileName }
+                else { card.attachments.append(attachment) }
+            }
+        }
     }
 }

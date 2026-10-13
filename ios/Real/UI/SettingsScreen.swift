@@ -42,7 +42,7 @@ struct AccountMenuOverlay: View {
                 } else {
                     text += ". Panolar şu anda alınamadı"
                 }
-                notice = text + ". Fotoğraf ve ses ekleri bir sonraki adımda gelecek."
+                notice = text + (summary.files > 0 ? ". \(summary.files) fotoğraf, dosya ve ses kaydı arka planda iniyor." : ".")
             } catch let failure as AppCheckUnavailable {
                 notice = "Kartlar alınamadı: uygulama doğrulaması yapılamadı (\(failure.reason))."
             } catch let failure as RealBackend.Failure {
@@ -161,6 +161,7 @@ struct SettingsScreen: View {
     @State private var page: Page = .main
     @State private var showDailyChoice = false
     @State private var showLicenses = false
+    @State private var showAiPrivacy = false
     @State private var showClearMoods = false
     @State private var showCalendar = false
     @State private var notice: String?
@@ -186,6 +187,7 @@ struct SettingsScreen: View {
             Button("Kapat", role: .cancel) {}
         }
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
+        .sheet(isPresented: $showAiPrivacy) { AiPrivacySheet() }
         .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false }.liftedTopSafeArea() }
         .alert("Tüm mood kayıtlarını sil?", isPresented: $showClearMoods) {
             Button("Sil", role: .destructive) {
@@ -249,15 +251,15 @@ struct SettingsScreen: View {
         SettingsSectionHeader(title: "GİZLİLİK")
         SettingsGlassGroup {
             SettingsActionRow(icon: .note, title: "Veri kullanımı", subtitle: "Hesap, bulut, paylaşım ve cihaz izinleri") {
-                notice = "iOS sürümünde notların, kategorilerin, su, mood ve kitap kayıtların yalnızca bu cihazda saklanıyor. Hesap ve bulut eşitlemesi henüz yok."
+                notice = "Kartların, kategorilerin, su, mood ve kitap kayıtların bu iPhone'da saklanıyor. Hesabındakileri 'Kartları hesaptan yeniden yükle' ile alabilirsin; iPhone'dan hesaba gönderim henüz yok."
             }
             SettingsDivider()
             SettingsActionRow(icon: .note, title: "AI ve gizlilik", subtitle: "Açıklamalar ve veri aktarımı onayları") {
-                notice = "AI önerileri (film, oyun, mood) REAL hesabıyla giriş eklendiğinde ve onay verdiğinde kullanılacak. Şu an hiçbir veri AI servisine gönderilmiyor."
+                showAiPrivacy = true
             }
             SettingsDivider()
             SettingsActionRow(icon: .note, title: "Veri hakları ve talepler", subtitle: "Kopya, düzeltme, silme veya itiraz talebi") {
-                notice = "Hesap verisi talepleri giriş eklendiğinde buradan yapılacak. Cihazdaki verileri uygulamayı silerek tamamen kaldırabilirsin."
+                notice = "Hesap verilerin için kopya, düzeltme veya silme talebini şimdilik Android uygulamasından ya da gizlilik sayfasındaki adresten yapabilirsin. Bu iPhone'daki verileri uygulamayı silerek tamamen kaldırabilirsin."
             }
         }
         SettingsSectionHeader(title: "HAKKINDA")
