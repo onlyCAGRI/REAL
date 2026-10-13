@@ -192,7 +192,7 @@ struct CategoryEditorSheet: View {
                     section("GÖRÜNÜM") {
                         VStack(spacing: 0) {
                             if !isBuiltIn {
-                                switchRow("REAL takviminde göster", "Bu kategorideki kartlar takvimde görünür.", $showInCalendar)
+                                switchRow("REAL takviminde göster", "Kategori kartı takvimde görünür. Saatli kartların her durumda takvimde yer alır.", $showInCalendar)
                                 divider
                                 switchRow("Yalnızca kategori içinde göster", "Kartlar genel listelerde görünmez.", $hide)
                                 divider

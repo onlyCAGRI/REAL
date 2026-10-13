@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// WelcomeScreen.kt: "Welcome to" → wordmark wipe + shimmer → group lifts → "Size nasıl hitap edelim?" name field,
-/// Google / e-posta buttons (disabled until REAL sign-in exists on iOS, as Android does without an auth controller),
-/// privacy links → "Tanıştığımıza memnun oldum, <ad>." → onComplete.
+/// WelcomeScreen.kt (REAL_Welcome design): the word story ("Your past. Memories. … Make it REAL.") on black →
+/// "Welcome to" rises into place, REAL rises and scales in with a haptic and a shine → the group lifts and the
+/// name field + Google / Apple / e-posta buttons come in → "Tanıştığımıza memnun oldum, <ad>." → onComplete.
+/// A tap during the word story skips to "Welcome to REAL".
 struct WelcomeScreen: View {
     let onComplete: (String) -> Void
 
@@ -11,10 +12,13 @@ struct WelcomeScreen: View {
     @State private var name = ""
     @FocusState private var focused: Bool
     @State private var welcomeAlpha: Double = 0
-    @State private var welcomeOffset: CGFloat = 8
-    @State private var welcomeKerning: CGFloat = 1.5
-    @State private var logoOffset: CGFloat = 10
-    @State private var reveal: CGFloat = 0
+    @State private var welcomeOffset: CGFloat = 39
+    @State private var welcomeKerning: CGFloat = 0.5
+    @State private var logoIn: CGFloat = 0
+    @State private var wordsDone = false
+    @State private var wordIndex = 0
+    @State private var wordProgress: CGFloat = 0
+    @State private var introTask: Task<Void, Never>?
     @State private var shimmer: CGFloat = -1
     @State private var groupShift: CGFloat = 0
     @State private var questionAlpha: Double = 0
@@ -34,12 +38,14 @@ struct WelcomeScreen: View {
             let finalShift: CGFloat = 54 + 24
             let promptTop = initialTop - finalShift + headerHeight + 52
             ZStack(alignment: .top) {
+                // Plain black throughout (REAL_Welcome design), no ambient glow.
                 Color.black.ignoresSafeArea()
-                WelcomeAmbient(intensity: reveal).ignoresSafeArea()
                 VStack(spacing: 14) {
-                    Text("Welcome to").font(RealFont.inter(20)).kerning(welcomeKerning).foregroundStyle(Color(argb: 0xFFA4A4AD))
+                    // Same typeface and colour as the word story (23pt, #F3F1F4, regular).
+                    Text("Welcome to").font(RealFont.inter(23)).kerning(welcomeKerning - 1).foregroundStyle(Color(argb: 0xFFF3F1F4))
                         .opacity(welcomeAlpha).offset(y: welcomeOffset)
-                    WelcomeWordmark(reveal: reveal, shimmer: shimmer).frame(width: 210, height: 91).offset(y: logoOffset)
+                    WelcomeWordmark(reveal: 1, shimmer: shimmer).frame(width: 210, height: 91)
+                        .opacity(logoIn).scaleEffect(0.97 + 0.03 * logoIn).offset(y: 6 * (1 - logoIn))
                 }
                 .frame(maxWidth: .infinity)
                 .offset(y: initialTop - finalShift * groupShift)
@@ -57,9 +63,12 @@ struct WelcomeScreen: View {
                 .padding(.horizontal, 28)
                 .frame(maxWidth: .infinity)
                 .offset(y: promptTop)
+
+                if !wordsDone { wordStory }
             }
         }
-        .onAppear(perform: runIntro)
+        .onAppear(perform: startStory)
+        .onDisappear { introTask?.cancel() }
         .alert("Veri kullanımı", isPresented: $showDataUse) { Button("Tamam", role: .cancel) {} } message: {
             Text("iOS sürümünde notların ve kayıtların yalnızca bu cihazda saklanıyor. AI özellikleri isteğe bağlıdır; kullanmadan önce ayrıca izin istenir.")
         }
@@ -94,6 +103,9 @@ struct WelcomeScreen: View {
             Color.clear.frame(height: 14)
             Group {
                 authButton("Google ile devam et", emphasized: true)
+                Color.clear.frame(height: 9)
+                // Shown with the sign-in set but not available yet: it cannot be pressed.
+                authButton("Apple ile devam et", emphasized: false)
                 Color.clear.frame(height: 9)
                 authButton("E-posta ile devam et", emphasized: false)
                 Color.clear.frame(height: 18)
@@ -136,33 +148,107 @@ struct WelcomeScreen: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { onComplete(name.trimmingCharacters(in: .whitespaces)) }
     }
 
-    private func runIntro() {
-        let ease = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.28)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-            withAnimation(ease) { welcomeOffset = 0; welcomeKerning = 0.5 }
-            withAnimation(.easeOut(duration: 0.28)) { welcomeAlpha = 1 }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-                withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.5)) { logoOffset = 0 }
-                withAnimation(.timingCurve(0.2, 0, 0.2, 1, duration: 0.5)) { reveal = 1 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    shimmer = 0
-                    withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 1.3)) { shimmer = 1 }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                        phase = .namePrompt
-                        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { groupShift = 1 }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.07) {
-                            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { questionOffset = 0 }
-                            withAnimation(.easeOut(duration: 0.3)) { questionAlpha = 1 }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-                                withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { inputOffset = 0 }
-                                withAnimation(.easeOut(duration: 0.3)) { inputAlpha = 1 }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focused = true }
-                            }
-                        }
-                    }
-                }
+    // MARK: Word story
+
+    private static let words: [(String, Double)] = [
+        ("Your past.", 0.50), ("Memories.", 0.55),
+        ("Your present.", 0.50), ("Moments.", 0.55),
+        ("Your future.", 0.50), ("Possibilities.", 0.65),
+        ("Someday.", 0.55), ("Today.", 0.65),
+        ("Make it happen.", 0.80), ("Make it REAL.", 1.15)
+    ]
+
+    /// Each word: in over the first 18% (7pt up, 0.97 → 1), held, out over the last 18% (4pt further, to 1.015).
+    private var wordStory: some View {
+        WordStoryText(text: Self.words[wordIndex].0, progress: wordProgress)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black.ignoresSafeArea())
+            .contentShape(Rectangle())
+            .onTapGesture { skipStory() }
+            .accessibilityLabel("Your past. Memories. Your present. Moments. Your future. Possibilities. Someday. Today. Make it happen. Make it REAL.")
+    }
+
+    private func startStory() {
+        introTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            for (index, word) in Self.words.enumerated() {
+                if Task.isCancelled || wordsDone { return }
+                wordIndex = index
+                wordProgress = 0
+                withAnimation(.timingCurve(0, 0, 0.58, 1, duration: word.1)) { wordProgress = 1 } // CSS ease-out
+                try? await Task.sleep(for: .seconds(word.1))
             }
+            if !Task.isCancelled && !wordsDone { wordsDone = true; runIntro() }
         }
+    }
+
+    private func skipStory() {
+        guard !wordsDone else { return }
+        introTask?.cancel()
+        wordsDone = true
+        runIntro()
+    }
+
+    // MARK: Welcome to REAL → sign-in (timeline after the last word, ms:
+    // 0 "Welcome to" fades in 39pt low · 650 it rises · 750 REAL rises/scales in · 830 haptic · 980 shine · 1450 sign-in)
+
+    private func runIntro() {
+        introTask = Task { @MainActor in
+            let emphasized = { (d: Double) in Animation.timingCurve(0.16, 1, 0.3, 1, duration: d) }
+            withAnimation(.easeOut(duration: 0.16)) { welcomeAlpha = 1 }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(650))
+                withAnimation(emphasized(0.4)) { welcomeOffset = 0 }
+            }
+            try? await Task.sleep(for: .milliseconds(750))
+            withAnimation(emphasized(0.55)) { logoIn = 1 }
+            try? await Task.sleep(for: .milliseconds(80))
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            try? await Task.sleep(for: .milliseconds(150))
+            shimmer = 0
+            withAnimation(.easeInOut(duration: 1.05)) { shimmer = 1 }
+            try? await Task.sleep(for: .milliseconds(470))
+            phase = .namePrompt
+            withAnimation(emphasized(0.42)) { groupShift = 1 }
+            try? await Task.sleep(for: .milliseconds(70))
+            withAnimation(emphasized(0.3)) { questionOffset = 0 }
+            withAnimation(.easeOut(duration: 0.3)) { questionAlpha = 1 }
+            try? await Task.sleep(for: .milliseconds(60))
+            withAnimation(emphasized(0.3)) { inputOffset = 0 }
+            withAnimation(.easeOut(duration: 0.3)) { inputAlpha = 1 }
+            try? await Task.sleep(for: .milliseconds(350))
+            focused = true
+        }
+    }
+}
+
+/// One word of the story; [progress] 0…1 is animated, so the keyframes are evaluated every frame.
+private struct WordStoryText: View, Animatable {
+    let text: String
+    var progress: CGFloat
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        let p = progress
+        let alpha: Double
+        let dy: CGFloat
+        let scale: CGFloat
+        if p < 0.18 {
+            let t = p / 0.18
+            alpha = Double(t); dy = 7 * (1 - t); scale = 0.97 + 0.03 * t
+        } else if p <= 0.82 {
+            alpha = 1; dy = 0; scale = 1
+        } else {
+            let t = (p - 0.82) / 0.18
+            alpha = Double(1 - t); dy = -4 * t; scale = 1 + 0.015 * t
+        }
+        return Text(text)
+            .font(RealFont.inter(31)).kerning(-1.1).foregroundStyle(Color(argb: 0xFFF3F1F4))
+            .lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal, 20)
+            .opacity(alpha).scaleEffect(scale).offset(y: dy)
     }
 }
 
@@ -197,27 +283,5 @@ private struct WelcomeWordmark: View, Animatable {
                 .opacity(reveal > 0 ? 1 : 0)
         }
         .accessibilityLabel("Real")
-    }
-}
-
-/// WelcomeAmbient: two slow, faint lights that give the black background depth.
-private struct WelcomeAmbient: View {
-    let intensity: CGFloat
-    var body: some View {
-        TimelineView(.animation) { tl in
-            let raw = (tl.date.timeIntervalSinceReferenceDate / 14).truncatingRemainder(dividingBy: 2)
-            let t = raw < 1 ? raw : 2 - raw
-            Canvas { ctx, size in
-                let a = min(max(intensity, 0), 1)
-                let w = size.width, h = size.height
-                let c1 = CGPoint(x: w * (0.25 + 0.35 * t), y: h * (0.22 + 0.06 * t))
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .radialGradient(
-                    Gradient(colors: [Color(argb: 0xFF9FB4FF).opacity(0.16 * a), .clear]), center: c1, startRadius: 0, endRadius: w * 0.85))
-                let c2 = CGPoint(x: w * (0.8 - 0.35 * t), y: h * (0.78 - 0.06 * t))
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .radialGradient(
-                    Gradient(colors: [Color(argb: 0xFFC9A6FF).opacity(0.12 * a), .clear]), center: c2, startRadius: 0, endRadius: w * 0.9))
-            }
-        }
-        .allowsHitTesting(false)
     }
 }

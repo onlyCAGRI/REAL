@@ -59,15 +59,16 @@ struct PlannerScreen: View {
         let today = calendar.startOfDay(for: now)
         let dayStart = calendar.startOfDay(for: selectedDay)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
-        let hiddenFromCalendar = Set(store.categories.filter { !$0.isShownInCalendar }.map(\.id))
-        let calendarReminders = store.reminders.filter { !($0.customCategoryId.map(hiddenFromCalendar.contains) ?? false) }
+        // Every card the user scheduled in REAL is in its calendar and in "Next 24 hours". The category switch
+        // "REAL takviminde göster" only decides which category cards the calendar lists.
+        let calendarReminders = store.reminders
         // Device calendar events (RememberExternalCalendarEvents) join the day as read-only cards.
         let externals = calendarConnection.occurrences(from: dayStart, to: dayEnd)
         let events = Planner.events(calendarReminders + externals.map(Self.externalCard), rangeStart: dayStart.epochMillis, rangeEnd: dayEnd.epochMillis, calendar: calendar)
         let focus = Planner.focusEvents(events, day: selectedDay, calendar: calendar)
         let allDay = events.filter(\.isDateOnly)
         let geometry = PlannerTimelineGeometry.daily(events, day: selectedDay, calendar: calendar)
-        let categoryCards = store.categories.compactMap { c -> PlannerCategoryCardData? in
+        let categoryCards = store.categories.filter(\.isShownInCalendar).compactMap { c -> PlannerCategoryCardData? in
             guard let stats = store.reminders.categoryProgress(builtIn: nil, customId: c.id, calendar: calendar) else { return nil }
             let raw = c.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(c.accentStart) ?? Color(argb: 0xFF4558C8)
             return PlannerCategoryCardData(category: c, stats: stats, surface: plannerSoftPastel(nearestCalendarPastel(raw)))
@@ -139,7 +140,14 @@ struct PlannerScreen: View {
                     .intro(introVisible, delay: 0.3, y: 10)
                 scheduleHeader(hasAllDay: !allDay.isEmpty, overlaps: geometry.laneCount > 2, today: today)
                     .intro(introVisible, delay: 0.38, y: 10)
-                ForEach(allDay) { event in allDayNote(event) }
+                // All-day cards pop in like the timed events (small → full size), just before the timeline.
+                ForEach(Array(allDay.enumerated()), id: \.element.id) { index, event in
+                    allDayNote(event)
+                        .scaleEffect(introVisible ? 1 : 0.8, anchor: .topLeading)
+                        .opacity(introVisible ? 1 : 0)
+                        .offset(y: introVisible ? 0 : 12)
+                        .animation(.spring(duration: 0.48, bounce: 0.25).delay(0.40 + Double(min(index, 5)) * 0.07), value: introVisible)
+                }
                 if !allDay.isEmpty { Color.clear.frame(height: 14) }
                 PlannerDailyTimelineView(day: selectedDay, events: events, geometry: geometry, categories: store.categories,
                                          ownerName: store.ownerName, introVisible: introVisible,
@@ -171,7 +179,10 @@ struct PlannerScreen: View {
         let todayDay = calendar.epochDay(of: now)
         let dateOnly = reminders.filter { !$0.isCompleted && $0.plannedDateEpochDay == todayDay && !$0.isQuick24HourActive(now: nowMs) }
             .map { PlannerEvent(reminder: $0, startMillis: calendar.startOfDayMillis(epochDay: todayDay), isDateOnly: true) }
-        let items = (manual + dateOnly + timed).sorted { ($0.startMillis, $0.reminder.id) < ($1.startMillis, $1.reminder.id) }
+        // Timed plans first, nearest at the top; all-day / 24 hour cards follow below them.
+        let items = (manual + dateOnly + timed).sorted {
+            ($0.isDateOnly ? 1 : 0, $0.startMillis, $0.reminder.id) < ($1.isDateOnly ? 1 : 0, $1.startMillis, $1.reminder.id)
+        }
         let next = items.first { !$0.isDateOnly && $0.startMillis >= nowMs }?.startMillis
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {

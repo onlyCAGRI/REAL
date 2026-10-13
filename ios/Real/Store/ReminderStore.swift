@@ -196,9 +196,23 @@ final class ReminderStore {
         }
     }
 
-    /// Swipe left on Home: move into the rolling 24 hour view without inventing a clock time.
+    /// Swipe left on Home (ReminderRepository.moveTo24Hour): into the rolling 24 hour view without a clock time.
+    /// The card becomes today's, its alarm and repeat are cleared and a pending notification is cancelled.
     func moveTo24Hour(_ id: Int64) {
-        mutate(id) { $0.quick24HourUntilAt = .now + CategoryRules.rolling24HoursMillis }
+        let now = EpochMillis.now
+        let today = calendar.epochDay(ofMillis: now)
+        mutate(id) {
+            $0.alertAt = nil
+            $0.plannedDateEpochDay = today
+            $0.quick24HourUntilAt = now + CategoryRules.rolling24HoursMillis
+            $0.notifiedAlertAt = nil
+            $0.repeatRule = .none
+            $0.repeatWeekdaysMask = 0
+            $0.repeatUntilEpochDay = nil
+            $0.repeatSkippedEpochDays = []
+            $0.anchorAlertAt = nil
+        }
+        NotificationScheduler.cancel(id)
     }
 
     func delete(_ ids: Set<Int64>) {
