@@ -31,11 +31,11 @@ final class RealAuth {
     /// Called once from the app delegate, before anything touches Firebase.
     func configure() {
         guard !isAvailable, Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil else { return }
-        // Test builds use App Check's debug provider with a token registered in the Firebase console
-        // (simulators and devices without App Attest). The provider reads it from this user default.
+        // Test builds exchange the debug token registered in the Firebase console for App Check tokens
+        // (simulators and devices without App Attest). A small provider of our own does the exchange, so it
+        // always uses exactly that token.
         if !BuildSecrets.appCheckDebugToken.isEmpty {
-            UserDefaults.standard.set(BuildSecrets.appCheckDebugToken, forKey: "FIRAAppCheckDebugToken")
-            AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
+            AppCheck.setAppCheckProviderFactory(RealDebugAppCheckFactory(debugToken: BuildSecrets.appCheckDebugToken))
         }
         FirebaseApp.configure()
         if let clientID = FirebaseApp.app()?.options.clientID {
@@ -94,11 +94,13 @@ final class RealAuth {
             throw URLError(.userAuthenticationRequired)
         }
         let idToken = try await user.getIDToken()
-        var headers = ["Authorization": "Bearer \(idToken)"]
-        if let appCheck = try? await AppCheck.appCheck().token(forcingRefresh: false) {
-            headers["X-Firebase-AppCheck"] = appCheck.token
+        let appCheck: AppCheckToken
+        do {
+            appCheck = try await AppCheck.appCheck().token(forcingRefresh: false)
+        } catch {
+            throw AppCheckUnavailable(reason: (error as NSError).localizedDescription)
         }
-        return headers
+        return ["Authorization": "Bearer \(idToken)", "X-Firebase-AppCheck": appCheck.token]
     }
 
     private static func topViewController() -> UIViewController? {
@@ -108,5 +110,52 @@ final class RealAuth {
         var top = root
         while let presented = top?.presentedViewController { top = presented }
         return top
+    }
+}
+
+/// App Check could not produce a token; REAL's worker requires one on every account request.
+struct AppCheckUnavailable: Error { let reason: String }
+
+/// Exchanges the console-registered debug token for an App Check token (projects.apps.exchangeDebugToken).
+final class RealDebugAppCheckFactory: NSObject, AppCheckProviderFactory {
+    private let debugToken: String
+    init(debugToken: String) { self.debugToken = debugToken }
+    func createProvider(with app: FirebaseApp) -> AppCheckProvider? { RealDebugAppCheckProvider(app: app, debugToken: debugToken) }
+}
+
+final class RealDebugAppCheckProvider: NSObject, AppCheckProvider {
+    private let debugToken: String
+    private let appID: String
+    private let projectID: String
+    private let apiKey: String
+
+    init(app: FirebaseApp, debugToken: String) {
+        self.debugToken = debugToken
+        appID = app.options.googleAppID
+        projectID = app.options.projectID ?? ""
+        apiKey = app.options.apiKey ?? ""
+    }
+
+    func getToken(completion handler: @escaping (AppCheckToken?, Error?) -> Void) {
+        let path = "https://firebaseappcheck.googleapis.com/v1/projects/\(projectID)/apps/\(appID):exchangeDebugToken?key=\(apiKey)"
+        guard let url = URL(string: path) else { handler(nil, URLError(.badURL)); return }
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(Bundle.main.bundleIdentifier, forHTTPHeaderField: "X-Ios-Bundle-Identifier")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["debugToken": debugToken])
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error { handler(nil, error); return }
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(status), let data,
+                  let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let token = body["token"] as? String else {
+                handler(nil, NSError(domain: "RealAppCheck", code: status,
+                                     userInfo: [NSLocalizedDescriptionKey: "App Check jeton değişimi başarısız (\(status))"]))
+                return
+            }
+            let ttl = Double((body["ttl"] as? String)?.replacingOccurrences(of: "s", with: "") ?? "") ?? 3600
+            handler(AppCheckToken(token: token, expirationDate: Date().addingTimeInterval(ttl)), nil)
+        }.resume()
     }
 }

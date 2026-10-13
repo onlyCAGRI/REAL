@@ -33,6 +33,8 @@ struct AccountMenuOverlay: View {
             do {
                 let summary = try await RealCloudRestore.run(store: store, life: life)
                 notice = "Hesabından \(summary.cards) kart, \(summary.categories) kategori ve \(summary.moods) mood yüklendi. Fotoğraf ve ses ekleri bir sonraki adımda gelecek."
+            } catch let failure as AppCheckUnavailable {
+                notice = "Kartlar alınamadı: uygulama doğrulaması yapılamadı (\(failure.reason))."
             } catch let failure as RealBackend.Failure {
                 notice = "Kartlar alınamadı (sunucu: \(failure.status))."
             } catch {
