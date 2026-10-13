@@ -458,9 +458,29 @@ struct ComposerBar: View {
     private func startVoice() {
         focus = nil
         let base = text
-        voice.toggle { spoken in
+        // A spoken command into an empty composer goes to the AI (signed in, with consent); it either creates the
+        // cards, fills the composer for a last look (a clock to pick), or leaves the transcript as typed text.
+        let interpret: ((String, @escaping () -> Void) -> Void)? = base.isEmpty && RealAuth.shared.account != nil ? { spoken, done in
+            Task { @MainActor in
+                switch await VoiceAI.interpret(spoken, store: store) {
+                case .created:
+                    reset()
+                    focus = nil
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                case .draft(let title, let draft, let category, let items):
+                    text = title
+                    schedule = draft
+                    if let category { categoryId = category }
+                    if !items.isEmpty { checklistMode = true; checklistItems = items }
+                case .none:
+                    break
+                }
+                done()
+            }
+        } : nil
+        voice.toggle(onText: { spoken in
             text = base.isEmpty ? spoken : base + " " + spoken
-        }
+        }, onFinished: interpret)
     }
 
     private func importPhotos(_ items: [PhotosPickerItem]) {

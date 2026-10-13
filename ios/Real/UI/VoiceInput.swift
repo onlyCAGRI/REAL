@@ -19,15 +19,18 @@ final class VoiceInput {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var onText: ((String) -> Void)?
+    /// Called once with the final transcript; the phase stays .finishing ("REAL düşünüyor…") until `done` runs.
+    private var onFinished: ((String, @escaping () -> Void) -> Void)?
 
     var text: String { [committed, partial].filter { !$0.isEmpty }.joined(separator: " ") }
 
-    func toggle(onText: @escaping (String) -> Void) {
-        if phase == .idle { start(onText: onText) } else { finish() }
+    func toggle(onText: @escaping (String) -> Void, onFinished: ((String, @escaping () -> Void) -> Void)? = nil) {
+        if phase == .idle { start(onText: onText, onFinished: onFinished) } else { finish() }
     }
 
-    func start(onText: @escaping (String) -> Void) {
+    func start(onText: @escaping (String) -> Void, onFinished: ((String, @escaping () -> Void) -> Void)? = nil) {
         self.onText = onText
+        self.onFinished = onFinished
         SFSpeechRecognizer.requestAuthorization { status in
             DispatchQueue.main.async {
                 guard status == .authorized else { self.errorText = "Konuşma tanıma izni verilmedi"; return }
@@ -97,6 +100,7 @@ final class VoiceInput {
     }
 
     func cancel() {
+        onFinished = nil
         task?.cancel()
         stopEngine()
         committed = ""
@@ -108,8 +112,16 @@ final class VoiceInput {
         engine.inputNode.removeTap(onBus: 0)
         task = nil
         request = nil
-        phase = .idle
         level = 0
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        let final = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if phase != .idle, let onFinished, !final.isEmpty {
+            self.onFinished = nil
+            phase = .finishing
+            onFinished(final) { [weak self] in self?.phase = .idle }
+            return
+        }
+        onFinished = nil
+        phase = .idle
     }
 }
