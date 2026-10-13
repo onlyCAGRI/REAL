@@ -28,6 +28,10 @@ struct WelcomeScreen: View {
     @State private var greetingAlpha: Double = 0
     @State private var showDataUse = false
     @Environment(\.openURL) private var openURL
+    @Environment(ReminderStore.self) private var store
+    @Environment(LifeStore.self) private var life
+    @State private var auth = RealAuth.shared
+    @State private var authError: String?
 
     private let privacyOrigin = "https://real-privacy-staging.realapp.workers.dev"
 
@@ -102,7 +106,11 @@ struct WelcomeScreen: View {
             .opacity(inputAlpha).offset(y: inputOffset)
             Color.clear.frame(height: 14)
             Group {
-                authButton("Google ile devam et", emphasized: true)
+                googleButton
+                if let authError {
+                    Text(authError).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFFF9A9A))
+                        .multilineTextAlignment(.center).frame(width: 300).padding(.top, 8)
+                }
                 Color.clear.frame(height: 9)
                 // Shown with the sign-in set but not available yet: it cannot be pressed.
                 authButton("Apple ile devam et", emphasized: false)
@@ -124,7 +132,45 @@ struct WelcomeScreen: View {
         }
     }
 
-    /// WelcomeAuthButton in its disabled state: REAL sign-in is not configured on iOS yet.
+    /// WelcomeAuthButton (emphasized): Google → Firebase, then the account's cards, categories and moods are restored
+    /// and onboarding finishes with the typed name or the Google first name (finishAfterAuthentication).
+    @ViewBuilder
+    private var googleButton: some View {
+        if auth.isAvailable {
+            Button {
+                focused = false
+                authError = nil
+                Task { @MainActor in
+                    guard let account = await auth.signInWithGoogle() else {
+                        authError = auth.lastError
+                        return
+                    }
+                    do {
+                        _ = try await RealCloudRestore.run(store: store, life: life)
+                    } catch {
+                        authError = "Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin."
+                    }
+                    let typed = name.trimmingCharacters(in: .whitespaces)
+                    name = typed.isEmpty ? (account.firstName ?? "") : typed
+                    phase = .greeting
+                    withAnimation(.easeOut(duration: 0.3)) { greetingAlpha = 1 }
+                    try? await Task.sleep(for: .seconds(1.1))
+                    onComplete(name)
+                }
+            } label: {
+                Text(auth.busy ? "Google açılıyor…" : "Google ile devam et")
+                    .font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                    .frame(width: 300, height: 50)
+                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white))
+            }
+            .buttonStyle(.plain)
+            .disabled(auth.busy)
+        } else {
+            authButton("Google ile devam et", emphasized: true)
+        }
+    }
+
+    /// WelcomeAuthButton in its disabled state (sign-in not available in this build, or Apple for now).
     private func authButton(_ label: String, emphasized: Bool) -> some View {
         Text(label).font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFF66666E))
             .frame(width: 300, height: 50)

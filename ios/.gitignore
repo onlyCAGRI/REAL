@@ -1,0 +1,3 @@
+
+# Firebase config is injected by CI from repository secrets
+Real/GoogleService-Info.plist

@@ -33,6 +33,21 @@ jobs:
           swift --version
           xcrun simctl list runtimes
 
+      - name: Inject Firebase config
+        # From repository secrets only: neither file is committed (the repository is public).
+        env:
+          PLIST_B64: ${{ secrets.IOS_GOOGLE_SERVICE_INFO_PLIST }}
+          APP_CHECK_DEBUG_TOKEN: ${{ secrets.IOS_APP_CHECK_DEBUG_TOKEN }}
+        run: |
+          if [ -n "$PLIST_B64" ]; then
+            printf '%s' "$PLIST_B64" | base64 --decode > Real/GoogleService-Info.plist
+            echo "GoogleService-Info.plist injected"
+          fi
+          if [ -n "$APP_CHECK_DEBUG_TOKEN" ]; then
+            echo "enum BuildSecrets { static let appCheckDebugToken = \"$APP_CHECK_DEBUG_TOKEN\" }" > Real/App/BuildSecrets.swift
+            echo "App Check debug token injected"
+          fi
+
       - name: Generate Xcode project
         run: |
           brew install xcodegen

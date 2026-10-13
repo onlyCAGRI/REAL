@@ -51,6 +51,7 @@ struct RealApp: App {
                 .environment(books)
                 .environment(discovery)
                 .background(Color.black)
+                .onOpenURL { url in _ = RealAuth.shared.handle(url: url) }
         }
     }
 }
@@ -59,6 +60,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         NotificationScheduler.registerCategories()
+        MainActor.assumeIsolated { RealAuth.shared.configure() }
         return true
     }
 

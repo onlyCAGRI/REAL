@@ -9,11 +9,37 @@ struct AccountMenuOverlay: View {
     let onSettings: () -> Void
     let onCategoryOrder: () -> Void
     @Environment(ReminderStore.self) private var store
+    @Environment(LifeStore.self) private var life
     @Environment(\.dismiss) private var dismiss
+    @State private var auth = RealAuth.shared
     @State private var progress: CGFloat = 0
     @State private var photoItem: PhotosPickerItem?
     @State private var showPhotoPicker = false
     @State private var notice: String?
+
+    /// Google sign-in, then the account's cards / categories / moods replace this device's (read-only restore).
+    private func signInAndRestore() {
+        Task { @MainActor in
+            guard await auth.signInWithGoogle() != nil else {
+                if let error = auth.lastError { notice = error }
+                return
+            }
+            restore()
+        }
+    }
+
+    private func restore() {
+        Task { @MainActor in
+            do {
+                let summary = try await RealCloudRestore.run(store: store, life: life)
+                notice = "Hesabından \(summary.cards) kart, \(summary.categories) kategori ve \(summary.moods) mood yüklendi. Fotoğraf ve ses ekleri bir sonraki adımda gelecek."
+            } catch let failure as RealBackend.Failure {
+                notice = "Kartlar alınamadı (sunucu: \(failure.status))."
+            } catch {
+                notice = "Kartlar alınamadı. İnternet bağlantını kontrol et."
+            }
+        }
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -22,7 +48,7 @@ struct AccountMenuOverlay: View {
                 .accessibilityLabel("Hesap menüsünü kapat")
             VStack(alignment: .leading, spacing: 0) {
                 Text("Hesap").font(RealFont.inter(21, .bold)).foregroundStyle(Color(argb: 0xFFF7F7F8))
-                Text("Bu cihazdaki notlar").font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFA4A4AD)).padding(.top, 12)
+                Text(auth.account?.email ?? "Bu cihazdaki notlar").font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFA4A4AD)).padding(.top, 12)
                 HStack(spacing: 12) {
                     ProfileAvatar(name: store.ownerName, size: 44)
                     Text(store.ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? "Kullanıcı" : store.ownerName)
@@ -32,8 +58,15 @@ struct AccountMenuOverlay: View {
                 VStack(spacing: 3) {
                     item(.person, "Fotoğrafın veya avatarın") { showPhotoPicker = true }
                     item(.star, "REAL Pro") { notice = "REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak." }
-                    item(.add, "Hesap ekle") { notice = "REAL hesabıyla giriş iOS sürümüne Firebase kurulumu ile eklenecek. Notların şimdilik bu cihazda tutuluyor." }
-                    item(.manage, "Hesapları yönet") { notice = "Hesap yönetimi, giriş eklendiğinde burada görünecek." }
+                    if auth.account == nil {
+                        item(.add, auth.busy ? "Google açılıyor…" : "Hesap ekle") { signInAndRestore() }
+                    } else {
+                        item(.manage, "Kartları hesaptan yeniden yükle") { restore() }
+                        item(.close, "Hesaptan çık") {
+                            auth.signOut()
+                            notice = "Hesaptan çıkıldı. Kartlar bu cihazda kalmaya devam ediyor."
+                        }
+                    }
                     item(.category, "Kategori sıralaması") { close(then: onCategoryOrder) }
                     item(.settings, "Ayarlar") { close(then: onSettings) }
                 }
