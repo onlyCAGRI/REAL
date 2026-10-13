@@ -123,6 +123,12 @@ enum NotificationScheduler {
     }
 
     private static func renderIcon(_ category: CustomCategory) -> Data? {
+        if Thread.isMainThread { return MainActor.assumeIsolated { renderIconOnMain(category) } }
+        return DispatchQueue.main.sync { MainActor.assumeIsolated { renderIconOnMain(category) } }
+    }
+
+    @MainActor
+    private static func renderIconOnMain(_ category: CustomCategory) -> Data? {
         let accent = paletteColor(category.accentStart) ?? Color(argb: 0xFF4558C8)
         let dark = accent.luminance > 0.55
         let view = ZStack {
@@ -130,14 +136,9 @@ enum NotificationScheduler {
             CategoryIconGlyph(icon: category.icon, color: dark ? Color(argb: 0xFF111111) : .white, size: 56)
         }
         .frame(width: 96, height: 96)
-        var data: Data?
-        let work = {
-            let renderer = ImageRenderer(content: view)
-            renderer.scale = 2
-            data = renderer.uiImage?.pngData()
-        }
-        if Thread.isMainThread { MainActor.assumeIsolated { work() } } else { DispatchQueue.main.sync { MainActor.assumeIsolated { work() } } }
-        return data
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        return renderer.uiImage?.pngData()
     }
 }
 
