@@ -30,8 +30,7 @@ struct RootView: View {
                     case .customCategory(let id): CategoryScreen(builtIn: nil, customId: id, path: $path).zoomDestination("cat-custom:\(id)", in: nav)
                     case .detail(let id): ReminderDetailView(reminderId: id).zoomDestination("card-\(id)", in: nav)
                     case .planner: PlannerScreen(path: $path)
-                    // Calendar category cards open the category screen (the old goal screen is no longer used).
-                    case .goal(let id): CategoryScreen(builtIn: nil, customId: id, path: $path).zoomDestination("goal-\(id)", in: nav)
+                    case .goal(let id): PlannerGoalScreen(categoryId: id, path: $path).zoomDestination("goal-\(id)", in: nav)
                     case .module(let name):
                         if name == "Yaşam" {
                             YasamScreen(onOpenCard: { id in path.append(.detail(id)) }).toolbar(.hidden, for: .navigationBar)

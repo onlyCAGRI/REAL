@@ -43,7 +43,8 @@ struct CategoryScreen: View {
                             onBack: { dismiss() },
                             onEdit: { if custom != nil { showEditor = true } else { showColorSheet = true } },
                             onFilter: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.2)) { filterMode = true } },
-                            onSort: { sortRaw = nextSort.rawValue }
+                            onSort: { sortRaw = nextSort.rawValue },
+                            onGoals: customId.map { id in { path.append(.goal(id)) } }
                         )
                         .opacity(selectedIds.isEmpty ? 1 : 0.35)
                         .background(GeometryReader { g in
@@ -290,6 +291,8 @@ private struct CategoryHero: View {
     let onEdit: () -> Void
     let onFilter: () -> Void
     let onSort: () -> Void
+    /// The category's goals (planning) screen; only custom categories have one.
+    var onGoals: (() -> Void)? = nil
     @State private var menuOpen = false
     @FocusState private var searching: Bool
 
@@ -333,6 +336,12 @@ private struct CategoryHero: View {
                                     .font(.system(size: 16, weight: .medium)).foregroundStyle(fg)
                             }
                             .transition(.scale(scale: 0.6).combined(with: .opacity))
+                            if let onGoals {
+                                HeroRound(fg: fg, label: "Hedefler", action: { menuOpen = false; onGoals() }) {
+                                    Image(systemName: "target").font(.system(size: 16, weight: .medium)).foregroundStyle(fg)
+                                }
+                                .transition(.scale(scale: 0.6).combined(with: .opacity))
+                            }
                         }
                         .background(Capsule().fill(visual.stripe.0).padding(-4).shadow(color: .black.opacity(0.35), radius: 10, y: 4))
                         .offset(y: 48)

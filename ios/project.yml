@@ -75,6 +75,10 @@ schemes:
         Real: all
         RealTests: [test]
         RealUITests: [test]
+    # Run from Xcode as the optimized Release build without the debugger (smooth like the store app).
+    run:
+      config: Release
+      debugEnabled: false
     test:
       targets:
         - RealTests

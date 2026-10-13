@@ -60,20 +60,13 @@ struct PlannerScreen: View {
         // Every card the user scheduled in REAL is in its calendar and in "Next 24 hours". The category switch
         // "REAL takviminde göster" only decides which category cards the calendar lists.
         let calendarReminders = store.reminders
-        let categoryCards = store.categories.filter(\.isShownInCalendar).compactMap { c -> PlannerCategoryCardData? in
-            guard let stats = store.reminders.categoryProgress(builtIn: nil, customId: c.id, calendar: calendar) else { return nil }
-            let raw = c.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(c.accentStart) ?? Color(argb: 0xFF4558C8)
-            return PlannerCategoryCardData(category: c, stats: stats, surface: plannerSoftPastel(nearestCalendarPastel(raw)))
-        }
 
         let isCalendar = modeRaw != "hours_24"
         ZStack {
             if isCalendar {
-                // Takvim is the month: grid, the picked day's plans and the calendar's category cards.
+                // Takvim is the month: the grid and the picked day's plans. Category goals open from the category screen.
                 PlannerMonthView(selectedDay: $selectedDay, today: today,
                                  externals: { from, to in calendarConnection.occurrences(from: from, to: to).map(Self.externalCard) },
-                                 categoryCards: categoryCards,
-                                 onOpenCategory: { path.append(.goal($0)) },
                                  onOpenEvent: { openEvent($0) })
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: 80)), removal: .opacity.combined(with: .offset(x: 80))))
             } else {
