@@ -118,6 +118,22 @@ final class ScreenshotTests: XCTestCase {
         shot("detailblocks")
     }
 
+    /// Home scrolled so the stacked category cards sit behind the dock (the area where cards used to show through).
+    func test1bHomeUnderDock() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "home"]
+        app.launch()
+        Thread.sleep(forTimeInterval: 2.5)
+        // Open the whole category deck so its cards run down behind the dock, as on the phone.
+        let showAll = app.buttons["Tümünü göster"]
+        if showAll.waitForExistence(timeout: 3) { showAll.tap() }
+        Thread.sleep(forTimeInterval: 1.5)
+        shot("homeunderdock")
+        app.swipeUp()
+        Thread.sleep(forTimeInterval: 1.2)
+        shot("homescrolled")
+    }
+
     func test11DockNavigation() {
         let app = XCUIApplication()
         app.launchArguments = ["-REALDemo", "-REALScreen", "home"]

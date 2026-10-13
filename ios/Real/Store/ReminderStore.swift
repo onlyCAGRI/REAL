@@ -94,8 +94,37 @@ final class ReminderStore {
     func category(_ id: Int64?) -> CustomCategory? { id.flatMap { id in categories.first { $0.id == id } } }
     private var hiddenCategoryIds: Set<Int64> { Set(categories.filter(\.hideFromGeneralLists).map(\.id)) }
 
-    /// Home deck order (resolveHomeCategoryOrder): 24 hour and Günlüklerim are not part of the deck.
+    /// Android's key for the home "Tümünü göster" button in the order list; "hidden:<key>" hides a category or it.
+    static let showAllKey = "action:show_all"
+    static let hiddenPrefix = "hidden:"
+
+    var hiddenHomeKeys: Set<String> {
+        Set(categoryOrderKeys.filter { $0.hasPrefix(Self.hiddenPrefix) }.map { String($0.dropFirst(Self.hiddenPrefix.count)) })
+    }
+
+    /// Every deck category in the saved order, hidden ones included (for the order editor).
+    var allHomeCategories: [OrderedCategory] {
+        let builtIns: [OrderedCategory] = [ReminderCategory.planned, .important, .noAlert, .completed].map { OrderedCategory.builtIn($0) }
+        let all = builtIns + categories.map { OrderedCategory.custom($0) }
+        let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.orderKey, $0) })
+        let ordered = categoryOrderKeys.compactMap { byKey[$0] }
+        return ordered + all.filter { item in !ordered.contains { $0.orderKey == item.orderKey } }
+    }
+
+    /// categoryOrderWithVisibility: the order without metadata, then the hidden keys.
+    func setCategoryOrder(_ order: [String], hidden: Set<String>) {
+        let clean = order.filter { !$0.hasPrefix(Self.hiddenPrefix) && $0 != Self.showAllKey }
+        var seen = Set<String>()
+        setCategoryOrder(clean.filter { seen.insert($0).inserted } + hidden.sorted().map { Self.hiddenPrefix + $0 })
+    }
+
+    /// Home deck order (resolveHomeCategoryOrder): 24 hour and Günlüklerim are not part of the deck; hidden ones are left out.
     var homeCategoryOrder: [OrderedCategory] {
+        let hidden = hiddenHomeKeys
+        return homeCategoryOrderAll.filter { !hidden.contains($0.orderKey) }
+    }
+
+    private var homeCategoryOrderAll: [OrderedCategory] {
         let builtIns: [OrderedCategory] = [ReminderCategory.planned, .important, .noAlert, .completed].map { OrderedCategory.builtIn($0) }
         let customs: [OrderedCategory] = categories.map { OrderedCategory.custom($0) }
         let all = builtIns + customs

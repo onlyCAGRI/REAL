@@ -4,8 +4,9 @@ import UIKit
 /// LiquidGlassTokens.kt values.
 enum LiquidGlassTokens {
     static let contentColor = Color(argb: 0xFF111113)
-    static let dockTintTop = Color(argb: 0x330C0C0E)
-    static let dockTintBottom = Color(argb: 0x480C0C0E)
+    // Darker than Android: iOS system glass refracts what is under it, so a light tint lets cards show through as ghosts.
+    static let dockTintTop = Color(argb: 0x8C0C0C0E)
+    static let dockTintBottom = Color(argb: 0xA60C0C0E)
     static let dockEdgeTop = Color(argb: 0xA6FFFFFF)
     static let dockEdgeBottom = Color(argb: 0x66FFFFFF)
     static let dockEdgeWidth: CGFloat = 0.9

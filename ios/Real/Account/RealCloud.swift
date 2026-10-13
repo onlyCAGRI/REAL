@@ -70,6 +70,12 @@ enum RealCloudRestore {
                   let records = page["records"] as? [[String: Any]] else { throw RealBackend.Failure(status: -1) }
             for record in records {
                 // The home category order travels as the "ui/category_order_v1" preference ("builtin:Today|custom:12|…").
+                if record["kind"] as? String == "PREFERENCE", record["key"] as? String == "ui/home_category_preview_count_v1" {
+                    if let n = ((record["payload"] as? [String: Any])?["value"] as? NSNumber)?.intValue, n > 0 {
+                        UserDefaults.standard.set(n, forKey: "home_category_preview_count_v1")
+                    }
+                    continue
+                }
                 if record["kind"] as? String == "PREFERENCE", record["key"] as? String == "ui/category_order_v1" {
                     categoryOrder = .some((record["payload"] as? [String: Any])?["value"] as? String)
                     continue

@@ -95,7 +95,8 @@ struct HomeView: View {
     @State private var contextTarget: ContextCardType?
     @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
 
-    private let previewCount = 4
+    /// "Ana sayfada göster" in Kategori düzeni (Android ui/home_category_preview_count_v1).
+    @AppStorage("home_category_preview_count_v1") private var previewCount = 4
 
     var body: some View {
         let active = filterAndSortReminders(store.homeActive(), sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded)
@@ -260,7 +261,7 @@ struct HomeView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 8)
             }
-            if order.count > previewCount || !expanded {
+            if (order.count > previewCount || !expanded) && !store.hiddenHomeKeys.contains(ReminderStore.showAllKey) {
                 Button(expanded ? "Daha az göster" : "Tümünü göster") {
                     withAnimation(.spring(duration: 0.4)) { expanded.toggle() }
                 }

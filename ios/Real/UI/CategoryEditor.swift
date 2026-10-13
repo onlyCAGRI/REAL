@@ -411,42 +411,150 @@ struct SettingsSheet: View {
 }
 
 /// Drag to reorder the home deck (CategoryOrderEditorDialog.kt).
+/// Kategori düzeni (CategoryOrderEditorDialog.kt): how many categories Home shows in "Daha az göster", the order
+/// (drag the handle), the "Tümünü göster" button as its own row, hiding with the eye, hidden ones as chips to add back.
 struct CategoryOrderSheet: View {
     @Environment(ReminderStore.self) private var store
     @Environment(\.dismiss) private var dismiss
-    @State private var items: [OrderedCategory] = []
+    @AppStorage("home_category_preview_count_v1") private var savedPreview = 4
+    @State private var order: [String] = []
+    @State private var hidden: Set<String> = []
+    @State private var preview = 4
+    @State private var loaded = false
+
+    private var visible: [String] { order.filter { !hidden.contains($0) } }
+    private var hiddenList: [String] { order.filter { hidden.contains($0) } }
 
     var body: some View {
-        NavigationStack {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Kategori düzeni").font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
+            Text("Tutamaçla sürükle, gözle gizle.").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFAAAAB4))
+                .padding(.top, 5).padding(.bottom, 12)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ana sayfada göster").font(RealFont.inter(14)).foregroundStyle(.white)
+                    Text("Daha az göster görünümündeki kart sayısı").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF8F909A))
+                }
+                Spacer()
+                stepButton("−", enabled: preview > 1) { preview -= 1 }
+                Text("\(preview)").font(RealFont.inter(16, .semibold)).foregroundStyle(.white).frame(minWidth: 26)
+                stepButton("+", enabled: preview < max(store.allHomeCategories.count, 1)) { preview += 1 }
+            }
+            .padding(.bottom, 8)
             List {
-                ForEach(items) { item in
-                    HStack(spacing: 12) {
-                        let visual: CategoryVisual = {
-                            switch item {
-                            case .builtIn(let c): return c.visual(override: store.builtInColors[c])
-                            case .custom(let c): return c.visual
-                            }
-                        }()
-                        RealSymbol(visual.symbol, size: 20).frame(width: 30, height: 30)
-                            .background(Circle().fill(visual.stripe.0)).foregroundStyle(visual.foreground)
-                        Text(visual.title)
-                    }
+                ForEach(visible, id: \.self) { key in
+                    row(key)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
-                .onMove { items.move(fromOffsets: $0, toOffset: $1) }
+                .onMove { from, to in
+                    var v = visible
+                    v.move(fromOffsets: from, toOffset: to)
+                    order = v + hiddenList
+                }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .environment(\.editMode, .constant(.active))
-            .navigationTitle("Kategori sırası")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") {
-                        store.setCategoryOrder(items.map(\.orderKey))
-                        dismiss()
+            if !hiddenList.isEmpty {
+                Text("GİZLENENLER · DOKUNARAK GERİ EKLE").font(RealFont.inter(10, .medium)).kerning(0.6).foregroundStyle(Color(argb: 0xFF8F909A))
+                    .padding(.top, 10)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(hiddenList, id: \.self) { key in
+                            Button { withAnimation { _ = hidden.remove(key) } } label: {
+                                Text("+ \(title(key))").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFF9DC3FF))
+                                    .padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(Capsule().fill(.white.opacity(0.07)))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
+                    .padding(.vertical, 6)
                 }
             }
-            .onAppear { items = store.homeCategoryOrder }
+            HStack {
+                Button("Varsayılan") {
+                    withAnimation {
+                        order = store.allHomeCategories.map(\.orderKey) + [ReminderStore.showAllKey]
+                        hidden = []
+                        preview = 4
+                    }
+                }
+                .foregroundStyle(Color(argb: 0xFFB8B9C2))
+                Spacer()
+                Button("Kapat") { dismiss() }.foregroundStyle(Color(argb: 0xFFB8B9C2)).padding(.trailing, 18)
+                Button("Tamam") {
+                    store.setCategoryOrder(order.filter { $0 != ReminderStore.showAllKey }, hidden: hidden)
+                    savedPreview = preview
+                    dismiss()
+                }
+                .foregroundStyle(Color(argb: 0xFF9DC3FF))
+            }
+            .font(RealFont.inter(15, .medium))
+            .padding(.top, 12)
         }
+        .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 14)
+        .presentationDetents([.large])
+        .presentationBackground(Color(argb: 0xFF101012))
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            order = store.allHomeCategories.map(\.orderKey) + [ReminderStore.showAllKey]
+            hidden = store.hiddenHomeKeys
+            preview = max(savedPreview, 1)
+        }
+    }
+
+    private func item(_ key: String) -> OrderedCategory? { store.allHomeCategories.first { $0.orderKey == key } }
+
+    private func title(_ key: String) -> String {
+        guard let item = item(key) else { return "Tümünü göster" }
+        switch item {
+        case .builtIn(let c): return c.visual(override: store.builtInColors[c]).title
+        case .custom(let c): return c.name
+        }
+    }
+
+    private func row(_ key: String) -> some View {
+        let item = item(key)
+        let visual: CategoryVisual? = item.map {
+            switch $0 {
+            case .builtIn(let c): return c.visual(override: store.builtInColors[c])
+            case .custom(let c): return c.visual
+            }
+        }
+        return HStack(spacing: 14) {
+            if let visual {
+                RealSymbol(visual.symbol, size: 15).foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(LinearGradient(colors: [visual.stripe.0, visual.stripe.1], startPoint: .topLeading, endPoint: .bottomTrailing)))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title(key)).font(RealFont.inter(15, .medium)).foregroundStyle(.white).lineLimit(1)
+                if item == nil { Text("Ana sayfa düğmesi").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF858691)) }
+            }
+            Spacer()
+            Button { withAnimation { _ = hidden.insert(key) } } label: {
+                Image(systemName: "eye.slash").font(.system(size: 15)).foregroundStyle(Color(argb: 0xFFAAAAB4)).frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(title(key)) gizle")
+        }
+        .padding(.leading, item == nil ? 16 : 14).padding(.vertical, 8).padding(.trailing, 4)
+        .frame(minHeight: 58)
+        .background(RoundedRectangle(cornerRadius: 18).fill(Color(argb: 0xFF1C1D23)))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08), lineWidth: 0.8))
+    }
+
+    private func stepButton(_ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(RealFont.inter(18, .medium)).foregroundStyle(enabled ? Color(argb: 0xFF9DC3FF) : .white.opacity(0.25))
+                .frame(width: 36, height: 36)
+        }
+        .buttonStyle(.plain).disabled(!enabled)
     }
 }
 
