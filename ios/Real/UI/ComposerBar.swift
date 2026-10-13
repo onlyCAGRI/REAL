@@ -112,7 +112,12 @@ struct ComposerBar: View {
     var body: some View {
         VStack(spacing: 10) {
             ZStack {
-                composerPanel
+                Group {
+                    // VoiceListeningWindow replaces the composer on Home while dictating (Android).
+                    if isHome && voice.phase != .idle { VoiceListeningWindow(voice: voice, onMic: startVoice) }
+                    else { composerPanel }
+                }
+                .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.24), value: voice.phase)
                     .padding(.horizontal, showChrome && !navExpanded ? 56 : 0)
                 if showChrome && !navExpanded {
                     HStack {
