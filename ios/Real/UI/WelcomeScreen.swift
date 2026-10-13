@@ -150,17 +150,16 @@ struct WelcomeScreen: View {
                 authButton("Apple ile devam et", emphasized: false)
                 Color.clear.frame(height: 9)
                 authButton("E-posta ile devam et", emphasized: false)
-                Color.clear.frame(height: 18)
-                Text("Hesap ve veri kullanımını aşağıdaki metinlerden inceleyebilirsin. AI için ayrıca seçim yaparsın.")
-                    .font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.5)).multilineTextAlignment(.center).frame(width: 300)
-                VStack(spacing: 6) {
+                Color.clear.frame(height: 22)
+                // Kept quiet on purpose: the three documents in one small row. The longer explanations live behind
+                // "Veri kullanımı" and AI asks for its own consent before it is first used.
+                HStack(spacing: 0) {
                     link("Gizlilik politikası") { if let u = URL(string: privacyOrigin + "/privacy?lang=tr") { openURL(u) } }
+                    linkDot
                     link("KVKK aydınlatma") { if let u = URL(string: privacyOrigin + "/kvkk?lang=tr") { openURL(u) } }
+                    linkDot
                     link("Veri kullanımı") { focused = false; showDataUse = true }
                 }
-                .padding(.top, 6)
-                Text("AI özellikleri isteğe bağlıdır; kullanmadan önce ayrıca izin istenir.")
-                    .font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.38)).multilineTextAlignment(.center).frame(width: 300).padding(.top, 6)
             }
             .opacity(inputAlpha)
         }
@@ -213,9 +212,13 @@ struct WelcomeScreen: View {
             .accessibilityLabel(label + ", şu an kullanılamıyor")
     }
 
+    private var linkDot: some View {
+        Text("·").font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.3)).padding(.horizontal, 7)
+    }
+
     private func link(_ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(label).font(RealFont.inter(12)).underline().foregroundStyle(.white.opacity(0.78)).padding(.vertical, 6)
+            Text(label).font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.45)).lineLimit(1).padding(.vertical, 6)
         }
         .buttonStyle(.plain)
     }
