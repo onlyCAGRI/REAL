@@ -10,6 +10,7 @@ struct AccountMenuOverlay: View {
     let onCategoryOrder: () -> Void
     @Environment(ReminderStore.self) private var store
     @Environment(LifeStore.self) private var life
+    @Environment(PanoStore.self) private var pano
     @Environment(\.dismiss) private var dismiss
     @State private var auth = RealAuth.shared
     @State private var progress: CGFloat = 0
@@ -32,7 +33,16 @@ struct AccountMenuOverlay: View {
         Task { @MainActor in
             do {
                 let summary = try await RealCloudRestore.run(store: store, life: life)
-                notice = "Hesabından \(summary.cards) kart, \(summary.categories) kategori ve \(summary.moods) mood yüklendi. Fotoğraf ve ses ekleri bir sonraki adımda gelecek."
+                var text = "Hesabından \(summary.cards) kart, \(summary.categories) kategori ve \(summary.moods) mood yüklendi"
+                if summary.categoryOrder { text += ", kategori sıralaman uygulandı" }
+                // Boards come from their own service; a failure there does not undo the cards.
+                if let boards = try? await RealBoardsRestore.run(pano: pano) {
+                    text += ". \(boards.boards) pano geldi"
+                    if boards.skipped > 0 { text += " (fotoğraf blokları sonraki adımda)" }
+                } else {
+                    text += ". Panolar şu anda alınamadı"
+                }
+                notice = text + ". Fotoğraf ve ses ekleri bir sonraki adımda gelecek."
             } catch let failure as AppCheckUnavailable {
                 notice = "Kartlar alınamadı: uygulama doğrulaması yapılamadı (\(failure.reason))."
             } catch let failure as RealBackend.Failure {

@@ -53,12 +53,13 @@ enum RealBackend {
 /// Writing changes back from iOS and downloading photo / voice files come in the next step.
 @MainActor
 enum RealCloudRestore {
-    struct Summary { let cards: Int; let categories: Int; let moods: Int }
+    struct Summary { let cards: Int; let categories: Int; let moods: Int; let categoryOrder: Bool }
 
     static func run(store: ReminderStore, life: LifeStore) async throws -> Summary {
         var cards: [Int64: ReminderItem] = [:]
         var categories: [Int64: CustomCategory] = [:]
         var moods: [Int64: MoodTrackerEntry] = [:]
+        var categoryOrder: String?? = nil         // nil: never seen · .some(nil): removed · .some(value)
         let decoder = JSONDecoder()
         var cursor: Int64 = 0
         var pages = 0
@@ -67,6 +68,11 @@ enum RealCloudRestore {
             guard let page = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let records = page["records"] as? [[String: Any]] else { throw RealBackend.Failure(status: -1) }
             for record in records {
+                // The home category order travels as the "ui/category_order_v1" preference ("builtin:Today|custom:12|…").
+                if record["kind"] as? String == "PREFERENCE", record["key"] as? String == "ui/category_order_v1" {
+                    categoryOrder = .some((record["payload"] as? [String: Any])?["value"] as? String)
+                    continue
+                }
                 guard let kind = record["kind"] as? String, let key = record["key"] as? String, let id = Int64(key) else { continue }
                 // A null payload is a deletion; any later record for the same key replaces the earlier one.
                 guard let payload = record["payload"] as? [String: Any],
@@ -104,7 +110,11 @@ enum RealCloudRestore {
         if !moods.isEmpty {
             life.replaceAll(goal: life.goalMl, entries: life.entries, moods: moods.values.sorted { $0.id > $1.id })
         }
-        return Summary(cards: restoredCards.count, categories: categories.count, moods: moods.count)
+        if case .some(let raw) = categoryOrder {
+            store.setCategoryOrder((raw ?? "").split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+        }
+        return Summary(cards: restoredCards.count, categories: categories.count, moods: moods.count,
+                       categoryOrder: (categoryOrder ?? nil) != nil)
     }
 
     // MARK: Android wire format → iOS models (missing keys get the defaults the iOS models use)

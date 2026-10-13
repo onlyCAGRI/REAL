@@ -91,6 +91,21 @@ final class PanoStore {
         return board
     }
 
+    /// The account's boards replace their copies here; boards that exist only on this device are kept.
+    /// The look (background) and viewport chosen on this device stay as they were.
+    func mergeFromAccount(boards remote: [PanoBoard], items remoteItems: [String: [PanoItem]]) {
+        let remoteIds = Set(remote.map(\.id))
+        let looks = Dictionary(boards.map { ($0.id, $0.background) }, uniquingKeysWith: { a, _ in a })
+        let merged = remote.map { board -> PanoBoard in
+            var b = board
+            if let look = looks[b.id] { b.background = look }
+            return b
+        }
+        boards = (merged + boards.filter { !remoteIds.contains($0.id) }).sorted { $0.updatedAt > $1.updatedAt }
+        for (id, list) in remoteItems { items[id] = list }
+        save()
+    }
+
     func deleteBoard(_ id: String) {
         boards.removeAll { $0.id == id }
         items[id] = nil
