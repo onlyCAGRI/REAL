@@ -3,7 +3,7 @@ import SwiftUI
 /// WelcomeScreen.kt (REAL_Welcome design): the word story ("Every idea. Captured. … Not someday. Today. … Make it REAL.") on black →
 /// "Welcome to" rises into place, REAL rises and scales in with a haptic and a shine → the group lifts and the
 /// name field + Google / Apple / e-posta buttons come in → "Tanıştığımıza memnun oldum, <ad>." → onComplete.
-/// A tap during the word story skips to "Welcome to REAL".
+/// A tap during the word story skips to "Welcome to REAL"; when it plays out, REAL flies from the sentence into the wordmark.
 struct WelcomeScreen: View {
     let onComplete: (String) -> Void
 
@@ -16,8 +16,25 @@ struct WelcomeScreen: View {
     @State private var welcomeKerning: CGFloat = 0.5
     @State private var logoIn: CGFloat = 0
     @State private var wordsDone = false
-    @State private var wordIndex = 0
-    @State private var wordProgress: CGFloat = 0
+    // word story (see startStory)
+    @State private var storyText = ""
+    @State private var storyAlpha: Double = 0
+    @State private var storyBlur: CGFloat = 0
+    @State private var storyDX: CGFloat = 0
+    @State private var storyScale: CGFloat = 1
+    @State private var sentence = false
+    @State private var sentenceAlpha: Double = 0
+    @State private var sentenceBlur: CGFloat = 6
+    @State private var keepAlpha: Double = 1
+    @State private var slotWord = "happen."
+    @State private var slotShift: CGFloat = 0
+    @State private var slotAlpha: Double = 1
+    @State private var realFrame: CGRect?
+    // REAL flying from the sentence into the wordmark
+    @State private var logoFrame: CGRect = .zero
+    @State private var flightOffset: CGSize = .zero
+    @State private var flightScale: CGFloat = 1
+    @State private var promptHeight: CGFloat = 0
     @State private var introTask: Task<Void, Never>?
     @State private var shimmer: CGFloat = -1
     @State private var groupShift: CGFloat = 0
@@ -41,7 +58,13 @@ struct WelcomeScreen: View {
         GeometryReader { geo in
             let headerHeight: CGFloat = 129
             let initialTop = (geo.size.height - headerHeight) / 2
-            let finalShift: CGFloat = 54 + 24
+            // If the name field + buttons + links are taller than the room under the logo, the group lifts further
+            // so the links stay on screen (keeping 12pt above the header).
+            let baseShift: CGFloat = 54 + 24
+            let overflow = promptHeight > 0
+                ? min(max(0, initialTop - baseShift + headerHeight + 52 + promptHeight + 12 - geo.size.height), max(0, initialTop - baseShift - 12))
+                : 0
+            let finalShift = baseShift + overflow
             let promptTop = initialTop - finalShift + headerHeight + 52
             ZStack(alignment: .top) {
                 // Plain black throughout (REAL_Welcome design), no ambient glow.
@@ -51,7 +74,13 @@ struct WelcomeScreen: View {
                     Text("Welcome to").font(RealFont.inter(23)).kerning(welcomeKerning - 1).foregroundStyle(Color(argb: 0xFFF3F1F4))
                         .opacity(welcomeAlpha).offset(y: welcomeOffset)
                     WelcomeWordmark(reveal: 1, shimmer: shimmer).frame(width: 210, height: 91)
+                        .background(GeometryReader { g in
+                            Color.clear
+                                .onAppear { logoFrame = g.frame(in: .global) }
+                                .onChange(of: g.frame(in: .global)) { _, f in if flightScale == 1, flightOffset == .zero { logoFrame = f } }
+                        })
                         .opacity(logoIn).scaleEffect(0.97 + 0.03 * logoIn).offset(y: 6 * (1 - logoIn))
+                        .scaleEffect(flightScale).offset(flightOffset)
                 }
                 .frame(maxWidth: .infinity)
                 .offset(y: initialTop - finalShift * groupShift)
@@ -68,7 +97,9 @@ struct WelcomeScreen: View {
                 }
                 .padding(.horizontal, 28)
                 .frame(maxWidth: .infinity)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { promptHeight = $0 }
                 .offset(y: promptTop)
+                .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3), value: overflow)
 
                 if !wordsDone { wordStory }
             }
@@ -198,22 +229,48 @@ struct WelcomeScreen: View {
     }
 
     // MARK: Word story
+    // On the welcome music's beat grid (120 BPM, 0.5 s a beat), same timeline as WelcomeScreen.kt and the REAL_Welcome
+    // demo: three pairs (each word two beats), "Not someday." blurred, "Today." snaps sharp, "Make it happen." rolls
+    // to "Make it REAL.", and on beat 20 REAL flies into the wordmark while the music opens up.
 
-    /// One word every two beats of the welcome music (120 BPM), so each word lands on the sound.
-    private static let wordSeconds = 1.0
-    private static let words: [(String, Double)] = [
-        "Every idea.", "Captured.", "Every plan.", "On time.", "Every moment.", "Kept.",
-        "Not someday.", "Today.", "Make it happen.", "Make it REAL."
-    ].map { ($0, wordSeconds) }
+    private static let beat = 0.5
+    private static let pairs = [("Every idea.", "Captured."), ("Every plan.", "On time."), ("Every moment.", "Kept.")]
+    private static let someday = "Not someday."
+    private static let allWords = pairs.flatMap { [$0.0, $0.1] } + [someday, "Today.", "Make it happen.", "Make it REAL."]
+    private static let storyEase = { (d: Double) in Animation.timingCurve(0.16, 1, 0.3, 1, duration: d) }
+    private static let storyOut = Animation.timingCurve(0.4, 0, 1, 1, duration: 0.2)
 
-    /// Each word: in over the first 18% (7pt up, 0.97 → 1), held, out over the last 18% (4pt further, to 1.015).
+    private var storyStyle: some ShapeStyle { Color(argb: 0xFFF3F1F4) }
+
     private var wordStory: some View {
-        WordStoryText(text: Self.words[wordIndex].0, progress: wordProgress)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black.ignoresSafeArea())
-            .contentShape(Rectangle())
-            .onTapGesture { skipStory() }
-            .accessibilityLabel(Self.words.map(\.0).joined(separator: " "))
+        ZStack {
+            if !sentence {
+                Text(storyText)
+                    .font(RealFont.inter(31)).kerning(-1.1).foregroundStyle(storyStyle)
+                    .lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal, 20)
+                    .scaleEffect(storyScale).offset(x: storyDX)
+                    .blur(radius: storyBlur).opacity(storyAlpha)
+            } else {
+                HStack(spacing: 8) {
+                    Text("Make it").opacity(keepAlpha)
+                    Text(slotWord)
+                        .offset(y: slotShift * 38).opacity(slotAlpha)
+                        .background(GeometryReader { g in
+                            Color.clear
+                                .onAppear { realFrame = g.frame(in: .global) }
+                                .onChange(of: g.frame(in: .global)) { _, f in realFrame = f }
+                        })
+                        .frame(height: 38).clipped()
+                }
+                .font(RealFont.inter(31)).kerning(-1.1).foregroundStyle(storyStyle).lineLimit(1)
+                .blur(radius: sentenceBlur).opacity(sentenceAlpha)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.ignoresSafeArea())
+        .contentShape(Rectangle())
+        .onTapGesture { skipStory() }
+        .accessibilityLabel(Self.allWords.joined(separator: " "))
     }
 
     private func startStory() {
@@ -221,18 +278,51 @@ struct WelcomeScreen: View {
             sound.prepare()
             try? await Task.sleep(for: .milliseconds(350))
             sound.start()                                   // the music's first note is the first word
-            // Each word is placed against the start time, so the words never drift off the music.
+            // Every step is placed against the start time, so the motion never drifts off the music.
             let clock = ContinuousClock(), start = clock.now
-            var elapsed = 0.0
-            for (index, word) in Self.words.enumerated() {
-                if Task.isCancelled || wordsDone { return }
-                wordIndex = index
-                wordProgress = 0
-                withAnimation(.timingCurve(0, 0, 0.58, 1, duration: word.1)) { wordProgress = 1 } // CSS ease-out
-                elapsed += word.1
-                try? await clock.sleep(until: start.advanced(by: .seconds(elapsed)))
+            func at(_ beat: Double) async -> Bool {
+                try? await clock.sleep(until: start.advanced(by: .seconds(beat * Self.beat)))
+                return !Task.isCancelled && !wordsDone
             }
-            if !Task.isCancelled && !wordsDone { wordsDone = true; runIntro() }
+            func wordIn(_ word: String, dx: CGFloat, blur: CGFloat = 6, scale: CGFloat = 0.97, duration: Double = 0.45, dim: Double = 1) {
+                storyText = word; storyAlpha = 0; storyBlur = blur; storyDX = dx; storyScale = scale
+                withAnimation(Self.storyEase(duration)) { storyAlpha = dim; storyBlur = 0; storyDX = 0; storyScale = 1 }
+            }
+            func wordOut(dx: CGFloat = 0) {
+                withAnimation(Self.storyOut) { storyAlpha = 0; storyBlur = 4; storyDX = dx }
+            }
+            for (p, pair) in Self.pairs.enumerated() {
+                let dir = CGFloat(p - 1), base = Double(p * 4)  // past-ish ← · present · future-ish →
+                guard await at(base) else { return }; wordIn(pair.0, dx: dir * -18)
+                guard await at(base + 1.6) else { return }; wordOut(dx: dir * 14)
+                guard await at(base + 2) else { return }; wordIn(pair.1, dx: dir * -18)
+                guard await at(base + 3.6) else { return }; wordOut(dx: dir * 14)
+            }
+            guard await at(12) else { return }
+            wordIn(Self.someday, dx: 0, blur: 14, scale: 0.94, duration: 0.9, dim: 0.55)
+            guard await at(14) else { return }              // "Today." snaps into focus
+            storyText = "Today."; storyAlpha = 0.5; storyBlur = 8; storyDX = 0; storyScale = 1.06
+            withAnimation(Self.storyEase(0.29)) { storyAlpha = 1; storyBlur = 0; storyScale = 0.985 }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(290))
+                withAnimation(Self.storyEase(0.23)) { storyScale = 1 }
+            }
+            guard await at(15.6) else { return }; wordOut()
+            guard await at(16) else { return }              // "Make it happen."
+            storyAlpha = 0; sentence = true
+            withAnimation(Self.storyEase(0.48)) { sentenceAlpha = 1; sentenceBlur = 0 }
+            guard await at(18) else { return }              // happen. rolls up, REAL. rolls in
+            withAnimation(Self.storyOut) { slotShift = -1.1; slotAlpha = 0 }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(200))
+                slotWord = "REAL."; slotShift = 1.1
+                withAnimation(Self.storyEase(0.38)) { slotShift = 0; slotAlpha = 1 }
+            }
+            guard await at(19.5) else { return }
+            withAnimation(.timingCurve(0.4, 0, 1, 1, duration: 0.25)) { keepAlpha = 0 }
+            guard await at(20) else { return }
+            wordsDone = true
+            runIntro(flyingFrom: realFrame)
         }
     }
 
@@ -241,28 +331,48 @@ struct WelcomeScreen: View {
         introTask?.cancel()
         sound.fadeOut()
         wordsDone = true
-        runIntro()
+        runIntro(flyingFrom: nil)
     }
 
-    // MARK: Welcome to REAL → sign-in (timeline after the last word, ms:
-    // 0 "Welcome to" fades in 39pt low · 650 it rises · 750 REAL rises/scales in · 830 haptic · 980 shine · 1450 sign-in)
+    // MARK: Welcome to REAL → sign-in
+    // After the story ends on its own (beat 20): 0 REAL flies from the sentence into the wordmark (0.9 s) with a haptic ·
+    // 0.5 s "Welcome to" rises in · 0.6 s the shine · 2.0 s the name prompt and sign-in.
+    // After a tap-skip: 0 "Welcome to" fades in 39pt low · 650 it rises · 750 REAL rises/scales in · 830 haptic ·
+    // 980 shine · 1450 sign-in.
 
-    private func runIntro() {
+    private func runIntro(flyingFrom from: CGRect?) {
         introTask = Task { @MainActor in
             let emphasized = { (d: Double) in Animation.timingCurve(0.16, 1, 0.3, 1, duration: d) }
-            withAnimation(.easeOut(duration: 0.16)) { welcomeAlpha = 1 }
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(650))
-                withAnimation(emphasized(0.4)) { welcomeOffset = 0 }
+            if let from, logoFrame.width > 0 {
+                flightOffset = CGSize(width: from.midX - logoFrame.midX, height: from.midY - logoFrame.midY)
+                flightScale = (from.width * 0.86) / logoFrame.width   // "REAL" without the dot vs the wordmark
+                welcomeOffset = 10
+                logoIn = 1
+                withAnimation(emphasized(0.9)) { flightOffset = .zero; flightScale = 1 }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(500))
+                    withAnimation(emphasized(0.6)) { welcomeAlpha = 1; welcomeOffset = 0 }
+                }
+                try? await Task.sleep(for: .milliseconds(600))
+                shimmer = 0
+                withAnimation(.easeInOut(duration: 1.05)) { shimmer = 1 }
+                try? await Task.sleep(for: .milliseconds(1400))
+            } else {
+                withAnimation(.easeOut(duration: 0.16)) { welcomeAlpha = 1 }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(650))
+                    withAnimation(emphasized(0.4)) { welcomeOffset = 0 }
+                }
+                try? await Task.sleep(for: .milliseconds(750))
+                withAnimation(emphasized(0.55)) { logoIn = 1 }
+                try? await Task.sleep(for: .milliseconds(80))
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                try? await Task.sleep(for: .milliseconds(150))
+                shimmer = 0
+                withAnimation(.easeInOut(duration: 1.05)) { shimmer = 1 }
+                try? await Task.sleep(for: .milliseconds(470))
             }
-            try? await Task.sleep(for: .milliseconds(750))
-            withAnimation(emphasized(0.55)) { logoIn = 1 }
-            try? await Task.sleep(for: .milliseconds(80))
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            try? await Task.sleep(for: .milliseconds(150))
-            shimmer = 0
-            withAnimation(.easeInOut(duration: 1.05)) { shimmer = 1 }
-            try? await Task.sleep(for: .milliseconds(470))
             phase = .namePrompt
             withAnimation(emphasized(0.42)) { groupShift = 1 }
             try? await Task.sleep(for: .milliseconds(70))
@@ -274,36 +384,6 @@ struct WelcomeScreen: View {
             try? await Task.sleep(for: .milliseconds(350))
             focused = true
         }
-    }
-}
-
-/// One word of the story; [progress] 0…1 is animated, so the keyframes are evaluated every frame.
-private struct WordStoryText: View, Animatable {
-    let text: String
-    var progress: CGFloat
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    var body: some View {
-        let p = progress
-        let alpha: Double
-        let dy: CGFloat
-        let scale: CGFloat
-        if p < 0.18 {
-            let t = p / 0.18
-            alpha = Double(t); dy = 7 * (1 - t); scale = 0.97 + 0.03 * t
-        } else if p <= 0.82 {
-            alpha = 1; dy = 0; scale = 1
-        } else {
-            let t = (p - 0.82) / 0.18
-            alpha = Double(1 - t); dy = -4 * t; scale = 1 + 0.015 * t
-        }
-        return Text(text)
-            .font(RealFont.inter(31)).kerning(-1.1).foregroundStyle(Color(argb: 0xFFF3F1F4))
-            .lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal, 20)
-            .opacity(alpha).scaleEffect(scale).offset(y: dy)
     }
 }
 
