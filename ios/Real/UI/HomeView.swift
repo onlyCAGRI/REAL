@@ -320,7 +320,7 @@ struct ProfileAvatar: View {
             Circle().strokeBorder(.white.opacity(0.14), lineWidth: 0.75)
             let initials = Planner.initials(name)
             if initials.isEmpty {
-                Image(systemName: "person.fill").font(.system(size: size * 0.4)).foregroundStyle(Color(argb: 0xFFB8B8BE))
+                ActionIcon(.person, color: Color(argb: 0xFFB8B8BE), size: size * 0.48)
             } else {
                 Text(initials).font(RealFont.inter(size * 0.36, .medium)).foregroundStyle(.white)
             }
@@ -339,12 +339,12 @@ struct SelectionBar: View {
 
     var body: some View {
         HStack(spacing: 18) {
-            Button(action: onCancel) { Image(systemName: "xmark") }
+            Button(action: onCancel) { ActionIcon(.close, size: 21) }
             Text("\(count) seçili").font(RealFont.inter(15, .medium))
             Spacer()
-            Button(action: onStar) { Image(systemName: "star") }
-            Button(action: onComplete) { Image(systemName: "checkmark.circle") }
-            Button(action: onDelete) { Image(systemName: "trash") }.tint(RealColors.overdue)
+            Button(action: onStar) { ActionIcon(.star, size: 21) }
+            Button(action: onComplete) { ActionIcon(.check, size: 21) }
+            Button(action: onDelete) { ActionIcon(.delete, size: 21) }.tint(RealColors.overdue)
         }
         .font(.system(size: 18))
         .foregroundStyle(.white)

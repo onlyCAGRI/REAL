@@ -337,7 +337,7 @@ struct RealSymbol: View {
         case "square.and.arrow.up": return (.share, false)
         case "pencil": return (.edit, false)
         case "doc": return (.file, false)
-        case "text.alignleft", "book.closed": return (.note, false)
+        case "text.alignleft", "book.closed", "note.text": return (.note, false)
         case "repeat": return (.repeat_, false)
         case "rectangle.stack": return (.cards, false)
         case "play.rectangle", "film": return (.video, false)

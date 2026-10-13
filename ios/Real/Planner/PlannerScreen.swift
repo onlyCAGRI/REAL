@@ -340,8 +340,7 @@ struct PlannerCardBadge: View {
 
 struct PlannerChevron: View {
     var body: some View {
-        Image(systemName: "chevron.right")
-            .font(.system(size: 14, weight: .semibold))
+        ActionIcon(.chevronRight, size: 18)
             .foregroundStyle(RealColors.plannerInk)
             .frame(width: 42, height: 42)
             .overlay(Circle().strokeBorder(RealColors.plannerInk.opacity(0.45), lineWidth: 1))

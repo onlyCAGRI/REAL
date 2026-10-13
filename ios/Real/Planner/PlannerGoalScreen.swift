@@ -246,8 +246,7 @@ struct PlannerGoalScreen: View {
                     // The badge sits in the black notch, so it is drawn in the tile colour.
                     Circle().fill(reorderMode ? accent : .clear)
                     Circle().strokeBorder(accent.opacity(0.55), lineWidth: 1)
-                    Image(systemName: reorderMode ? "checkmark" : "pencil")
-                        .font(.system(size: reorderMode ? 13 : 12, weight: .semibold))
+                    ActionIcon(reorderMode ? .check : .edit, size: 15)
                         .foregroundStyle(reorderMode ? RealColors.plannerInk : accent)
                 }
                 .frame(width: 30, height: 30)

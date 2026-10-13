@@ -20,6 +20,7 @@ struct ReminderDetailView: View {
     @State private var dockCollapsed = false
     @State private var showMusicSearch = false
     @State private var voiceRecorderOpen = false
+    @State private var textToolsKey: String?
     @State private var showMediaSearch = false
     @State private var deleting = false
     @State private var reordering = false
@@ -104,6 +105,13 @@ struct ReminderDetailView: View {
                 }
             }
         }
+        .sheet(item: Binding(get: { textToolsKey.map(IdentifiedKey.init) }, set: { textToolsKey = $0?.id })) { k in
+            CardTextTools(placement: (draft?.contentBlockLayout[k.id] ?? CardBlockPlacement()).normalized) { p in
+                draft?.contentBlockLayout[k.id] = p
+            }
+            .presentationDetents([.height(230)])
+            .presentationBackground(.clear)
+        }
         .sheet(isPresented: $showMusicSearch) {
             MusicSearchSheet { m in withAnimation(.spring(duration: 0.3)) { draft?.musicBlocks.append(m) } }
         }
@@ -185,7 +193,7 @@ struct ReminderDetailView: View {
             Spacer()
             HStack(spacing: 0) {
                 // Now Bar has no iOS counterpart yet; shown disabled like Android when unavailable.
-                RealSymbol("pin", size: 19.5).foregroundStyle(Color(argb: 0xFF66666F))
+                ActionIcon(.nowBar, color: Color(argb: 0xFF66666F), size: 20)
                     .frame(width: 48, height: 40)
                     .accessibilityLabel("Now Bar kullanılamıyor")
                 Rectangle().fill(.white.opacity(0.13)).frame(width: 1, height: 18)
@@ -193,11 +201,10 @@ struct ReminderDetailView: View {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     store.mutate(reminderId) { $0.isImportant.toggle() }
                 } label: {
-                    Image(systemName: r.isImportant ? "star.fill" : "star").font(.system(size: 18))
-                        .foregroundStyle(r.isImportant ? Color(argb: 0xFFEACB75) : Color(argb: 0xFFC9CBD3))
+                    ActionIcon(.star, color: r.isImportant ? Color(argb: 0xFFEACB75) : Color(argb: 0xFFC9CBD3), filled: r.isImportant, size: 21)
                         .frame(width: 48, height: 40)
                         .background(r.isImportant ? Color(argb: 0xFFEACB75).opacity(0.08) : .clear)
-                        .contentTransition(.symbolEffect(.replace))
+                        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.16), value: r.isImportant)
                 }
                 .accessibilityLabel(r.isImportant ? "Önemli işaretini kaldır" : "Önemli olarak işaretle")
             }
@@ -261,8 +268,7 @@ struct ReminderDetailView: View {
             }
         } else {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: r.isCompleted ? "checkmark" : "note.text")
-                    .font(.system(size: 17, weight: .medium))
+                ActionIcon(r.isCompleted ? .check : .note, size: 20)
                     .foregroundStyle(RealColors.accentBlue)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 3) {
@@ -505,7 +511,7 @@ struct ReminderDetailView: View {
             Spacer()
             if editing { removeButton { removeAttachment(a) } } else {
                 ShareLink(item: AttachmentStorage.directory.appendingPathComponent(a.localPath)) {
-                    Image(systemName: "square.and.arrow.up").foregroundStyle(RealColors.subtext)
+                    ActionIcon(.share, color: RealColors.subtext, size: 18)
                 }
             }
         }
@@ -536,30 +542,54 @@ struct ReminderDetailView: View {
     }
 
     /// CardStandaloneTextBox: a free text box that carries the card colour.
+    /// CardStandaloneTextBox: 28pt surface, 21/31 text, "Metin yaz…", detached gear/× chip and the "Metin biçimi" tools.
     private func textBoxBlock(_ a: ReminderAttachment, _ r: ReminderItem) -> some View {
+        let key = "files:\(a.id)"
+        let placement = (r.contentBlockLayout[key] ?? CardBlockPlacement()).normalized
         let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: false, blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
-        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+        let compact = (1..<200).contains(placement.minHeight)
+        let ink = r.useDarkText ? Color(argb: 0xFF101010) : Color(argb: 0xFFF4F4F6)
+        let align: TextAlignment = placement.textAlignment == "center" ? .center : (placement.textAlignment == "end" ? .trailing : .leading)
+        let frameAlign: Alignment = placement.textAlignment == "center" ? .top : (placement.textAlignment == "end" ? .topTrailing : .topLeading)
+        let font = RealFont.inter(21, placement.textBold ? .bold : .regular)
         return ZStack(alignment: .topTrailing) {
             Group {
                 if editing {
-                    TextField("Metin", text: Binding(get: { a.text ?? "" }, set: { v in
+                    TextField("", text: Binding(get: { a.text ?? "" }, set: { v in
                         draft?.attachments = (draft?.attachments ?? []).map { item in
                             var copy = item
                             if item.id == a.id { copy.text = v }
                             return copy
                         }
-                    }), axis: .vertical)
+                    }), prompt: Text("Metin yaz…").foregroundStyle(ink.opacity(0.4)), axis: .vertical)
+                    .tint(ink)
+                    .frame(minHeight: placement.minHeight > 0 ? 0 : 96, alignment: .topLeading)
                 } else {
-                    Text(a.text ?? "").textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(a.text ?? "").textSelection(.enabled)
                 }
             }
-            .font(RealFont.inter(16))
-            .foregroundStyle(r.useDarkText ? Color(argb: 0xFF101010) : .white)
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 80, alignment: .topLeading)
-            .background { if let accent { shape.fill(accent) } else { shape.fill(LiquidGlassTokens.contentColor) } }
-            .overlay(shape.strokeBorder(.white.opacity(0.08), lineWidth: 0.7))
-            if editing { removeButton { removeAttachment(a) } }
+            .font(font).italic(placement.textItalic).lineSpacing(10)
+            .multilineTextAlignment(align)
+            .foregroundStyle(ink)
+            .frame(maxWidth: .infinity, alignment: frameAlign)
+            .padding(.horizontal, 22).padding(.vertical, compact ? 8 : 25)
+            .background {
+                if let accent { shape.fill(accent) }
+                else { shape.fill(LinearGradient(colors: [Color(argb: 0xFF18181A), LiquidGlassTokens.contentColor], startPoint: .top, endPoint: .bottom)) }
+            }
+            .clipShape(shape)
+            if editing {
+                HStack(spacing: 0) {
+                    Button { textToolsKey = key } label: { ActionIcon(.settings, color: Color(argb: 0xFFB7B7C0), size: 15).frame(width: 28, height: 28) }
+                        .accessibilityLabel("Metin araçları")
+                    Button { removeAttachment(a) } label: { ActionIcon(.close, color: Color(argb: 0xFFB7B7C0), size: 15).frame(width: 28, height: 28) }
+                        .accessibilityLabel("Metin kutusunu kaldır")
+                }
+                .buttonStyle(.plain)
+                .liquidGlass(RoundedRectangle(cornerRadius: 14, style: .continuous), role: .chrome)
+                .offset(y: -32)
+            }
         }
     }
 
@@ -1218,7 +1248,7 @@ private struct BlockReorderSheet: View {
                 ForEach(keys, id: \.self) { key in
                     let d = describe(key)
                     HStack(spacing: 12) {
-                        Image(systemName: d.2).foregroundStyle(RealColors.accentBlue).frame(width: 28)
+                        RealSymbol(d.2, size: 20).foregroundStyle(RealColors.accentBlue).frame(width: 28)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(d.0).foregroundStyle(.white)
                             Text(d.1).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -1396,5 +1426,55 @@ struct AttachmentThumb: View {
         .frame(width: 96, height: 96)
         .background(RealColors.field)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+struct IdentifiedKey: Identifiable { let id: String }
+
+/// CardTitleTools: "Metin biçimi" — Sola / Ortala / Sağa, Kalın, İtalik.
+struct CardTextTools: View {
+    let placement: CardBlockPlacement
+    let onChange: (CardBlockPlacement) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var current: CardBlockPlacement
+
+    init(placement: CardBlockPlacement, onChange: @escaping (CardBlockPlacement) -> Void) {
+        self.placement = placement
+        self.onChange = onChange
+        _current = State(initialValue: placement)
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Metin biçimi").font(RealFont.inter(16)).foregroundStyle(.white)
+                Spacer()
+                Button("Bitti") { dismiss() }.foregroundStyle(.white)
+            }
+            HStack(spacing: 6) {
+                ForEach([("start", "Sola"), ("center", "Ortala"), ("end", "Sağa")], id: \.0) { key, label in
+                    tool(label, active: current.textAlignment == key) { current.textAlignment = key }
+                }
+            }
+            HStack(spacing: 6) {
+                tool("Kalın", active: current.textBold, bold: true) { current.textBold.toggle() }
+                tool("İtalik", active: current.textItalic, italic: true) { current.textItalic.toggle() }
+            }
+        }
+        .padding(16)
+        .liquidGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .sheet)
+        .padding(.horizontal, 16)
+        .onChange(of: current) { _, p in onChange(p) }
+    }
+
+    private func tool(_ label: String, active: Bool, bold: Bool = false, italic: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: { withAnimation(.easeOut(duration: 0.16)) { action() } }) {
+            Text(label).font(RealFont.inter(13, bold ? .bold : .regular)).italic(italic)
+                .foregroundStyle(active ? .white : Color(argb: 0xFFB7B7C0))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(active ? 0.18 : 0.04)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }

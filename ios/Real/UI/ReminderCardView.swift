@@ -130,8 +130,7 @@ struct ReminderCardView: View {
                     .strokeBorder(reminder.isCompleted ? .clear : (recurringAck ? RealColors.accentBlue
                                   : (useDark ? Color(argb: 0xFF35353C) : Color(argb: 0xFF626269))), lineWidth: 1.5)
                 if reminder.isCompleted || recurringAck {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                    ActionIcon(.check, size: 13)
                         .foregroundStyle(recurringAck && !reminder.isCompleted ? RealColors.accentBlue
                                          : (useDark ? .white : Color(argb: 0xFF1B1B1F)))
                 }
