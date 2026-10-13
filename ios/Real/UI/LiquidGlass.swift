@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// LiquidGlassTokens.kt values.
 enum LiquidGlassTokens {
@@ -144,6 +145,9 @@ extension View {
 
 /// ReminderScreen.kt BottomFade: cards dissolve into black under the dock (height = dock + bottom gap + 46dp).
 struct BottomFade: View {
+    /// Hidden while the keyboard is up, so the open composer never sits in a dark band.
+    @State private var keyboardUp = false
+
     var body: some View {
         // Tall and dark enough that cards scrolling under the dock (and the strip under it) fade into black
         // instead of showing through around the composer.
@@ -156,6 +160,10 @@ struct BottomFade: View {
             // riding up and darkening the cards around the open composer.
             .ignoresSafeArea(.all, edges: .bottom)
             .allowsHitTesting(false)
+            .opacity(keyboardUp ? 0 : 1)
+            .animation(.easeOut(duration: 0.18), value: keyboardUp)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardUp = true }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardUp = false }
     }
 }
 

@@ -92,7 +92,6 @@ struct CategoryScreen: View {
         }
         .hideBottomScrollEdgeEffect()
         .background(RealColors.background.ignoresSafeArea())
-        .overlay(alignment: .bottom) { BottomFade() }
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
             if !selectedIds.isEmpty {
@@ -104,6 +103,7 @@ struct CategoryScreen: View {
             } else if builtIn != .completed && builtIn != .journalEntries {
                 ComposerBar(defaultCategoryId: customId, defaultImportant: builtIn == .important,
                             defaultPlannedToday: builtIn == .today || builtIn == .planned)
+                    .background(alignment: .bottom) { BottomFade() }
             }
         }
         .sheet(isPresented: $showEditor) { CategoryEditorSheet(existing: custom) }

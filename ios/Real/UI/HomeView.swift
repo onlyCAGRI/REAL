@@ -155,13 +155,15 @@ struct HomeView: View {
         .scrollDismissesKeyboard(.interactively)
         .hideBottomScrollEdgeEffect()
         .background(RealColors.background.ignoresSafeArea())
-        .overlay(alignment: .bottom) { if selectedIds.isEmpty { BottomFade() } }
         .safeAreaInset(edge: .bottom) {
             if selectedIds.isEmpty {
                 ComposerBar(defaultCategoryId: nil, isHome: true,
                             onOpenPlanner: { path.append(.planner) },
                             onOpenYasam: { withoutAnimation { showYasam = true } },
                             onOpenPano: { showPano = true })
+                    // The fade belongs to the dock: drawn above every card (stacked category cards included) and
+                    // below the composer, from above the dock down to the screen edge.
+                    .background(alignment: .bottom) { BottomFade() }
             } else {
                 SelectionBar(count: selectedIds.count,
                              onStar: {
