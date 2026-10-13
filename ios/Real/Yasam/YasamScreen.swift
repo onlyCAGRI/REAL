@@ -449,7 +449,10 @@ struct YasamHeroSentence: View {
         let ink = Color(argb: 0xFF05080C)
         let bottom: Color = hour < 12 ? Color(argb: 0xFFE9B79B) : (hour < 18 ? Color(argb: 0xFF9AA7B4) : Color(argb: 0xFF6B5B95))
         let b: Double = breathe ? 1 : 0
-        let words = sentence.split(separator: " ").map(String.init)
+        // "\n" in a sentence is an intentional line break (YasamSentence); it becomes a break token for WordFlow.
+        let words: [String] = sentence.components(separatedBy: "\n").enumerated().flatMap { i, line in
+            (i > 0 ? [WordFlow.lineBreak] : []) + line.split(separator: " ").map(String.init)
+        }
         VStack(spacing: 0) {
             if !compact {
                 Text(greeting.uppercased(with: Locale(identifier: "tr_TR")))
@@ -459,6 +462,9 @@ struct YasamHeroSentence: View {
             }
             WordFlow(spacing: 8, lineSpacing: 2) {
                 ForEach(Array(words.enumerated()), id: \.offset) { i, word in
+                    if word == WordFlow.lineBreak {
+                        Color.clear.frame(width: 0, height: 0).layoutValue(key: WordFlowBreak.self, value: true)
+                    } else {
                     Text(word)
                         .font(.system(size: 25, weight: .light))
                         .foregroundStyle(.white.opacity(0.94))
@@ -466,6 +472,7 @@ struct YasamHeroSentence: View {
                         .opacity(revealed ? 1 : 0)
                         .offset(y: revealed ? 0 : 6)
                         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.5).delay(0.45 + Double(i) * 0.045), value: revealed)
+                    }
                 }
             }
         }
@@ -487,7 +494,10 @@ struct YasamHeroSentence: View {
 }
 
 /// Centred flowing layout for the hero words (FlowRow with centred arrangement).
+struct WordFlowBreak: LayoutValueKey { static let defaultValue = false }
+
 struct WordFlow: Layout {
+    static let lineBreak = "\u{2028}"
     var spacing: CGFloat = 8
     var lineSpacing: CGFloat = 2
 
@@ -516,6 +526,10 @@ struct WordFlow: Layout {
     private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
         var rows: [Row] = [Row()]
         for (i, sub) in subviews.enumerated() {
+            if sub[WordFlowBreak.self] {
+                if !rows[rows.count - 1].items.isEmpty { rows.append(Row()) }
+                continue
+            }
             let size = sub.sizeThatFits(.unspecified)
             let needed = rows[rows.count - 1].items.isEmpty ? size.width : rows[rows.count - 1].width + spacing + size.width
             if needed > width && !rows[rows.count - 1].items.isEmpty { rows.append(Row()) }

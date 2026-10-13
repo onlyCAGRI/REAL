@@ -73,13 +73,17 @@ struct WaterTrackerScreen: View {
                                 life.addDrink(amount, beverage: beverage)
                                 engine.disturb(at: 0.5, strength: 0.9)
                             } label: {
-                                VStack(spacing: 2) {
-                                    Text("+ \(amountText(amount))").font(RealFont.inter(18, .medium))
-                                    Text(beverage.label).font(RealFont.inter(12)).opacity(0.7)
+                                // QuickWaterAdd: "+" and the amount on one line, 50pt tall glass capsule.
+                                HStack(spacing: 12) {
+                                    Text("+").font(RealFont.inter(24))
+                                    Text(amountText(amount)).font(RealFont.inter(15, .medium))
+                                    Spacer(minLength: 0)
                                 }
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity, minHeight: 64)
-                                .liquidGlass(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                                .foregroundStyle(.white.opacity(0.95))
+                                .padding(.horizontal, 18)
+                                .frame(maxWidth: .infinity, minHeight: 50)
+                                .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                                .accessibilityLabel("\(amountText(amount)) \(beverage.label) ekle")
                             }
                             .buttonStyle(PressScaleStyle(scale: 0.96))
                         }

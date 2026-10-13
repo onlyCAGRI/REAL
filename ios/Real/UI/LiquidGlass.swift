@@ -31,7 +31,10 @@ extension View {
                     ZStack {
                         shape.fill(LinearGradient(colors: role == .dock
                                                   ? [LiquidGlassTokens.dockTintTop, LiquidGlassTokens.dockTintBottom]
-                                                  : [Color(argb: 0x66202022), Color(argb: 0x880D0D0F)],
+                                                  : (role == .sheet
+                                                     // LiquidGlassTokens.sheetTint: panels stay readable over cards.
+                                                     ? [Color(argb: 0xD10C0C0E), Color(argb: 0xD10C0C0E)]
+                                                     : [Color(argb: 0x66202022), Color(argb: 0x880D0D0F)]),
                                                   startPoint: .top, endPoint: .bottom))
                         if dim > 0 { shape.fill(Color.black.opacity(dim)) }
                     }
