@@ -183,19 +183,34 @@ func liquidRim(_ role: LiquidGlassRole) -> LinearGradient {
 
 
 /// Android's status bar is ~24dp; the Dynamic Island safe area is ~62pt, which pushed every iOS header visibly lower.
-/// This lifts content 14pt into the top safe area (never closer than 48pt) on notch / Dynamic Island devices. It is
-/// computed from the window inset and applied absolutely, so nesting it is harmless.
+/// This lifts content 14pt into the top safe area (never closer than 48pt) on notch / Dynamic Island devices.
+/// SwiftUI safe-area modifiers are ignored by NavigationStack / presented covers, so the hosting controller's
+/// additionalSafeAreaInsets is adjusted instead (set, not added, so applying it twice is harmless).
 struct LiftedTopSafeArea: ViewModifier {
     static let lift: CGFloat = 14
+    func body(content: Content) -> some View { content.background(SafeAreaLifter(lift: Self.lift).frame(width: 0, height: 0)) }
+}
 
-    func body(content: Content) -> some View {
-        let top = UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow ?? ($0 as? UIWindowScene)?.windows.first }
-            .first?.safeAreaInsets.top ?? 0
-        let lifted = top >= 44 ? top - Self.lift : top
-        content
-            .safeAreaPadding(.top, lifted)
-            .ignoresSafeArea(.container, edges: .top)
+private struct SafeAreaLifter: UIViewControllerRepresentable {
+    let lift: CGFloat
+    func makeUIViewController(context: Context) -> LifterController { LifterController(lift: lift) }
+    func updateUIViewController(_ controller: LifterController, context: Context) { controller.apply() }
+
+    final class LifterController: UIViewController {
+        let lift: CGFloat
+        init(lift: CGFloat) { self.lift = lift; super.init(nibName: nil, bundle: nil) }
+        required init?(coder: NSCoder) { fatalError() }
+        override func didMove(toParent parent: UIViewController?) { super.didMove(toParent: parent); apply() }
+        override func viewWillAppear(_ animated: Bool) { super.viewWillAppear(animated); apply() }
+
+        func apply() {
+            var host: UIViewController = self
+            while let p = host.parent { host = p }
+            guard host !== self else { return }
+            let windowTop = view.window?.safeAreaInsets.top ?? host.view.window?.safeAreaInsets.top ?? 0
+            let target: CGFloat = windowTop >= 44 ? -lift : 0
+            if host.additionalSafeAreaInsets.top != target { host.additionalSafeAreaInsets.top = target }
+        }
     }
 }
 
