@@ -61,6 +61,7 @@ struct RootView: View {
 
 struct HomeView: View {
     @Environment(ReminderStore.self) private var store
+    @Environment(BookStore.self) private var books
     @Environment(\.navNamespace) private var nav
     @Binding var path: [Route]
     @State private var expanded = false
@@ -73,6 +74,7 @@ struct HomeView: View {
     @State private var confirmDelete = false
     @State private var showYasam = false
     @State private var showPano = false
+    @State private var contextTarget: ContextCardType?
     @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
 
     private let previewCount = 4
@@ -127,6 +129,7 @@ struct HomeView: View {
                             .padding(.vertical, 12)
                     }
                 }
+                if selectedIds.isEmpty { HomeContextCard(onOpen: openContext) }
                 Color.clear.frame(height: 140)
             }
             .animation(.spring(duration: 0.35), value: active.map(\.id))
@@ -164,6 +167,14 @@ struct HomeView: View {
         .fullScreenCover(isPresented: $showSettings) { SettingsScreen { showSettings = false } }
         .sheet(isPresented: $showCategoryOrder) { CategoryOrderSheet() }
         .fullScreenCover(isPresented: $showPano) { PanoScreen().presentationBackground(.black) }
+        .fullScreenCover(item: $contextTarget) { target in
+            switch target {
+            case .water: WaterTrackerScreen().presentationBackground(.black)
+            case .mood: MoodAddSheet()
+            case .book: BooksModuleScreen(resumeBookId: books.books.last { books.page($0) > 0 }?.id)
+            case .media: DiscoveryScreen(kind: .film) { contextTarget = nil }
+            }
+        }
         .fullScreenCover(isPresented: $showYasam) {
             YasamScreen(onOpenCard: { id in
                 withoutAnimation { showYasam = false }
@@ -175,6 +186,8 @@ struct HomeView: View {
             Button("Vazgeç", role: .cancel) {}
         }
     }
+
+    private func openContext(_ type: ContextCardType) { contextTarget = type }
 
     private var header: some View {
         HStack {

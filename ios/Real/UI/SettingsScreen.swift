@@ -244,6 +244,23 @@ struct SettingsScreen: View {
     @ViewBuilder
     private var developerPage: some View {
         SettingsSectionHeader(title: "GELİŞTİRİCİ ARAÇLARI")
+        SettingsSectionHeader(title: "BAĞLAM KARTLARI TESTİ")
+        SettingsGlassGroup {
+            let tests: [(ContextCardType, ActionGlyph, String)] = [(.water, .bell, "Su kartını göster"), (.mood, .moodNeutral, "Mood kartını göster"),
+                                                                  (.book, .note, "Kitap kartını göster"), (.media, .video, "Film & dizi kartını göster")]
+            ForEach(Array(tests.enumerated()), id: \.offset) { i, t in
+                if i > 0 { SettingsDivider() }
+                SettingsActionRow(icon: t.1, title: t.2, subtitle: "Saat ve limit kurallarını yok sayar; ana ekranın en altında görünür") {
+                    ContextCardStore.update { var h = $0; h.forcedType = t.0.rawValue; return h }
+                    notice = "Kart ana ekranın en altında görünecek."
+                }
+            }
+            SettingsDivider()
+            SettingsActionRow(icon: .undo, title: "Kart geçmişini sıfırla", subtitle: "Günlük limit, bekleme ve sessize alma sayaçlarını temizler") {
+                ContextCardStore.update { ContextCardHistory(enabled: $0.enabled) }
+                notice = "Bağlam kartı geçmişi sıfırlandı."
+            }
+        }
         SettingsSectionHeader(title: "MOOD TEST VE VERİ")
         SettingsGlassGroup {
             VStack(alignment: .leading, spacing: 10) {

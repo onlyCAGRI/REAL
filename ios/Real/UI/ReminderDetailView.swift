@@ -35,6 +35,7 @@ struct ReminderDetailView: View {
     @State private var showCamera = false
     @State private var showFileImporter = false
     @State private var showLocationEditor = false
+    @State private var showLocationGuide = false
     @State private var showLinkEditor = false
     @State private var editingStackCard: CardStackCard?
     @State private var showMoodPicker = false
@@ -87,6 +88,14 @@ struct ReminderDetailView: View {
         .fullScreenCover(isPresented: $showCamera) { CameraPicker { data in addAttachment(AttachmentStorage.save(data)) }.ignoresSafeArea() }
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { urls.forEach { addAttachment(AttachmentStorage.saveFile($0)) } }
+        }
+        .realOverlay(isPresented: $showLocationGuide) {
+            // LocationGuideSheet: Android hands off to Google Maps → Share → REAL; iOS searches in-app (a share
+            // extension would be needed for the Maps hand-off).
+            PermissionSheet(title: "Konum ekle", description: "Haritada istediğin yeri ara ve seç. Seçtiğin konum karta eklenir.",
+                            primaryLabel: "Haritada ara", secondaryLabel: "Vazgeç", glyph: .pin,
+                            onPrimary: { withoutAnimation { showLocationGuide = false }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { showLocationEditor = true } },
+                            onSecondary: { withoutAnimation { showLocationGuide = false } })
         }
         .sheet(isPresented: $showLocationEditor) {
             LocationEditor(initial: draft?.location) { draft?.location = $0 }.presentationDetents([.medium, .large])
@@ -820,7 +829,7 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "calendar", label: "Tarih / Saat", active: d?.alertAt != nil || d?.plannedDateEpochDay != nil) {
                         if let d { openSchedule(d) }
                     }
-                    QuickAction(symbol: "mappin", label: "Konum", active: d?.location != nil) { showLocationEditor = true }
+                    QuickAction(symbol: "mappin", label: "Konum", active: d?.location != nil) { withoutAnimation { showLocationGuide = true } }
                     QuickAction(symbol: "checklist", label: "Checklist", active: checklistOpen || !(d?.checklistItems.isEmpty ?? true),
                                 count: d?.checklistItems.count) {
                         checklistOpen = true
