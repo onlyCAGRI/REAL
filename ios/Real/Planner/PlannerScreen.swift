@@ -15,7 +15,7 @@ struct PlannerScreen: View {
     @State private var calendarConnection = CalendarConnection.shared
     @State private var externalDetail: CalendarOccurrence?
     @State private var now = Date()
-    /// Last active Planner view mode (rememberPlannerViewModePreference): "hours_24", "daily" (New) or "monthly".
+    /// Last active Planner view mode: "hours_24" or the month ("monthly"; an older "daily" value also opens the month).
     @AppStorage("planner_view_mode") private var modeRaw = "hours_24"
 
     private let calendar = Calendar.real
@@ -57,17 +57,9 @@ struct PlannerScreen: View {
 
     var body: some View {
         let today = calendar.startOfDay(for: now)
-        let dayStart = calendar.startOfDay(for: selectedDay)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
         // Every card the user scheduled in REAL is in its calendar and in "Next 24 hours". The category switch
         // "REAL takviminde göster" only decides which category cards the calendar lists.
         let calendarReminders = store.reminders
-        // Device calendar events (RememberExternalCalendarEvents) join the day as read-only cards.
-        let externals = calendarConnection.occurrences(from: dayStart, to: dayEnd)
-        let events = Planner.events(calendarReminders + externals.map(Self.externalCard), rangeStart: dayStart.epochMillis, rangeEnd: dayEnd.epochMillis, calendar: calendar)
-        let focus = Planner.focusEvents(events, day: selectedDay, calendar: calendar)
-        let allDay = events.filter(\.isDateOnly)
-        let geometry = PlannerTimelineGeometry.daily(events, day: selectedDay, calendar: calendar)
         let categoryCards = store.categories.filter(\.isShownInCalendar).compactMap { c -> PlannerCategoryCardData? in
             guard let stats = store.reminders.categoryProgress(builtIn: nil, customId: c.id, calendar: calendar) else { return nil }
             let raw = c.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(c.accentStart) ?? Color(argb: 0xFF4558C8)
@@ -76,14 +68,13 @@ struct PlannerScreen: View {
 
         let isCalendar = modeRaw != "hours_24"
         ZStack {
-            if modeRaw == "monthly" {
+            if isCalendar {
+                // Takvim is the month: grid, the picked day's plans and the calendar's category cards.
                 PlannerMonthView(selectedDay: $selectedDay, today: today,
                                  externals: { from, to in calendarConnection.occurrences(from: from, to: to).map(Self.externalCard) },
-                                 onOpenDay: { day in selectedDay = day; modeRaw = "daily" },
+                                 categoryCards: categoryCards,
+                                 onOpenCategory: { path.append(.goal($0)) },
                                  onOpenEvent: { openEvent($0) })
-                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
-            } else if isCalendar {
-                dailyContent(today: today, focus: focus, categoryCards: categoryCards, allDay: allDay, geometry: geometry, events: events)
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: 80)), removal: .opacity.combined(with: .offset(x: 80))))
             } else {
                 hours24Content(reminders: calendarReminders)
@@ -107,15 +98,9 @@ struct PlannerScreen: View {
             guard abs(value.translation.width) > abs(value.translation.height) * 2 else { return }
             // Swipe between 24 hour and Takvim like Android; inside Takvim a swipe changes the day.
             if !isCalendar {
-                if value.translation.width < 0 { modeRaw = "daily" }
-            } else if modeRaw == "monthly" {
-                return                                   // the month grid swipes between months itself
+                if value.translation.width < 0 { modeRaw = "monthly" }
             } else if value.translation.width > 0 && value.startLocation.x < 40 {
-                modeRaw = "hours_24"
-            } else {
-                withAnimation(.spring(duration: 0.35)) {
-                    selectedDay = calendar.date(byAdding: .day, value: value.translation.width < 0 ? 1 : -1, to: selectedDay)!
-                }
+                modeRaw = "hours_24"                     // edge swipe back; elsewhere the month grid swipes months
             }
         })
     }
@@ -239,11 +224,7 @@ struct PlannerScreen: View {
             .accessibilityLabel("Önceki görünüme dön")
             LiquidSegmentedControl(labels: ["24 hour", "Takvim"], selected: Binding(
                 get: { isCalendar ? 1 : 0 },
-                // Tapping "Takvim" again switches between the daily and the monthly view.
-                set: { picked in
-                    if picked == 0 { modeRaw = "hours_24" }
-                    else { modeRaw = modeRaw == "daily" ? "monthly" : "daily" }
-                }))
+                set: { modeRaw = $0 == 1 ? "monthly" : "hours_24" }))
                 .frame(height: 44)
             Button {
                 let base = Date().addingTimeInterval(3600)

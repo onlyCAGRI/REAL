@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Takvim > monthly view (PlannerCalendar.kt month grid): month bar with ‹ ›, weekday row, day tiles tinted with the
-/// day's main category colour and up to three event dots, then the picked day's plans. Tap a day to pick it, tap it
-/// again (or double tap) to open it in the daily view.
+/// Takvim (PlannerCalendar.kt month grid): month bar with ‹ ›, weekday row, day tiles tinted with the day's main
+/// category colour and up to three event dots, the picked day's plans, then the categories shown in the calendar
+/// (each opens its category screen).
 struct PlannerMonthView: View {
     @Environment(ReminderStore.self) private var store
     @Binding var selectedDay: Date
     let today: Date
     let externals: (Date, Date) -> [ReminderItem]
-    let onOpenDay: (Date) -> Void
+    let categoryCards: [PlannerCategoryCardData]
+    let onOpenCategory: (Int64) -> Void
     let onOpenEvent: (Int64) -> Void
 
     @State private var month: Date = Calendar.real.startOfMonth(for: Date())
@@ -55,6 +56,19 @@ struct PlannerMonthView: View {
                             .onTapGesture { onOpenEvent(event.reminder.id) }
                     }
                 }
+                if !categoryCards.isEmpty {
+                    Text("Kategoriler").font(RealType.editorialItem).kerning(-1).foregroundStyle(Color(argb: 0xFFF3F1F4))
+                        .padding(.top, 18).padding(.horizontal, 4)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 12) {
+                            ForEach(categoryCards, id: \.category.id) { card in
+                                Button { onOpenCategory(card.category.id) } label: { PlannerCategoryCardView(card: card, width: 250) }
+                                    .buttonStyle(PressScaleStyle(scale: 0.965))
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                }
                 Color.clear.frame(height: 110)
             }
             .padding(.horizontal, 12).padding(.top, 14)
@@ -94,7 +108,7 @@ struct PlannerMonthView: View {
         let text: Color = !inMonth ? .white.opacity(0.2) : (pastel != nil ? ink : .white.opacity(isSelected || isToday ? 1 : 0.88))
         let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
         return Button {
-            if isSelected { onOpenDay(day) } else { withAnimation(.spring(duration: 0.3)) { selectedDay = day } }
+            withAnimation(.spring(duration: 0.3)) { selectedDay = day }
         } label: {
             ZStack(alignment: .topLeading) {
                 shape.fill(!inMonth ? Color(argb: 0xFF141517) : (pastel ?? Color(argb: 0xFF1B1C1E)))
@@ -118,7 +132,6 @@ struct PlannerMonthView: View {
             }
         }
         .buttonStyle(PressScaleStyle(scale: 0.95))
-        .simultaneousGesture(TapGesture(count: 2).onEnded { onOpenDay(day) })
         .frame(maxWidth: .infinity)
         .accessibilityLabel("\(RealDates.longDay(day)), \(events.count) etkinlik\(isToday ? ", bugün" : "")")
     }
