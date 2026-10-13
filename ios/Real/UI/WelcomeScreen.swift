@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// WelcomeScreen.kt (REAL_Welcome design): the word story ("Your past. Memories. … Make it REAL.") on black →
+/// WelcomeScreen.kt (REAL_Welcome design): the word story ("Every idea. Captured. … Not someday. Today. … Make it REAL.") on black →
 /// "Welcome to" rises into place, REAL rises and scales in with a haptic and a shine → the group lifts and the
 /// name field + Google / Apple / e-posta buttons come in → "Tanıştığımıza memnun oldum, <ad>." → onComplete.
 /// A tap during the word story skips to "Welcome to REAL".
@@ -74,7 +74,7 @@ struct WelcomeScreen: View {
             }
         }
         .onAppear(perform: startStory)
-        .onDisappear { introTask?.cancel(); sound.stop() }
+        .onDisappear { introTask?.cancel(); sound.fadeOut(0.6) }   // soften out, don't cut
         .onChange(of: scenePhase) { _, newPhase in if newPhase == .background { sound.stop() } }
         .alert("Veri kullanımı", isPresented: $showDataUse) { Button("Tamam", role: .cancel) {} } message: {
             Text("iOS sürümünde notların ve kayıtların yalnızca bu cihazda saklanıyor. AI özellikleri isteğe bağlıdır; kullanmadan önce ayrıca izin istenir.")
@@ -202,8 +202,8 @@ struct WelcomeScreen: View {
     /// One word every two beats of the welcome music (120 BPM), so each word lands on the sound.
     private static let wordSeconds = 1.0
     private static let words: [(String, Double)] = [
-        "Your past.", "Memories.", "Your present.", "Moments.", "Your future.", "Possibilities.",
-        "Someday.", "Today.", "Make it happen.", "Make it REAL."
+        "Every idea.", "Captured.", "Every plan.", "On time.", "Every moment.", "Kept.",
+        "Not someday.", "Today.", "Make it happen.", "Make it REAL."
     ].map { ($0, wordSeconds) }
 
     /// Each word: in over the first 18% (7pt up, 0.97 → 1), held, out over the last 18% (4pt further, to 1.015).
@@ -213,7 +213,7 @@ struct WelcomeScreen: View {
             .background(Color.black.ignoresSafeArea())
             .contentShape(Rectangle())
             .onTapGesture { skipStory() }
-            .accessibilityLabel("Your past. Memories. Your present. Moments. Your future. Possibilities. Someday. Today. Make it happen. Make it REAL.")
+            .accessibilityLabel(Self.words.map(\.0).joined(separator: " "))
     }
 
     private func startStory() {
