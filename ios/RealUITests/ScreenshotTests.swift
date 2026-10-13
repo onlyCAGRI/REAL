@@ -74,6 +74,14 @@ final class ScreenshotTests: XCTestCase {
         shot("accountmenu")
     }
 
+    func test29Welcome() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALWelcome", "-REALScreen", "home"]
+        app.launch()
+        Thread.sleep(forTimeInterval: 3.5)
+        shot("welcome")
+    }
+
     func test15Yasam() { capture("yasam", settle: 3) }
     func test16Water() { capture("water", settle: 3) }
 

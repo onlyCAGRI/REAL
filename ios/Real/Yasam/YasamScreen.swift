@@ -25,6 +25,7 @@ struct YasamScreen: View {
     @State private var showWater = false
     @State private var showMoodAdd = false
     @State private var showMoodHistory = false
+    @State private var showJournalSheet = false
     @State private var placeholder: String?
     @State private var heroTopic = Int.random(in: 0..<6)
     @State private var contentID = 0
@@ -79,6 +80,14 @@ struct YasamScreen: View {
         .fullScreenCover(isPresented: $showBooks) { BooksModuleScreen(resumeBookId: resumeBook) }
         .fullScreenCover(isPresented: $showWater) { WaterTrackerScreen().presentationBackground(.black) }
         .fullScreenCover(isPresented: $showMoodAdd) { MoodAddSheet() }
+        .sheet(isPresented: $showJournalSheet) {
+            YasamJournalSheet { text in
+                _ = store.addReminder(text: YasamJournalSheet.title()) { r in
+                    r.journal = ReminderJournal(mood: nil, text: text, createdAt: .now, updatedAt: .now)
+                }
+                return true
+            }
+        }
         .fullScreenCover(isPresented: $showMoodHistory) {
             MoodHistoryScreen(onAdd: { showMoodHistory = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showMoodAdd = true } })
         }
@@ -273,12 +282,8 @@ struct YasamScreen: View {
         if open != "water" { waterHistoryOpen = false }
     }
 
-    private func newJournal() {
-        let item = store.addReminder(text: "Günlük") { r in
-            r.journal = ReminderJournal(mood: nil, text: "", createdAt: .now, updatedAt: .now)
-        }
-        onOpenCard(item.id)
-    }
+    /// "BUGÜN YAZ" opens YasamJournalSheet (Android); saving adds a "Günlük · d MMMM" journal card.
+    private func newJournal() { showJournalSheet = true }
 
     // MARK: Journals mode
 

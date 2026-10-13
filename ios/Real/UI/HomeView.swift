@@ -14,6 +14,7 @@ struct RootView: View {
     @Environment(ReminderStore.self) private var store
     @State private var path: [Route]
     @Namespace private var nav
+    @State private var showWelcome = false
 
     init(initialPath: [Route] = []) {
         _path = State(initialValue: initialPath)
@@ -56,6 +57,17 @@ struct RootView: View {
         .environment(\.navNamespace, nav)
         .tint(RealColors.accentBlue)
         .preferredColorScheme(.dark)
+        .overlay {
+            // WelcomeScreen on first launch (no name yet), like MainActivity.
+            if showWelcome {
+                WelcomeScreen { name in
+                    store.setOwnerName(name)
+                    withAnimation(.easeOut(duration: 0.35)) { showWelcome = false }
+                }
+                .transition(.opacity)
+            }
+        }
+        .onAppear { if store.ownerName.trimmingCharacters(in: .whitespaces).isEmpty || ProcessInfo.processInfo.arguments.contains("-REALWelcome") { showWelcome = true } }
     }
 }
 
