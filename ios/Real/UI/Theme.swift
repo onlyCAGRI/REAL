@@ -91,6 +91,16 @@ func categoryGradient(start: Color, end: Color, blend: Double?) -> LinearGradien
                                   .init(color: end, location: 1)], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 
+/// Black on light category colours, white on dark ones (WCAG luminance averaged over the two ends), like Android.
+func categoryForeground(start: Color, end: Color) -> Color {
+    func lum(_ c: Color) -> Double {
+        let v = c.rgba
+        func ch(_ x: Double) -> Double { x <= 0.03928 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
+        return 0.2126 * ch(v.r) + 0.7152 * ch(v.g) + 0.0722 * ch(v.b)
+    }
+    return (lum(start) + lum(end)) / 2 > 0.42 ? Color(argb: 0xFF101010) : .white
+}
+
 struct CategoryVisual {
     var title: String
     var symbol: String
@@ -105,7 +115,7 @@ extension CustomCategory {
         let end = customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(accentEnd) ?? start
         let stripeEnd = (accentEnd != nil && accentEnd != accentStart) ? end : start.opacity(0.55)
         return CategoryVisual(title: name, symbol: icon.symbol, gradient: categoryGradient(start: start, end: end, blend: gradientBlendFraction),
-                              foreground: useDarkText ? Color(argb: 0xFF101010) : .white, stripe: (start, stripeEnd))
+                              foreground: categoryForeground(start: start, end: end), stripe: (start, stripeEnd))
     }
 }
 
@@ -122,7 +132,7 @@ extension ReminderCategory {
             blend = o.gradientBlendFraction
         }
         return CategoryVisual(title: title, symbol: symbol, gradient: categoryGradient(start: start, end: end, blend: blend),
-                              foreground: useDark ? Color(argb: 0xFF101010) : .white, stripe: (start, end))
+                              foreground: categoryForeground(start: start, end: end), stripe: (start, end))
     }
 }
 

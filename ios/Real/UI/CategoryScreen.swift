@@ -1,8 +1,9 @@
 import SwiftUI
 import UIKit
 
-/// Category screen (ReminderScreen category mode + CategoryHeaderGlass.kt): dock-glass header buttons,
-/// hero tile with progress ring + sort arrow, collapsible "İlerleme" panel, colour filter row, card list.
+/// Category screen (ReminderScreen category mode + CategoryFullHero.kt): the category colour as a full-width header
+/// from under the status bar (search, ••• → edit / colour filter, big name, counts, progress ring, sort arrow, the
+/// progress opening inside it), a thin bar in the category colour once it has scrolled away, then the cards.
 struct CategoryScreen: View {
     @Environment(ReminderStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -19,6 +20,8 @@ struct CategoryScreen: View {
     @State private var showColorSheet = false
     @State private var selectedIds: Set<Int64> = []
     @State private var confirmDelete = false
+    @State private var query = ""
+    @State private var heroBottom: CGFloat = 1000
 
     private var sort: ReminderSortOrder { ReminderSortOrder(rawValue: sortRaw) ?? .recentlyAdded }
     private var custom: CustomCategory? { store.category(customId) }
@@ -26,41 +29,65 @@ struct CategoryScreen: View {
     var body: some View {
         let lists = projection
         let stats = store.reminders.categoryProgress(builtIn: builtIn, customId: customId)
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                header(stats: stats)
-                    .padding(.top, 10).padding(.leading, 4).padding(.trailing, 16)
-                    .opacity(selectedIds.isEmpty ? 1 : 0)
-                Color.clear.frame(height: 22)
-                if let visual {
-                    heroTile(visual, count: lists.active.count + lists.completed.count, stats: stats)
-                        .padding(.horizontal, 16).padding(.bottom, 20)
+        GeometryReader { outer in
+            let topInset = outer.safeAreaInsets.top
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    if let visual {
+                        CategoryHero(
+                            visual: visual, description: custom?.description ?? "",
+                            count: lists.allCount, todayCount: lists.todayCount, topInset: topInset,
+                            query: $query, hasFilter: colorFilter != nil,
+                            editLabel: custom != nil ? "Kategoriyi düzenle" : "Kategori rengini düzenle",
+                            stats: stats, showProgress: $showProgress, sort: sort, showSort: builtIn != .journalEntries,
+                            onBack: { dismiss() },
+                            onEdit: { if custom != nil { showEditor = true } else { showColorSheet = true } },
+                            onFilter: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.2)) { filterMode = true } },
+                            onSort: { sortRaw = nextSort.rawValue }
+                        )
+                        .opacity(selectedIds.isEmpty ? 1 : 0.35)
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: HeroBottomKey.self, value: g.frame(in: .named("categoryScroll")).maxY)
+                        })
+                        .zIndex(2)
+                    }
+                    if filterMode {
+                        colorSelectorHeader.padding(.top, 12).transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                    Color.clear.frame(height: 18)
+                    if lists.active.isEmpty && lists.completed.isEmpty {
+                        Text(query.isEmpty ? emptyMessage : "\"\(query)\" bu kategoride yok")
+                            .font(RealFont.inter(14))
+                            .foregroundStyle(Color(argb: 0xFF888890))
+                            .frame(height: 104)
+                            .padding(.horizontal, 24)
+                    }
+                    if builtIn == .journalEntries {
+                        journalList(lists.active)
+                    } else {
+                        ForEach(lists.active) { card($0) }
+                    }
+                    if !lists.completed.isEmpty {
+                        SectionTitle(text: "Tamamlandı").padding(.top, 18)
+                        ForEach(lists.completed) { card($0) }
+                    }
+                    Color.clear.frame(height: 140)
                 }
-                if let stats, showProgress {
-                    CategoryProgressPanel(title: visual?.title ?? "", stats: stats, accent: progressAccent)
-                        .padding(.horizontal, 16).padding(.bottom, 20)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-                if lists.active.isEmpty && lists.completed.isEmpty {
-                    Text(emptyMessage)
-                        .font(RealFont.inter(14))
-                        .foregroundStyle(Color(argb: 0xFF888890))
-                        .frame(height: 104)
-                        .padding(.horizontal, 24)
-                }
-                if builtIn == .journalEntries {
-                    journalList(lists.active)
-                } else {
-                    ForEach(lists.active) { card($0) }
-                }
-                if !lists.completed.isEmpty {
-                    SectionTitle(text: "Tamamlandı").padding(.top, 18)
-                    ForEach(lists.completed) { card($0) }
-                }
-                Color.clear.frame(height: 140)
+                .animation(.spring(duration: 0.35), value: lists.active.map(\.id))
+                .animation(.spring(duration: 0.3), value: showProgress)
             }
-            .animation(.spring(duration: 0.35), value: lists.active.map(\.id))
-            .animation(.spring(duration: 0.3), value: showProgress)
+            .coordinateSpace(name: "categoryScroll")
+            .onPreferenceChange(HeroBottomKey.self) { heroBottom = $0 }
+            .ignoresSafeArea(edges: .top)
+            .overlay(alignment: .top) {
+                if let visual, heroBottom < topInset + 64, selectedIds.isEmpty {
+                    CategoryCompactBar(visual: visual, topInset: topInset, sort: sort, showSort: builtIn != .journalEntries,
+                                       onBack: { dismiss() }, onSort: { sortRaw = nextSort.rawValue })
+                        .ignoresSafeArea(edges: .top)
+                        .transition(.move(edge: .top))
+                }
+            }
+            .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.26), value: heroBottom < topInset + 64)
         }
         .hideBottomScrollEdgeEffect()
         .background(RealColors.background.ignoresSafeArea())
@@ -86,16 +113,13 @@ struct CategoryScreen: View {
         .onChange(of: custom == nil && customId != nil) { _, gone in if gone { dismiss() } }
     }
 
+    private var nextSort: ReminderSortOrder {
+        sort == .recentlyAdded ? .oldestFirst : (sort == .oldestFirst ? .nearestDate : .recentlyAdded)
+    }
+
     private var visual: CategoryVisual? {
         if let custom { return custom.visual }
         return builtIn.map { $0.visual(override: store.builtInColors[$0]) }
-    }
-
-    private var progressAccent: Color {
-        if let custom { return custom.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(custom.accentStart) ?? RealColors.accentBlue }
-        guard let builtIn else { return Color(argb: 0xFF62F5DC) }
-        let o = store.builtInColors[builtIn]
-        return o?.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(o?.start) ?? Color(argb: builtIn.defaultColors.0)
     }
 
     private var emptyMessage: String {
@@ -105,7 +129,25 @@ struct CategoryScreen: View {
         return builtIn?.emptyMessage ?? "Henüz hatırlatıcı yok"
     }
 
-    private var projection: (active: [ReminderItem], completed: [ReminderItem]) {
+    /// "Bu kategoride ara": title or a checklist line contains the typed text.
+    private func matches(_ r: ReminderItem) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return true }
+        let tr = Locale(identifier: "tr_TR")
+        let needle = q.lowercased(with: tr)
+        return r.text.lowercased(with: tr).contains(needle) || r.checklistItems.contains { $0.text.lowercased(with: tr).contains(needle) }
+    }
+
+    private var projection: (active: [ReminderItem], completed: [ReminderItem], allCount: Int, todayCount: Int) {
+        let base = baseProjection
+        let today = Calendar.real.epochDay(of: Date())
+        let todayCount = base.active.filter { r in
+            r.alertAt.map { Calendar.real.epochDay(ofMillis: $0) == today } ?? (r.plannedDateEpochDay == today)
+        }.count
+        return (base.active.filter(matches), base.completed.filter(matches), base.active.count + base.completed.count, todayCount)
+    }
+
+    private var baseProjection: (active: [ReminderItem], completed: [ReminderItem]) {
         if let customId {
             let mine = store.reminders.filter { $0.customCategoryId == customId }
             let active = filterAndSortReminders(mine.filter { !$0.isCompleted }, colorFilter: colorFilter, sort: sort)
@@ -124,69 +166,6 @@ struct CategoryScreen: View {
         default:
             return (filterAndSortReminders(items, colorFilter: colorFilter, sort: sort), [])
         }
-    }
-
-    // MARK: Header
-
-    @ViewBuilder
-    private func header(stats: CategoryProgressStats?) -> some View {
-        if filterMode {
-            colorSelectorHeader
-        } else {
-            HStack(spacing: 8) {
-                glassCircle(symbol: "chevron.left", label: "Ana sayfaya dön", size: 36) { dismiss() }
-                Spacer()
-                if stats == nil && builtIn != .journalEntries {
-                    Menu {
-                        Picker("Sıralama", selection: $sortRaw) {
-                            Label("Son eklenen üstte", systemImage: "text.alignleft").tag(ReminderSortOrder.recentlyAdded.rawValue)
-                            Label("Son eklenen en sonda", systemImage: "text.alignright").tag(ReminderSortOrder.oldestFirst.rawValue)
-                            Label("Tarihi en yakın", systemImage: "calendar").tag(ReminderSortOrder.nearestDate.rawValue)
-                        }
-                    } label: {
-                        sortGlyph.frame(width: 36, height: 36).liquidGlass(Circle())
-                    }
-                    .accessibilityLabel("Sıralama")
-                }
-                Button { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.2)) { filterMode = true } } label: {
-                    ZStack {
-                        if let c = colorFilter.flatMap(paletteColor) {
-                            Circle().fill(c).frame(width: 16, height: 16)
-                        } else {
-                            RealSymbol("circle.lefthalf.filled", size: 18.4).foregroundStyle(Color(argb: 0xFFC9CBD3))
-                        }
-                    }
-                    .frame(width: 36, height: 36).liquidGlass(Circle())
-                }
-                .accessibilityLabel("Renge göre filtrele")
-                glassCircle(symbol: custom != nil ? "slider.horizontal.3" : "paintpalette",
-                            label: custom != nil ? "Kategoriyi düzenle" : "Kategori rengini düzenle", size: 36) {
-                    if custom != nil { showEditor = true } else { showColorSheet = true }
-                }
-            }
-        }
-    }
-
-    private var sortGlyph: some View {
-        Group {
-            switch sort {
-            case .nearestDate, .reminderTime: Image(systemName: "calendar")
-            case .oldestFirst: Image(systemName: "text.alignright")
-            case .recentlyAdded: Image(systemName: "text.alignleft")
-            }
-        }
-        .font(.system(size: 15))
-        .foregroundStyle(Color(argb: 0xFFC9CBD3))
-    }
-
-    private func glassCircle(symbol: String, label: String, size: CGFloat, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            RealSymbol(symbol, size: size * 0.5).foregroundStyle(Color(argb: 0xFFC9CBD3))
-                .frame(width: size, height: size).liquidGlass(Circle())
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(PressScaleStyle(scale: 0.94))
-        .accessibilityLabel(label)
     }
 
     /// CategoryColorSelectorHeader: close + every palette colour, tap one to filter.
@@ -214,34 +193,6 @@ struct CategoryScreen: View {
             .padding(.horizontal, 16)
         }
         .frame(height: 44)
-    }
-
-    // MARK: Hero
-
-    private func heroTile(_ visual: CategoryVisual, count: Int, stats: CategoryProgressStats?) -> some View {
-        CategoryTileView(visual: visual, count: count, description: custom?.description ?? "", hero: true,
-                         heroActions: stats.map { AnyView(heroActions(stats: $0, foreground: visual.foreground)) })
-    }
-
-    private func heroActions(stats: CategoryProgressStats, foreground: Color) -> some View {
-        HStack(spacing: 0) {
-            Button { withAnimation { showProgress.toggle() } } label: {
-                ProgressRing(fraction: stats.fraction, active: showProgress).scaleEffect(1.1).frame(width: 48, height: 48)
-            }
-            .accessibilityLabel(showProgress ? "İlerlemeyi gizle" : "Kategori ilerlemesini göster")
-            Button {
-                let next: ReminderSortOrder = sort == .recentlyAdded ? .oldestFirst : (sort == .oldestFirst ? .nearestDate : .recentlyAdded)
-                sortRaw = next.rawValue
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 21, weight: .light))
-                    .foregroundStyle(foreground)
-                    .rotationEffect(.degrees(sort == .oldestFirst ? 180 : (sort == .nearestDate || sort == .reminderTime ? 90 : 0)))
-                    .animation(.easeOut(duration: 0.22), value: sortRaw)
-                    .frame(width: 48, height: 48)
-            }
-            .accessibilityLabel("Sıralamayı değiştir")
-        }
     }
 
     // MARK: Lists
@@ -282,6 +233,221 @@ struct CategoryScreen: View {
         .zoomSource("card-\(reminder.id)", in: nav)
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
+    }
+}
+
+private struct HeroBottomKey: PreferenceKey {
+    static var defaultValue: CGFloat = 1000
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private func heroGlass(_ fg: Color) -> Color { fg == .white ? .white.opacity(0.18) : .white.opacity(0.36) }
+private func heroRim(_ fg: Color) -> Color { fg == .white ? .white.opacity(0.28) : .black.opacity(0.12) }
+
+private struct HeroRound<Label: View>: View {
+    let fg: Color
+    var size: CGFloat = 40
+    let label: String
+    let action: () -> Void
+    @ViewBuilder let content: () -> Label
+    var body: some View {
+        Button(action: action) {
+            content().frame(width: size, height: size)
+                .background(Circle().fill(heroGlass(fg)))
+                .overlay(Circle().strokeBorder(heroRim(fg), lineWidth: 0.8))
+        }
+        .buttonStyle(PressScaleStyle(scale: 0.94))
+        .accessibilityLabel(label)
+    }
+}
+
+/// The sort arrow (CategoryHeroActions): up = newest first, down = newest last, right = nearest date.
+private struct SortArrow: View {
+    let sort: ReminderSortOrder
+    let fg: Color
+    var body: some View {
+        Image(systemName: "arrow.up").font(.system(size: 20, weight: .light)).foregroundStyle(fg)
+            .rotationEffect(.degrees(sort == .oldestFirst ? 180 : (sort == .nearestDate || sort == .reminderTime ? 90 : 0)))
+            .animation(.easeOut(duration: 0.22), value: sort)
+    }
+}
+
+/// CategoryFullHero.kt: the category colour runs full width from under the status bar with rounded bottom corners.
+private struct CategoryHero: View {
+    let visual: CategoryVisual
+    let description: String
+    let count: Int
+    let todayCount: Int
+    let topInset: CGFloat
+    @Binding var query: String
+    let hasFilter: Bool
+    let editLabel: String
+    let stats: CategoryProgressStats?
+    @Binding var showProgress: Bool
+    let sort: ReminderSortOrder
+    let showSort: Bool
+    let onBack: () -> Void
+    let onEdit: () -> Void
+    let onFilter: () -> Void
+    let onSort: () -> Void
+    @State private var menuOpen = false
+    @FocusState private var searching: Bool
+
+    var body: some View {
+        let fg = visual.foreground
+        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 34, bottomTrailingRadius: 34, style: .continuous)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                HeroRound(fg: fg, label: "Ana sayfaya dön", action: onBack) { RealSymbol("chevron.left", size: 18).foregroundStyle(fg) }
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .medium)).foregroundStyle(fg.opacity(0.8))
+                    TextField("", text: $query, prompt: Text("Bu kategoride ara").foregroundStyle(fg.opacity(0.72)))
+                        .font(RealFont.inter(14, .medium)).foregroundStyle(fg).tint(fg)
+                        .focused($searching).submitLabel(.search).onSubmit { searching = false }
+                    if !query.isEmpty {
+                        Button { query = "" } label: { RealSymbol("xmark", size: 12).foregroundStyle(fg).frame(width: 26, height: 26) }
+                            .accessibilityLabel("Aramayı temizle")
+                    }
+                }
+                .padding(.horizontal, 14).frame(height: 40)
+                .background(Capsule().fill(heroGlass(fg)))
+                .overlay(Capsule().strokeBorder(heroRim(fg), lineWidth: 0.8))
+                HeroRound(fg: fg, label: menuOpen ? "Seçenekleri kapat" : "Seçenekler", action: {
+                    withAnimation(.spring(duration: 0.3, bounce: 0.25)) { menuOpen.toggle() }
+                }) {
+                    ZStack(alignment: .topTrailing) {
+                        Text("•••").font(.system(size: 11, weight: .bold)).foregroundStyle(fg).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if hasFilter { Circle().fill(fg).frame(width: 7, height: 7).padding(7) }
+                    }
+                }
+                // ••• drops a round pencil and a round filter button straight under it.
+                .overlay(alignment: .top) {
+                    if menuOpen {
+                        VStack(spacing: 8) {
+                            HeroRound(fg: fg, label: editLabel, action: { menuOpen = false; onEdit() }) {
+                                Image(systemName: "pencil").font(.system(size: 16, weight: .medium)).foregroundStyle(fg)
+                            }
+                            .transition(.scale(scale: 0.6).combined(with: .opacity))
+                            HeroRound(fg: fg, label: hasFilter ? "Renk filtresi (açık)" : "Renge göre filtrele", action: { menuOpen = false; onFilter() }) {
+                                Image(systemName: hasFilter ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+                                    .font(.system(size: 16, weight: .medium)).foregroundStyle(fg)
+                            }
+                            .transition(.scale(scale: 0.6).combined(with: .opacity))
+                        }
+                        .background(Capsule().fill(visual.stripe.0).padding(-4).shadow(color: .black.opacity(0.35), radius: 10, y: 4))
+                        .offset(y: 48)
+                    }
+                }
+                .zIndex(3)
+            }
+            .zIndex(3)
+            HStack(spacing: 8) {
+                RealSymbol(visual.symbol, size: 15).foregroundStyle(fg.opacity(0.85))
+                Text(description.isEmpty ? "Kategori" : description).font(RealFont.inter(13, .medium)).foregroundStyle(fg.opacity(0.8)).lineLimit(1)
+            }
+            .padding(.top, 30)
+            Text(visual.title).font(RealFont.inter(40, .bold)).kerning(-1.4).foregroundStyle(fg).lineLimit(2)
+                .minimumScaleFactor(0.7).padding(.top, 4)
+            HStack(spacing: 4) {
+                Text(todayCount > 0 ? "\(count) kart  •  \(todayCount) tanesi bugün" : "\(count) kart")
+                    .font(RealFont.inter(13, .semibold)).foregroundStyle(fg.opacity(0.9))
+                Spacer()
+                if let stats {
+                    Button { withAnimation(.spring(duration: 0.35)) { showProgress.toggle() } } label: {
+                        ProgressRing(fraction: stats.fraction, active: showProgress).scaleEffect(1.1).frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(showProgress ? "İlerlemeyi gizle" : "Kategori ilerlemesini göster")
+                }
+                if showSort {
+                    Button(action: onSort) { SortArrow(sort: sort, fg: fg).frame(width: 44, height: 44) }
+                        .accessibilityLabel("Sıralamayı değiştir")
+                }
+            }
+            .padding(.top, 10)
+            if let stats, showProgress {
+                HeroProgress(stats: stats, fg: fg).padding(.top, 14)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.top, topInset + 10).padding(.horizontal, 18).padding(.bottom, 22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                shape.fill(visual.gradient)
+                shape.fill(RadialGradient(colors: [.white.opacity(0.2), .clear], center: UnitPoint(x: 0.85, y: 0), startRadius: 0, endRadius: 360))
+            }
+        }
+    }
+}
+
+/// The category's progress inside its header: big percentage, a glass track filling in the text colour, three counters.
+private struct HeroProgress: View {
+    let stats: CategoryProgressStats
+    let fg: Color
+    @State private var fill: Double = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .lastTextBaseline, spacing: 2) {
+                Text("\(Int((fill * 100).rounded()))").font(RealFont.inter(46, .bold)).kerning(-1.5).foregroundStyle(fg)
+                    .contentTransition(.numericText())
+                Text("%").font(RealFont.inter(20, .bold)).foregroundStyle(fg.opacity(0.7))
+                Spacer()
+                Text(stats.total == 0 ? "Kayıt yok" : "\(stats.done) / \(stats.total) tamamlandı")
+                    .font(RealFont.inter(13, .semibold)).foregroundStyle(fg.opacity(0.85))
+            }
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(heroGlass(fg))
+                    Capsule().fill(fg.opacity(0.9)).frame(width: g.size.width * min(max(fill, 0), 1))
+                }
+            }
+            .frame(height: 12)
+            HStack(spacing: 8) {
+                chip("Tamamlanan", stats.done)
+                chip("Kalan", max(stats.total - stats.done, 0))
+                chip("Bugün", stats.doneToday)
+            }
+        }
+        .onAppear { withAnimation(.easeInOut(duration: 0.85).delay(0.08)) { fill = stats.fraction } }
+        .onChange(of: stats.fraction) { _, f in withAnimation(.easeInOut(duration: 0.85)) { fill = f } }
+    }
+
+    private func chip(_ label: String, _ value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(RealFont.inter(11.5, .medium)).foregroundStyle(fg.opacity(0.75)).lineLimit(1)
+            Text("\(value)").font(RealFont.inter(20, .bold)).foregroundStyle(fg)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(heroGlass(fg)))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(heroRim(fg), lineWidth: 0.8))
+    }
+}
+
+/// The thin bar in the category colour that takes the header's place once it has scrolled away.
+private struct CategoryCompactBar: View {
+    let visual: CategoryVisual
+    let topInset: CGFloat
+    let sort: ReminderSortOrder
+    let showSort: Bool
+    let onBack: () -> Void
+    let onSort: () -> Void
+
+    var body: some View {
+        let fg = visual.foreground
+        HStack(spacing: 8) {
+            HeroRound(fg: fg, size: 36, label: "Ana sayfaya dön", action: onBack) { RealSymbol("chevron.left", size: 16).foregroundStyle(fg) }
+            Text(visual.title).font(RealFont.inter(18, .bold)).foregroundStyle(fg).lineLimit(1).padding(.leading, 4)
+            Spacer()
+            if showSort {
+                Button(action: onSort) { SortArrow(sort: sort, fg: fg).frame(width: 40, height: 40) }
+                    .accessibilityLabel("Sıralamayı değiştir")
+            }
+        }
+        .padding(.top, topInset + 6).padding(.horizontal, 12).padding(.bottom, 8)
+        .background(UnevenRoundedRectangle(bottomLeadingRadius: 22, bottomTrailingRadius: 22, style: .continuous).fill(visual.gradient)
+            .shadow(color: .black.opacity(0.4), radius: 14, y: 6))
     }
 }
 

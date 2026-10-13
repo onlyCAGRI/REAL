@@ -46,7 +46,6 @@ struct PaletteGradientPicker: View {
                     Slider(value: $blend, in: 0...1)
                 }
             }
-            Toggle("Koyu yazı", isOn: $darkText)
         }
     }
 
@@ -62,7 +61,7 @@ struct PaletteGradientPicker: View {
         return RoundedRectangle(cornerRadius: 20, style: .continuous)
             .fill(fill)
             .frame(height: 64)
-            .overlay(Text("Aa").font(RealFont.inter(20, .medium)).foregroundStyle(darkText ? Color(argb: 0xFF101010) : .white))
+            .overlay(Text("Aa").font(RealFont.inter(20, .medium)).foregroundStyle(categoryForeground(start: s ?? e ?? Color(argb: 0xFF26262E), end: e ?? s ?? Color(argb: 0xFF17171B))))
     }
 }
 
@@ -195,9 +194,7 @@ struct CategoryEditorSheet: View {
                                 switchRow("REAL takviminde göster", "Kategori kartı takvimde görünür. Saatli kartların her durumda takvimde yer alır.", $showInCalendar)
                                 divider
                                 switchRow("Yalnızca kategori içinde göster", "Kartlar genel listelerde görünmez.", $hide)
-                                divider
                             }
-                            switchRow("Koyu renk metin", "Açık renklerde okunurluğu artırır.", $dark)
                         }
                     }
                     if existing != nil {

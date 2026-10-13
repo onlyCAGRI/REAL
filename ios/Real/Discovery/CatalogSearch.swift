@@ -147,35 +147,20 @@ enum MediaCatalog {
 
 // MARK: Search sheets
 
-/// MediaSearchSheet: "Film & Dizi" panel with Film/Dizi toggle, query field, Kapat / Ara and the result rows.
+/// MediaSearchSheet (Android MediaContent.kt): one "Film & Dizi" search that runs while typing. Films (TheTVDB via the
+/// Worker, iTunes when signed out) and series (TVmaze) are searched together; titles that start with the query first,
+/// then the rest alternating film / series.
 struct MediaSearchSheet: View {
     let onSelect: (MediaBlock) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
-    @State private var type: MediaType = .MOVIE
     @State private var results: [MediaBlock] = []
     @State private var searching = false
     @State private var message: String?
 
     var body: some View {
         CatalogPanel(title: "Film & Dizi", placeholder: "Film veya dizi ara", query: $query, searching: searching, message: message,
-                     attribution: MediaCatalog.attribution(type), onSearch: search, onClose: { dismiss() }) {
-            HStack(spacing: 6) {
-                ForEach([(MediaType.MOVIE, "Film"), (MediaType.TV, "Dizi")], id: \.1) { t, label in
-                    let selected = type == t
-                    Button {
-                        if !selected { type = t; results = []; message = nil }
-                    } label: {
-                        Text(label).font(RealFont.inter(13, selected ? .semibold : .regular))
-                            .foregroundStyle(selected ? .white : Color(argb: 0xFF9898A2))
-                            .padding(.horizontal, 14).padding(.vertical, 6)
-                            .background(Color.white.opacity(selected ? 0.18 : 0.05), in: RoundedRectangle(cornerRadius: 16))
-                            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(selected ? Color.white.opacity(0.4) : .clear, lineWidth: 0.8))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        } rows: {
+                     attribution: "Filmler \(MediaCatalog.attribution(.MOVIE)) • Diziler TVmaze", onClose: { dismiss() }) {
             ForEach(results) { m in
                 Button { onSelect(m); dismiss() } label: {
                     HStack(spacing: 12) {
@@ -193,21 +178,41 @@ struct MediaSearchSheet: View {
                 .buttonStyle(.plain)
             }
         }
+        .task(id: query) { await search(query) }
     }
 
-    private func search() {
-        searching = true; message = nil; results = []
-        Task {
-            do {
-                results = try await MediaCatalog.search(query, type: type)
-                if results.isEmpty { message = "Sonuç bulunamadı." }
-            } catch { message = "İçerik kataloğuna şu anda ulaşılamadı." }
-            searching = false
+    private func search(_ raw: String) async {
+        let q = raw.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 2 else { results = []; message = nil; searching = false; return }
+        try? await Task.sleep(for: .milliseconds(350))      // a short pause after the last keystroke
+        guard !Task.isCancelled else { return }
+        searching = true
+        message = nil
+        async let movies = try? MediaCatalog.search(q, type: .MOVIE)
+        async let series = try? MediaCatalog.search(q, type: .TV)
+        let (m, t) = await (movies, series)
+        guard !Task.isCancelled else { return }
+        searching = false
+        if m == nil && t == nil { results = []; message = "İçerik kataloğuna şu anda ulaşılamadı."; return }
+        results = Self.merge(q, m ?? [], t ?? [])
+        if results.isEmpty { message = "Sonuç bulunamadı." }
+    }
+
+    private static func merge(_ query: String, _ movies: [MediaBlock], _ series: [MediaBlock]) -> [MediaBlock] {
+        var alternating: [MediaBlock] = []
+        for i in 0..<max(movies.count, series.count) {
+            if i < movies.count { alternating.append(movies[i]) }
+            if i < series.count { alternating.append(series[i]) }
         }
+        let q = query.lowercased()
+        let close = alternating.filter { $0.title.lowercased().hasPrefix(q) }
+        let rest = alternating.filter { !$0.title.lowercased().hasPrefix(q) }
+        var seen = Set<String>()
+        return (close + rest).filter { seen.insert("\($0.type.rawValue):\($0.providerId ?? $0.title)").inserted }.prefix(30).map { $0 }
     }
 }
 
-/// MusicSearchSheet: "Müzik" panel over the iTunes Türkiye catalog.
+/// MusicSearchSheet: "Müzik" over the iTunes Türkiye catalog, searching while typing.
 struct MusicSearchSheet: View {
     let onSelect: (MusicBlock) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -218,9 +223,7 @@ struct MusicSearchSheet: View {
 
     var body: some View {
         CatalogPanel(title: "Müzik", placeholder: "Şarkı veya sanatçı ara", query: $query, searching: searching, message: message,
-                     attribution: "iTunes • Türkiye kataloğu", onSearch: search, onClose: { dismiss() }) {
-            EmptyView()
-        } rows: {
+                     attribution: "iTunes • Türkiye kataloğu", onClose: { dismiss() }) {
             ForEach(results) { m in
                 Button { onSelect(m); dismiss() } label: {
                     HStack(spacing: 12) {
@@ -237,53 +240,55 @@ struct MusicSearchSheet: View {
                 .buttonStyle(.plain)
             }
         }
+        .task(id: query) { await search(query) }
     }
 
-    private func search() {
-        searching = true; message = nil; results = []
-        Task {
-            do {
-                results = try await MusicCatalog.search(query)
-                if results.isEmpty { message = "Sonuç bulunamadı." }
-            } catch { message = "Müzik kataloğuna şu anda ulaşılamadı." }
-            searching = false
+    private func search(_ raw: String) async {
+        let q = raw.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 2 else { results = []; message = nil; searching = false; return }
+        try? await Task.sleep(for: .milliseconds(350))
+        guard !Task.isCancelled else { return }
+        searching = true
+        message = nil
+        do {
+            let found = try await MusicCatalog.search(q)
+            guard !Task.isCancelled else { return }
+            results = found
+            message = found.isEmpty ? "Sonuç bulunamadı. Başka bir şarkı veya sanatçı dene." : nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            message = "Müzik araması yapılamadı. Bağlantını kontrol edip yeniden dene."
         }
+        searching = false
     }
 }
 
-private struct CatalogPanel<Accessory: View, Rows: View>: View {
+/// The shared search panel: title, the field (results follow the typing), "Aranıyor…" and Kapat, the rows, the source.
+private struct CatalogPanel<Rows: View>: View {
     let title: String
     let placeholder: String
     @Binding var query: String
     let searching: Bool
     let message: String?
     let attribution: String
-    let onSearch: () -> Void
     let onClose: () -> Void
-    @ViewBuilder let accessory: () -> Accessory
     @ViewBuilder let rows: () -> Rows
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(title).font(RealFont.inter(19, .semibold)).foregroundStyle(.white)
-                Spacer()
-                accessory()
-            }
+            Text(title).font(RealFont.inter(19, .semibold)).foregroundStyle(.white)
             TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(Color(argb: 0xFF8E8E98)))
                 .font(RealFont.inter(16)).foregroundStyle(.white).tint(.white)
                 .focused($focused).submitLabel(.search)
-                .onSubmit { if !query.trimmingCharacters(in: .whitespaces).isEmpty && !searching { onSearch() } }
+                .onSubmit { focused = false }
                 .padding(.horizontal, 18).frame(height: 52)
                 .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(focused ? Color(argb: 0xFF85858D) : Color(argb: 0xFF424248), lineWidth: 1))
-            HStack(spacing: 18) {
+            HStack {
+                Text(searching ? "Aranıyor…" : "").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA5A5B0))
                 Spacer()
-                Button("Kapat", action: onClose).foregroundStyle(Color(argb: 0xFFBCBCC5))
-                Button(searching ? "Aranıyor…" : "Ara", action: onSearch).foregroundStyle(.white)
-                    .disabled(query.trimmingCharacters(in: .whitespaces).isEmpty || searching)
+                Button("Kapat", action: onClose).foregroundStyle(Color(argb: 0xFFBCBCC5)).font(RealFont.inter(15, .medium))
             }
-            .font(RealFont.inter(15, .medium))
             .padding(.vertical, 4)
             if let message { Text(message).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFBCBCC5)) }
             ScrollView {
