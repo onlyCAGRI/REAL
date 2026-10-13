@@ -191,6 +191,7 @@ struct CalendarConnectionScreen: View {
     @State private var draft = CalendarConnection.shared.options
     @State private var confirm = false
     @State private var error: String?
+    @State private var howOpen = false
     @Environment(\.openURL) private var openURL
 
     private let muted = Color(argb: 0xFF9A9AA5)
@@ -203,33 +204,50 @@ struct CalendarConnectionScreen: View {
         SettingsLayout(onBack: onBack, title: "") {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Takvim bağlantısı").font(RealFont.inter(28, .semibold)).foregroundStyle(.white)
-                Text("Telefondaki Google, iCloud ve diğer takvimleri REAL'de göster; istersen REAL planlarını bir takvime gönder.")
+                Text("Telefondaki takvimleri REAL'de gör, istersen planlarını takvime gönder.")
                     .font(RealFont.inter(14)).foregroundStyle(muted).lineSpacing(4)
             }
             .padding(.top, 14).padding(.horizontal, 6)
-            section("Nasıl çalışır?") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("REAL'e alınan: Seçtiğin takvimlerin etkinlikleri yalnızca gösterilir. REAL'e kopyalanmaz, onayın olmadan değiştirilmez.")
-                    Text("Takvime gönderilen: Yalnız 'Takvime gönder' açıksa, seçtiğin hedef takvime; başlık, gün ve saat. REAL'de sildiğin plan takvimden de silinir.")
-                    Text("Ne zaman: Uygulamayı açınca, takvim ekranına girince ve ayar kaydedince. Arka planda sürekli çalışmaz.")
+            // The details are one tap away instead of a wall of text.
+            SettingsGlassGroup {
+                VStack(alignment: .leading, spacing: 0) {
+                    Button { withAnimation(.easeOut(duration: 0.2)) { howOpen.toggle() } } label: {
+                        HStack {
+                            Text("Nasıl çalışır?").font(RealFont.inter(15, .medium)).foregroundStyle(.white)
+                            Spacer()
+                            RealSymbol("chevron.right", size: 13).foregroundStyle(muted).rotationEffect(.degrees(howOpen ? 90 : 0))
+                        }
+                        .padding(.horizontal, 18).padding(.vertical, 14).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if howOpen {
+                        VStack(alignment: .leading, spacing: 8) {
+                            bullet("Takvimden gelenler REAL'de yalnızca gösterilir, değiştirilmez.")
+                            bullet("'Takvime gönder' açıksa başlık, gün ve saat seçtiğin takvime yazılır.")
+                            bullet("Eşitleme uygulamayı açınca, takvime girince ve ayar kaydedince yapılır; arka planda sürekli çalışmaz.")
+                        }
+                        .padding(.horizontal, 18).padding(.bottom, 16)
+                    }
                 }
-                .font(RealFont.inter(13)).foregroundStyle(muted).lineSpacing(4).padding(16)
             }
+            .padding(.top, 14)
             if !connection.status.isEmpty {
-                section(connection.busy ? "Eşitleniyor…" : "Durum") {
-                    Text(connection.status).font(RealFont.inter(14)).foregroundStyle(.white).padding(16)
+                SettingsGlassGroup {
+                    Text(connection.busy ? "Eşitleniyor…" : connection.status).font(RealFont.inter(14)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 14)
                 }
+                .padding(.top, 12)
             }
             if !connection.readable {
-                section("Başlamak için", footer: "REAL, takvim etkinliklerini yalnızca bu izinle okuyabilir.") {
-                    SettingsActionRow(icon: .calendar, title: "Takvimleri görmeye izin ver", subtitle: "Google hesabı iPhone'a ekli ve takvimleri açık olmalı.") {
+                section("Başlamak için") {
+                    SettingsActionRow(icon: .calendar, title: "Takvimleri görmeye izin ver", subtitle: "iPhone'da Google hesabı ve takvimleri açık olmalı.") {
                         Task { _ = await connection.requestRead() }
                     }
                 }
             } else {
-                section("REAL'de göster", footer: "Seçtiğin takvimlerin etkinlikleri Focus ve takvim ekranlarında görünür.") {
+                section("REAL'de göster") {
                     if connection.calendars.isEmpty {
-                        Text("Takvim bulunamadı. Google hesabını iPhone ayarlarından ekleyip takvimleri aç.").font(RealFont.inter(14)).foregroundStyle(muted).padding(18)
+                        Text("Takvim bulunamadı. iPhone ayarlarından Google hesabını ekleyip takvimleri aç.").font(RealFont.inter(14)).foregroundStyle(muted).padding(18)
                     }
                     ForEach(Array(connection.calendars.enumerated()), id: \.element.calendarIdentifier) { i, c in
                         if i > 0 { SettingsDivider() }
@@ -238,11 +256,11 @@ struct CalendarConnectionScreen: View {
                         }
                     }
                 }
-                section("Takvime gönder", footer: "Kapatmak mevcut takvim kayıtlarını silmez; sonraki değişiklikleri göndermeyi durdurur.") {
-                    SettingsToggleRow(icon: .calendar, title: "Takvime gönder", subtitle: "Kapalıyken REAL'den hiçbir şey takvime yazılmaz.", isOn: $draft.exportEnabled)
+                section("Takvime gönder", footer: draft.exportEnabled ? nil : "Kapatınca takvimdeki mevcut kayıtlar silinmez.") {
+                    SettingsToggleRow(icon: .calendar, title: "REAL planlarını takvime gönder", subtitle: "", isOn: $draft.exportEnabled)
                 }
                 if draft.exportEnabled {
-                    section("Nereye gönderilsin?", footer: connection.hasLinks ? "Mevcut bağlantılar korunurken hedef takvim değiştirilemez." : nil) {
+                    section("Hangi takvime?", footer: connection.hasLinks ? "Gönderilmiş planlar varken hedef takvim değiştirilemez." : nil) {
                         if connection.writableCalendars.isEmpty {
                             Text("Yazılabilir takvim bulunamadı.").font(RealFont.inter(14)).foregroundStyle(muted).padding(18)
                         }
@@ -253,7 +271,7 @@ struct CalendarConnectionScreen: View {
                             }
                         }
                     }
-                    section("Hangi planlar?", footer: "Tekrarlı planlarda gelecek 90 gün gönderilir; REAL açıldığında uzatılır. Tarihsiz metin, Pano blokları ve geçici 24 hour kartları gönderilmez.") {
+                    section("Hangi planlar?", footer: "Yalnızca tarihi olan kartlar gönderilir. Tekrarlılarda gelecek 90 gün.") {
                         LiquidSegmentedControl(labels: ["Tüm planlı kartlar", "Seçtiklerim"], selected: Binding(get: { draft.exportAll ? 0 : 1 }, set: { draft.exportAll = $0 == 0 }))
                             .frame(height: 40).padding(12)
                         if draft.exportAll {
@@ -270,7 +288,7 @@ struct CalendarConnectionScreen: View {
                     }
                 }
             }
-            section("İzinler", footer: "Takvimde değiştirilen veya silinen kopyalar korunur, zorla geri yazılmaz.") {
+            section("İzinler") {
                 permissionRow("Takvimi okuma", granted: connection.readable) { Task { _ = await connection.requestRead() } }
                 SettingsDivider()
                 permissionRow("Takvime yazma", granted: connection.writable) { Task { _ = await connection.requestRead() } }
@@ -296,7 +314,7 @@ struct CalendarConnectionScreen: View {
             Button("Onayla ve gönder") { commit() }
             Button("Vazgeç", role: .cancel) {}
         } message: {
-            Text("Seçtiğin planların başlığı, günü ve saati takvime yazılır. Tekrarlıların gelecek 90 günü aktarılır. REAL'de sildiğin planların takvimdeki kopyaları da silinir; tamamlananların yalnız gelecek kopyaları kaldırılır. Takvimde sen değiştirdiysen kopyaya dokunulmaz.")
+            Text("• Başlık, gün ve saat takvime yazılır.\n• Tekrarlı planlarda gelecek 90 gün gönderilir.\n• REAL'de sildiğin plan takvimden de silinir. Takvimde değiştirdiğin kopyaya dokunulmaz.")
         }
     }
 
@@ -319,21 +337,33 @@ struct CalendarConnectionScreen: View {
             HStack(spacing: 14) {
                 if let color { Circle().fill(color).frame(width: 10, height: 10) }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(label).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
+                    Text(label).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(2)
                     if let supporting, !supporting.isEmpty { Text(supporting).font(RealFont.inter(12)).foregroundStyle(muted).lineLimit(1) }
                 }
                 Spacer()
                 ZStack {
-                    if radio { Circle().strokeBorder(checked ? Color(argb: 0xFF91B9FF) : .white.opacity(0.3), lineWidth: 1.5)
-                        if checked { Circle().fill(Color(argb: 0xFF91B9FF)).padding(5) } }
-                    else { RoundedRectangle(cornerRadius: 6).strokeBorder(checked ? Color(argb: 0xFF91B9FF) : .white.opacity(0.3), lineWidth: 1.5)
-                        if checked { ActionIcon(.check, color: Color(argb: 0xFF91B9FF), size: 14) } }
+                    if radio {
+                        Circle().strokeBorder(checked ? Color(argb: 0xFF91B9FF) : .white.opacity(0.35), lineWidth: 1.6)
+                        if checked { Circle().fill(Color(argb: 0xFF91B9FF)).frame(width: 10, height: 10) }
+                    } else if checked {
+                        Circle().fill(Color(argb: 0xFF91B9FF))
+                        ActionIcon(.check, color: .black, size: 13)
+                    } else {
+                        Circle().strokeBorder(.white.opacity(0.35), lineWidth: 1.6)
+                    }
                 }
-                .frame(width: 22, height: 22)
+                .frame(width: 24, height: 24)
             }
-            .padding(.horizontal, 18).padding(.vertical, 12).contentShape(Rectangle())
+            .padding(.horizontal, 18).padding(.vertical, 13).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func bullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle().fill(Color(argb: 0xFF91B9FF)).frame(width: 5, height: 5).padding(.top, 7)
+            Text(text).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFD6D7DE)).lineSpacing(3)
+        }
     }
 
     private func permissionRow(_ label: String, granted: Bool, action: @escaping () -> Void) -> some View {

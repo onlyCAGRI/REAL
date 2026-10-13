@@ -15,7 +15,7 @@ struct PlannerScreen: View {
     @State private var calendarConnection = CalendarConnection.shared
     @State private var externalDetail: CalendarOccurrence?
     @State private var now = Date()
-    /// Last active Planner view mode (rememberPlannerViewModePreference): "hours_24" or "daily" (New).
+    /// Last active Planner view mode (rememberPlannerViewModePreference): "hours_24", "daily" (New) or "monthly".
     @AppStorage("planner_view_mode") private var modeRaw = "hours_24"
 
     private let calendar = Calendar.real
@@ -76,7 +76,13 @@ struct PlannerScreen: View {
 
         let isCalendar = modeRaw != "hours_24"
         ZStack {
-            if isCalendar {
+            if modeRaw == "monthly" {
+                PlannerMonthView(selectedDay: $selectedDay, today: today,
+                                 externals: { from, to in calendarConnection.occurrences(from: from, to: to).map(Self.externalCard) },
+                                 onOpenDay: { day in selectedDay = day; modeRaw = "daily" },
+                                 onOpenEvent: { openEvent($0) })
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            } else if isCalendar {
                 dailyContent(today: today, focus: focus, categoryCards: categoryCards, allDay: allDay, geometry: geometry, events: events)
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: 80)), removal: .opacity.combined(with: .offset(x: 80))))
             } else {
@@ -84,7 +90,7 @@ struct PlannerScreen: View {
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: -80)), removal: .opacity.combined(with: .offset(x: -80))))
             }
         }
-        .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.28), value: isCalendar)
+        .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.28), value: modeRaw)
         .background(Color.black.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top) { topBar(isCalendar: isCalendar) }
@@ -102,6 +108,8 @@ struct PlannerScreen: View {
             // Swipe between 24 hour and Takvim like Android; inside Takvim a swipe changes the day.
             if !isCalendar {
                 if value.translation.width < 0 { modeRaw = "daily" }
+            } else if modeRaw == "monthly" {
+                return                                   // the month grid swipes between months itself
             } else if value.translation.width > 0 && value.startLocation.x < 40 {
                 modeRaw = "hours_24"
             } else {
@@ -231,7 +239,11 @@ struct PlannerScreen: View {
             .accessibilityLabel("Önceki görünüme dön")
             LiquidSegmentedControl(labels: ["24 hour", "Takvim"], selected: Binding(
                 get: { isCalendar ? 1 : 0 },
-                set: { modeRaw = $0 == 1 ? "daily" : "hours_24" }))
+                // Tapping "Takvim" again switches between the daily and the monthly view.
+                set: { picked in
+                    if picked == 0 { modeRaw = "hours_24" }
+                    else { modeRaw = modeRaw == "daily" ? "monthly" : "daily" }
+                }))
                 .frame(height: 44)
             Button {
                 let base = Date().addingTimeInterval(3600)
