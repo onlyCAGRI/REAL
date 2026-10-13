@@ -29,6 +29,10 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Seçtiğin takvimlerin etkinliklerini REAL takviminde göstermek ve istersen planlarını takvime göndermek için.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>REAL planlarını seçtiğin takvime göndermek için.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Sesle REAL oluşturmak için mikrofon kullanılır.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

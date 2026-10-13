@@ -12,6 +12,8 @@ struct PlannerScreen: View {
     @State private var selectedDay: Date
     @State private var introVisible = false
     @State private var addRequest: PlannerAddRequest?
+    @State private var calendarConnection = CalendarConnection.shared
+    @State private var externalDetail: CalendarOccurrence?
     @State private var now = Date()
     /// Last active Planner view mode (rememberPlannerViewModePreference): "hours_24" or "daily" (New).
     @AppStorage("planner_view_mode") private var modeRaw = "hours_24"
@@ -24,13 +26,44 @@ struct PlannerScreen: View {
         _selectedDay = State(initialValue: Calendar.real.startOfDay(for: initialDay))
     }
 
+    /// Synthetic, negative-id card for a device calendar event (never stored).
+    static func externalCard(_ o: CalendarOccurrence) -> ReminderItem {
+        var r = ReminderItem(id: -Int64(abs(o.id.hashValue % 1_000_000_000) + 1), text: o.title, createdAt: o.start.epochMillis)
+        if o.allDay { r.plannedDateEpochDay = Calendar.real.epochDay(of: o.start) }
+        else {
+            r.alertAt = o.start.epochMillis
+            r.durationMinutes = max(1, Int(o.end.timeIntervalSince(o.start) / 60))
+        }
+        r.customSolidColorArgb = argbInt(o.color)
+        return r
+    }
+
+    private static func argbInt(_ c: Color) -> Int {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        UIColor(c).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let v = (0xFF << 24) | (Int(red * 255) << 16) | (Int(green * 255) << 8) | Int(blue * 255)
+        return Int(Int32(truncatingIfNeeded: v))
+    }
+
+    private func openEvent(_ id: Int64, _ externals: [CalendarOccurrence]? = nil) {
+        if id < 0 {
+            let day = calendar.startOfDay(for: selectedDay)
+            let list = externals ?? calendarConnection.occurrences(from: day, to: calendar.date(byAdding: .day, value: 1, to: day)!)
+            externalDetail = list.first { Self.externalCard($0).id == id }
+        } else {
+            path.append(.detail(id))
+        }
+    }
+
     var body: some View {
         let today = calendar.startOfDay(for: now)
         let dayStart = calendar.startOfDay(for: selectedDay)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
         let hiddenFromCalendar = Set(store.categories.filter { !$0.isShownInCalendar }.map(\.id))
         let calendarReminders = store.reminders.filter { !($0.customCategoryId.map(hiddenFromCalendar.contains) ?? false) }
-        let events = Planner.events(calendarReminders, rangeStart: dayStart.epochMillis, rangeEnd: dayEnd.epochMillis, calendar: calendar)
+        // Device calendar events (RememberExternalCalendarEvents) join the day as read-only cards.
+        let externals = calendarConnection.occurrences(from: dayStart, to: dayEnd)
+        let events = Planner.events(calendarReminders + externals.map(Self.externalCard), rangeStart: dayStart.epochMillis, rangeEnd: dayEnd.epochMillis, calendar: calendar)
         let focus = Planner.focusEvents(events, day: selectedDay, calendar: calendar)
         let allDay = events.filter(\.isDateOnly)
         let geometry = PlannerTimelineGeometry.daily(events, day: selectedDay, calendar: calendar)
@@ -54,6 +87,8 @@ struct PlannerScreen: View {
         .background(Color.black.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top) { topBar(isCalendar: isCalendar) }
+        .sheet(item: $externalDetail) { ExternalCalendarEventDetail(event: $0) }
+        .task { calendarConnection.reconcile(store.reminders) }
         .overlay {
             if let request = addRequest {
                 PlannerEventEditor(request: request) { addRequest = nil }.id(request.id).zIndex(10)
@@ -108,7 +143,7 @@ struct PlannerScreen: View {
                 if !allDay.isEmpty { Color.clear.frame(height: 14) }
                 PlannerDailyTimelineView(day: selectedDay, events: events, geometry: geometry, categories: store.categories,
                                          ownerName: store.ownerName, introVisible: introVisible,
-                                         onOpen: { path.append(.detail($0.reminder.id)) },
+                                         onOpen: { openEvent($0.reminder.id) },
                                          onAdd: { hour in addRequest = PlannerAddRequest(day: selectedDay, hour: hour) })
                     .intro(introVisible, delay: 0.38, y: 0)
                 if events.isEmpty {
@@ -155,7 +190,7 @@ struct PlannerScreen: View {
                     VStack(spacing: 14) {
                         ForEach(items) { event in
                             PlannerNext24Card(event: event, categories: store.categories, ownerName: store.ownerName, now: now)
-                                .onTapGesture { path.append(.detail(event.reminder.id)) }
+                                .onTapGesture { openEvent(event.reminder.id) }
                         }
                     }
                     .padding(.horizontal, 2).padding(.vertical, 8)
@@ -209,7 +244,7 @@ struct PlannerScreen: View {
                 LazyHStack(spacing: 12) {
                     ForEach(Array(focus.enumerated()), id: \.element.id) { index, event in
                         PlannerFocusCard(event: event, categories: store.categories, now: now, width: width)
-                            .onTapGesture { path.append(.detail(event.reminder.id)) }
+                            .onTapGesture { openEvent(event.reminder.id) }
                             .intro(introVisible, delay: 0.15 + Double(min(index, 3)) * 0.09, x: 90)
                     }
                     ForEach(Array(categories.enumerated()), id: \.element.category.id) { index, card in
@@ -289,7 +324,7 @@ struct PlannerScreen: View {
             .background(Capsule().fill(surface))
             .opacity(0.62)
             .padding(.horizontal, 6).padding(.vertical, 3)
-            .onTapGesture { path.append(.detail(event.reminder.id)) }
+            .onTapGesture { openEvent(event.reminder.id) }
         } else {
             Text(event.reminder.text)
                 .font(RealFont.inter(17))
@@ -300,7 +335,7 @@ struct PlannerScreen: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(surface))
                 .padding(.horizontal, 6).padding(.vertical, 3)
-                .onTapGesture { path.append(.detail(event.reminder.id)) }
+                .onTapGesture { openEvent(event.reminder.id) }
         }
     }
 }

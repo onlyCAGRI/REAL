@@ -117,6 +117,7 @@ struct SettingsScreen: View {
     @State private var showDailyChoice = false
     @State private var showLicenses = false
     @State private var showClearMoods = false
+    @State private var showCalendar = false
     @State private var notice: String?
     @Environment(\.openURL) private var openURL
 
@@ -140,6 +141,7 @@ struct SettingsScreen: View {
             Button("Kapat", role: .cancel) {}
         }
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
+        .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false } }
         .alert("Tüm mood kayıtlarını sil?", isPresented: $showClearMoods) {
             Button("Sil", role: .destructive) {
                 life.clearAllMoods()
@@ -168,8 +170,8 @@ struct SettingsScreen: View {
             SettingsDivider()
             SettingsActionRow(icon: .calendar, title: "Daily Planner View", subtitle: dailyLabel) { showDailyChoice = true }
             SettingsDivider()
-            SettingsActionRow(icon: .calendar, title: "Takvim bağlantısı", subtitle: "Google / Samsung takvimlerini göster ve planlarını gönder") {
-                notice = "Takvim bağlantısı iOS'ta Apple Takvim (EventKit) ile eklenecek."
+            SettingsActionRow(icon: .calendar, title: "Takvim bağlantısı", subtitle: "Google / iCloud takvimlerini göster ve planlarını gönder") {
+                showCalendar = true
             }
         }
         SettingsSectionHeader(title: "BİLDİRİMLER VE DAVRANIŞ")
@@ -319,6 +321,7 @@ struct CatalogSourceNotice {
 /// SettingsLayout: black backdrop with soft glows, a top glass bar (back · "Ayarlar") and a large glass sheet body.
 struct SettingsLayout<Content: View>: View {
     let onBack: () -> Void
+    var title = "Ayarlar"
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -349,7 +352,7 @@ struct SettingsLayout<Content: View>: View {
                     .accessibilityLabel("Geri")
                     Spacer()
                 }
-                Text("Ayarlar").font(RealFont.inter(18, .semibold)).kerning(-0.3).foregroundStyle(.white)
+                Text(title).font(RealFont.inter(18, .semibold)).kerning(-0.3).foregroundStyle(.white)
             }
             .padding(.horizontal, 4)
             .frame(height: 52)
