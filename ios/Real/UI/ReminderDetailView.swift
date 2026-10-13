@@ -53,8 +53,19 @@ struct ReminderDetailView: View {
             if let r = shown {
                 ScrollView {
                     VStack(spacing: 12) {
-                        if !editing { header(r) } else { Color.clear.frame(height: 4) }
-                        CardBlockGrid(keys: blockOrder(r), layout: r.contentBlockLayout, editing: editing,
+                        let order = blockOrder(r)
+                        let heroKey = editing ? nil : order.first.flatMap { isHero(r.contentBlockLayout[$0]) ? $0 : nil }
+                        if let heroKey {
+                            let hero = (r.contentBlockLayout[heroKey] ?? CardBlockPlacement()).normalized
+                            block(heroKey, r)
+                                .environment(\.cardBlockHeight, CGFloat(hero.minHeight))
+                                .frame(maxWidth: .infinity, minHeight: CGFloat(hero.minHeight), alignment: .top)
+                                .overlay(alignment: .top) { header(r).padding(.horizontal, 6).padding(.top, 6) }
+                                .padding(.bottom, 2)
+                        } else if !editing { header(r) } else { Color.clear.frame(height: 4) }
+                        CardBlockGrid(keys: heroKey == nil ? order : Array(order.dropFirst()),
+                                      layout: heroKey.map { heroLiftedLayout(r.contentBlockLayout, hero: $0) } ?? r.contentBlockLayout,
+                                      editing: editing,
                                       onChange: { key, p in draft?.contentBlockLayout[key] = p },
                                       onDrop: { keys, layout in draft?.contentBlockOrder = keys; draft?.contentBlockLayout = layout }) { key in
                             block(key, r).transition(.opacity.combined(with: .scale(scale: 0.97)))
@@ -134,7 +145,22 @@ struct ReminderDetailView: View {
             .liftedTopSafeArea()
         }
         .sheet(isPresented: $reordering) {
-            if let r = shown { BlockReorderSheet(keys: blockOrder(r), item: r) { draft?.contentBlockOrder = $0 } }
+            if let r = shown {
+                BlockReorderSheet(keys: blockOrder(r), item: r, hero: blockOrder(r).first.map { isHero(r.contentBlockLayout[$0]) } ?? false) { keys, heroOn in
+                    guard var d = draft else { return }
+                    let oldHero = blockOrder(d).first { isHero(d.contentBlockLayout[$0]) }
+                    d.contentBlockOrder = keys
+                    // A new order lets the blocks flow again (Android finishDrag clears the free tops).
+                    for (k, var v) in d.contentBlockLayout { v.top = nil; d.contentBlockLayout[k] = v }
+                    if let oldHero, var v = d.contentBlockLayout[oldHero] { v.minHeight = 0; d.contentBlockLayout[oldHero] = v.normalized }
+                    if heroOn, let top = keys.first {
+                        var v = (d.contentBlockLayout[top] ?? CardBlockPlacement()).normalized
+                        v.span = CardBlockPlacement.units; v.column = 0; v.minHeight = max(v.minHeight, detailHeroMinHeight)
+                        d.contentBlockLayout[top] = v.normalized
+                    }
+                    draft = d
+                }
+            }
         }
         .fullScreenCover(item: $previewPhoto) { a in PhotoPreview(attachment: a) }
     }
@@ -149,6 +175,24 @@ struct ReminderDetailView: View {
     }
 
     // MARK: Block order
+
+    /// "En üstteki içeriği büyüt" is stored in the existing layout fields: full width + at least 360pt tall.
+    private func isHero(_ p: CardBlockPlacement?) -> Bool {
+        guard let p = p?.normalized else { return false }
+        return p.span == CardBlockPlacement.units && p.minHeight >= detailHeroMinHeight
+    }
+
+    /// Blocks placed freely below the hero counted its slot in the grid; with the hero drawn above the grid they
+    /// move up by that slot so no empty band opens.
+    private func heroLiftedLayout(_ layout: [String: CardBlockPlacement], hero: String) -> [String: CardBlockPlacement] {
+        let h = (layout[hero] ?? CardBlockPlacement()).normalized
+        let slot = (h.top ?? 0) + h.minHeight + h.gapBefore
+        return layout.mapValues { p in
+            var q = p
+            if let t = q.top { q.top = max(t - slot, 0) }
+            return q
+        }
+    }
 
     private func blockOrder(_ r: ReminderItem) -> [String] {
         let active = r.cardContentKeys(includeEmptyChecklist: editing && checklistOpen, includeVoiceRecorder: editing && voiceRecorderOpen, includeJournal: false)
@@ -824,32 +868,33 @@ struct ReminderDetailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     let d = draft
-                    QuickAction(symbol: "text.alignleft", label: "Metin kutusu ekle", active: d?.attachments.contains { $0.sourceTitle == "REAL_TEXT_BLOCK" } ?? false) {
-                        addAttachment(ReminderAttachment(id: UUID().uuidString, type: .textSnippet, text: "", sourceTitle: "REAL_TEXT_BLOCK"))
-                    }
+                    // Most used first, least used last (Android order).
                     QuickAction(symbol: "calendar", label: "Tarih / Saat", active: d?.alertAt != nil || d?.plannedDateEpochDay != nil) {
                         if let d { openSchedule(d) }
                     }
-                    QuickAction(symbol: "mappin", label: "Konum", active: d?.location != nil) { withoutAnimation { showLocationGuide = true } }
+                    QuickAction(symbol: "photo", label: "Fotoğraf ekle", active: false,
+                                count: d?.attachments.filter { $0.type == .image }.count) { showPhotoPicker = true }
+                    QuickAction(symbol: "camera", label: "Kamera ile fotoğraf ekle", active: false) { showCamera = true }
                     QuickAction(symbol: "checklist", label: "Checklist", active: checklistOpen || !(d?.checklistItems.isEmpty ?? true),
                                 count: d?.checklistItems.count) {
                         checklistOpen = true
                         draft?.isChecklist = true
                     }
-                    QuickAction(symbol: "photo", label: "Fotoğraf ekle", active: false,
-                                count: d?.attachments.filter { $0.type == .image }.count) { showPhotoPicker = true }
-                    QuickAction(symbol: "camera", label: "Kamera ile fotoğraf ekle", active: false) { showCamera = true }
-                    QuickAction(symbol: "doc", label: "Dosya ekle", active: false,
-                                count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
+                    QuickAction(symbol: "rectangle.stack", label: "Kart Yığını", active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
+                        editingStackCard = CardStackCard()
+                    }
+                    QuickAction(symbol: "text.alignleft", label: "Metin kutusu ekle", active: d?.attachments.contains { $0.sourceTitle == "REAL_TEXT_BLOCK" } ?? false) {
+                        addAttachment(ReminderAttachment(id: UUID().uuidString, type: .textSnippet, text: "", sourceTitle: "REAL_TEXT_BLOCK"))
+                    }
+                    QuickAction(symbol: "mappin", label: "Konum", active: d?.location != nil) { withoutAnimation { showLocationGuide = true } }
+                    QuickAction(symbol: "waveform", label: "Ses kaydı", active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
+                                count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
                     QuickAction(symbol: "music.note", label: "Müzik", active: !(d?.musicBlocks.isEmpty ?? true),
                                 count: d?.musicBlocks.count) { showMusicSearch = true }
                     QuickAction(symbol: "play.rectangle", label: "Film & Dizi", active: !(d?.mediaBlocks.isEmpty ?? true),
                                 count: d?.mediaBlocks.count) { showMediaSearch = true }
-                    QuickAction(symbol: "waveform", label: "Ses kaydı", active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
-                                count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
-                    QuickAction(symbol: "rectangle.stack", label: "Kart Yığını", active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
-                        editingStackCard = CardStackCard()
-                    }
+                    QuickAction(symbol: "doc", label: "Dosya ekle", active: false,
+                                count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
                     QuickAction(symbol: "face.smiling", label: "Mood", active: d?.mood != nil) { showMoodPicker = true }
                 }
                 .padding(.leading, 2).padding(.trailing, 12)
@@ -857,6 +902,10 @@ struct ReminderDetailView: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        // Adding a block folds the colour / category panels down so the new content is in view (Android).
+        .onChange(of: draft.map { blockOrder($0).count } ?? 0) { old, new in
+            if new > old, secondaryExpanded { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { secondaryExpanded = false } }
+        }
     }
 
     private var secondaryPanels: some View {
@@ -1250,11 +1299,32 @@ private struct BlockReorderSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State var keys: [String]
     let item: ReminderItem
-    let onSave: ([String]) -> Void
+    @State var hero: Bool
+    let onSave: ([String], Bool) -> Void
 
     var body: some View {
         NavigationStack {
             List {
+                // "En üstteki içeriği büyüt": the block at the top of the list becomes a full-width cover.
+                Section {
+                    Button { withAnimation(.spring(duration: 0.25)) { hero.toggle() } } label: {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle().fill(Color(argb: 0xFF91B9FF).opacity(hero ? 1 : 0))
+                                Circle().strokeBorder(hero ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFF6E6E78), lineWidth: 1.5)
+                                if hero { RealSymbol("checkmark", size: 12).foregroundStyle(Color(argb: 0xFF0B0B0D)) }
+                            }
+                            .frame(width: 22, height: 22)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("En üstteki içeriği büyüt").font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFE8E8EE))
+                                Text("Listenin başındaki içerik kartın tepesinde tam genişlikte, büyük görünür.")
+                                    .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityValue(hero ? "Açık" : "Kapalı")
+                }
                 ForEach(keys, id: \.self) { key in
                     let d = describe(key)
                     HStack(spacing: 12) {
@@ -1271,7 +1341,7 @@ private struct BlockReorderSheet: View {
             .navigationTitle("İçerik Sıralaması")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Bitti") { onSave(keys); dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Bitti") { onSave(keys, hero); dismiss() } }
             }
         }
     }
@@ -1488,3 +1558,6 @@ struct CardTextTools: View {
         .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
+
+/// DETAIL_HERO_MIN_HEIGHT_DP: the hero block's minimum height.
+let detailHeroMinHeight = 360
