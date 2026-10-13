@@ -26,7 +26,6 @@ struct YasamScreen: View {
     @State private var showMoodAdd = false
     @State private var showMoodHistory = false
     @State private var showJournalSheet = false
-    @State private var placeholder: String?
     @State private var heroTopic = Int.random(in: 0..<6)
     @State private var contentID = 0
 
@@ -91,9 +90,6 @@ struct YasamScreen: View {
         .fullScreenCover(isPresented: $showMoodHistory) {
             MoodHistoryScreen(onAdd: { showMoodHistory = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showMoodAdd = true } })
         }
-        .alert(placeholder ?? "", isPresented: Binding(get: { placeholder != nil }, set: { if !$0 { placeholder = nil } })) {
-            Button("Tamam", role: .cancel) {}
-        } message: { Text("Bu modül iOS'a sıradaki adımda taşınıyor.") }
     }
 
     private func close() {
@@ -323,7 +319,11 @@ struct YasamScreen: View {
     }
 
     private var micButton: some View {
-        Button { placeholder = "Sesli komutlar" } label: {
+        // YasamMic → onComposerMicClick: Yaşam closes and the Home dock starts voice capture.
+        Button {
+            close()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { NotificationCenter.default.post(name: .realStartVoice, object: nil) }
+        } label: {
             RealSymbol("waveform", size: 23).foregroundStyle(.white)
                 .frame(width: 64, height: 64).liquidGlass(Circle())
         }

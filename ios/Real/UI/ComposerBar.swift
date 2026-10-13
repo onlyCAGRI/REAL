@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import UIKit
 import PhotosUI
 
@@ -150,6 +151,7 @@ struct ComposerBar: View {
         )
         .onChange(of: expanded) { _, e in if e { navExpanded = false } }
         .onAppear(perform: reset)
+        .onReceive(NotificationCenter.default.publisher(for: .realStartVoice)) { _ in if isHome { startVoiceIfIdle() } }
         .realOverlay(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
         .realOverlay(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId) }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
@@ -446,6 +448,8 @@ struct ComposerBar: View {
         schedule.hasTime = false
     }
 
+    private func startVoiceIfIdle() { if voice.phase == .idle { startVoice() } }
+
     private func startVoice() {
         focus = nil
         let base = text
@@ -565,4 +569,9 @@ struct CategoryPickerSheet: View {
         }
         .buttonStyle(PressScaleStyle(scale: 0.98))
     }
+}
+
+extension Notification.Name {
+    /// Yaşam mic → Home dock voice capture.
+    static let realStartVoice = Notification.Name("REALStartVoice")
 }
