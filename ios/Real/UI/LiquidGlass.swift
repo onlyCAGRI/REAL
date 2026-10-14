@@ -20,48 +20,16 @@ enum LiquidGlassTokens {
 
 enum LiquidGlassRole { case dock, chrome, sheet }
 
-/// Test-only switch (`-REALGlassLab N`) so CI can photograph dock variants side by side. 0 = the shipping look.
-/// 1 = system glass alone (no dark tint under it, no bottom fade) · 2 = as 1 with iOS's own bottom scroll-edge effect
-/// left on · 3 = as 1 with the clear glass variant · 4 = as 1 with the tint given to the glass itself.
-enum GlassLab {
-    static let mode: Int = {
-        let a = ProcessInfo.processInfo.arguments
-        guard let i = a.firstIndex(of: "-REALGlassLab"), i + 1 < a.count else { return 0 }
-        return Int(a[i + 1]) ?? 0
-    }()
-    static var pure: Bool { mode >= 1 }
-}
-
 extension View {
     /// LiquidGlassSurface: the real Liquid Glass material on iOS 26, a tinted blur with the Android edge stroke before.
     @ViewBuilder
     func liquidGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole = .dock, dim: Double = 0) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
-            // System glass for refraction, plus the Android tint + bright rim so it reads on REAL's black backgrounds
-            // (plain clear glass is nearly invisible over black).
-            if GlassLab.pure && role == .dock {
-                self
-                    .glassEffect(GlassLab.mode == 3 ? Glass.clear.interactive()
-                                 : (GlassLab.mode == 4 ? Glass.regular.tint(.black.opacity(0.35)).interactive() : Glass.regular.interactive()),
-                                 in: shape)
-            } else {
-            self
-                .background {
-                    ZStack {
-                        shape.fill(LinearGradient(colors: role == .dock
-                                                  ? [LiquidGlassTokens.dockTintTop, LiquidGlassTokens.dockTintBottom]
-                                                  : (role == .sheet
-                                                     // LiquidGlassTokens.sheetTint: panels stay readable over cards.
-                                                     ? [Color(argb: 0xD10C0C0E), Color(argb: 0xD10C0C0E)]
-                                                     : [Color(argb: 0x66202022), Color(argb: 0x880D0D0F)]),
-                                                  startPoint: .top, endPoint: .bottom))
-                        if dim > 0 { shape.fill(Color.black.opacity(dim)) }
-                    }
-                }
-                .glassEffect(role == .sheet ? Glass.regular : Glass.regular.interactive(), in: shape)
-                .overlay { shape.strokeBorder(Self.rim(role), lineWidth: role == .dock ? LiquidGlassTokens.dockEdgeWidth : 0.65).allowsHitTesting(false) }
-            }
+            // Clear Liquid Glass everywhere: it takes the colour of what passes behind it. The only tint is inside the
+            // glass (a light one for legibility on bright cards, a deeper one for panels full of text). Painting a
+            // dark layer under the glass, as before, hid the glass and drew the band behind the dock.
+            self.glassEffect(Self.clearGlass(role: role, dim: dim), in: shape)
         } else {
             fallbackGlass(shape, role: role, dim: dim)
         }
@@ -72,6 +40,16 @@ extension View {
 
     /// liquidRimBrush / liquidDockRimBrush
     static func rim(_ role: LiquidGlassRole) -> LinearGradient { liquidRim(role) }
+
+    #if compiler(>=6.2)
+    /// Dock and buttons: clear glass with a light dark tint; panels (role .sheet): the same glass, deeper tint.
+    @available(iOS 26.0, *)
+    static func clearGlass(role: LiquidGlassRole, dim: Double) -> Glass {
+        let tint = min((role == .sheet ? 0.55 : 0.14) + dim, 0.85)
+        let glass = Glass.clear.tint(.black.opacity(tint))
+        return role == .sheet ? glass : glass.interactive()
+    }
+    #endif
 
     @ViewBuilder
     private func fallbackGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole, dim: Double) -> some View {
@@ -170,7 +148,15 @@ struct BottomFade: View {
     private static let tail: CGFloat = 80
 
     var body: some View {
-        if GlassLab.pure { Color.clear.frame(height: 0) } else { fade }
+        if Self.systemGlass { Color.clear.frame(height: 0) } else { fade }
+    }
+
+    /// iOS 26 Liquid Glass: cards pass under the dock as they should, no fade.
+    private static var systemGlass: Bool {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) { return true }
+        #endif
+        return false
     }
 
     private var fade: some View {
@@ -199,7 +185,7 @@ extension View {
     @ViewBuilder
     func hideBottomScrollEdgeEffect() -> some View {
         #if compiler(>=6.2)
-        if #available(iOS 26.0, *), GlassLab.mode != 2 {
+        if #available(iOS 26.0, *) {
             self.scrollEdgeEffectHidden(true, for: .bottom)
         } else {
             self

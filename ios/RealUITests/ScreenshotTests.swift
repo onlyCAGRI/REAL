@@ -134,25 +134,6 @@ final class ScreenshotTests: XCTestCase {
         shot("homescrolled")
     }
 
-    /// Glass lab: the same home deck under the dock in each GlassLab variant (lab1…lab4), to find what draws the
-    /// band behind the dock and how the system glass looks without REAL's tint and fade.
-    func test1cGlassLab() {
-        for mode in 1...4 {
-            let app = XCUIApplication()
-            app.launchArguments = ["-REALDemo", "-REALScreen", "home", "-REALGlassLab", "\(mode)"]
-            app.launch()
-            Thread.sleep(forTimeInterval: 2.5)
-            let showAll = app.buttons["Tümünü göster"]
-            if showAll.waitForExistence(timeout: 3) { showAll.tap() }
-            Thread.sleep(forTimeInterval: 1.5)
-            shot("lab\(mode)")
-            app.swipeUp()
-            Thread.sleep(forTimeInterval: 1.2)
-            shot("lab\(mode)s")
-            app.terminate()
-        }
-    }
-
     func test11DockNavigation() {
         let app = XCUIApplication()
         app.launchArguments = ["-REALDemo", "-REALScreen", "home"]

@@ -389,8 +389,7 @@ struct SelectionBar: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 22)
         .frame(height: 58)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.75))
+        .liquidGlass(Capsule())
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
     }
