@@ -477,10 +477,8 @@ private struct PosterDeck: View {
             let height = width / posterAspect
             let visible = Array(cards.prefix(4))
             ZStack(alignment: .top) {
-                if let first = cards.first {
-                    PosterArtwork(media: first.media).frame(width: width * 1.05, height: height * 0.95)
-                        .blur(radius: 40).opacity(0.45).offset(y: 20)
-                }
+                // No blurred copy of the front poster here: its unclipped blur left a rectangle behind the deck, and
+                // it went black while the next poster's copy loaded. The screen's PosterAmbient already gives the glow.
                 ForEach(Array(visible.enumerated()).reversed(), id: \.element.id) { depth, item in
                     poster(item, depth: depth, width: width, height: height)
                 }

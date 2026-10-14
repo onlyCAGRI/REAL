@@ -565,7 +565,7 @@ struct CardColorsPanel: View {
     @Binding var blend: Double
     @Binding var darkText: Bool
     var allowNoneStart = true
-    var showDarkText = true
+    var showDarkText = false
     var isStarred = false
 
     var body: some View {

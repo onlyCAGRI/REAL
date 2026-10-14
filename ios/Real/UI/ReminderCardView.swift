@@ -22,7 +22,7 @@ struct ReminderCardView: View {
     @State private var dragX: CGFloat = 0
     @State private var recurringAck = false
 
-    private var useDark: Bool { reminder.useDarkText }
+    private var useDark: Bool { reminder.autoDarkText }
     private var accent: LinearGradient? {
         reminderAccentGradient(start: reminder.accentStart, end: reminder.accentEnd, completed: reminder.isCompleted,
                                blend: reminder.gradientBlendFraction, solidArgb: reminder.customSolidColorArgb)

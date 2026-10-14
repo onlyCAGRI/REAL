@@ -92,6 +92,25 @@ func categoryGradient(start: Color, end: Color, blend: Double?) -> LinearGradien
 }
 
 /// Black on light category colours, white on dark ones (WCAG luminance averaged over the two ends), like Android.
+/// WCAG relative luminance of a colour (0 black … 1 white).
+func relativeLuminance(_ c: Color) -> Double {
+    let v = c.rgba
+    func ch(_ x: Double) -> Double { x <= 0.03928 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
+    return 0.2126 * ch(v.r) + 0.7152 * ch(v.g) + 0.0722 * ch(v.b)
+}
+
+extension ReminderItem {
+    /// Card text follows the card's colour, as categories do: dark on light colours, white on dark ones. Cards draw
+    /// their colour at 76% over the dark card surface, so that blend is measured. No colour: white text.
+    var autoDarkText: Bool {
+        let colors: [Color] = customSolidColorArgb.map { [Color(argbInt: $0)] } ?? [paletteColor(accentStart), paletteColor(accentEnd)].compactMap { $0 }
+        guard !colors.isEmpty else { return false }
+        let surface = Color(argb: 0xFF151517)
+        let light = colors.map { relativeLuminance(surface.lerp($0, 0.76)) }.reduce(0, +) / Double(colors.count)
+        return light > 0.35
+    }
+}
+
 func categoryForeground(start: Color, end: Color) -> Color {
     func lum(_ c: Color) -> Double {
         let v = c.rgba

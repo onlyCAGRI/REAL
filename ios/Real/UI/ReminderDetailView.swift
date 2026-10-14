@@ -281,7 +281,7 @@ struct ReminderDetailView: View {
         let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
         let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: r.isCompleted,
                                             blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
-        let dark = r.useDarkText
+        let dark = r.autoDarkText
         let struck = r.isCompleted && r.journal == nil
         let ink: Color = dark ? (struck ? Color(argb: 0xFF55555A) : Color(argb: 0xFF101010)) : (struck ? Color(argb: 0xFF9999A2) : Color(argb: 0xFFF4F4F6))
         return VStack(alignment: cover ? .center : .leading, spacing: 0) {
@@ -613,7 +613,7 @@ struct ReminderDetailView: View {
         let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: false, blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
         let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
         let compact = (1..<200).contains(placement.minHeight)
-        let ink = r.useDarkText ? Color(argb: 0xFF101010) : Color(argb: 0xFFF4F4F6)
+        let ink = r.autoDarkText ? Color(argb: 0xFF101010) : Color(argb: 0xFFF4F4F6)
         let align: TextAlignment = placement.textAlignment == "center" ? .center : (placement.textAlignment == "end" ? .trailing : .leading)
         let frameAlign: Alignment = placement.textAlignment == "center" ? .top : (placement.textAlignment == "end" ? .topTrailing : .topLeading)
         let font = RealFont.inter(21, placement.textBold ? .bold : .regular)
@@ -667,6 +667,15 @@ struct ReminderDetailView: View {
                 .environment(\.colorScheme, .dark)
                 .frame(height: 150)
                 .allowsHitTesting(false)
+                .overlay(alignment: .bottomTrailing) {
+                    if let label = reminderLocationLabel(l) {
+                        Text(label).font(RealFont.inter(11, .medium)).foregroundStyle(.white).lineLimit(1)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(Color.black.opacity(0.7)))
+                            .frame(maxWidth: 200, alignment: .trailing)
+                            .padding(8)
+                    }
+                }
             }
             HStack(spacing: 12) {
                 RealSymbol("mappin.and.ellipse", size: 18.4).foregroundStyle(Color(argb: 0xFF8ED7C4))
@@ -801,6 +810,7 @@ struct ReminderDetailView: View {
                     withAnimation { store.toggleCompleted(reminderId) }
                 }
                 DetailAction(label: "Düzenle", symbol: "pencil", enabled: !deleting) {
+                    dockCollapsed = false   // every edit starts with the dock raised
                     draft = r
                     categorySelection = r.customCategoryId
                     checklistOpen = !r.checklistItems.isEmpty
@@ -1217,6 +1227,7 @@ struct LocationEditor: View {
     @State private var locating = false
     @State private var locateError: String?
     @State private var fix = OneShotLocation()
+    @State private var userMoving = false
 
     var body: some View {
         NavigationStack {
@@ -1261,18 +1272,30 @@ struct LocationEditor: View {
 
                 MapReader { proxy in
                     Map(position: $camera) {
-                        if let pin {
-                            Marker(pinName.isEmpty ? "Seçilen yer" : pinName, coordinate: pin).tint(Color(argb: 0xFF91B9FF))
-                        }
                         UserAnnotation()
                     }
                     .onTapGesture { point in
                         if let c = proxy.convert(point, from: .local) { drop(c, name: "", address: "") }
                     }
+                    .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in userMoving = true })
+                    .onMapCameraChange(frequency: .onEnd) { context in
+                        guard userMoving else { return }
+                        userMoving = false
+                        drop(context.region.center, name: "", address: "", moveCamera: false)
+                    }
+                }
+                .overlay {
+                    // The pin marks the map centre; the map moves under it.
+                    Image(systemName: "mappin")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(pin == nil ? Color.white.opacity(0.75) : Color(argb: 0xFF91B9FF))
+                        .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
+                        .offset(y: -17)
+                        .allowsHitTesting(false)
                 }
                 .overlay(alignment: .top) {
                     if pin == nil {
-                        Text("Haritaya dokunarak yer seç").font(RealFont.inter(12, .medium)).foregroundStyle(.white)
+                        Text("Haritayı kaydır veya bir yere dokun").font(RealFont.inter(12, .medium)).foregroundStyle(.white)
                             .padding(.horizontal, 12).padding(.vertical, 7)
                             .background(Capsule().fill(.black.opacity(0.6)))
                             .padding(.top, 10)
@@ -1340,13 +1363,15 @@ struct LocationEditor: View {
     }
 
     /// Puts the pin on the map; without a name it is looked up from the coordinate.
-    private func drop(_ c: CLLocationCoordinate2D, name: String, address: String) {
+    private func drop(_ c: CLLocationCoordinate2D, name: String, address: String, moveCamera: Bool = true) {
         pin = c
         pinName = name
         pinAddress = address
         locateError = nil
-        withAnimation(.easeInOut(duration: 0.35)) {
-            camera = .region(MKCoordinateRegion(center: c, latitudinalMeters: 700, longitudinalMeters: 700))
+        if moveCamera {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                camera = .region(MKCoordinateRegion(center: c, latitudinalMeters: 700, longitudinalMeters: 700))
+            }
         }
         guard name.isEmpty else { return }
         CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: c.latitude, longitude: c.longitude)) { marks, _ in
@@ -1752,4 +1777,13 @@ struct DynamicIslandMark: View {
             .frame(width: 24, height: 10)
             .overlay(alignment: .trailing) { Circle().fill(color).frame(width: 4, height: 4).padding(.trailing, 4) }
     }
+}
+
+/// Short name for the map's corner: the place's name, or the street when an empty spot was picked.
+func reminderLocationLabel(_ l: ReminderLocation) -> String? {
+    let name = l.placeName.trimmingCharacters(in: .whitespaces)
+    let street = l.address.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
+    if !name.isEmpty, name != "Seçilen yer", name != l.address.trimmingCharacters(in: .whitespaces), name.contains(where: \.isLetter) { return name }
+    if let street { return street }
+    return name.isEmpty ? nil : name
 }
