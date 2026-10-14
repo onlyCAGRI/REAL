@@ -148,18 +148,19 @@ extension View {
 struct BottomFade: View {
     /// Hidden while the keyboard is up, so the open composer never sits in a dark band.
     @State private var keyboardUp = false
+    private static let tail: CGFloat = 80
 
     var body: some View {
         // Tall and dark enough that cards scrolling under the dock (and the strip under it) fade into black
         // instead of showing through around the composer.
+        // The dock floats above the home-indicator strip, so a background on it ends at the dock's bottom edge and
+        // ignoresSafeArea cannot stretch it; a solid tail reaches past the screen edge to cover that strip too.
         LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.45), location: 0.4),
                                .init(color: .black.opacity(0.88), location: 0.68), .init(color: .black, location: 1)],
                        startPoint: .top, endPoint: .bottom)
             .frame(height: 170)
             .frame(maxWidth: .infinity)
-            // Pinned to the screen bottom, keyboard included: while typing it stays behind the keyboard instead of
-            // riding up and darkening the cards around the open composer.
-            .ignoresSafeArea(.all, edges: .bottom)
+            .overlay(alignment: .bottom) { Color.black.frame(height: Self.tail).offset(y: Self.tail) }
             .allowsHitTesting(false)
             .opacity(keyboardUp ? 0 : 1)
             .animation(.easeOut(duration: 0.18), value: keyboardUp)
