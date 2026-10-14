@@ -1182,47 +1182,133 @@ struct CardStackEditor: View {
     }
 }
 
-/// Place search (MKLocalSearch) or a typed name/address.
+/// Konum: search a place (MKLocalSearch), use where you are now (one GPS fix), or tap the map to drop the pin;
+/// "Bu konumu kaydet" stores the pin with its reverse-geocoded name. A typed name can be saved without coordinates.
 struct LocationEditor: View {
     @Environment(\.dismiss) private var dismiss
     let initial: ReminderLocation?
     let onSave: (ReminderLocation?) -> Void
     @State private var query = ""
     @State private var results: [MKMapItem] = []
+    @State private var camera: MapCameraPosition = .automatic
+    @State private var pin: CLLocationCoordinate2D?
+    @State private var pinName = ""
+    @State private var pinAddress = ""
+    @State private var locating = false
+    @State private var locateError: String?
+    @State private var fix = OneShotLocation()
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    TextField("Yer ara", text: $query)
-                        .submitLabel(.search)
-                        .onSubmit(search)
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(Color(argb: 0xFF8E8E98))
+                        TextField("Yer ara", text: $query).submitLabel(.search).onSubmit(search)
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 12).frame(height: 42)
+                    .background(Capsule().fill(.white.opacity(0.08)))
+                    Button(action: locate) {
+                        Group {
+                            if locating { ProgressView().tint(Color(argb: 0xFF0B0B0D)) }
+                            else { Image(systemName: "location.fill").font(.system(size: 16, weight: .semibold)) }
+                        }
+                        .foregroundStyle(Color(argb: 0xFF0B0B0D))
+                        .frame(width: 42, height: 42)
+                        .background(Circle().fill(Color(argb: 0xFF91B9FF)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Şu anki konumum")
                 }
-                ForEach(results, id: \.self) { item in
-                    Button {
-                        let c = item.placemark.coordinate
-                        onSave(ReminderLocation(placeName: item.name ?? query, address: item.placemark.title ?? "",
-                                                latitude: c.latitude, longitude: c.longitude))
-                        dismiss()
-                    } label: {
+                .padding(.horizontal, 16).padding(.vertical, 10)
+
+                if !results.isEmpty {
+                    List(results, id: \.self) { item in
+                        Button {
+                            drop(item.placemark.coordinate, name: item.name ?? query, address: item.placemark.title ?? "")
+                            results = []
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.name ?? "").foregroundStyle(.white)
+                                Text(item.placemark.title ?? "").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                    .frame(maxHeight: 240)
+                }
+
+                MapReader { proxy in
+                    Map(position: $camera) {
+                        if let pin {
+                            Marker(pinName.isEmpty ? "Seçilen yer" : pinName, coordinate: pin).tint(Color(argb: 0xFF91B9FF))
+                        }
+                        UserAnnotation()
+                    }
+                    .onTapGesture { point in
+                        if let c = proxy.convert(point, from: .local) { drop(c, name: "", address: "") }
+                    }
+                }
+                .overlay(alignment: .top) {
+                    if pin == nil {
+                        Text("Haritaya dokunarak yer seç").font(RealFont.inter(12, .medium)).foregroundStyle(.white)
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Capsule().fill(.black.opacity(0.6)))
+                            .padding(.top, 10)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    if let locateError {
+                        Text(locateError).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFE6BCB1))
+                    }
+                    if let pin {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name ?? "").foregroundStyle(.white)
-                            Text(item.placemark.title ?? "").font(.caption).foregroundStyle(.secondary)
+                            Text(pinName.isEmpty ? "Seçilen yer" : pinName).font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                            Text(pinAddress.isEmpty ? String(format: "%.5f, %.5f", pin.latitude, pin.longitude) : pinAddress)
+                                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9A9AA4)).lineLimit(2)
+                        }
+                        Button {
+                            let name = pinName.isEmpty ? (pinAddress.isEmpty ? "Seçilen yer" : pinAddress) : pinName
+                            onSave(ReminderLocation(placeName: name, address: pinAddress, latitude: pin.latitude, longitude: pin.longitude))
+                            dismiss()
+                        } label: {
+                            Text("Bu konumu kaydet").font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFF0B0B0D))
+                                .frame(maxWidth: .infinity).frame(height: 48)
+                                .background(Capsule().fill(Color(argb: 0xFF91B9FF)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    HStack {
+                        if !query.isEmpty && pin == nil {
+                            Button("“\(query)” olarak kaydet") { onSave(ReminderLocation(placeName: query)); dismiss() }
+                                .font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFF9DC3FF))
+                        }
+                        Spacer()
+                        if initial != nil {
+                            Button("Konumu kaldır", role: .destructive) { onSave(nil); dismiss() }.font(RealFont.inter(13, .medium))
                         }
                     }
                 }
-                if !query.isEmpty {
-                    Button("“\(query)” olarak kaydet") { onSave(ReminderLocation(placeName: query)); dismiss() }
-                }
-                if initial != nil {
-                    Button("Konumu kaldır", role: .destructive) { onSave(nil); dismiss() }
-                }
+                .padding(16)
             }
+            .background(Color(argb: 0xFF101012).ignoresSafeArea())
             .navigationTitle("Konum")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } } }
-            .onAppear { query = initial?.placeName ?? "" }
+            .onAppear {
+                query = initial?.placeName ?? ""
+                if let lat = initial?.latitude, let lon = initial?.longitude {
+                    let c = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                    pin = c
+                    pinName = initial?.placeName ?? ""
+                    pinAddress = initial?.address ?? ""
+                    camera = .region(MKCoordinateRegion(center: c, latitudinalMeters: 900, longitudinalMeters: 900))
+                }
+            }
         }
+        .presentationDetents([.large])
     }
 
     private func search() {
@@ -1231,6 +1317,82 @@ struct LocationEditor: View {
         MKLocalSearch(request: request).start { response, _ in
             results = response?.mapItems ?? []
         }
+    }
+
+    /// Puts the pin on the map; without a name it is looked up from the coordinate.
+    private func drop(_ c: CLLocationCoordinate2D, name: String, address: String) {
+        pin = c
+        pinName = name
+        pinAddress = address
+        locateError = nil
+        withAnimation(.easeInOut(duration: 0.35)) {
+            camera = .region(MKCoordinateRegion(center: c, latitudinalMeters: 700, longitudinalMeters: 700))
+        }
+        guard name.isEmpty else { return }
+        CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: c.latitude, longitude: c.longitude)) { marks, _ in
+            guard let m = marks?.first, pin?.latitude == c.latitude, pin?.longitude == c.longitude else { return }
+            pinName = m.name ?? m.thoroughfare ?? ""
+            pinAddress = [m.thoroughfare, m.subLocality, m.locality].compactMap { $0 }.joined(separator: ", ")
+        }
+    }
+
+    private func locate() {
+        guard !locating else { return }
+        locating = true
+        locateError = nil
+        fix.request { result in
+            locating = false
+            switch result {
+            case .success(let c): drop(c, name: "", address: "")
+            case .failure(let message): locateError = message
+            }
+        }
+    }
+}
+
+/// One location fix for "Şu anki konumum" (when-in-use permission, asked the first time).
+@Observable
+final class OneShotLocation: NSObject, CLLocationManagerDelegate {
+    enum Result { case success(CLLocationCoordinate2D), failure(String) }
+    @ObservationIgnored private let manager = CLLocationManager()
+    @ObservationIgnored private var completion: ((Result) -> Void)?
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+    }
+
+    func request(_ done: @escaping (Result) -> Void) {
+        completion = done
+        switch manager.authorizationStatus {
+        case .notDetermined: manager.requestWhenInUseAuthorization()
+        case .denied, .restricted: finish(.failure("Konum izni kapalı. Ayarlar > REAL > Konum bölümünden açabilirsin."))
+        default: manager.requestLocation()
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        guard completion != nil else { return }
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways: manager.requestLocation()
+        case .denied, .restricted: finish(.failure("Konum izni verilmedi."))
+        default: break
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        if let c = locations.last?.coordinate { finish(.success(c)) }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        finish(.failure("Konum alınamadı. Biraz sonra tekrar dene."))
+    }
+
+    private func finish(_ result: Result) {
+        let done = completion
+        completion = nil
+        DispatchQueue.main.async { done?(result) }
     }
 }
 

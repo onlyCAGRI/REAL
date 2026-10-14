@@ -231,7 +231,9 @@ struct CategoryScreen: View {
                 if selectedIds.isEmpty { path.append(.detail(reminder.id)) }
                 else if selectedIds.contains(reminder.id) { selectedIds.remove(reminder.id) } else { selectedIds.insert(reminder.id) }
             },
-            onLongPress: { selectedIds.insert(reminder.id) }
+            onLongPress: { selectedIds.insert(reminder.id) },
+            onSwipeTo24Hour: builtIn == .today ? nil : { withAnimation { store.moveTo24Hour(reminder.id) } },
+            onSwipeDelete: { withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo([reminder.id]) } }
         )
         .zoomSource("card-\(reminder.id)", in: nav)
         .padding(.horizontal, 16)

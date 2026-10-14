@@ -51,6 +51,7 @@ struct RealApp: App {
                 .environment(books)
                 .environment(discovery)
                 .background(Color.black)
+                .overlay { RealToastHost() }
                 .onOpenURL { url in _ = RealAuth.shared.handle(url: url) }
         }
     }

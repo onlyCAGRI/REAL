@@ -89,8 +89,19 @@ struct DiscoveryCard: Codable, Hashable, Identifiable {
     var tags: [String]
     var reason: String
     var platforms: [String] = []
+    /// The title the recommender used; the catalog title can differ, so both count as seen.
+    var aiTitle: String?
     var id: String { "\(media.type.rawValue):\(media.provider):\(media.providerId ?? media.providerUrl)" }
+    var seenTitles: [String] {
+        var out = [media.title]
+        if let aiTitle, !aiTitle.isEmpty, aiTitle != media.title { out.append(aiTitle) }
+        return out
+    }
 }
+
+/// Seen titles kept locally; the service takes only the latest `discoveryExcludeSent`.
+let discoverySeenLimit = 400
+let discoveryExcludeSent = 40
 
 enum DiscoveryKind: String { case film, game }
 
@@ -130,24 +141,54 @@ final class DiscoveryStore {
 
     private func set(_ kind: DiscoveryKind, _ s: Snapshot) {
         var s = s
-        s.cards = Array(s.cards.prefix(40)); s.later = Array(s.later.prefix(40)); s.excluded = Array(s.excluded.suffix(40))
+        s.cards = Array(s.cards.prefix(60)); s.later = Array(s.later.prefix(40)); s.excluded = Array(s.excluded.suffix(discoverySeenLimit))
         if kind == .film { film = s } else { game = s }
         guard persist, let data = try? JSONEncoder().encode(s) else { return }
         UserDefaults.standard.set(data, forKey: kind == .film ? "real_media_discovery" : "real_game_discovery")
     }
 
+    /// Adds fresh posters behind the ones still in the deck. Seen, saved and queued titles are dropped here too (the
+    /// service only takes the latest 40), and a round that brings back mostly known titles is followed by another with
+    /// those excluded, so a repeating recommender never leaves the deck empty.
     func fetch(_ kind: DiscoveryKind, type: String, filters: Set<String>, platforms: Set<String> = []) async throws {
         let prior = snapshot(kind)
-        let cards = try await service.recommend(kind: kind, type: type, filters: filters, platforms: platforms, exclude: Array(prior.excluded.suffix(40)))
-        guard !cards.isEmpty else { throw BookError.message("Kataloglarda doğrulanmış bir sonuç bulunamadı. Tekrar deneyebilirsin.") }
+        let sameDeck = prior.type == type && Set(prior.filters) == filters
+        let keep = sameDeck ? prior.cards : []
+        func norm(_ t: String) -> String { t.trimmingCharacters(in: .whitespaces).lowercased() }
+        var known = Set((prior.excluded + prior.later.flatMap(\.seenTitles) + keep.flatMap(\.seenTitles)).map(norm))
+        var knownKeys = Set((prior.later + keep).map(\.id))
+        var asked: [String] = []
+        var fresh: [DiscoveryCard] = []
+        var lastError: Error?
+        for _ in 0..<(kind == .film ? 3 : 2) where fresh.count < 8 {
+            var exclude = prior.excluded + keep.flatMap(\.seenTitles) + asked
+            var dedup = Set<String>()
+            exclude = Array(exclude.reversed().filter { dedup.insert($0).inserted }.reversed())
+            let cards: [DiscoveryCard]
+            do {
+                cards = try await service.recommend(kind: kind, type: type, filters: filters, platforms: platforms,
+                                                    exclude: Array(exclude.suffix(discoveryExcludeSent)))
+            } catch {
+                if fresh.isEmpty && keep.isEmpty { throw error }
+                lastError = error
+                break
+            }
+            asked += cards.flatMap(\.seenTitles)
+            for card in cards where !knownKeys.contains(card.id) && !card.seenTitles.contains(where: { known.contains(norm($0)) }) {
+                knownKeys.insert(card.id)
+                card.seenTitles.forEach { known.insert(norm($0)) }
+                fresh.append(card)
+            }
+        }
+        // Nothing new also ends an automatic refill, so it can never loop the request.
+        guard !fresh.isEmpty else {
+            throw lastError ?? BookError.message("Bu seçimlerle yeni afiş kalmadı. Bir iki seçimi kaldırıp tekrar dene.")
+        }
         var s = snapshot(kind)
-        let excluded = Set(s.excluded)
-        let laterKeys = Set(s.later.map(\.id))
-        var seen = Set<String>()
-        let fresh = cards.filter { !excluded.contains($0.media.title) && !laterKeys.contains($0.id) && seen.insert($0.id).inserted }
+        let ranked = fresh.sorted { DiscoveryRanking.match($0, filters, kind: kind).count > DiscoveryRanking.match($1, filters, kind: kind).count }
+        s.cards = (sameDeck ? s.cards : []) + ranked
         s.type = type
         s.filters = Array(filters)
-        s.cards = fresh.sorted { DiscoveryRanking.match($0, filters, kind: kind).count > DiscoveryRanking.match($1, filters, kind: kind).count }
         set(kind, s)
     }
 
@@ -161,14 +202,14 @@ final class DiscoveryStore {
         case .removeFromList: s.later = s.later.filter { $0.id != card.id }
         case .skip, .saveDiscovery:
             s.cards = remainder
-            if !s.excluded.contains(card.media.title) { s.excluded.append(card.media.title) }
+            for t in card.seenTitles where !s.excluded.contains(t) { s.excluded.append(t) }
         case .addToList:
             guard s.later.count < 40 || s.later.contains(where: { $0.id == card.id }) else {
                 throw BookError.message(kind == .film ? "İzlenecek listen dolu. Önce bir afiş çıkar." : "Oynanacak listen dolu. Önce bir oyun çıkar.")
             }
             s.cards = remainder
             if !s.later.contains(where: { $0.id == card.id }) { s.later.append(card) }
-            if !s.excluded.contains(card.media.title) { s.excluded.append(card.media.title) }
+            for t in card.seenTitles where !s.excluded.contains(t) { s.excluded.append(t) }
         }
         set(kind, s)
     }
@@ -248,11 +289,13 @@ struct BackendDiscoveryService: DiscoveryService {
                                               ["type": type, "filters": Array(filters), "exclude": Array(exclude.suffix(40))], timeout: 25)
         guard let list = json["candidates"] as? [[String: Any]] else { throw BookError.message("Öneri yanıtı geçersiz.") }
         let valid = Set(DiscoveryFilter.film.map(\.key))
-        // Verify up to 12 candidates against the catalogs, a few at a time, keeping the AI's order.
+        // Verify the candidates against the catalogs (skipping titles already seen), a few at a time, keeping the AI's order.
+        let skip = Set(exclude.map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+        let unseen = list.filter { !skip.contains((($0["title"] as? String) ?? "").trimmingCharacters(in: .whitespaces).lowercased()) }
         return await withTaskGroup(of: (Int, DiscoveryCard?).self) { group in
             var results: [(Int, DiscoveryCard?)] = []
-            for (index, item) in list.prefix(12).enumerated() {
-                if index >= 3, let done = await group.next() { results.append(done) }
+            for (index, item) in unseen.prefix(16).enumerated() {
+                if index >= 4, let done = await group.next() { results.append(done) }
                 group.addTask {
                     guard let title = (item["title"] as? String)?.trimmingCharacters(in: .whitespaces), !title.isEmpty,
                           let kind = MediaType(rawValue: ((item["type"] as? String) ?? "").uppercased()),
@@ -260,7 +303,8 @@ struct BackendDiscoveryService: DiscoveryService {
                     let year = (item["year"] as? Int).flatMap { $0 > 0 ? $0 : nil }
                     guard let media = await MediaCatalog.resolve(title: String(title.prefix(180)), year: year, type: kind) else { return (index, nil) }
                     let tags = ((item["tags"] as? [String]) ?? []).filter { valid.contains($0) }
-                    return (index, DiscoveryCard(media: media, tags: tags, reason: String(((item["reason"] as? String) ?? "").prefix(220))))
+                    return (index, DiscoveryCard(media: media, tags: tags, reason: String(((item["reason"] as? String) ?? "").prefix(220)),
+                                                 aiTitle: String(title.prefix(180))))
                 }
             }
             for await done in group { results.append(done) }

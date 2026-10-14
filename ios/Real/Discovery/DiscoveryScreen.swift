@@ -212,6 +212,14 @@ struct DiscoveryScreen: View {
                 if let error { errorLine(error) }
             }
         }
+        // Keep the deck stocked: with a couple of posters left the next ones load in the background.
+        .onChange(of: cards.count, initial: true) { _, count in
+            guard !isList, !loading, error == nil, count <= 2, page == .discover else { return }
+            let s = discovery.snapshot(kind)
+            guard !s.cards.isEmpty || !s.excluded.isEmpty else { return }
+            type = s.type; filters = Set(s.filters)
+            fetch()
+        }
     }
 
     /// Returns false when the poster should spring back (add failed).

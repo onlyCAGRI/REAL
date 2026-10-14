@@ -39,6 +39,8 @@
 	<string>Söylediklerini karta yazmak için konuşma tanıma kullanılır.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Kartına fotoğraf çekmek için kamera kullanılır.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Kartına bulunduğun yeri eklemek için konumun yalnızca o an bir kez okunur.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Kartlarına fotoğraf eklemek için fotoğraflarına erişim gerekir.</string>
 	<key>UIApplicationSceneManifest</key>

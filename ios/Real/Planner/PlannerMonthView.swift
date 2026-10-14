@@ -87,8 +87,10 @@ struct PlannerMonthView: View {
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDay)
         let open = events.filter { !$0.reminder.isCompleted }
         let colors = open.prefix(3).map(eventColor)
-        let pastel = inMonth ? colors.first.map { plannerSoftPastel(nearestCalendarPastel($0)) } : nil
-        let ink = Color(argb: 0xFF17181B)
+        // The day takes its first plan's real colour (a touch softened), with dark or light text by its brightness.
+        let pastel = inMonth ? colors.first.map { $0.lerp(Color(argb: 0xFFFFFBF4), 0.14) } : nil
+        let ink = pastel.map { categoryForeground(start: $0, end: $0) == .white ? Color.white : Color(argb: 0xFF17181B) }
+            ?? Color(argb: 0xFF17181B)
         let text: Color = !inMonth ? .white.opacity(0.2) : (pastel != nil ? ink : .white.opacity(isSelected || isToday ? 1 : 0.88))
         let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
         return Button {
@@ -102,7 +104,9 @@ struct PlannerMonthView: View {
                 if inMonth && !colors.isEmpty {
                     HStack(spacing: 3) {
                         ForEach(Array(colors.enumerated()), id: \.offset) { _, c in
-                            Circle().fill(pastel != nil ? ink.opacity(0.75) : c).frame(width: 5, height: 5)
+                            // Each plan keeps its own colour; a thin ring keeps it visible on a tinted day.
+                            Circle().fill(c).overlay(Circle().strokeBorder(ink.opacity(pastel != nil ? 0.55 : 0), lineWidth: 0.8))
+                                .frame(width: 6, height: 6)
                         }
                     }
                     .padding(.leading, 9).padding(.bottom, 8)
@@ -120,14 +124,15 @@ struct PlannerMonthView: View {
         .accessibilityLabel("\(RealDates.longDay(day)), \(events.count) etkinlik\(isToday ? ", bugün" : "")")
     }
 
-    /// The card's category colour, else its own card colour, else a neutral blue.
+    /// The card's category colour; without a category the colour the person picked (planner or card colour);
+    /// otherwise an automatic colour that differs from card to card.
     private func eventColor(_ e: PlannerEvent) -> Color {
         let r = e.reminder
-        if let c = store.category(r.customCategoryId) {
-            return c.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(c.accentStart) ?? Color(argb: 0xFF4558C8)
-        }
+        if let c = store.category(r.customCategoryId) { return c.visual.stripe.0 }
+        if let i = r.plannerColorIndex, realCalendarPastels.indices.contains(i) { return realCalendarPastels[i] }
         if let solid = r.customSolidColorArgb { return Color(argbInt: solid) }
-        return paletteColor(r.accentStart) ?? Color(argb: 0xFF78C9F2)
+        if let picked = paletteColor(r.accentStart) { return picked }
+        return uncategorizedPastel(r.id)
     }
 
     private func changeMonth(_ step: Int) {

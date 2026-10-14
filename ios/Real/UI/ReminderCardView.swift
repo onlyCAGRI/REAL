@@ -14,7 +14,10 @@ struct ReminderCardView: View {
     var onToggle: () -> Void = {}
     var onOpen: () -> Void = {}
     var onLongPress: () -> Void = {}
+    /// Swipe right: into 24 hour.
     var onSwipeTo24Hour: (() -> Void)?
+    /// Swipe left: delete (the caller offers "Geri al").
+    var onSwipeDelete: (() -> Void)?
 
     @State private var dragX: CGFloat = 0
     @State private var recurringAck = false
@@ -34,15 +37,26 @@ struct ReminderCardView: View {
         guard showCategoryStripes, reminder.customCategoryId != nil, let category else { return nil }
         return category.visual.stripe
     }
-    private var swipeEnabled: Bool { onSwipeTo24Hour != nil && !isSelectionMode && !reminder.isCompleted }
+    private var swipeRightOn: Bool { onSwipeTo24Hour != nil && !reminder.isCompleted }
+    private var swipeLeftOn: Bool { onSwipeDelete != nil }
+    private var swipeEnabled: Bool { (swipeRightOn || swipeLeftOn) && !isSelectionMode && !journalListMode }
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            if swipeEnabled {
+        ZStack {
+            if swipeEnabled && swipeRightOn {
                 Text("Move 24 hour")
                     .font(RealFont.inter(12, .semibold))
                     .foregroundStyle(RealColors.selection)
+                    .padding(.leading, 18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(Double(min(max(dragX / 82, 0), 1)))
+            }
+            if swipeEnabled && swipeLeftOn {
+                Text("Sil")
+                    .font(RealFont.inter(12, .semibold))
+                    .foregroundStyle(Color(argb: 0xFFFF8A80))
                     .padding(.trailing, 18)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                     .opacity(Double(min(max(-dragX / 82, 0), 1)))
             }
             card
@@ -231,16 +245,19 @@ struct ReminderCardView: View {
         DragGesture(minimumDistance: 18)
             .onChanged { value in
                 guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                let x = min(0, value.translation.width)
-                if x <= -82 && dragX > -82 { UISelectionFeedbackGenerator().selectionChanged() }
-                dragX = x
+                let w = value.translation.width
+                let clamped = min(max(w, swipeLeftOn ? -.infinity : 0), swipeRightOn ? .infinity : 0)
+                if abs(clamped) >= 82 && abs(dragX) < 82 { UISelectionFeedbackGenerator().selectionChanged() }
+                dragX = clamped
             }
             .onEnded { value in
-                let commit = dragX <= -82 || (value.predictedEndTranslation.width < -300 && dragX < -28)
-                withAnimation(.spring(duration: 0.3)) { dragX = commit ? -900 : 0 }
+                let left = dragX < 0
+                let predicted = value.predictedEndTranslation.width
+                let commit = abs(dragX) >= 82 || (abs(predicted) > 300 && (predicted < 0) == left && abs(dragX) > 28)
+                withAnimation(.spring(duration: 0.3)) { dragX = commit ? (left ? -900 : 900) : 0 }
                 if commit {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-                        onSwipeTo24Hour?()
+                        if left { onSwipeDelete?() } else { onSwipeTo24Hour?() }
                         dragX = 0
                     }
                 }

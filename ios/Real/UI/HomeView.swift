@@ -216,10 +216,10 @@ struct HomeView: View {
 
     private var header: some View {
         HStack {
-            Text("REAL")
-                .font(RealFont.inter(30, .medium))
-                .kerning(-0.8)
-                .foregroundStyle(Color(argb: 0xFFF3F2F5))
+            // The welcome screen's wordmark at header size.
+            Image("RealWordmark").resizable().scaledToFit()
+                .frame(width: 69, height: 30, alignment: .leading)
+                .accessibilityLabel("REAL")
             Spacer()
             Button { withoutAnimation { showAccountMenu = true } } label: {
                 ProfileAvatar(name: store.ownerName, size: 44)
@@ -284,7 +284,8 @@ struct HomeView: View {
                 if selectedIds.isEmpty { path.append(.detail(reminder.id)) } else { toggleSelection(reminder.id) }
             },
             onLongPress: { toggleSelection(reminder.id) },
-            onSwipeTo24Hour: swipe ? { withAnimation { store.moveTo24Hour(reminder.id) } } : nil
+            onSwipeTo24Hour: swipe ? { withAnimation { store.moveTo24Hour(reminder.id) } } : nil,
+            onSwipeDelete: { withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo([reminder.id]) } }
         )
         .zoomSource("card-\(reminder.id)", in: nav)
         .padding(.horizontal, 16)

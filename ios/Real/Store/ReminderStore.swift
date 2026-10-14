@@ -244,6 +244,24 @@ final class ReminderStore {
         NotificationScheduler.cancel(id)
     }
 
+    /// Delete with "Geri al" at the top (MainActivity.requestDelete): the cards go now and come back untouched,
+    /// in their old places and with their alarms, if the action is tapped.
+    @MainActor
+    func deleteWithUndo(_ ids: Set<Int64>) {
+        let removed = reminders.enumerated().filter { ids.contains($0.element.id) }
+        guard !removed.isEmpty else { return }
+        delete(ids)
+        let label = removed.count == 1 ? "Kart silindi" : "\(removed.count) kart silindi"
+        RealToast.shared.showAction(label, "Geri al") { [weak self] in
+            guard let self else { return }
+            for (index, item) in removed where !self.reminders.contains(where: { $0.id == item.id }) {
+                self.reminders.insert(item, at: min(index, self.reminders.count))
+            }
+            self.save()
+            removed.forEach { NotificationScheduler.schedule($0.element) }
+        }
+    }
+
     func delete(_ ids: Set<Int64>) {
         reminders.removeAll { ids.contains($0.id) }
         save()
