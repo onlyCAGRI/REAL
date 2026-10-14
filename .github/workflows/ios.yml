@@ -15,7 +15,8 @@ concurrency:
 jobs:
   build:
     # Intel runner: the arm64 macOS pool is capacity-constrained (jobs were dropped unstarted).
-    runs-on: macos-15-intel
+    # Apple Silicon runner (about 3x faster than macos-15-intel); switch back if jobs stop being picked up.
+    runs-on: macos-26
     timeout-minutes: 45
     defaults:
       run:
@@ -113,7 +114,8 @@ jobs:
           if-no-files-found: ignore
 
       - name: Package simulator app (Appetize)
-        if: success()
+        # Manual runs only: builds are tested on the Mac now, and this step kept timing out on pushes.
+        if: success() && github.event_name == 'workflow_dispatch'
         run: |
           xcodebuild build -project Real.xcodeproj -scheme Real -configuration Release \
             -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
@@ -124,7 +126,7 @@ jobs:
           zip -qry "$GITHUB_WORKSPACE/REAL-simulator.zip" REAL.app
 
       - name: Upload simulator app
-        if: success()
+        if: success() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: REAL-simulator-app
