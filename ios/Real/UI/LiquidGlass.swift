@@ -20,6 +20,18 @@ enum LiquidGlassTokens {
 
 enum LiquidGlassRole { case dock, chrome, sheet }
 
+/// Test-only switch (`-REALGlassLab N`) so CI can photograph dock variants side by side. 0 = the shipping look.
+/// 1 = system glass alone (no dark tint under it, no bottom fade) · 2 = as 1 with iOS's own bottom scroll-edge effect
+/// left on · 3 = as 1 with the clear glass variant · 4 = as 1 with the tint given to the glass itself.
+enum GlassLab {
+    static let mode: Int = {
+        let a = ProcessInfo.processInfo.arguments
+        guard let i = a.firstIndex(of: "-REALGlassLab"), i + 1 < a.count else { return 0 }
+        return Int(a[i + 1]) ?? 0
+    }()
+    static var pure: Bool { mode >= 1 }
+}
+
 extension View {
     /// LiquidGlassSurface: the real Liquid Glass material on iOS 26, a tinted blur with the Android edge stroke before.
     @ViewBuilder
@@ -28,6 +40,12 @@ extension View {
         if #available(iOS 26.0, *) {
             // System glass for refraction, plus the Android tint + bright rim so it reads on REAL's black backgrounds
             // (plain clear glass is nearly invisible over black).
+            if GlassLab.pure && role == .dock {
+                self
+                    .glassEffect(GlassLab.mode == 3 ? Glass.clear.interactive()
+                                 : (GlassLab.mode == 4 ? Glass.regular.tint(.black.opacity(0.35)).interactive() : Glass.regular.interactive()),
+                                 in: shape)
+            } else {
             self
                 .background {
                     ZStack {
@@ -43,6 +61,7 @@ extension View {
                 }
                 .glassEffect(role == .sheet ? Glass.regular : Glass.regular.interactive(), in: shape)
                 .overlay { shape.strokeBorder(Self.rim(role), lineWidth: role == .dock ? LiquidGlassTokens.dockEdgeWidth : 0.65).allowsHitTesting(false) }
+            }
         } else {
             fallbackGlass(shape, role: role, dim: dim)
         }
@@ -151,6 +170,10 @@ struct BottomFade: View {
     private static let tail: CGFloat = 80
 
     var body: some View {
+        if GlassLab.pure { Color.clear.frame(height: 0) } else { fade }
+    }
+
+    private var fade: some View {
         // Tall and dark enough that cards scrolling under the dock (and the strip under it) fade into black
         // instead of showing through around the composer.
         // The dock floats above the home-indicator strip, so a background on it ends at the dock's bottom edge and
@@ -176,7 +199,7 @@ extension View {
     @ViewBuilder
     func hideBottomScrollEdgeEffect() -> some View {
         #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), GlassLab.mode != 2 {
             self.scrollEdgeEffectHidden(true, for: .bottom)
         } else {
             self
