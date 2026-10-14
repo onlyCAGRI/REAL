@@ -239,6 +239,7 @@ struct ReaderParagraph: View {
 
     private func styled(size: CGFloat) -> Text {
         let t = paragraph.text
+        if !paragraph.spans.isEmpty { return spanned(size: size) }
         guard first, let idx = t.firstIndex(where: { $0.isLetter || $0.isNumber }) else {
             return Text(t).font(RealFont.inter(size))
         }
@@ -248,6 +249,29 @@ struct ReaderParagraph: View {
         return Text(before).font(RealFont.inter(size))
             + Text(initial).font(.system(size: size * 2.8, design: .serif))
             + Text(rest).font(RealFont.inter(size))
+    }
+
+    /// The PDF's own bold / italic runs (the drop initial applies to the first letter of the first run).
+    private func spanned(size: CGFloat) -> Text {
+        var out = Text("")
+        var initialDone = !first
+        for span in paragraph.spans {
+            var piece = span.text
+            if !initialDone, let idx = piece.firstIndex(where: { $0.isLetter || $0.isNumber }) {
+                out = out + run(String(piece[..<idx]), span, size)
+                    + Text(String(piece[idx])).font(.system(size: size * 2.8, design: .serif))
+                piece = String(piece[piece.index(after: idx)...])
+                initialDone = true
+            }
+            out = out + run(piece, span, size)
+        }
+        return out
+    }
+
+    private func run(_ text: String, _ span: BookSpan, _ size: CGFloat) -> Text {
+        var t = Text(text).font(RealFont.inter(size, span.bold ? .bold : .regular))
+        if span.italic { t = t.italic() }
+        return t
     }
 }
 

@@ -742,19 +742,14 @@ struct ReminderDetailView: View {
             if deleting { deletePrompt(r).padding(.bottom, 12).transition(.move(edge: .bottom).combined(with: .opacity)) }
             if editing {
                 if secondaryExpanded { secondaryPanels.padding(.bottom, 12).transition(.opacity.combined(with: .scale(scale: 0.97))) }
-                VStack(spacing: 0) {
-                    // DetailEditDock handle: drag down (>24pt) or tap to collapse, drag up to reopen.
-                    Capsule().fill(.white.opacity(0.55)).frame(width: 40, height: 4)
-                        .frame(maxWidth: .infinity).frame(height: 28).contentShape(Rectangle())
-                        .onTapGesture { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { dockCollapsed.toggle() } }
-                        .gesture(DragGesture(minimumDistance: 4).onEnded { v in
-                            let next = v.translation.height >= 24 ? true : (v.translation.height <= -24 ? false : dockCollapsed)
-                            if next != dockCollapsed { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { dockCollapsed = next } }
-                        })
-                        .accessibilityLabel("Düzenleme dock'u")
-                        .accessibilityValue(dockCollapsed ? "Küçültülmüş" : "Açık")
-                        .accessibilityAddTraits(.isButton)
-                    if !dockCollapsed {
+                Group {
+                    if dockCollapsed {
+                        // Lowered dock: a slim glass bar that still holds the handle.
+                        dockHandle
+                            .padding(.horizontal, 14).padding(.vertical, 6)
+                            .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                            .transition(.opacity)
+                    } else {
                         editDock.transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
@@ -847,8 +842,23 @@ struct ReminderDetailView: View {
     }
 
     /// Edit dock: "Renk ve kategori" toggle + sort, then the one-by-one add buttons.
+    /// DetailEditDock handle, inside the dock: drag down (>24pt) or tap to lower it, drag up to raise it.
+    private var dockHandle: some View {
+        Capsule().fill(.white.opacity(0.42)).frame(width: 36, height: 4)
+            .frame(maxWidth: .infinity).frame(height: 20).contentShape(Rectangle())
+            .onTapGesture { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { dockCollapsed.toggle() } }
+            .gesture(DragGesture(minimumDistance: 4).onEnded { v in
+                let next = v.translation.height >= 24 ? true : (v.translation.height <= -24 ? false : dockCollapsed)
+                if next != dockCollapsed { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { dockCollapsed = next } }
+            })
+            .accessibilityLabel("Düzenleme dock'u")
+            .accessibilityValue(dockCollapsed ? "Küçültülmüş" : "Açık")
+            .accessibilityAddTraits(.isButton)
+    }
+
     private var editDock: some View {
         VStack(alignment: .leading, spacing: 0) {
+            dockHandle.padding(.top, -4)
             HStack {
                 Button { titleFocused = false; secondaryExpanded.toggle() } label: {
                     HStack(spacing: 6) {

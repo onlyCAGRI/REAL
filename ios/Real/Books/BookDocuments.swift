@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 struct BookParagraph: Hashable {
     var text: String
     var heading: Bool = false
+    /// Bold / italic runs from the PDF's fonts; empty when the paragraph is plain.
+    var spans: [BookSpan] = []
 }
 
 /// BookDocumentRepository.kt: imports PDF / EPUB / TXT / images into the private library and serves page text.
@@ -89,9 +91,9 @@ final class BookDocuments {
         case "pdf":
             result = await Task.detached(priority: .userInitiated) { () -> [BookParagraph] in
                 guard let doc = PDFDocument(url: url), let p = doc.page(at: page) else { return [] }
-                let raw = p.string ?? ""
-                if raw.trimmingCharacters(in: .whitespacesAndNewlines).count > 20 { return Self.paragraphs(fromPdf: raw) }
-                // Scanned page: recognise text like the Android OCR fallback.
+                // Copyable PDF: its own text, laid out from line positions and fonts (bold / italic kept).
+                if let layered = BookPdfText.paragraphs(p) { return layered }
+                // Scanned page (or a text layer that cannot be read): recognise text like the Android OCR fallback.
                 let img = p.thumbnail(of: CGSize(width: 1400, height: 2000), for: .mediaBox)
                 return Self.paragraphs(fromPdf: Self.ocr(img))
             }.value
