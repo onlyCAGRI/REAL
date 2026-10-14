@@ -15,9 +15,10 @@ concurrency:
 jobs:
   build:
     # Intel runner: the arm64 macOS pool is capacity-constrained (jobs were dropped unstarted).
-    # Apple Silicon runner (about 3x faster than macos-15-intel); switch back if jobs stop being picked up.
-    runs-on: macos-26
-    timeout-minutes: 45
+    # macos-26 (Apple Silicon) is faster, but on 2026-10-13 and 2026-10-14 its jobs sat queued without a runner;
+    # the Intel image always picks up. 80 minutes leaves room for the Appetize package on manual runs.
+    runs-on: macos-15-intel
+    timeout-minutes: 80
     defaults:
       run:
         working-directory: ios
