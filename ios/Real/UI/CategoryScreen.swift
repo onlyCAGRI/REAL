@@ -30,7 +30,9 @@ struct CategoryScreen: View {
         let lists = projection
         let stats = store.reminders.categoryProgress(builtIn: builtIn, customId: customId)
         GeometryReader { outer in
-            let topInset = outer.safeAreaInsets.top
+            // A parent can hand this reader a zero top inset; the window's own inset keeps the hero buttons below
+            // the status bar either way.
+            let topInset = max(outer.safeAreaInsets.top, windowTopInset)
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if let visual {
@@ -559,4 +561,12 @@ struct GlowProgressBar: View {
             }
         }
     }
+}
+
+/// The key window's top safe-area inset (status bar / Dynamic Island).
+@MainActor
+var windowTopInset: CGFloat {
+    UIApplication.shared.connectedScenes
+        .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }
+        .first ?? 0
 }
