@@ -46,10 +46,11 @@ enum BookPdfText {
         guard usable(text), !spaceless(lines.map(\.text)) else { return nil }
 
         // Page numbers / running heads: a lone number, or a short line at the very top or bottom edge.
+        let manyLines = lines.count > 3
         lines.removeAll { l in
             let t = l.text.trimmingCharacters(in: .whitespaces)
             let edge = l.box.minY < bounds.height * 0.07 || l.box.maxY > bounds.height * 0.94
-            return t.range(of: "^[-–—\\s]*\\d{1,4}[-–—\\s]*$", options: .regularExpression) != nil || (edge && t.count <= 60 && lines.count > 3)
+            return t.range(of: "^[-–—\\s]*\\d{1,4}[-–—\\s]*$", options: .regularExpression) != nil || (edge && t.count <= 60 && manyLines)
         }
         guard !lines.isEmpty else { return [] }
 
