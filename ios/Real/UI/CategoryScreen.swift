@@ -83,7 +83,32 @@ struct CategoryScreen: View {
                     }
                     if !lists.completed.isEmpty {
                         SectionTitle(text: "Tamamlandı").padding(.top, 18)
-                        ForEach(lists.completed) { card($0) }
+                        // Same as Home: 3 (the 3rd under glass) until "Daha fazla" opens 10, then 10 more each time.
+                        // "Tamamlananlar" itself lists everything.
+                        let limit = builtIn != .completed
+                        let shown = limit ? Array(lists.completed.prefix(completedShown)) : lists.completed
+                        let more = limit && lists.completed.count > completedShown
+                        ForEach(Array(shown.enumerated()), id: \.element.id) { index, reminder in
+                            if more && index == shown.count - 1 {
+                                card(reminder)
+                                    .blur(radius: 6).opacity(0.5).allowsHitTesting(false)
+                                    .overlay {
+                                        Button {
+                                            withAnimation(.spring(duration: 0.35)) {
+                                                completedShown = completedShown < 10 ? 10 : completedShown + 10
+                                            }
+                                        } label: {
+                                            Text("Daha fazla").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+                                                .padding(.horizontal, 18).padding(.vertical, 9)
+                                                .liquidGlass(Capsule(), role: .chrome)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .padding(.bottom, 8)
+                                    }
+                            } else {
+                                card(reminder)
+                            }
+                        }
                     }
                     Color.clear.frame(height: 140)
                 }
@@ -133,6 +158,7 @@ struct CategoryScreen: View {
 
     /// The arrow's new meaning, shown briefly under the header (id restarts the fade on every press).
     @State private var sortHint: (id: Int, text: String)?
+    @State private var completedShown = 3
 
     private func changeSort() {
         let next = nextSort
