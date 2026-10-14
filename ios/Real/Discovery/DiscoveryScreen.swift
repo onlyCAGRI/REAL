@@ -97,6 +97,7 @@ struct DiscoveryScreen: View {
                         DiscoveryChip(label: label, selected: type == key, enabled: !loading, accent: accent) { type = key }
                     }
                 }
+                Text("Her bölümde en fazla 3 seçim").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF9A9A9F))
             } else {
                 Text("Platform").font(RealFont.inter(17, .medium)).foregroundStyle(.white.opacity(0.8))
                 ChipFlow(spacing: 8) {
@@ -107,6 +108,7 @@ struct DiscoveryScreen: View {
                         }
                     }
                 }
+                Text("Seçmezsen tüm platformlar · Her bölümde en fazla 3 seçim").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF9A9A9F))
             }
             Text("Tür").font(RealFont.inter(17, .medium)).foregroundStyle(.white.opacity(0.8))
             let genrePages = self.genrePages
@@ -116,9 +118,10 @@ struct DiscoveryScreen: View {
             let feelings = feelingPages
             DiscoverySelectionPager(titles: feelings.indices.map { $0 == 0 ? "Hisler" : "Diğer hisler" },
                                     selectedCounts: feelings.map { $0.filter { filters.contains($0.key) }.count }, accent: accent) { i in chips(feelings[i]) }
-            // Catalog credit only, small and quiet.
-            Text(kind == .film ? "TVmaze · TheTVDB" : "IGDB")
-                .font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF5E5E66))
+            Text(kind == .film
+                 ? "Öneriler AI ile seçilir; afiş ve başlıklar TVmaze / TheTVDB kataloglarından doğrulanır. İnternet gerekir."
+                 : "Öneriler AI ile seçilir; kapak, çıkış yılı ve platformlar IGDB'den doğrulanır. İnternet gerekir.")
+                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF85858E)).lineSpacing(5)
                 .padding(.bottom, 12)
         }
     }

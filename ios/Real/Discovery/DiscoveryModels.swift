@@ -31,8 +31,6 @@ struct DiscoveryFilter: Hashable, Identifiable {
     var selectionGroup: Int { genre ? 0 : (themeGroup != nil ? 1 : 2) }
 
     static let maxPerGroup = 3
-    /// Feelings that only repeated a genre (removed); saved selections read as that genre.
-    static let merged = ["scary": "horror", "funny": "comedy", "suspenseful": "thriller", "intriguing": "mystery"]
 
     static let film: [DiscoveryFilter] = {
         func g(_ k: String, _ l: String, _ a: [String] = []) -> DiscoveryFilter { DiscoveryFilter(key: k, label: l, aliases: a.isEmpty ? [k] : a) }
@@ -43,11 +41,11 @@ struct DiscoveryFilter: Hashable, Identifiable {
             g("action", "Aksiyon"), g("adventure", "Macera"), g("comedy", "Komedi"), g("drama", "Dram"), g("romance", "Romantik"),
             g("science-fiction", "Bilim kurgu", ["science fiction", "sci-fi", "science-fiction"]), g("fantasy", "Fantastik"),
             g("thriller", "Gerilim"), g("mystery", "Gizem"), g("crime", "Suç"), g("horror", "Korku"), g("animation", "Animasyon"),
-            g("anime", "Anime"), g("documentary", "Belgesel"), g("family", "Aile"), g("history", "Tarih", ["history", "historical"]), g("war", "Savaş"),
+            g("documentary", "Belgesel"), g("family", "Aile"), g("history", "Tarih", ["history", "historical"]), g("war", "Savaş"),
             f("feel-good", "İyi hissettiren"), f("mind-bending", "Zihin büken"), f("slow-burn", "Yavaş gelişen"), f("fast-paced", "Tempolu"),
-            f("emotional", "Duygulandıran"), f("heartbreaking", "Hüzünlendiren"),
-            f("plot-twist", "Ters köşe yapan"), f("thought-provoking", "Düşündüren"), f("inspiring", "İlham veren"),
-            f("relaxing", "Rahatlatan"), f("dark-tone", "Karanlık atmosferli"), f("nostalgic", "Nostaljik"),
+            f("scary", "Korkutan"), f("suspenseful", "Gergin tutan"), f("emotional", "Duygulandıran"), f("heartbreaking", "Hüzünlendiren"),
+            f("intriguing", "Merak uyandıran"), f("plot-twist", "Ters köşe yapan"), f("thought-provoking", "Düşündüren"), f("inspiring", "İlham veren"),
+            f("funny", "Güldüren"), f("relaxing", "Rahatlatan"), f("dark-tone", "Karanlık atmosferli"), f("nostalgic", "Nostaljik"),
             t("dystopia", "Distopya", future), t("post-apocalyptic", "Kıyamet sonrası", future), t("time-travel", "Zaman yolculuğu", future),
             t("time-loop", "Zaman döngüsü", future), t("parallel-universe", "Paralel evren", future), t("space", "Uzay", future),
             t("aliens", "Uzaylılar", future), t("artificial-intelligence", "Yapay zekâ", future), t("cyberpunk", "Siberpunk", future),
@@ -69,10 +67,7 @@ struct DiscoveryFilter: Hashable, Identifiable {
             g("puzzle", "Bulmaca"), g("adventure", "Macera"), g("shooter", "Nişancı"), g("fighting", "Dövüş"), g("sports", "Spor"),
             g("simulation", "Simülasyon"), g("indie", "Bağımsız"), g("roguelike", "Roguelike"), g("open-world", "Açık dünya"),
             g("metroidvania", "Metroidvania"), g("tactics", "Taktik"),
-            g("horror", "Korku"), g("survival", "Hayatta kalma"), g("souls-like", "Souls-like"), g("sandbox", "Sandbox"),
-            g("stealth", "Gizlilik"), g("card", "Kart / deste"), g("visual-novel", "Görsel roman"), g("rhythm", "Ritim / müzik"),
-            g("management", "Şehir kurma / yönetim"), g("hack-and-slash", "Hack and slash"),
-            f("relaxing", "Rahatlatan"), f("challenging", "Zorlayan"), f("story-driven", "Hikâyeye sürükleyen"),
+            f("relaxing", "Rahatlatan"), f("challenging", "Zorlayan"), f("story-driven", "Hikâyeye sürükleyen"), f("scary", "Korkutan"),
             f("cozy", "Sıcacık"), f("fast-paced", "Tempolu"), f("competitive", "Rekabetçi"), f("atmospheric", "Atmosferik"),
             f("thought-provoking", "Düşündüren"), f("nostalgic", "Nostaljik"), f("co-op", "Birlikte oynanan"), f("short-session", "Kısa seanslık"),
         ]
@@ -84,16 +79,8 @@ struct GamePlatformGroup: Hashable, Identifiable {
     let key: String
     let label: String
     var id: String { key }
-    static let all = [GamePlatformGroup(key: "pc", label: "PC"), GamePlatformGroup(key: "playstation", label: "PlayStation"),
-                      GamePlatformGroup(key: "xbox", label: "Xbox"), GamePlatformGroup(key: "switch", label: "Switch"),
-                      GamePlatformGroup(key: "mobile", label: "Mobil"), GamePlatformGroup(key: "retro", label: "Retro")]
-
-    /// What a server from before the split understands: consoles as one group, no mobile.
-    static func legacy(_ keys: Set<String>) -> Set<String> {
-        Set(keys.compactMap { k -> String? in
-            switch k { case "playstation", "xbox", "switch": return "current"; case "mobile": return nil; default: return k }
-        })
-    }
+    static let all = [GamePlatformGroup(key: "pc", label: "PC"), GamePlatformGroup(key: "current", label: "Güncel konsollar"),
+                      GamePlatformGroup(key: "retro", label: "Retro cihazlar")]
 }
 
 /// One poster in the deck: film/series (media) or game. Tags are AI-inferred filter keys.
@@ -148,11 +135,8 @@ final class DiscoveryStore {
     func snapshot(_ kind: DiscoveryKind) -> Snapshot { kind == .film ? film : game }
 
     private static func load(_ key: String) -> Snapshot? {
-        guard let data = UserDefaults.standard.data(forKey: key), var s = try? JSONDecoder().decode(Snapshot.self, from: data) else { return nil }
-        let merged = key == "real_game_discovery" ? ["scary": "horror"] : DiscoveryFilter.merged
-        var seen = Set<String>()
-        s.filters = s.filters.map { merged[$0] ?? $0 }.filter { seen.insert($0).inserted }
-        return s
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(Snapshot.self, from: data)
     }
 
     private func set(_ kind: DiscoveryKind, _ s: Snapshot) {
@@ -176,8 +160,6 @@ final class DiscoveryStore {
         var asked: [String] = []
         var fresh: [DiscoveryCard] = []
         var lastError: Error?
-        let catalog = kind == .film ? DiscoveryFilter.film : DiscoveryFilter.game
-        let genreKeys = Set(filters.filter { k in catalog.first { $0.key == k }?.genre == true })
         for _ in 0..<(kind == .film ? 3 : 2) where fresh.count < 8 {
             var exclude = prior.excluded + keep.flatMap(\.seenTitles) + asked
             var dedup = Set<String>()
@@ -195,8 +177,6 @@ final class DiscoveryStore {
             for card in cards where !knownKeys.contains(card.id) && !card.seenTitles.contains(where: { known.contains(norm($0)) }) {
                 knownKeys.insert(card.id)
                 card.seenTitles.forEach { known.insert(norm($0)) }
-                // Games are confirmed against IGDB on the server; films / series here against their catalog genres.
-                if kind == .film, !genreKeys.isEmpty, DiscoveryRanking.match(card, genreKeys, kind: kind).count == 0 { continue }
                 fresh.append(card)
             }
         }
@@ -305,15 +285,8 @@ struct BackendDiscoveryService: DiscoveryService {
     }
 
     private func films(type: String, filters: Set<String>, exclude: [String]) async throws -> [DiscoveryCard] {
-        let json: [String: Any]
-        do {
-            json = try await RealBackend.post("/api/media-recommendations",
+        let json = try await RealBackend.post("/api/media-recommendations",
                                               ["type": type, "filters": Array(filters), "exclude": Array(exclude.suffix(40))], timeout: 25)
-        } catch let failure as RealBackend.Failure where failure.status == 400 && filters.contains("anime") {
-            // A server from before "anime" does not know it: ask without it (the genre check still applies here).
-            json = try await RealBackend.post("/api/media-recommendations",
-                                              ["type": type, "filters": Array(filters.subtracting(["anime"])), "exclude": Array(exclude.suffix(40))], timeout: 25)
-        }
         guard let list = json["candidates"] as? [[String: Any]] else { throw BookError.message("Öneri yanıtı geçersiz.") }
         let valid = Set(DiscoveryFilter.film.map(\.key))
         // Verify the candidates against the catalogs (skipping titles already seen), a few at a time, keeping the AI's order.
@@ -342,21 +315,8 @@ struct BackendDiscoveryService: DiscoveryService {
     private func games(filters: Set<String>, platforms: Set<String>, exclude: [String]) async throws -> [DiscoveryCard] {
         let json: [String: Any]
         do {
-            do {
-                json = try await RealBackend.post("/api/game-recommendations",
-                                                  ["filters": Array(filters), "platforms": Array(platforms), "exclude": Array(exclude.suffix(40))], timeout: 40)
-            } catch let failure as RealBackend.Failure where failure.status == 400 {
-                // A server from before the new genres / platforms: ask once more in its terms.
-                let old: Set<String> = ["rpg", "strategy", "action", "platformer", "racing", "puzzle", "adventure", "shooter", "fighting",
-                                        "sports", "simulation", "indie", "roguelike", "open-world", "metroidvania", "tactics"]
-                let legacyFilters = filters.compactMap { k -> String? in
-                    if k == "horror" { return "scary" }
-                    return (DiscoveryFilter.game.first { $0.key == k }?.genre == false || old.contains(k)) ? k : nil
-                }
-                json = try await RealBackend.post("/api/game-recommendations",
-                                                  ["filters": legacyFilters, "platforms": Array(GamePlatformGroup.legacy(platforms)),
-                                                   "exclude": Array(exclude.suffix(40))], timeout: 40)
-            }
+            json = try await RealBackend.post("/api/game-recommendations",
+                                              ["filters": Array(filters), "platforms": Array(platforms), "exclude": Array(exclude.suffix(40))], timeout: 40)
         } catch let failure as RealBackend.Failure where failure.status == 503 {
             throw BookError.message("Oyun kataloğu şu anda hazır değil.")
         }
