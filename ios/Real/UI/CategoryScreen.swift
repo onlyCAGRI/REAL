@@ -367,7 +367,7 @@ private struct CategoryHero: View {
                 Spacer()
                 if let stats {
                     Button { withAnimation(.spring(duration: 0.35)) { showProgress.toggle() } } label: {
-                        ProgressRing(fraction: stats.fraction, active: showProgress).scaleEffect(1.1).frame(width: 44, height: 44)
+                        CategoryProgressDisc(fraction: stats.fraction, active: showProgress, tint: visual.stripe.0).frame(width: 44, height: 44)
                     }
                     .accessibilityLabel(showProgress ? "İlerlemeyi gizle" : "Kategori ilerlemesini göster")
                 }
@@ -477,6 +477,27 @@ struct ProgressRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: 20, height: 20)
+    }
+}
+
+/// The hero's progress button: a disc in the category colour's deep shade with a thick ring in its light shade.
+struct CategoryProgressDisc: View {
+    let fraction: Double
+    let active: Bool
+    let tint: Color
+    var body: some View {
+        let deep = tint.lerp(.black, 0.42)
+        let light = tint.lerp(.white, 0.55)
+        ZStack {
+            Circle().fill(deep.opacity(active ? 1 : 0.88))
+            Circle().strokeBorder(.white.opacity(0.16), lineWidth: 0.8)
+            Circle().stroke(.white.opacity(0.18), lineWidth: 3.4).padding(9)
+            Circle().trim(from: 0, to: max(0, min(fraction, 1)))
+                .stroke(light, style: StrokeStyle(lineWidth: 3.4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .padding(9)
+        }
+        .frame(width: 38, height: 38)
     }
 }
 

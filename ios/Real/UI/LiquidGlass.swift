@@ -155,12 +155,14 @@ struct BottomFade: View {
         // instead of showing through around the composer.
         // The dock floats above the home-indicator strip, so a background on it ends at the dock's bottom edge and
         // ignoresSafeArea cannot stretch it; a solid tail reaches past the screen edge to cover that strip too.
-        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.45), location: 0.4),
-                               .init(color: .black.opacity(0.88), location: 0.68), .init(color: .black, location: 1)],
+        // Eased stops (no visible edge where the fade starts), ending at Android's 92% black rather than solid.
+        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.08), location: 0.2),
+                               .init(color: .black.opacity(0.24), location: 0.4), .init(color: .black.opacity(0.48), location: 0.6),
+                               .init(color: .black.opacity(0.74), location: 0.8), .init(color: .black.opacity(0.92), location: 1)],
                        startPoint: .top, endPoint: .bottom)
-            .frame(height: 170)
+            .frame(height: 210)
             .frame(maxWidth: .infinity)
-            .overlay(alignment: .bottom) { Color.black.frame(height: Self.tail).offset(y: Self.tail) }
+            .overlay(alignment: .bottom) { Color.black.opacity(0.92).frame(height: Self.tail).offset(y: Self.tail) }
             .allowsHitTesting(false)
             .opacity(keyboardUp ? 0 : 1)
             .animation(.easeOut(duration: 0.18), value: keyboardUp)
