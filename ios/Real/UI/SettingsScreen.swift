@@ -211,6 +211,8 @@ struct SettingsScreen: View {
             SettingsDivider()
             SettingsToggleRow(icon: .blurOff, title: "Dinamik bulanıklığı azalt", subtitle: "Bulanıklık efektleri yerine sabit koyu yüzeyler kullanır", isOn: $reduceDynamicBlur)
             SettingsDivider()
+            PaletteChoiceRow()
+            SettingsDivider()
             SettingsToggleRow(icon: .cat, title: "REAL Pet", subtitle: "Geçici olarak devre dışı bırakıldı", isOn: .constant(false), enabled: false)
             SettingsDivider()
             SettingsToggleRow(icon: .bell, title: "Bağlam kartları", subtitle: "Ana ekranın altında arada su, mood, kitap ve film önerisi gösterir", isOn: $contextCards)
@@ -591,5 +593,44 @@ struct LicensesSheet: View {
         guard let url = Bundle.main.url(forResource: entries[index].2, withExtension: "txt"),
               let s = try? String(contentsOf: url, encoding: .utf8) else { return "Lisans metni okunamadı." }
         return s
+    }
+}
+
+/// Renk paleti: REAL or Canlı. Every card and category recolours from the chosen palette (stored on this device).
+struct PaletteChoiceRow: View {
+    @AppStorage(colorPaletteKey) private var palette = 1
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Renk paleti").font(RealFont.inter(15, .medium)).foregroundStyle(.white)
+            Text("Kartların ve kategorilerin renkleri seçtiğin paletten gelir").font(RealFont.inter(12))
+                .foregroundStyle(Color(argb: 0xFF8E8E98)).padding(.top, 2).padding(.bottom, 12)
+            HStack(spacing: 10) {
+                option(1, "REAL", paletteRealChoices)
+                option(2, "Canlı", paletteCanliChoices)
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+    }
+
+    private func option(_ id: Int, _ name: String, _ colors: [ReminderColorChoice]) -> some View {
+        let on = palette == id
+        return Button { palette = id } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: -6) {
+                    ForEach(Array(reminderColorDisplayOrder.dropFirst(2).prefix(8)), id: \.self) { i in
+                        Circle().fill(colors[i].color).frame(width: 18, height: 18)
+                            .overlay(Circle().strokeBorder(Color(argb: 0xFF16161A), lineWidth: 1))
+                    }
+                }
+                Text(name).font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white.opacity(on ? 0.10 : 0.04)))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(on ? Color.white : .white.opacity(0.10), lineWidth: on ? 1.5 : 0.6))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
