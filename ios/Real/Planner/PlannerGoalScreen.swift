@@ -31,12 +31,15 @@ struct PlannerGoalScreen: View {
 
     private var category: CustomCategory? { store.category(categoryId) }
 
-    /// plannerCategoryDetailAccent (or the pastel picked in the style popup).
+    /// plannerCategoryDetailAccent: the category's own colour (as on its home card and in the monthly calendar).
     private var accent: Color {
-        if let i = store.categoryPastel[categoryId], realCalendarPastels.indices.contains(i) { return plannerSoftPastel(realCalendarPastels[i]) }
-        guard let c = category else { return plannerSoftPastel(realCalendarPastels[9]) }
-        let raw = c.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(c.accentStart) ?? Color(argb: 0xFF4558C8)
-        return plannerSoftPastel(nearestCalendarPastel(raw))
+        guard let c = category else { return Color(argb: 0xFF4558C8) }
+        return c.visual.stripe.0
+    }
+
+    /// Text / marks drawn on the accent: dark on light colours, white on dark ones.
+    private var onAccent: Color {
+        categoryForeground(start: accent, end: accent) == .white ? .white : RealColors.plannerInk
     }
 
     private var members: [ReminderItem] {
@@ -235,8 +238,8 @@ struct PlannerGoalScreen: View {
                 .padding(14)
             VStack(alignment: .leading, spacing: 0) {
                 Spacer()
-                Text("\(doneCount)/\(total)").font(RealFont.inter(34)).kerning(-1.2).foregroundStyle(RealColors.plannerInk)
-                Text("goals done").font(RealFont.inter(12)).foregroundStyle(RealColors.plannerInk.opacity(0.6))
+                Text("\(doneCount)/\(total)").font(RealFont.inter(34)).kerning(-1.2).foregroundStyle(onAccent)
+                Text("goals done").font(RealFont.inter(12)).foregroundStyle(onAccent.opacity(0.6))
             }
             .padding(.leading, 16).padding(.bottom, 12)
             Button {
@@ -247,7 +250,7 @@ struct PlannerGoalScreen: View {
                     Circle().fill(reorderMode ? accent : .clear)
                     Circle().strokeBorder(accent.opacity(0.55), lineWidth: 1)
                     ActionIcon(reorderMode ? .check : .edit, size: 15)
-                        .foregroundStyle(reorderMode ? RealColors.plannerInk : accent)
+                        .foregroundStyle(reorderMode ? onAccent : accent)
                 }
                 .frame(width: 30, height: 30)
             }
@@ -407,7 +410,7 @@ struct PlannerGoalScreen: View {
                             default: Circle().strokeBorder(Color(argb: 0xFF3A3A42), lineWidth: 1)
                             }
                             if state == 0 {
-                                RealSymbol("checkmark", size: 17.2).foregroundStyle(RealColors.plannerInk)
+                                RealSymbol("checkmark", size: 17.2).foregroundStyle(onAccent)
                             } else {
                                 Text("\(number)").font(RealFont.inter(16)).foregroundStyle(state == 1 ? accent : Color(argb: 0xFF7C7C85))
                             }
@@ -656,21 +659,6 @@ private struct CategoryStylePopup: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Renk").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8C8C95))
-            ForEach(0..<2, id: \.self) { row in
-                HStack {
-                    ForEach(0..<5, id: \.self) { col in
-                        let i = row * 5 + col
-                        let selected = store.categoryPastel[categoryId] == i
-                        Button { store.setCategoryPastel(categoryId, i) } label: {
-                            Circle().fill(realCalendarPastels[i]).frame(width: 40, height: 40)
-                                .overlay(Circle().strokeBorder(.white, lineWidth: selected ? 2 : 0))
-                                .overlay { if selected { RealSymbol("checkmark", size: 14.9).foregroundStyle(RealColors.plannerInk) } }
-                        }
-                        if col < 4 { Spacer() }
-                    }
-                }
-            }
             Text("Kart şekli").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8C8C95))
             HStack(spacing: 10) {
                 ForEach(["square", "rectangle"], id: \.self) { shape in
