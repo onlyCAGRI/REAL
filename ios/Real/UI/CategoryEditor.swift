@@ -28,7 +28,7 @@ struct PaletteGradientPicker: View {
                     }
                     .accessibilityLabel("Renk yok")
                 }
-                ForEach(reminderColorChoices) { choice in
+                ForEach(pickerColorChoices) { choice in
                     let selected = (editingEnd ? end : start) == choice.index
                     Button {
                         if editingEnd { end = choice.index } else { start = choice.index }
@@ -631,7 +631,7 @@ private struct ColorChoiceRow: View {
                         }
                         .accessibilityLabel("\(label): Renk yok (Varsayılan)")
                     }
-                    ForEach(reminderColorChoices) { choice in
+                    ForEach(pickerColorChoices) { choice in
                         let on = selected == choice.index
                         Button { selected = choice.index } label: {
                             Circle().fill(choice.color).frame(width: 31, height: 31)

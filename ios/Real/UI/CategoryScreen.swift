@@ -239,7 +239,7 @@ struct CategoryScreen: View {
                         .overlay(Circle().strokeBorder(.white.opacity(colorFilter == -1 ? 0.9 : 0.25), lineWidth: colorFilter == -1 ? 2 : 1))
                 }
                 .accessibilityLabel("Renksiz kartlar")
-                ForEach(reminderColorChoices) { choice in
+                ForEach(pickerColorChoices) { choice in
                     Button { withAnimation { colorFilter = choice.index; filterMode = false } } label: {
                         Circle().fill(choice.color).frame(width: 34, height: 34)
                             .overlay(Circle().strokeBorder(.white, lineWidth: colorFilter == choice.index ? 2 : 0))

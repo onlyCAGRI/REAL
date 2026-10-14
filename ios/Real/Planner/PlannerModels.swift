@@ -155,8 +155,9 @@ func plannerCardColor(_ reminder: ReminderItem, categories: [CustomCategory]) ->
     }
     if let solid = reminder.customSolidColorArgb { return Color(argbInt: solid) }
     if let raw = paletteColor(reminder.accentStart) { return raw }
-    let n = reminderColorChoices.count
-    return reminderColorChoices[((kotlinHash(reminder.id) % n) + n) % n].color
+    let order = reminderColorDisplayOrder.filter { $0 != 1 }   // the 20, without the near-black
+    let n = order.count
+    return reminderColorChoices[order[((kotlinHash(reminder.id) % n) + n) % n]].color
 }
 
 /// Text on a planner card: dark on light colours, white on dark ones.

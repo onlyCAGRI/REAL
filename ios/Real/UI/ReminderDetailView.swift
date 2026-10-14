@@ -1175,7 +1175,7 @@ struct CardStackEditor: View {
                 TextField("Metin", text: $card.body, axis: .vertical).lineLimit(3...12)
                 Section("Renk") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 10) {
-                        ForEach(reminderColorChoices) { choice in
+                        ForEach(pickerColorChoices) { choice in
                             let argb = choice.color.argbInt
                             Circle().fill(choice.color).frame(height: 28)
                                 .overlay(Circle().strokeBorder(.white, lineWidth: card.colorArgb == argb ? 2 : 0))

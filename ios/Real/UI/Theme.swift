@@ -54,6 +54,12 @@ let reminderColorChoices: [ReminderColorChoice] = rawPalette.enumerated().map { 
     ReminderColorChoice(index: pair.offset, label: pair.element.0, color: Color(argb: pair.element.1))
 }
 
+/// ReminderColorDisplayOrder: the 20 colours as pickers show them, REAL-style — the two signature neutrals, then
+/// round the colour wheel (yellow, orange, pink-red, purple, blue, teal, green), light to dark in each family. Cards
+/// store the index, so the order changes nothing saved; the four "Koleksiyon" duplicates are not offered.
+let reminderColorDisplayOrder = [0, 1, 9, 10, 11, 13, 12, 14, 16, 15, 17, 18, 19, 4, 2, 3, 5, 6, 7, 8]
+let pickerColorChoices: [ReminderColorChoice] = reminderColorDisplayOrder.map { reminderColorChoices[$0] }
+
 func paletteColor(_ index: Int?) -> Color? {
     guard let index, reminderColorChoices.indices.contains(index) else { return nil }
     return reminderColorChoices[index].color
