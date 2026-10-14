@@ -429,20 +429,31 @@ struct CategoryOrderSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Kategori düzeni").font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
-            Text("Tutamaçla sürükle, gözle gizle.").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFAAAAB4))
-                .padding(.top, 5).padding(.bottom, 12)
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ana sayfada göster").font(RealFont.inter(14)).foregroundStyle(.white)
-                    Text("Daha az göster görünümündeki kart sayısı").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF8F909A))
-                }
+                Text("Kategoriler").font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
                 Spacer()
-                stepButton("−", enabled: preview > 1) { preview -= 1 }
-                Text("\(preview)").font(RealFont.inter(16, .semibold)).foregroundStyle(.white).frame(minWidth: 26)
-                stepButton("+", enabled: preview < max(store.allHomeCategories.count, 1)) { preview += 1 }
+                Button {
+                    store.setCategoryOrder(order.filter { $0 != ReminderStore.showAllKey }, hidden: hidden)
+                    savedPreview = preview
+                    dismiss()
+                } label: {
+                    Text("Tamam").font(RealFont.inter(14, .semibold)).foregroundStyle(.black)
+                        .padding(.horizontal, 18).padding(.vertical, 9).background(Capsule().fill(.white))
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.bottom, 8)
+            // How many show on Home before "Tümünü göster".
+            HStack {
+                Text("Ana sayfada").font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.85))
+                Spacer()
+                stepButton("−", enabled: preview > 1) { withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { preview -= 1 } }
+                Text("\(preview)").font(RealFont.inter(17, .semibold)).foregroundStyle(.white).frame(minWidth: 26)
+                    .contentTransition(.numericText(value: Double(preview)))
+                stepButton("+", enabled: preview < max(store.allHomeCategories.count, 1)) { withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { preview += 1 } }
+            }
+            .padding(.leading, 16).padding(.trailing, 6).padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 18).fill(.white.opacity(0.05)))
+            .padding(.top, 14).padding(.bottom, 8)
             List {
                 ForEach(visible, id: \.self) { key in
                     row(key)
@@ -460,13 +471,13 @@ struct CategoryOrderSheet: View {
             .scrollContentBackground(.hidden)
             .environment(\.editMode, .constant(.active))
             if !hiddenList.isEmpty {
-                Text("GİZLENENLER · DOKUNARAK GERİ EKLE").font(RealFont.inter(10, .medium)).kerning(0.6).foregroundStyle(Color(argb: 0xFF8F909A))
+                Text("Gizlenenler").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45))
                     .padding(.top, 10)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(hiddenList, id: \.self) { key in
                             Button { withAnimation { _ = hidden.remove(key) } } label: {
-                                Text("+ \(title(key))").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFF9DC3FF))
+                                Text("+ \(title(key))").font(RealFont.inter(13, .medium)).foregroundStyle(.white.opacity(0.85))
                                     .padding(.horizontal, 12).padding(.vertical, 8)
                                     .background(Capsule().fill(.white.opacity(0.07)))
                             }
@@ -476,25 +487,15 @@ struct CategoryOrderSheet: View {
                     .padding(.vertical, 6)
                 }
             }
-            HStack {
-                Button("Varsayılan") {
-                    withAnimation {
-                        order = store.allHomeCategories.map(\.orderKey) + [ReminderStore.showAllKey]
-                        hidden = []
-                        preview = 4
-                    }
+            Button("Varsayılan") {
+                withAnimation {
+                    order = store.allHomeCategories.map(\.orderKey) + [ReminderStore.showAllKey]
+                    hidden = []
+                    preview = 4
                 }
-                .foregroundStyle(Color(argb: 0xFFB8B9C2))
-                Spacer()
-                Button("Kapat") { dismiss() }.foregroundStyle(Color(argb: 0xFFB8B9C2)).padding(.trailing, 18)
-                Button("Tamam") {
-                    store.setCategoryOrder(order.filter { $0 != ReminderStore.showAllKey }, hidden: hidden)
-                    savedPreview = preview
-                    dismiss()
-                }
-                .foregroundStyle(Color(argb: 0xFF9DC3FF))
             }
-            .font(RealFont.inter(15, .medium))
+            .font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.45))
+            .frame(maxWidth: .infinity)
             .padding(.top, 12)
         }
         .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 14)
@@ -529,15 +530,9 @@ struct CategoryOrderSheet: View {
             }
         }
         return HStack(spacing: 14) {
-            if let visual {
-                RealSymbol(visual.symbol, size: 15).foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(Circle().fill(LinearGradient(colors: [visual.stripe.0, visual.stripe.1], startPoint: .topLeading, endPoint: .bottomTrailing)))
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title(key)).font(RealFont.inter(15, .medium)).foregroundStyle(.white).lineLimit(1)
-                if item == nil { Text("Ana sayfa düğmesi").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF858691)) }
-            }
+            if let visual { Circle().fill(visual.stripe.0).frame(width: 12, height: 12) }
+            else { Circle().strokeBorder(.white.opacity(0.35), lineWidth: 1.2).frame(width: 12, height: 12) }
+            Text(title(key)).font(RealFont.inter(15, .medium)).foregroundStyle(item == nil ? .white.opacity(0.6) : .white).lineLimit(1)
             Spacer()
             Button { withAnimation { _ = hidden.insert(key) } } label: {
                 Image(systemName: "eye.slash").font(.system(size: 15)).foregroundStyle(Color(argb: 0xFFAAAAB4)).frame(width: 36, height: 36)
@@ -545,16 +540,15 @@ struct CategoryOrderSheet: View {
             .buttonStyle(.plain)
             .accessibilityLabel("\(title(key)) gizle")
         }
-        .padding(.leading, item == nil ? 16 : 14).padding(.vertical, 8).padding(.trailing, 4)
-        .frame(minHeight: 58)
-        .background(RoundedRectangle(cornerRadius: 18).fill(Color(argb: 0xFF1C1D23)))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08), lineWidth: 0.8))
+        .padding(.leading, 16).padding(.vertical, 8).padding(.trailing, 4)
+        .frame(minHeight: 56)
+        .background(RoundedRectangle(cornerRadius: 18).fill(.white.opacity(0.05)))
     }
 
     private func stepButton(_ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(label).font(RealFont.inter(18, .medium)).foregroundStyle(enabled ? Color(argb: 0xFF9DC3FF) : .white.opacity(0.25))
-                .frame(width: 36, height: 36)
+            Text(label).font(RealFont.inter(20)).foregroundStyle(enabled ? .white.opacity(0.9) : .white.opacity(0.25))
+                .frame(width: 40, height: 40)
         }
         .buttonStyle(.plain).disabled(!enabled)
     }

@@ -75,8 +75,28 @@ enum NotificationScheduler {
             let comps = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: time.date)
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier(item.id, i), content: content, trigger: trigger))
+            // "Erken uyarı": a heads-up before each occurrence ("15 dk sonra · …").
+            if let minutes = item.earlyAlertMinutes, (1...ReminderItem.maxEarlyAlertMinutes).contains(minutes) {
+                let early = time - EpochMillis(minutes) * 60_000
+                guard early > now else { continue }
+                let heads = self.content(for: item, alerting: false)
+                heads.body = earlyLead(minutes) + " · " + heads.body
+                heads.subtitle = "Erken uyarı"
+                heads.sound = .default
+                let c = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: early.date)
+                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: earlyIdentifier(item.id, i), content: heads,
+                    trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
+            }
         }
     }
+
+    /// "15 dk sonra", "1 saat sonra", "2 gün sonra".
+    static func earlyLead(_ minutes: Int) -> String {
+        if minutes >= 1440 && minutes % 1440 == 0 { return "\(minutes / 1440) gün sonra" }
+        if minutes >= 60 && minutes % 60 == 0 { return "\(minutes / 60) saat sonra" }
+        return "\(minutes) dk sonra"
+    }
+    private static func earlyIdentifier(_ id: Int64, _ index: Int) -> String { "reminder-\(id)-early-\(index)" }
 
     /// showImmediate: a fresh card with no date posts right away when "Hemen bildir" is on.
     static func postImmediateIfNeeded(_ item: ReminderItem) {
@@ -90,7 +110,7 @@ enum NotificationScheduler {
 
     static func cancel(_ id: Int64) {
         guard enabled else { return }
-        let ids = (0..<repeatsAhead).map { identifier(id, $0) }
+        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 

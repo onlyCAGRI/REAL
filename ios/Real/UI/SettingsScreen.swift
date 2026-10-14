@@ -203,6 +203,9 @@ struct SettingsScreen: View {
 
     private var dailyLabel: String { dailyView == "new_plus" ? "New+" : (dailyView == "classic" ? "Classic" : "New") }
 
+    @AppStorage(HomeCardStyle.plainKey) private var plainCards = false
+    @AppStorage(CalendarCards.homeDaysKey) private var calendarHomeDays = 0
+
     @ViewBuilder
     private var mainPage: some View {
         SettingsSectionHeader(title: "GÖRÜNÜM")
@@ -219,6 +222,15 @@ struct SettingsScreen: View {
             SettingsDivider()
             SettingsActionRow(icon: .calendar, title: "Takvim bağlantısı", subtitle: "Google / iCloud takvimlerini göster ve planlarını gönder") {
                 showCalendar = true
+            }
+            SettingsDivider()
+            SettingsToggleRow(icon: .check, title: "Sade kartlar (Deneysel)",
+                              subtitle: "Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır.", isOn: $plainCards)
+            SettingsDivider()
+            // Kapalı → 7 gün → 14 gün, one tap each.
+            SettingsActionRow(icon: .calendar, title: "Ana ekranda takvim",
+                              subtitle: calendarHomeDays > 0 ? "Önümüzdeki \(calendarHomeDays) gün" : "Kapalı") {
+                calendarHomeDays = calendarHomeDays == 0 ? 7 : (calendarHomeDays == 7 ? 14 : 0)
             }
         }
         SettingsSectionHeader(title: "BİLDİRİMLER VE DAVRANIŞ")

@@ -294,7 +294,7 @@ struct ReminderDetailView: View {
                     .focused($titleFocused)
                     .frame(minHeight: 96, alignment: .topLeading)
                     .onChange(of: titleFocused) { _, f in if f { secondaryExpanded = false } }
-                if !r.isCompleted, r.alertAt != nil { scheduleChips(r) }
+                if !r.isCompleted, r.alertAt != nil || r.plannedDateEpochDay != nil { scheduleChips(r) }
             } else {
                 Text(r.text.isEmpty ? "Boş not" : r.text)
                     .font(RealFont.inter(21))
@@ -358,12 +358,14 @@ struct ReminderDetailView: View {
                             if let repeatText = repeatSummary(r) {
                                 Text(repeatText).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
                             }
+                            timingLines(r)
                         } else if let day = r.plannedDateEpochDay {
                             HStack(spacing: 6) {
                                 Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
                                 Text("•").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF6B6B75))
                                 Text(RealDates.planned(day)).font(RealFont.inter(14, .medium)).foregroundStyle(RealColors.accentBlue)
                             }
+                            timingLines(r)
                         } else {
                             Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
                         }
@@ -383,8 +385,8 @@ struct ReminderDetailView: View {
     private func statusText(_ r: ReminderItem, hasCategory: Bool) -> String? {
         if r.isCompleted { return "Tamamlandı" }
         if r.isQuick24HourActive() { return "24 hour" }
-        if r.alertAt == nil && r.plannedDateEpochDay == nil { return hasCategory ? nil : "Uyarı yok" }
-        return "Planlı"
+        if r.alertAt == nil && r.plannedDateEpochDay == nil { return hasCategory ? nil : "No alert" }
+        return "Planned"
     }
 
     /// RecurrenceRule.repeatSummary ("Her Pazartesi tekrarlanacak").
@@ -421,29 +423,66 @@ struct ReminderDetailView: View {
             .background(Circle().fill(LinearGradient(colors: [start, end], startPoint: .topLeading, endPoint: .bottomTrailing)))
     }
 
-    /// Edit-mode schedule chips under the text: date, repeat, duration, end, clear.
+    /// "Bitiş: 15 Eki 18:00" and "Erken uyarı: 15 dk önce" under the status.
+    @ViewBuilder
+    private func timingLines(_ r: ReminderItem) -> some View {
+        if let end = r.endAt {
+            Text("Bitiş: " + Self.shortDateTime(end)).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
+        }
+        if let early = r.earlyAlertMinutes {
+            Text("Erken uyarı: " + EarlyAlertScreen.label(early) + " önce").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
+        }
+    }
+
+    static func shortDateTime(_ millis: EpochMillis) -> String {
+        let d = millis.date
+        return "\(Calendar.real.component(.day, from: d)) " + d.formatted(.dateTime.month(.abbreviated).locale(Locale(identifier: "tr_TR"))) + " " + RealDates.time(d)
+    }
+
+    /// Edit-mode schedule chips under the text: date, repeat, early warning, duration, end, clear. A day without a time
+    /// (e.g. moved to 24 hour) gets the date chip and the clear button too.
     private func scheduleChips(_ r: ReminderItem) -> some View {
         HStack(spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    chip("calendar", RealDates.reminder(r.alertAt!), selected: true) { openSchedule(r) }
+                    if let alert = r.alertAt {
+                        chip("calendar", RealDates.reminder(alert), selected: true) { openSchedule(r) }
+                    } else if let day = r.plannedDateEpochDay {
+                        chip("calendar", RealDates.planned(day), selected: true) { openSchedule(r) }
+                    }
                     if r.hasRepeat {
                         chip("repeat", Recurrence.description(r.repeatRule, alert: r.anchorAlertAt ?? r.alertAt), selected: false) { openSchedule(r) }
                     }
-                    chip("note.text", r.durationMinutes.map { "Süre: \($0) min" } ?? "Süre ekle", selected: false) {
-                        let options = [nil, 15, 30, 45, 60, 90, 120]
-                        let i = options.firstIndex(of: r.durationMinutes) ?? 0
-                        draft?.durationMinutes = options[(i + 1) % options.count]
+                    if let early = r.earlyAlertMinutes {
+                        chip("bell", EarlyAlertScreen.label(early) + " önce", selected: false) { openSchedule(r) }
                     }
-                    let end = r.durationMinutes.map { RealDates.time((r.alertAt! + Int64($0) * 60_000).date) } ?? "—"
-                    chip("calendar", "Bitiş: \(end)", selected: false) { openSchedule(r) }
+                    if r.alertAt != nil {
+                        chip("note.text", r.durationMinutes.map { "Süre: \($0) min" } ?? "Süre ekle", selected: false) {
+                            let options = [nil, 15, 30, 45, 60, 90, 120]
+                            let i = options.firstIndex(of: r.durationMinutes) ?? 0
+                            draft?.durationMinutes = options[(i + 1) % options.count]
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        chip("calendar", r.endAt.map { "Bitiş: " + Self.shortDateTime($0) } ?? "+ Bitiş", selected: false) { openSchedule(r) }
+                        if r.endAt != nil {
+                            Button { draft?.endAt = nil } label: {
+                                RealSymbol("xmark", size: 11).foregroundStyle(Color(argb: 0xFFA7A7AF)).frame(width: 24, height: 24)
+                            }
+                            .accessibilityLabel("Bitişi kaldır")
+                        }
+                    }
                 }
             }
             Button {
                 draft?.alertAt = nil
                 draft?.anchorAlertAt = nil
+                draft?.plannedDateEpochDay = nil
+                draft?.quick24HourUntilAt = nil
                 draft?.repeatRule = .none
                 draft?.durationMinutes = nil
+                draft?.endAt = nil
+                draft?.earlyAlertMinutes = nil
             } label: { RealSymbol("xmark", size: 16.1).foregroundStyle(.white).frame(width: 40, height: 40) }
             .accessibilityLabel("Tarih ve saati kaldır")
         }

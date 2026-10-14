@@ -14,10 +14,15 @@ struct ReminderCardView: View {
     var onToggle: () -> Void = {}
     var onOpen: () -> Void = {}
     var onLongPress: () -> Void = {}
-    /// Swipe right: into 24 hour.
+    /// Swipe right: into 24 hour (or complete / undo, see [swipeRightLabel]).
     var onSwipeTo24Hour: (() -> Void)?
     /// Swipe left: delete (the caller offers "Geri al").
     var onSwipeDelete: (() -> Void)?
+    var swipeRightLabel = "Move 24 hour"
+    /// True when the card stays in the list after the right swipe, so it slides back into place.
+    var swipeRightKeepsCard = true
+    /// Sade kartlar (Ayarlar, deneysel): no completion circle; the text moves left.
+    var plainStyle = false
 
     @State private var dragX: CGFloat = 0
     @State private var recurringAck = false
@@ -37,14 +42,22 @@ struct ReminderCardView: View {
         guard showCategoryStripes, reminder.customCategoryId != nil, let category else { return nil }
         return category.visual.stripe
     }
-    private var swipeRightOn: Bool { onSwipeTo24Hour != nil && !reminder.isCompleted }
+    // Sade kartlar: a completed card swipes right to undo ("Geri al").
+    private var swipeRightOn: Bool { onSwipeTo24Hour != nil && (!reminder.isCompleted || plainStyle) }
+    private var plain: Bool { plainStyle && !isSelectionMode }
+    /// Ortak kategori: a card someone else added carries just their name.
+    private var author: String? {
+        guard let name = reminder.sharedAuthorName?.trimmingCharacters(in: .whitespaces), !name.isEmpty,
+              let uid = reminder.sharedAuthorUid, uid != RealAuth.shared.account?.uid else { return nil }
+        return name
+    }
     private var swipeLeftOn: Bool { onSwipeDelete != nil }
     private var swipeEnabled: Bool { (swipeRightOn || swipeLeftOn) && !isSelectionMode && !journalListMode }
 
     var body: some View {
         ZStack {
             if swipeEnabled && swipeRightOn {
-                Text("Move 24 hour")
+                Text(swipeRightLabel)
                     .font(RealFont.inter(12, .semibold))
                     .foregroundStyle(RealColors.selection)
                     .padding(.leading, 18)
@@ -68,7 +81,7 @@ struct ReminderCardView: View {
     private var card: some View {
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return HStack(alignment: .top, spacing: 2) {
-            if journalListMode && !isSelectionMode {
+            if (journalListMode || plain) && !isSelectionMode {
                 Color.clear.frame(width: 14, height: 1)
             } else if !isSelectionMode {
                 completionCircle
@@ -94,6 +107,13 @@ struct ReminderCardView: View {
         .padding(.trailing, stripes != nil ? 32 : 16)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottomTrailing) {
+            if let author {
+                Text(author).font(RealFont.inter(11)).foregroundStyle(textColor.opacity(0.55)).lineLimit(1)
+                    .frame(maxWidth: 140, alignment: .trailing)
+                    .padding(.trailing, stripes != nil ? 32 : 16).padding(.bottom, 8)
+            }
+        }
         .background {
             ZStack(alignment: .trailing) {
                 if let accent { shape.fill(accent) } else { shape.fill(RealColors.cardSurface) }
@@ -254,6 +274,12 @@ struct ReminderCardView: View {
                 let left = dragX < 0
                 let predicted = value.predictedEndTranslation.width
                 let commit = abs(dragX) >= 82 || (abs(predicted) > 300 && (predicted < 0) == left && abs(dragX) > 28)
+                if commit && !left && swipeRightKeepsCard {
+                    // Move to 24 hour keeps the card here: act, then it slides back in (no bounce).
+                    onSwipeTo24Hour?()
+                    withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.32)) { dragX = 0 }
+                    return
+                }
                 withAnimation(.spring(duration: 0.3)) { dragX = commit ? (left ? -900 : 900) : 0 }
                 if commit {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {

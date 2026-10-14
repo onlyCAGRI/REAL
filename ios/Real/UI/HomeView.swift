@@ -97,6 +97,12 @@ struct HomeView: View {
     @State private var showPano = false
     @State private var contextTarget: ContextCardType?
     @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
+    /// What the sort arrow now does, under it on the right; it fades after a moment.
+    @State private var sortHint: (id: Int, text: String)?
+    @AppStorage(HomeCardStyle.plainKey) private var plainCards = false
+    @AppStorage(CalendarCards.homeDaysKey) private var calendarDays = 0
+    @State private var externalDetail: CalendarOccurrence?
+    private var keyboard: KeyboardWatcher { KeyboardWatcher.shared }
 
     /// "Ana sayfada göster" in Kategori düzeni (Android ui/home_category_preview_count_v1).
     @AppStorage("home_category_preview_count_v1") private var previewCount = 4
@@ -104,6 +110,12 @@ struct HomeView: View {
     var body: some View {
         let active = filterAndSortReminders(store.homeActive(), sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded)
         let completed = store.homeCompleted()
+        // Ayarlar → "Ana ekranda takvim": the phone calendar's next 7 / 14 days as cards too (categorized ones carry
+        // their category stripe; hidden-from-home categories stay out).
+        let hidden = Set(store.categories.filter(\.hideFromGeneralLists).map(\.id))
+        let calendarItems = calendarDays > 0 ? CalendarCards.upcoming(days: calendarDays).filter { o in
+            !(CalendarCategoryLinks.shared.categoryFor(o).map(hidden.contains) ?? false)
+        } : []
         ScrollView {
             LazyVStack(spacing: 0) {
                 header
@@ -112,24 +124,27 @@ struct HomeView: View {
                     .padding(.bottom, 22)
                     .opacity(selectedIds.isEmpty ? 1 : 0)
                 categoryDeck.padding(.horizontal, 16).zIndex(1)
-                // "Kartlarım" + HomeSortControl (son eklenen ↔ bildirim zamanı).
+                // "Kartlarım" + the category screen's sort arrow: newest on top → newest at the bottom → nearest date.
                 HStack {
                     Text("Kartlarım").font(RealFont.inter(20, .semibold)).foregroundStyle(Color(argb: 0xFFF2F2F4))
                     Spacer()
-                    Button {
-                        homeSort = homeSort == ReminderSortOrder.reminderTime.rawValue ? ReminderSortOrder.recentlyAdded.rawValue : ReminderSortOrder.reminderTime.rawValue
-                    } label: {
-                        Image(systemName: homeSort == ReminderSortOrder.reminderTime.rawValue ? "clock" : "line.3.horizontal.decrease")
-                            .font(.system(size: 16)).foregroundStyle(Color(argb: 0xFFC9CBD3))
-                            .contentTransition(.symbolEffect(.replace))
+                    Button { changeHomeSort() } label: {
+                        SortArrow(sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded, fg: Color(argb: 0xFFF2F2F4))
                             .frame(width: 44, height: 44)
-                            .liquidGlass(Circle())
                     }
-                    .accessibilityLabel(homeSort == ReminderSortOrder.reminderTime.rawValue
-                                        ? "Bildirim zamanına göre sıralanıyor. Son eklenene göre sırala."
-                                        : "Son eklenene göre sıralanıyor. Bildirim zamanına göre sırala.")
+                    .accessibilityLabel("Sıralamayı değiştir")
                 }
                 .padding(.leading, 18).padding(.trailing, 6).padding(.top, 12).padding(.bottom, 12)
+                if let sortHint {
+                    Text(sortHint.text).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB8B9C2))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, 24).padding(.bottom, 12)
+                        .transition(.opacity)
+                        .task(id: sortHint.id) {
+                            try? await Task.sleep(for: .seconds(1.6))
+                            withAnimation(.easeOut(duration: 0.3)) { self.sortHint = nil }
+                        }
+                }
                 if active.isEmpty && completed.isEmpty {
                     Text("Bir REAL yaz, gerisini biz hatırlayalım.")
                         .font(RealType.cardTitle)
@@ -138,6 +153,12 @@ struct HomeView: View {
                 }
                 ForEach(active) { reminder in
                     card(reminder, swipe: true)
+                }
+                ForEach(calendarItems) { o in
+                    // A phone-calendar event: opens the event window; no completing, swiping or selecting.
+                    ReminderCardView(reminder: CalendarCards.card(o), category: store.category(CalendarCategoryLinks.shared.categoryFor(o)),
+                                     onOpen: { if !keyboard.consumeTap() { externalDetail = o } })
+                        .padding(.horizontal, 16).padding(.bottom, 8)
                 }
                 let completedMore = completed.count > completedShown
                 if completedMore && selectedIds.isEmpty { HomeContextCard(onOpen: openContext) }
@@ -238,6 +259,20 @@ struct HomeView: View {
             Button("Sil", role: .destructive) { store.delete(selectedIds); selectedIds = [] }
             Button("Vazgeç", role: .cancel) {}
         }
+        .sheet(item: $externalDetail) { ExternalCalendarEventDetail(event: $0) }
+    }
+
+    private func changeHomeSort() {
+        let current = ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded
+        let next: ReminderSortOrder = current == .recentlyAdded ? .oldestFirst : (current == .oldestFirst ? .reminderTime : .recentlyAdded)
+        homeSort = next.rawValue
+        let text: String
+        switch next {
+        case .oldestFirst: text = "Son eklenen altta"
+        case .reminderTime, .nearestDate: text = "Tarihi en yakın üstte"
+        case .recentlyAdded: text = "Son eklenen üstte"
+        }
+        withAnimation(.easeOut(duration: 0.2)) { sortHint = ((sortHint?.id ?? 0) + 1, text) }
     }
 
     private func openContext(_ type: ContextCardType) { contextTarget = type }
@@ -262,8 +297,8 @@ struct HomeView: View {
         return VStack(spacing: 0) {
             VStack(spacing: -72) {
                 ForEach(Array(visible.enumerated()), id: \.element.id) { index, item in
-                    Button { open(item) } label: {
-                        CategoryTileView(visual: visual(item), count: store.count(for: item), description: description(item),
+                    Button { if !keyboard.consumeTap() { open(item) } } label: {
+                        CategoryTileView(visual: visual(item), count: store.count(for: item) + calendarCount(item), description: description(item),
                                          extendUnderNext: index < visible.count - 1)
                     }
                     .buttonStyle(PressScaleStyle())
@@ -301,19 +336,39 @@ struct HomeView: View {
         .padding(.bottom, 12)
     }
 
+    /// Upcoming phone-calendar events filed under a category count with its cards.
+    private func calendarCount(_ item: OrderedCategory) -> Int {
+        if case .custom(let c) = item { return CalendarCards.inCategory(c.id).count }
+        return 0
+    }
+
     private func card(_ reminder: ReminderItem, swipe: Bool) -> some View {
-        ReminderCardView(
+        let category = store.category(reminder.customCategoryId)
+        // Sınırlı access to a shared category: the card is only looked at.
+        let viewOnly = category?.isReadOnlyShared == true
+        // Sade kartlar: a right swipe completes (or, on a completed card, undoes); otherwise it moves to 24 hour.
+        var rightAction: (() -> Void)? = nil
+        if !viewOnly {
+            if plainCards { rightAction = { withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(reminder.id) } } }
+            else if swipe { rightAction = { withAnimation { store.moveTo24Hour(reminder.id) } } }
+        }
+        let deleteAction: (() -> Void)? = viewOnly ? nil : { withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo([reminder.id]) } }
+        return ReminderCardView(
             reminder: reminder,
-            category: store.category(reminder.customCategoryId),
+            category: category,
             isSelectionMode: !selectedIds.isEmpty,
             isSelected: selectedIds.contains(reminder.id),
-            onToggle: { withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(reminder.id) } },
+            onToggle: { if !viewOnly && !keyboard.consumeTap() { withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(reminder.id) } } },
             onOpen: {
-                if selectedIds.isEmpty { path.append(.detail(reminder.id)) } else { toggleSelection(reminder.id) }
+                if keyboard.consumeTap() { return }
+                if selectedIds.isEmpty { path.append(.detail(reminder.id)) } else if !viewOnly { toggleSelection(reminder.id) }
             },
-            onLongPress: { toggleSelection(reminder.id) },
-            onSwipeTo24Hour: swipe ? { withAnimation { store.moveTo24Hour(reminder.id) } } : nil,
-            onSwipeDelete: { withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo([reminder.id]) } }
+            onLongPress: { if !viewOnly { toggleSelection(reminder.id) } },
+            onSwipeTo24Hour: rightAction,
+            onSwipeDelete: deleteAction,
+            swipeRightLabel: plainCards ? (reminder.isCompleted ? "Geri al" : "Tamamla") : "Move 24 hour",
+            swipeRightKeepsCard: !plainCards || (reminder.hasRepeat && !reminder.isCompleted),
+            plainStyle: plainCards
         )
         .zoomSource("card-\(reminder.id)", in: nav)
         .padding(.horizontal, 16)

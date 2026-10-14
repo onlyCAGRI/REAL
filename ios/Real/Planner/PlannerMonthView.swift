@@ -19,7 +19,7 @@ struct PlannerMonthView: View {
         let start = days.first!, end = calendar.date(byAdding: .day, value: 1, to: days.last!)!
         let all = store.reminders + externals(start, end)
         let events = Planner.events(all, rangeStart: start.epochMillis, rangeEnd: end.epochMillis, calendar: calendar)
-        let byDay = Dictionary(grouping: events) { calendar.startOfDay(for: $0.startMillis.date) }
+        let byDay = Planner.byDay(events, calendar: calendar)
         let picked = (byDay[calendar.startOfDay(for: selectedDay)] ?? []).sorted { ($0.isDateOnly ? 0 : 1, $0.startMillis) < ($1.isDateOnly ? 0 : 1, $1.startMillis) }
 
         ScrollView {
@@ -32,11 +32,7 @@ struct PlannerMonthView: View {
                 }
                 VStack(spacing: 5) {
                     ForEach(0..<(days.count / 7), id: \.self) { row in
-                        HStack(spacing: 4) {
-                            ForEach(days[(row * 7)..<(row * 7 + 7)], id: \.self) { day in
-                                tile(day, events: byDay[day] ?? [])
-                            }
-                        }
+                        weekRow(Array(days[(row * 7)..<(row * 7 + 7)]), byDay: byDay)
                     }
                 }
                 .id(month)
@@ -49,8 +45,19 @@ struct PlannerMonthView: View {
                 .padding(.top, 14).padding(.horizontal, 4)
                 VStack(spacing: 12) {
                     ForEach(picked) { event in
-                        PlannerNext24Card(event: event, categories: store.categories, ownerName: store.ownerName, now: Date())
-                            .onTapGesture { onOpenEvent(event.reminder.id) }
+                        VStack(spacing: 0) {
+                            PlannerNext24Card(event: event, categories: store.categories, ownerName: store.ownerName, now: Date(),
+                                              onDurationTap: event.reminder.id < 0 ? nil : {
+                                                  withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.26)) {
+                                                      durationEditorId = durationEditorId == event.id ? nil : event.id
+                                                  }
+                                              })
+                                .onTapGesture { onOpenEvent(event.reminder.id) }
+                            if durationEditorId == event.id {
+                                PlannerInlineEventEditor(reminderId: event.reminder.id)
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
                     }
                 }
                 Color.clear.frame(height: 110)
@@ -59,11 +66,14 @@ struct PlannerMonthView: View {
         }
         .clipped()
         .onAppear { month = calendar.startOfMonth(for: selectedDay) }
+        .onChange(of: selectedDay) { _, _ in durationEditorId = nil }
         .gesture(DragGesture(minimumDistance: 30).onEnded { v in
             guard abs(v.translation.width) > abs(v.translation.height) * 1.5 else { return }
             changeMonth(v.translation.width < 0 ? 1 : -1)
         })
     }
+
+    @State private var durationEditorId: String?
 
     private var monthBar: some View {
         HStack {
@@ -81,42 +91,123 @@ struct PlannerMonthView: View {
         .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    private func tile(_ day: Date, events: [PlannerEvent]) -> some View {
+    private static let dotSize: CGFloat = 4.8
+    private static let dotGap: CGFloat = 3.5
+
+    /// Up to three dots a day; several-day events first so their dots line up day to day.
+    private func dotEvents(_ day: Date, _ byDay: [Date: [PlannerEvent]]) -> [PlannerEvent] {
+        guard calendar.isDate(day, equalTo: month, toGranularity: .month) else { return [] }
+        return (byDay[day] ?? []).filter { !$0.reminder.isCompleted }
+            .sorted { ($0.isMultiDay(calendar) ? 0 : 1, $0.startMillis, $0.reminder.id) < ($1.isMultiDay(calendar) ? 0 : 1, $1.startMillis, $1.reminder.id) }
+            .prefix(3).map { $0 }
+    }
+
+    /// One week: tiles, then a line joining the dots of several-day events (straight: a fixed dot slot per event all week).
+    private func weekRow(_ week: [Date], byDay: [Date: [PlannerEvent]]) -> some View {
+        let dots = week.map { dotEvents($0, byDay) }
+        let colors = dots.map { $0.map(eventColor) }
+        let spanKeys = Array(Set(dots.flatMap { $0 }.filter { $0.isMultiDay(calendar) }.map(\.id))).sorted()
+        let order = dots.flatMap { $0 }.filter { $0.isMultiDay(calendar) }.map(\.id)
+        var firstSeen: [String] = []
+        for k in order where !firstSeen.contains(k) { firstSeen.append(k) }
+        _ = spanKeys
+        let spanSlot = Dictionary(uniqueKeysWithValues: firstSeen.prefix(3).enumerated().map { ($0.element, [1, 0, 2][$0.offset]) })
+        let slots: [[Int]?] = dots.map { list in
+            guard list.contains(where: { spanSlot[$0.id] != nil }) else { return nil }
+            let used = Set(list.compactMap { spanSlot[$0.id] })
+            var free = (0...2).filter { !used.contains($0) }
+            return list.map { e in spanSlot[e.id] ?? free.removeFirst() }
+        }
+        return HStack(spacing: 4) {
+            ForEach(Array(week.enumerated()), id: \.element) { i, day in
+                tile(day, events: byDay[day] ?? [], colors: colors[i], slots: slots[i])
+            }
+        }
+        .overlay {
+            Canvas { ctx, size in
+                let gap: CGFloat = 4
+                let tileW = (size.width - gap * 6) / 7
+                let d = Self.dotSize, s = Self.dotGap
+                func center(_ i: Int, _ k: Int) -> CGPoint {
+                    let x = CGFloat(i) * (tileW + gap) + tileW - 7 - d / 2
+                    if let slot = slots[i]?[safe: k] { return CGPoint(x: x, y: size.height / 2 + CGFloat(slot - 1) * (d + s)) }
+                    let n = CGFloat(dots[i].count)
+                    let total = d * n + s * (n - 1)
+                    return CGPoint(x: x, y: (size.height - total) / 2 + d / 2 + CGFloat(k) * (d + s))
+                }
+                func numberGap(_ i: Int) -> ClosedRange<CGFloat> {
+                    let digits = CGFloat(String(calendar.component(.day, from: week[i])).count)
+                    let left = CGFloat(i) * (tileW + gap) + 9
+                    return (left - 3)...(left + digits * 9 + 3)
+                }
+                func segment(_ a: CGPoint, _ b: CGPoint, _ color: Color, skip: ClosedRange<CGFloat>?) {
+                    func draw(_ p: CGPoint, _ q: CGPoint) {
+                        var path = Path(); path.move(to: p); path.addLine(to: q)
+                        ctx.stroke(path, with: .color(color.opacity(0.9)), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                    }
+                    guard let skip, b.x > skip.lowerBound, a.x < skip.upperBound else { draw(a, b); return }
+                    func at(_ x: CGFloat) -> CGPoint { CGPoint(x: x, y: a.y + (b.y - a.y) * ((x - a.x) / (b.x - a.x))) }
+                    if skip.lowerBound > a.x { draw(a, at(skip.lowerBound)) }
+                    if skip.upperBound < b.x { draw(at(skip.upperBound), b) }
+                }
+                for (i, list) in dots.enumerated() {
+                    for (k, e) in list.enumerated() where e.isMultiDay(calendar) {
+                        let here = center(i, k)
+                        let color = colors[i][k]
+                        if i + 1 < dots.count, let next = dots[i + 1].firstIndex(where: { $0.id == e.id }) {
+                            segment(here, center(i + 1, next), color, skip: numberGap(i + 1))
+                        } else if i == 6, e.lastDay(calendar) > week[i],
+                                  calendar.isDate(calendar.date(byAdding: .day, value: 1, to: week[i])!, equalTo: month, toGranularity: .month) {
+                            segment(here, CGPoint(x: size.width, y: here.y), color, skip: nil)
+                        }
+                        if i == 0, e.startDay(calendar) < week[i],
+                           calendar.isDate(calendar.date(byAdding: .day, value: -1, to: week[i])!, equalTo: month, toGranularity: .month) {
+                            segment(CGPoint(x: 0, y: here.y), here, color, skip: numberGap(0))
+                        }
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func tile(_ day: Date, events: [PlannerEvent], colors: [Color], slots: [Int]?) -> some View {
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
         let isToday = calendar.isDate(day, inSameDayAs: today)
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDay)
-        let open = events.filter { !$0.reminder.isCompleted }
-        let colors = open.prefix(3).map(eventColor)
-        // The day takes its first plan's real colour (a touch softened), with dark or light text by its brightness.
-        let pastel = inMonth ? colors.first.map { $0.lerp(Color(argb: 0xFFFFFBF4), 0.14) } : nil
-        let ink = pastel.map { categoryForeground(start: $0, end: $0) == .white ? Color.white : Color(argb: 0xFF17181B) }
-            ?? Color(argb: 0xFF17181B)
-        let text: Color = !inMonth ? .white.opacity(0.2) : (pastel != nil ? ink : .white.opacity(isSelected || isToday ? 1 : 0.88))
+        // Days are neutral: before today faded, today framed in white, later days normal; the dots carry the colours.
+        let isPast = day < calendar.startOfDay(for: today)
+        let background: Color = !inMonth ? Color(argb: 0xFF141517) : (isPast ? Color(argb: 0xFF151618) : Color(argb: 0xFF222326))
+        let text: Color = !inMonth ? .white.opacity(0.2) : (isSelected || isToday ? .white : (isPast ? .white.opacity(0.38) : .white.opacity(0.92)))
         let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
         return Button {
             withAnimation(.spring(duration: 0.3)) { selectedDay = day }
         } label: {
-            ZStack(alignment: .topLeading) {
-                shape.fill(!inMonth ? Color(argb: 0xFF141517) : (pastel ?? Color(argb: 0xFF1B1C1E)))
+            ZStack {
+                shape.fill(background)
                 Text("\(calendar.component(.day, from: day))")
                     .font(RealFont.inter(15, isSelected ? .bold : (isToday ? .semibold : .regular))).foregroundStyle(text)
-                    .padding(.leading, 9).padding(.top, 8)
+                    .padding(.leading, 9)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 if inMonth && !colors.isEmpty {
-                    HStack(spacing: 3) {
-                        ForEach(Array(colors.enumerated()), id: \.offset) { _, c in
-                            // Each plan keeps its own colour; a thin ring keeps it visible on a tinted day.
-                            Circle().fill(c).overlay(Circle().strokeBorder(ink.opacity(pastel != nil ? 0.55 : 0), lineWidth: 0.8))
-                                .frame(width: 6, height: 6)
+                    let rows = slots == nil ? colors.count : 3
+                    ZStack(alignment: .top) {
+                        ForEach(Array(colors.enumerated()), id: \.offset) { k, c in
+                            Circle().fill(c).frame(width: Self.dotSize, height: Self.dotSize)
+                                .offset(y: CGFloat(slots?[safe: k] ?? k) * (Self.dotSize + Self.dotGap))
                         }
                     }
-                    .padding(.leading, 9).padding(.bottom, 8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .frame(width: Self.dotSize, height: Self.dotSize * CGFloat(rows) + Self.dotGap * CGFloat(rows - 1), alignment: .top)
+                    .padding(.trailing, 7)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                 }
             }
             .aspectRatio(0.85, contentMode: .fit)
             .overlay {
-                if inMonth && isSelected { shape.strokeBorder(pastel != nil ? ink : .white, lineWidth: 2) }
-                else if inMonth && isToday { shape.strokeBorder((pastel != nil ? ink : .white).opacity(0.75), lineWidth: 1.2) }
+                if !inMonth { EmptyView() }
+                else if isToday { shape.strokeBorder(.white, lineWidth: 2) }
+                else if isSelected { shape.strokeBorder(.white.opacity(0.55), lineWidth: 1.5) }
+                else { shape.strokeBorder(.white.opacity(isPast ? 0.04 : 0.07), lineWidth: 0.5) }
             }
         }
         .buttonStyle(PressScaleStyle(scale: 0.95))
@@ -157,4 +248,8 @@ extension Calendar {
     func startOfMonth(for date: Date) -> Date {
         self.date(from: dateComponents([.year, .month], from: date)) ?? startOfDay(for: date)
     }
+}
+
+extension Array {
+    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
 }

@@ -15,6 +15,8 @@ struct PlannerScreen: View {
     @State private var calendarConnection = CalendarConnection.shared
     @State private var externalDetail: CalendarOccurrence?
     @State private var now = Date()
+    /// "Süre ekle" on a 24 hour card opens start / end / duration under it.
+    @State private var durationEditorId: String?
     /// Last active Planner view mode: "hours_24" or the month ("monthly"; an older "daily" value also opens the month).
     @AppStorage("planner_view_mode") private var modeRaw = "hours_24"
 
@@ -32,9 +34,13 @@ struct PlannerScreen: View {
         if o.allDay { r.plannedDateEpochDay = Calendar.real.epochDay(of: o.start) }
         else {
             r.alertAt = o.start.epochMillis
-            r.durationMinutes = max(1, Int(o.end.timeIntervalSince(o.start) / 60))
+            r.durationMinutes = min(1440, max(1, Int(o.end.timeIntervalSince(o.start) / 60)))
         }
+        // Several days long (a race weekend): the month view joins its days.
+        r.endAt = o.end.epochMillis
         r.customSolidColorArgb = argbInt(o.color)
+        // "Kategorize et": shown in that category's colour (and inside it).
+        r.customCategoryId = CalendarCategoryLinks.shared.categoryFor(o)
         return r
     }
 
@@ -186,8 +192,19 @@ struct PlannerScreen: View {
                 } else {
                     VStack(spacing: 14) {
                         ForEach(items) { event in
-                            PlannerNext24Card(event: event, categories: store.categories, ownerName: store.ownerName, now: now)
-                                .onTapGesture { openEvent(event.reminder.id) }
+                            VStack(spacing: 0) {
+                                PlannerNext24Card(event: event, categories: store.categories, ownerName: store.ownerName, now: now,
+                                                  onDurationTap: event.reminder.id < 0 ? nil : {
+                                                      withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.26)) {
+                                                          durationEditorId = durationEditorId == event.id ? nil : event.id
+                                                      }
+                                                  })
+                                    .onTapGesture { openEvent(event.reminder.id) }
+                                if durationEditorId == event.id {
+                                    PlannerInlineEventEditor(reminderId: event.reminder.id)
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 2).padding(.vertical, 8)
@@ -880,6 +897,8 @@ struct PlannerNext24Card: View {
     let categories: [CustomCategory]
     let ownerName: String
     let now: Date
+    /// "Süre ekle" opens the start / end / duration editor under the card instead of opening the card.
+    var onDurationTap: (() -> Void)? = nil
 
     private static func amPm(_ millis: EpochMillis) -> String {
         let c = Calendar.real.dateComponents([.hour, .minute], from: millis.date)
@@ -914,9 +933,20 @@ struct PlannerNext24Card: View {
                     .font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.78))
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(RoundedRectangle(cornerRadius: 16).fill(ink.opacity(0.10)))
+                    .padding(4).contentShape(Rectangle())
+                    .onTapGesture { onDurationTap?() }
+                    .allowsHitTesting(onDurationTap != nil)
+                // Bitiş on a later day: the card keeps its own duration and names the last day under End.
+                let lastDay: Date? = event.isMultiDay() ? event.lastDay() : nil
+                let endTime: String = {
+                    if !event.isDateOnly, let end { return Self.amPm(end) }
+                    if lastDay != nil, !event.isDateOnly, let span = event.spanEndMillis { return Self.amPm(span) }
+                    return "—"
+                }()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(event.isDateOnly || end == nil ? "—" : Self.amPm(end!)).font(RealFont.inter(22)).kerning(-0.6).foregroundStyle(ink).lineLimit(1)
-                    Text("End").font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.55))
+                    Text(endTime).font(RealFont.inter(22)).kerning(-0.6).foregroundStyle(ink).lineLimit(1)
+                    Text(lastDay.map { "Son gün \(Calendar.real.component(.day, from: $0)) " + $0.formatted(.dateTime.month(.abbreviated).locale(Locale(identifier: "tr_TR"))) } ?? "End")
+                        .font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.55)).lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -930,5 +960,78 @@ struct PlannerNext24Card: View {
         .padding(22)
         .background(RoundedRectangle(cornerRadius: 32, style: .continuous).fill(surface))
         .contentShape(RoundedRectangle(cornerRadius: 32))
+    }
+}
+
+
+/// "Süre ekle" on a 24 hour / month card: start, end and duration under it (PlannerInlineEventEditor.kt). Opens
+/// without a bounce.
+struct PlannerInlineEventEditor: View {
+    let reminderId: Int64
+    @Environment(ReminderStore.self) private var store
+    @State private var showStart = false
+    @State private var showEnd = false
+    @State private var startDraft = ScheduleDraft()
+    @State private var endDraft = ScheduleDraft()
+
+    var body: some View {
+        let item = store.reminder(reminderId)
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                tile("Başlangıç", item?.alertAt.map { RealDates.time($0.date) } ?? "Saat ekle") {
+                    if let item { startDraft = ScheduleDraft(from: item) }
+                    withoutAnimation { showStart = true }
+                }
+                tile("Bitiş", item?.endAt.map { RealDates.reminder($0) } ?? (item?.durationMinutes.flatMap { d in item?.alertAt.map { RealDates.time(($0 + EpochMillis(d) * 60_000).date) } } ?? "Bitiş ekle")) {
+                    var d = ScheduleDraft()
+                    d.date = (item?.endAt ?? item?.alertAt.map { $0 + EpochMillis((item?.durationMinutes ?? 60)) * 60_000 })?.date
+                    d.hasTime = true
+                    endDraft = d
+                    withoutAnimation { showEnd = true }
+                }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach([30, 45, 60, 90, 120, 150, 180], id: \.self) { mins in
+                        let sel = item?.durationMinutes == mins
+                        Button { store.mutate(reminderId) { $0.durationMinutes = sel ? nil : mins } } label: {
+                            Text("\(mins) dk").font(RealFont.inter(12, sel ? .semibold : .regular))
+                                .foregroundStyle(sel ? Color.black : .white.opacity(0.8))
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(Capsule().fill(sel ? Color.white : .white.opacity(0.07)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(LiquidGlassTokens.contentColor))
+        .padding(.top, 8)
+        .realOverlay(isPresented: $showStart) { ScheduleSheet(draft: $startDraft) }
+        .realOverlay(isPresented: $showEnd) { ScheduleSheet(draft: $endDraft, showTiming: false) }
+        .onChange(of: startDraft) { _, d in
+            guard d.date != nil else { return }
+            store.mutate(reminderId) { d.apply(to: &$0) }
+        }
+        .onChange(of: endDraft) { _, d in
+            store.mutate(reminderId) { r in
+                let start = r.alertAt ?? r.plannedDateEpochDay.map { Calendar.real.startOfDayMillis(epochDay: $0) } ?? 0
+                r.endAt = d.date.map(\.epochMillis).flatMap { $0 > start ? $0 : nil }
+            }
+        }
+    }
+
+    private func tile(_ label: String, _ value: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(RealFont.inter(10)).foregroundStyle(.white.opacity(0.5))
+                Text(value).font(RealFont.inter(15, .medium)).foregroundStyle(.white).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(0.055)))
+        }
+        .buttonStyle(.plain)
     }
 }

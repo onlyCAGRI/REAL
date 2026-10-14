@@ -170,7 +170,7 @@ struct YasamScreen: View {
         let journalsMode = section == .journals
         return ZStack(alignment: .topLeading) {
             YasamHeroSentence(greeting: journalsMode ? "\(journals.count) GİRİŞ" : YasamText.greeting(hour),
-                              sentence: journalsMode ? "Günlüklerim" : heroSentence,
+                              sentence: journalsMode ? "Journal" : heroSentence,
                               tone: YasamTone.mood(lastMood), hour: hour, revealed: revealed)
             Button(action: close) {
                 RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)

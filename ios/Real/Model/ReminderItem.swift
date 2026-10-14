@@ -158,6 +158,16 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     var people: [String] = []
     /// Detail block order (contentBlockOrder): keys like "text", "checklist", "photos:<id>".
     var contentBlockOrder: [String] = []
+    /// When the event ends ("Bitiş"), possibly days later. Independent of [durationMinutes]: a 4-day course of 1 hour a
+    /// day keeps "60 dk" and this end.
+    var endAt: EpochMillis? = nil
+    /// "Erken uyarı": a heads-up this many minutes before [alertAt] (5 dk … 30 gün). nil = none.
+    var earlyAlertMinutes: Int? = nil
+    /// Ortak kategori: the card's server id when it lives in a shared category (never part of personal sync).
+    var sharedCardId: String? = nil
+    /// Who added it; shown bottom-right when it is someone else.
+    var sharedAuthorUid: String? = nil
+    var sharedAuthorName: String? = nil
 
     init(id: Int64, text: String, createdAt: EpochMillis, updatedAt: EpochMillis? = nil) {
         self.id = id
@@ -168,6 +178,13 @@ struct ReminderItem: Codable, Identifiable, Hashable {
 
     var isCompleted: Bool { completedAt != nil }
     var hasRepeat: Bool { repeatRule != .none }
+
+    /// When the early warning for the current alert fires, or nil without one.
+    var earlyAlertAt: EpochMillis? {
+        guard let alertAt, let minutes = earlyAlertMinutes, (1...ReminderItem.maxEarlyAlertMinutes).contains(minutes) else { return nil }
+        return alertAt - EpochMillis(minutes) * 60_000
+    }
+    static let maxEarlyAlertMinutes = 30 * 24 * 60
 
     func isNoAlert(now: EpochMillis = .now) -> Bool {
         CategoryRules.isNoAlert(completed: isCompleted, alertAt: alertAt, plannedDay: plannedDateEpochDay,
@@ -258,7 +275,8 @@ extension ReminderItem {
              quick24HourUntilAt, notifiedAlertAt, accentStart, accentEnd, repeatRule, anchorAlertAt,
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
-             cardStack, voiceRecordings, musicBlocks, mediaBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex
+             cardStack, voiceRecordings, musicBlocks, mediaBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex,
+             endAt, earlyAlertMinutes, sharedCardId, sharedAuthorUid, sharedAuthorName
     }
 
     init(from decoder: Decoder) throws {
@@ -301,6 +319,11 @@ extension ReminderItem {
         contentBlockOrder = try c.decodeIfPresent([String].self, forKey: .contentBlockOrder) ?? []
         contentBlockLayout = try c.decodeIfPresent([String: CardBlockPlacement].self, forKey: .contentBlockLayout) ?? [:]
         plannerColorIndex = try c.decodeIfPresent(Int.self, forKey: .plannerColorIndex)
+        endAt = try c.decodeIfPresent(EpochMillis.self, forKey: .endAt)
+        earlyAlertMinutes = (try c.decodeIfPresent(Int.self, forKey: .earlyAlertMinutes)).flatMap { (1...ReminderItem.maxEarlyAlertMinutes).contains($0) ? $0 : nil }
+        sharedCardId = try c.decodeIfPresent(String.self, forKey: .sharedCardId)
+        sharedAuthorUid = try c.decodeIfPresent(String.self, forKey: .sharedAuthorUid)
+        sharedAuthorName = try c.decodeIfPresent(String.self, forKey: .sharedAuthorName)
     }
 }
 

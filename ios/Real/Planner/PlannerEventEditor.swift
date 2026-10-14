@@ -23,7 +23,9 @@ struct PlannerEventEditor: View {
     @FocusState private var focused: Bool
 
     private var startDate: Date { start.date ?? Date() }
-    private var endDate: Date? { duration.map { startDate.addingTimeInterval(Double($0) * 60) } }
+    /// Bitiş: its own day and time (may be days later); the duration chips stay per day.
+    @State private var endAt: Date?
+    private var endDate: Date? { endAt.flatMap { $0 > startDate ? $0 : nil } }
     private var valid: Bool { !title.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
@@ -40,9 +42,9 @@ struct PlannerEventEditor: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focused = true }
         }
         .realOverlay(isPresented: $showStart) { ScheduleSheet(draft: $start) }
-        .realOverlay(isPresented: $showEnd) { ScheduleSheet(draft: $endDraft, initialTimeTab: true) }
+        .realOverlay(isPresented: $showEnd) { ScheduleSheet(draft: $endDraft, showTiming: false) }
         .onChange(of: endDraft) { _, d in
-            if let end = d.date { duration = max(1, Int(end.timeIntervalSince(startDate) / 60)) }
+            endAt = d.date.flatMap { $0 > startDate ? $0 : nil }
         }
     }
 
@@ -69,8 +71,8 @@ struct PlannerEventEditor: View {
                 tile("Başlangıç", "\(Calendar.real.component(.day, from: startDate)) \(Self.month(startDate)) · \(Self.ampm(startDate))") {
                     activeTool = nil; withoutAnimation { showStart = true }
                 }
-                tile("Bitiş", endDate.map(Self.ampm) ?? "—") {
-                    endDraft = Self.draft(endDate ?? startDate.addingTimeInterval(3600))
+                tile("Bitiş", endDate.map { "\(Calendar.real.component(.day, from: $0)) \(Self.month($0)) · \(Self.ampm($0))" } ?? "—") {
+                    endDraft = Self.draft(endDate ?? startDate.addingTimeInterval(Double(duration ?? 60) * 60))
                     withoutAnimation { showEnd = true }
                 }
             }
@@ -214,6 +216,8 @@ struct PlannerEventEditor: View {
             item.plannerColorIndex = colorIndex
             item.repeatWeekdaysMask = start.weekdaysMask
             item.repeatUntilEpochDay = start.untilEpochDay
+            item.earlyAlertMinutes = start.earlyAlertMinutes
+            item.endAt = endDate?.epochMillis ?? start.endAt.flatMap { $0 > startDate ? $0.epochMillis : nil }
         }
         NotificationScheduler.requestAuthorization()
         close()

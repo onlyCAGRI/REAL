@@ -63,8 +63,14 @@ final class ReminderStore {
         categoryLinks = snap.categoryLinks ?? [:]
     }
 
+    /// Called after every save (the app points it at SharedCategorySync so shared cards go up shortly).
+    @ObservationIgnored var onSaved: (() -> Void)?
+    /// True while SharedCategorySync writes, so its own writes do not schedule another round.
+    @ObservationIgnored var syncWriting = false
+
     private func save() {
         NotificationScheduler.categories = categories
+        if !syncWriting { onSaved?() }
         guard persist else { return }
         let snap = Snapshot(reminders: reminders, categories: categories,
                             builtInColors: Dictionary(uniqueKeysWithValues: builtInColors.map { ($0.key.rawValue, $0.value) }),
@@ -76,8 +82,17 @@ final class ReminderStore {
     }
 
     func replaceAll(reminders: [ReminderItem], categories: [CustomCategory], ownerName: String) {
-        self.reminders = reminders
-        self.categories = categories
+        // Ortak kategori cards and other people's categories are not in the personal cloud: keep them, and keep the
+        // sharing bookkeeping of this person's own shared categories.
+        let restoredIds = Set(reminders.map(\.id))
+        let shared = self.reminders.filter { $0.sharedCardId != nil && !restoredIds.contains($0.id) }
+        let mirrors = self.categories.filter(\.isSharedMirror)
+        let ownShared = Dictionary(self.categories.filter { $0.sharedRole == "owner" }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        self.reminders = reminders + shared
+        self.categories = categories.map { c in
+            guard let old = ownShared[c.id] else { return c }
+            var c = c; c.sharedId = old.sharedId; c.sharedRole = old.sharedRole; return c
+        } + mirrors.filter { m in !categories.contains { $0.id == m.id } }
         self.ownerName = ownerName
         save()
         NotificationScheduler.reschedule(reminders)
@@ -135,11 +150,11 @@ final class ReminderStore {
         return ordered + rest
     }
 
-    /// Home list: active cards outside the rolling 24 hour bucket and hidden categories.
+    /// Home list: active cards outside hidden categories. Cards moved into 24 hour stay on Home too.
     func homeActive(now: EpochMillis = .now) -> [ReminderItem] {
         let hidden = hiddenCategoryIds
         return reminders.filter { r in
-            !r.isCompleted && !r.isQuick24HourActive(now: now) && !(r.customCategoryId.map(hidden.contains) ?? false)
+            !r.isCompleted && !(r.customCategoryId.map(hidden.contains) ?? false)
         }.sorted { $0.createdAt > $1.createdAt }
     }
 
@@ -198,6 +213,11 @@ final class ReminderStore {
         }
         if updated.repeatRule == .none { updated.anchorAlertAt = updated.alertAt }
         if updated.alertAt != old.alertAt { updated.notifiedAlertAt = nil }
+        // Removing the date removes its end and early warning; a new start keeps an end that is still after it.
+        if updated.alertAt == nil { updated.earlyAlertMinutes = nil }
+        if updated.alertAt == nil && updated.plannedDateEpochDay == nil { updated.endAt = nil }
+        if let start = updated.alertAt ?? updated.plannedDateEpochDay.map({ calendar.startOfDayMillis(epochDay: $0) }),
+           let end = updated.endAt, end <= start { updated.endAt = nil }
         guard updated != old else { return }
         updated.updatedAt = .now
         reminders[index] = updated
@@ -240,6 +260,8 @@ final class ReminderStore {
             $0.repeatUntilEpochDay = nil
             $0.repeatSkippedEpochDays = []
             $0.anchorAlertAt = nil
+            $0.endAt = nil
+            $0.earlyAlertMinutes = nil
         }
         NotificationScheduler.cancel(id)
     }
@@ -300,6 +322,47 @@ final class ReminderStore {
         let anchorDay = calendar.epochDay(ofMillis: item.anchorAlertAt ?? item.alertAt ?? occurrence)
         if day <= anchorDay { delete([id]); return }
         mutate(id) { $0.repeatUntilEpochDay = day - 1 }
+    }
+
+    // MARK: Ortak kategori (SharedCategorySync writes)
+
+    /// Puts a shared card in as the server has it (no updatedAt bump; its reminder is scheduled).
+    func putFromSync(_ item: ReminderItem) {
+        syncWriting = true; defer { syncWriting = false }
+        if let i = reminders.firstIndex(where: { $0.id == item.id }) { reminders[i] = item } else { reminders.append(item) }
+        save()
+        NotificationScheduler.schedule(item)
+    }
+
+    func removeFromSync(_ id: Int64) {
+        syncWriting = true; defer { syncWriting = false }
+        reminders.removeAll { $0.id == id }
+        save()
+        NotificationScheduler.cancel(id)
+        NotificationScheduler.removeDelivered(id)
+    }
+
+    func putCategoryFromSync(_ category: CustomCategory) {
+        syncWriting = true; defer { syncWriting = false }
+        if let i = categories.firstIndex(where: { $0.id == category.id }) { categories[i] = category } else { categories.append(category) }
+        save()
+    }
+
+    func removeCategoryFromSync(_ id: Int64) {
+        syncWriting = true; defer { syncWriting = false }
+        let ids = Set(reminders.filter { $0.customCategoryId == id && $0.sharedCardId != nil }.map(\.id))
+        reminders.removeAll { ids.contains($0.id) }
+        categories.removeAll { $0.id == id }
+        categoryOrderKeys.removeAll { $0 == "custom:\(id)" }
+        save()
+        ids.forEach(NotificationScheduler.cancel)
+    }
+
+    /// Rewrites cards in one go (e.g. a category coming home: its shared cards become personal).
+    func rewriteFromSync(_ change: (inout [ReminderItem]) -> Void) {
+        syncWriting = true; defer { syncWriting = false }
+        change(&reminders)
+        save()
     }
 
     // MARK: Planner goal screen prefs

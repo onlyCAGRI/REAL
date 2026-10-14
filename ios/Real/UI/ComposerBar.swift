@@ -11,6 +11,9 @@ struct ScheduleDraft: Equatable {
     var weekdaysMask = 0
     var until: Date? = nil
     var durationMinutes: Int? = nil
+    /// "Erken uyarı" (minutes before the alert) and "Bitiş" (any day and time after the start).
+    var earlyAlertMinutes: Int? = nil
+    var endAt: Date? = nil
 
     var isEmpty: Bool { date == nil }
 
@@ -39,6 +42,8 @@ struct ScheduleDraft: Equatable {
         weekdaysMask = item.repeatWeekdaysMask
         until = item.repeatUntilEpochDay.map { Calendar.real.startOfDay(epochDay: $0) }
         durationMinutes = item.durationMinutes
+        earlyAlertMinutes = item.earlyAlertMinutes
+        endAt = item.endAt?.date
     }
 
     func apply(to item: inout ReminderItem) {
@@ -51,6 +56,9 @@ struct ScheduleDraft: Equatable {
         item.durationMinutes = alertAt == nil ? nil : durationMinutes
         if alertAt != oldAlert { item.anchorAlertAt = alertAt; item.repeatSkippedEpochDays = [] }
         if alertAt != nil || plannedDay != nil { item.quick24HourUntilAt = nil }
+        item.earlyAlertMinutes = alertAt == nil ? nil : earlyAlertMinutes
+        let start = alertAt ?? plannedDay.map { Calendar.real.startOfDayMillis(epochDay: $0) }
+        item.endAt = endAt.map(\.epochMillis).flatMap { end in start.flatMap { end > $0 ? end : nil } }
     }
 }
 

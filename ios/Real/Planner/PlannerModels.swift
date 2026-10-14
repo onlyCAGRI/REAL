@@ -5,11 +5,21 @@ struct PlannerEvent: Identifiable, Hashable {
     let reminder: ReminderItem
     let startMillis: EpochMillis
     let isDateOnly: Bool
+    /// Bitiş: when this occurrence ends, possibly days later. nil = it lives on its start day only.
+    var spanEndMillis: EpochMillis? = nil
 
     var id: String { "\(reminder.id):\(startMillis)" }
     var endMillis: EpochMillis? {
         isDateOnly ? nil : reminder.durationMinutes.map { startMillis + EpochMillis($0) * 60_000 }
     }
+    func startDay(_ calendar: Calendar = .real) -> Date { calendar.startOfDay(for: startMillis.date) }
+    /// The last day this occurrence covers (an end at midnight belongs to the day before).
+    func lastDay(_ calendar: Calendar = .real) -> Date {
+        guard let end = spanEndMillis else { return startDay(calendar) }
+        return max(startDay(calendar), calendar.startOfDay(for: (end - 1).date))
+    }
+    /// Spans more than one day: the month view joins its dots with a line.
+    func isMultiDay(_ calendar: Calendar = .real) -> Bool { lastDay(calendar) > startDay(calendar) }
 }
 
 enum Planner {
@@ -20,15 +30,24 @@ enum Planner {
         for reminder in reminders {
             if let day = reminder.plannedDateEpochDay {
                 let start = calendar.startOfDayMillis(epochDay: day)
-                if start >= rangeStart && start < rangeEnd { out.append(PlannerEvent(reminder: reminder, startMillis: start, isDateOnly: true)) }
+                let spanEnd = reminder.endAt.flatMap { $0 > start ? $0 : nil }
+                if start < rangeEnd && (spanEnd ?? (start + 1)) > rangeStart {
+                    out.append(PlannerEvent(reminder: reminder, startMillis: start, isDateOnly: true, spanEndMillis: spanEnd))
+                }
                 continue
             }
             guard let current = reminder.alertAt else { continue }
             if reminder.repeatRule == .none {
-                let end = reminder.durationMinutes.map { current + EpochMillis($0) * 60_000 } ?? current
-                if current < rangeEnd && end >= rangeStart { out.append(PlannerEvent(reminder: reminder, startMillis: current, isDateOnly: false)) }
+                let spanEnd = reminder.endAt.flatMap { $0 > current ? $0 : nil }
+                let end = max(reminder.durationMinutes.map { current + EpochMillis($0) * 60_000 } ?? current, spanEnd ?? 0)
+                if current < rangeEnd && end >= rangeStart {
+                    out.append(PlannerEvent(reminder: reminder, startMillis: current, isDateOnly: false, spanEndMillis: spanEnd))
+                }
                 continue
             }
+            // A repeating event with an end spans the same length each time (its first start → Bitiş).
+            let repeatSpan = reminder.endAt.map { $0 - (reminder.anchorAlertAt ?? current) }.flatMap { $0 > 0 ? $0 : nil }
+            let lookBack = repeatSpan ?? 0
             let anchor = reminder.anchorAlertAt ?? current
             let skipped = reminder.repeatSkippedEpochDays
             let until = reminder.repeatUntilEpochDay
@@ -38,10 +57,12 @@ enum Planner {
             }
             let anchorDay = calendar.epochDay(ofMillis: anchor)
             let anchorAlive = !skipped.contains(anchorDay) && (until.map { anchorDay <= $0 } ?? true)
-            var occurrence: EpochMillis? = anchor >= rangeStart ? (anchorAlive ? anchor : next(anchor)) : next(rangeStart - 1)
+            var occurrence: EpochMillis? = anchor >= rangeStart - lookBack ? (anchorAlive ? anchor : next(anchor)) : next(rangeStart - lookBack - 1)
             var safety = 0
             while let o = occurrence, o < rangeEnd, safety < 5000 {
-                if o >= rangeStart { out.append(PlannerEvent(reminder: reminder, startMillis: o, isDateOnly: false)) }
+                if o + lookBack >= rangeStart {
+                    out.append(PlannerEvent(reminder: reminder, startMillis: o, isDateOnly: false, spanEndMillis: repeatSpan.map { o + $0 }))
+                }
                 occurrence = next(o)
                 safety += 1
             }
@@ -50,6 +71,22 @@ enum Planner {
     }
 
     static func day(of event: PlannerEvent, calendar: Calendar = .real) -> Date { calendar.startOfDay(for: event.startMillis.date) }
+
+    /// Events by every day they cover (a 4-day event is on all 4 days).
+    static func byDay(_ events: [PlannerEvent], calendar: Calendar = .real) -> [Date: [PlannerEvent]] {
+        var out: [Date: [PlannerEvent]] = [:]
+        for e in events {
+            var d = e.startDay(calendar)
+            let last = e.lastDay(calendar)
+            var guardCount = 0
+            while d <= last && guardCount < 400 {
+                out[d, default: []].append(e)
+                d = calendar.date(byAdding: .day, value: 1, to: d)!
+                guardCount += 1
+            }
+        }
+        return out
+    }
 
     /// plannerFocusEvents: starred cards of the selected day.
     static func focusEvents(_ events: [PlannerEvent], day: Date, calendar: Calendar = .real) -> [PlannerEvent] {

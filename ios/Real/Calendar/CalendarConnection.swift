@@ -385,6 +385,10 @@ struct ExternalCalendarEventDetail: View {
     let event: CalendarOccurrence
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(ReminderStore.self) private var store
+    @State private var categorizeOpen = false
+    @State private var whole = true
+    private var links: CalendarCategoryLinks { CalendarCategoryLinks.shared }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -411,9 +415,74 @@ struct ExternalCalendarEventDetail: View {
                 }
             }
             .buttonStyle(.plain).padding(.top, 6)
+            categorize
         }
         .padding(22)
-        .presentationDetents([.medium])
+        .onAppear { whole = links.categoryFor(event) == nil || links.isWholeCalendar(event.calendarId) }
+        .presentationDetents([.medium, .large])
         .presentationBackground(Color(argb: 0xFF111113))
     }
+
+    /// Kategorize et: file this event — or everything in its calendar — under a REAL category.
+    @ViewBuilder private var categorize: some View {
+        let current = store.category(links.categoryFor(event))
+        Button { withAnimation(.spring(duration: 0.3)) { categorizeOpen.toggle() } } label: {
+            HStack(spacing: 8) {
+                if let current { Circle().fill(current.visual.stripe.0).frame(width: 12, height: 12) }
+                Text(current?.name ?? "Kategorize et").font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity).frame(height: 48).background(Capsule().fill(.white.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+        if categorizeOpen {
+            VStack(alignment: .leading, spacing: 10) {
+                Button { whole.toggle() } label: {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle().strokeBorder(whole ? Color.white : Color(argb: 0xFF777780), lineWidth: 1.2)
+                            if whole { Circle().fill(.white); Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.black) }
+                        }
+                        .frame(width: 20, height: 20)
+                        Text("\(event.calendarName) takvimindeki tüm etkinlikler").font(RealFont.inter(14)).foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+                ForEach(store.categories.filter { !$0.isSharedMirror }) { c in
+                    Button { links.link(event, categoryId: c.id, wholeCalendar: whole); categorizeOpen = false } label: {
+                        HStack(spacing: 12) {
+                            Circle().fill(c.visual.stripe.0).frame(width: 16, height: 16)
+                            Text(c.name).font(RealFont.inter(15)).foregroundStyle(.white)
+                            Spacer()
+                            if c.id == current?.id { Image(systemName: "checkmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white) }
+                        }
+                        .padding(.vertical, 6).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                if !store.categories.contains(where: { $0.name.caseInsensitiveCompare(event.calendarName) == .orderedSame }) {
+                    Button {
+                        // First palette colour no category uses yet; it can be recoloured later.
+                        let used = Set(store.categories.map(\.accentStart))
+                        let color = reminderColorDisplayOrder.dropFirst(2).first { !used.contains($0) } ?? 9
+                        let made = store.addCategory(name: String(event.calendarName.prefix(60)), icon: .noIcon, accentStart: color, accentEnd: nil)
+                        links.link(event, categoryId: made.id, wholeCalendar: whole)
+                        categorizeOpen = false
+                    } label: {
+                        Text("+ Yeni kategori: \(event.calendarName)").font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.85))
+                    }
+                    .buttonStyle(.plain)
+                }
+                if current != nil {
+                    Button { links.link(event, categoryId: nil, wholeCalendar: false); categorizeOpen = false } label: {
+                        Text("Kategoriden çıkar").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFFB4AB))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.05)))
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
 }

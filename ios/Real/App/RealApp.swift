@@ -53,6 +53,19 @@ struct RealApp: App {
                 .background(Color.black)
                 .overlay { RealToastHost() }
                 .onOpenURL { url in _ = RealAuth.shared.handle(url: url) }
+                // Ortak kategori: local edits go up shortly; while the app is open it also pulls every minute.
+                .task {
+                    let store = store
+                    _ = KeyboardWatcher.shared
+                    store.onSaved = { [weak store] in
+                        guard let store else { return }
+                        Task { @MainActor in SharedCategorySync.shared.request(store) }
+                    }
+                    while !Task.isCancelled {
+                        await SharedCategorySync.shared.syncNow(store)
+                        try? await Task.sleep(for: .seconds(60))
+                    }
+                }
         }
     }
 }

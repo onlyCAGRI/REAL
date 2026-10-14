@@ -22,6 +22,11 @@ struct CategoryScreen: View {
     @State private var confirmDelete = false
     @State private var query = ""
     @State private var heroBottom: CGFloat = 1000
+    @State private var showPeople = false
+    @State private var externalDetail: CalendarOccurrence?
+    private var keyboard: KeyboardWatcher { KeyboardWatcher.shared }
+    /// Phone-calendar events filed under this category ("Kategorize et"), the coming year, as read-only cards.
+    private var calendarItems: [CalendarOccurrence] { customId.map { CalendarCards.inCategory($0) } ?? [] }
 
     private var sort: ReminderSortOrder { ReminderSortOrder(rawValue: sortRaw) ?? .recentlyAdded }
     private var custom: CustomCategory? { store.category(customId) }
@@ -38,15 +43,21 @@ struct CategoryScreen: View {
                     if let visual {
                         CategoryHero(
                             visual: visual, description: custom?.description ?? "",
-                            count: lists.allCount, todayCount: lists.todayCount, topInset: topInset,
+                            count: lists.allCount + calendarItems.count,
+                            detail: categoryHeaderDetail(lists.active + calendarItems.map(CalendarCards.card)),
+                            showIcon: custom.map { $0.icon != .noIcon } ?? true, topInset: topInset,
                             query: $query, hasFilter: colorFilter != nil,
                             editLabel: custom != nil ? "Kategoriyi düzenle" : "Kategori rengini düzenle",
                             stats: stats, showProgress: $showProgress, sort: sort, showSort: builtIn != .journalEntries,
                             onBack: { dismiss() },
-                            onEdit: { if custom != nil { showEditor = true } else { showColorSheet = true } },
+                            onEdit: {
+                                if custom?.isSharedMirror == true { RealToast.shared.show("Bu kategoriyi sadece sahibi düzenleyebilir.") }
+                                else if custom != nil { showEditor = true } else { showColorSheet = true }
+                            },
                             onFilter: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.2)) { filterMode = true } },
                             onSort: { changeSort() },
-                            onGoals: customId.map { id in { path.append(.goal(id)) } }
+                            onGoals: customId.map { id in { path.append(.goal(id)) } },
+                            onPeople: custom.map { _ in { showPeople = true } }
                         )
                         .opacity(selectedIds.isEmpty ? 1 : 0.35)
                         .background(GeometryReader { g in
@@ -80,6 +91,12 @@ struct CategoryScreen: View {
                         journalList(lists.active)
                     } else {
                         ForEach(lists.active) { card($0) }
+                        ForEach(calendarItems.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }) { o in
+                            // A phone-calendar event: opens the event window; no completing, swiping or selecting.
+                            ReminderCardView(reminder: CalendarCards.card(o), category: custom, showCategoryStripes: false,
+                                             onOpen: { if !keyboard.consumeTap() { externalDetail = o } })
+                                .padding(.horizontal, 16).padding(.bottom, 8)
+                        }
                     }
                     if !lists.completed.isEmpty {
                         SectionTitle(text: "Tamamlandı").padding(.top, 18)
@@ -140,13 +157,17 @@ struct CategoryScreen: View {
                              onComplete: { selectedIds.forEach { store.toggleCompleted($0) }; selectedIds = [] },
                              onDelete: { confirmDelete = true },
                              onCancel: { selectedIds = [] })
-            } else if builtIn != .completed && builtIn != .journalEntries {
+            } else if builtIn != .completed && builtIn != .journalEntries && custom?.isReadOnlyShared != true {
                 ComposerBar(defaultCategoryId: customId, defaultImportant: builtIn == .important,
                             defaultPlannedToday: builtIn == .today || builtIn == .planned)
                     .background(alignment: .bottom) { BottomFade() }
             }
         }
         .sheet(isPresented: $showEditor) { CategoryEditorSheet(existing: custom) }
+        .sheet(item: $externalDetail) { ExternalCalendarEventDetail(event: $0) }
+        .realOverlay(isPresented: $showPeople) {
+            if let custom { SharedCategorySheet(category: custom, calendarLinked: CalendarCategoryLinks.shared.hasCategory(custom.id)) }
+        }
         .sheet(isPresented: $showColorSheet) { if let builtIn { BuiltInCategoryColorSheet(category: builtIn) } }
         .confirmationDialog("\(selectedIds.count) kart silinsin mi?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Sil", role: .destructive) { store.delete(selectedIds); selectedIds = [] }
@@ -274,20 +295,27 @@ struct CategoryScreen: View {
     }
 
     private func card(_ reminder: ReminderItem) -> some View {
-        ReminderCardView(
+        let category = store.category(reminder.customCategoryId)
+        // Sınırlı access to a shared category: the card is only looked at.
+        let viewOnly = category?.isReadOnlyShared == true
+        let rightAction: (() -> Void)? = (builtIn == .today || viewOnly) ? nil : { withAnimation { store.moveTo24Hour(reminder.id) } }
+        let deleteAction: (() -> Void)? = viewOnly ? nil : { withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo([reminder.id]) } }
+        return ReminderCardView(
             reminder: reminder,
-            category: store.category(reminder.customCategoryId),
+            category: category,
             showCategoryStripes: false,
             isSelectionMode: !selectedIds.isEmpty,
             isSelected: selectedIds.contains(reminder.id),
-            onToggle: { withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(reminder.id) } },
+            onToggle: { if !viewOnly && !keyboard.consumeTap() { withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(reminder.id) } } },
             onOpen: {
+                if keyboard.consumeTap() { return }
                 if selectedIds.isEmpty { path.append(.detail(reminder.id)) }
+                else if viewOnly { return }
                 else if selectedIds.contains(reminder.id) { selectedIds.remove(reminder.id) } else { selectedIds.insert(reminder.id) }
             },
-            onLongPress: { selectedIds.insert(reminder.id) },
-            onSwipeTo24Hour: builtIn == .today ? nil : { withAnimation { store.moveTo24Hour(reminder.id) } },
-            onSwipeDelete: { withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo([reminder.id]) } }
+            onLongPress: { if !viewOnly { selectedIds.insert(reminder.id) } },
+            onSwipeTo24Hour: rightAction,
+            onSwipeDelete: deleteAction
         )
         .zoomSource("card-\(reminder.id)", in: nav)
         .padding(.horizontal, 16)
@@ -321,7 +349,7 @@ private struct HeroRound<Label: View>: View {
 }
 
 /// The sort arrow (CategoryHeroActions): up = newest first, down = newest last, right = nearest date.
-private struct SortArrow: View {
+struct SortArrow: View {
     let sort: ReminderSortOrder
     let fg: Color
     var body: some View {
@@ -336,7 +364,10 @@ private struct CategoryHero: View {
     let visual: CategoryVisual
     let description: String
     let count: Int
-    let todayCount: Int
+    /// "2 gecikmiş" (warning) or "1 tanesi bugün" after the count.
+    let detail: (text: String, alert: Bool)?
+    /// A category without an icon starts its description where the icon would be.
+    var showIcon = true
     let topInset: CGFloat
     @Binding var query: String
     let hasFilter: Bool
@@ -351,6 +382,8 @@ private struct CategoryHero: View {
     let onSort: () -> Void
     /// The category's goals (planning) screen; only custom categories have one.
     var onGoals: (() -> Void)? = nil
+    /// Ortak kategori: the people in this category (friend button in the ••• menu).
+    var onPeople: (() -> Void)? = nil
     @State private var menuOpen = false
     @FocusState private var searching: Bool
 
@@ -400,6 +433,12 @@ private struct CategoryHero: View {
                                 }
                                 .transition(.scale(scale: 0.6).combined(with: .opacity))
                             }
+                            if let onPeople {
+                                HeroRound(fg: fg, label: "Kişiler", action: { menuOpen = false; onPeople() }) {
+                                    CategoryIconGlyph(icon: .friends, color: fg, size: 18)
+                                }
+                                .transition(.scale(scale: 0.6).combined(with: .opacity))
+                            }
                         }
                         .background(Capsule().fill(visual.stripe.0).padding(-4).shadow(color: .black.opacity(0.35), radius: 10, y: 4))
                         .offset(y: 48)
@@ -409,15 +448,17 @@ private struct CategoryHero: View {
             }
             .zIndex(3)
             HStack(spacing: 8) {
-                RealSymbol(visual.symbol, size: 15).foregroundStyle(fg.opacity(0.85))
+                if showIcon { RealSymbol(visual.symbol, size: 15).foregroundStyle(fg.opacity(0.85)) }
                 Text(description.isEmpty ? "Kategori" : description).font(RealFont.inter(13, .medium)).foregroundStyle(fg.opacity(0.8)).lineLimit(1)
             }
             .padding(.top, 30)
             Text(visual.title).font(RealFont.inter(40, .bold)).kerning(-1.4).foregroundStyle(fg).lineLimit(2)
                 .minimumScaleFactor(0.7).padding(.top, 4)
             HStack(spacing: 4) {
-                Text(todayCount > 0 ? "\(count) kart  •  \(todayCount) tanesi bugün" : "\(count) kart")
-                    .font(RealFont.inter(13, .semibold)).foregroundStyle(fg.opacity(0.9))
+                // Overdue reads in a soft red that still shows on light and dark category colours.
+                let alertColor = fg == .white ? Color(argb: 0xFFFFB4AB) : Color(argb: 0xFF9C1C1C)
+                (Text("\(count) kart") + (detail.map { d in Text("  •  ") + Text(d.text).foregroundColor(d.alert ? alertColor : fg.opacity(0.9)) } ?? Text("")))
+                    .font(RealFont.inter(13, .semibold)).foregroundStyle(fg.opacity(0.9)).lineLimit(1)
                 Spacer()
                 if let stats {
                     Button { withAnimation(.spring(duration: 0.35)) { showProgress.toggle() } } label: {

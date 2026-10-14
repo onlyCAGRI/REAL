@@ -7,6 +7,12 @@ on:
       - "ios/**"
       - ".github/workflows/ios.yml"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "compile = only check that it builds; appetize = simulator app zip; test = UI tests + screenshots"
+        type: choice
+        options: [compile, appetize, test]
+        default: compile
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -56,8 +62,20 @@ jobs:
           brew install xcodegen
           xcodegen generate
 
+      # Pushes and "compile" runs only check that the app builds: no tests, screenshots or app package.
+      - name: Compile check
+        if: github.event_name == 'push' || inputs.mode == 'compile'
+        run: |
+          mkdir -p build
+          set +e
+          xcodebuild build -project Real.xcodeproj -scheme Real -configuration Debug             -sdk iphonesimulator -destination "generic/platform=iOS Simulator"             -derivedDataPath build/compile ONLY_ACTIVE_ARCH=YES             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/xcodebuild.log 2>&1
+          status=$?
+          grep -E "error:|\*\* BUILD" build/xcodebuild.log | sort -u | head -200
+          exit $status
+
       - name: Pick simulator
         id: sim
+        if: inputs.mode == 'test'
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
@@ -77,8 +95,8 @@ jobs:
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
 
       - name: Build and test
-        # Manual runs only package the app for Appetize: no UI tests or screenshots.
-        if: github.event_name != 'workflow_dispatch'
+        # Only "test" runs: UI tests and screenshots.
+        if: inputs.mode == 'test'
         run: |
           mkdir -p build
           set +e
@@ -88,7 +106,7 @@ jobs:
           exit $status
 
       - name: Export screenshots
-        if: always() && github.event_name != 'workflow_dispatch'
+        if: always() && inputs.mode == 'test'
         run: |
           mkdir -p screenshots raw
           xcrun xcresulttool export attachments --path build/TestResults.xcresult --output-path raw || true
@@ -109,7 +127,7 @@ jobs:
           ls -la screenshots
 
       - name: Upload screenshots
-        if: always() && github.event_name != 'workflow_dispatch'
+        if: always() && inputs.mode == 'test'
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
@@ -117,8 +135,8 @@ jobs:
           if-no-files-found: ignore
 
       - name: Package simulator app (Appetize)
-        # Manual runs only: builds are tested on the Mac now, and this step kept timing out on pushes.
-        if: success() && github.event_name == 'workflow_dispatch'
+        # "appetize" runs only.
+        if: success() && inputs.mode == 'appetize'
         run: |
           mkdir -p build   # the test step that used to create it is skipped on manual runs
           xcodebuild build -project Real.xcodeproj -scheme Real -configuration Release \
@@ -130,7 +148,7 @@ jobs:
           zip -qry "$GITHUB_WORKSPACE/REAL-simulator.zip" REAL.app
 
       - name: Upload simulator app
-        if: success() && github.event_name == 'workflow_dispatch'
+        if: success() && inputs.mode == 'appetize'
         uses: actions/upload-artifact@v4
         with:
           name: REAL-simulator-app

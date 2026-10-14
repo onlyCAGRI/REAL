@@ -33,11 +33,11 @@ enum ReminderCategory: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .today: return "24 hour"
-        case .planned: return "Planlı"
-        case .important: return "Önemli"
-        case .noAlert: return "Uyarı yok"
-        case .completed: return "Tamamlananlar"
-        case .journalEntries: return "Günlüklerim"
+        case .planned: return "Planned"
+        case .important: return "Important"
+        case .noAlert: return "No alert"
+        case .completed: return "Completed"
+        case .journalEntries: return "Journal"
         }
     }
     var emptyMessage: String {
@@ -88,6 +88,8 @@ enum CategoryIcon: String, CaseIterable, Codable, Identifiable {
     case work = "WORK", home = "HOME", shopping = "SHOPPING", health = "HEALTH", sport = "SPORT", money = "MONEY",
          school = "SCHOOL", travel = "TRAVEL", family = "FAMILY", pet = "PET", food = "FOOD", idea = "IDEA",
          heart = "HEART", star = "STAR", file = "FILE", location = "LOCATION", bookmark = "BOOKMARK", gift = "GIFT"
+    // Drawn from SVG path data shared with Android (CategoryIconPaths). Keys must never be "CAR" / "GAME" (old keys).
+    case birthday = "BIRTHDAY", racing = "RACING", racingSide = "RACING_SIDE", vehicle = "VEHICLE", ball = "BALL", music = "MUSIC", movie = "MOVIE", gaming = "GAMING", book = "BOOK", medicine = "MEDICINE", plant = "PLANT", code = "CODE", camera = "CAMERA", event = "EVENT", friends = "FRIENDS"
 
     var id: String { rawValue }
     var label: String {
@@ -110,6 +112,21 @@ enum CategoryIcon: String, CaseIterable, Codable, Identifiable {
         case .location: return "Konum"
         case .bookmark: return "Kaydedilen"
         case .gift: return "Hediye"
+        case .birthday: return "Doğum günü"
+        case .racing: return "Formula"
+        case .racingSide: return "Formula yandan"
+        case .vehicle: return "Araba"
+        case .ball: return "Maç"
+        case .music: return "Müzik"
+        case .movie: return "Film ve dizi"
+        case .gaming: return "Oyun"
+        case .book: return "Kitap"
+        case .medicine: return "İlaç"
+        case .plant: return "Bitki"
+        case .code: return "Yazılım"
+        case .camera: return "Fotoğraf"
+        case .event: return "Etkinlik"
+        case .friends: return "Arkadaşlar"
         case .noIcon: return "İkon yok"
         }
     }
@@ -136,6 +153,21 @@ enum CategoryIcon: String, CaseIterable, Codable, Identifiable {
         case .location: return "mappin.and.ellipse"
         case .bookmark: return "bookmark"
         case .gift: return "gift"
+        case .birthday: return "birthday.cake"
+        case .racing: return "flag.checkered"
+        case .racingSide: return "car.side"
+        case .vehicle: return "car"
+        case .ball: return "soccerball"
+        case .music: return "music.note"
+        case .movie: return "film"
+        case .gaming: return "gamecontroller"
+        case .book: return "book.closed"
+        case .medicine: return "pills"
+        case .plant: return "leaf"
+        case .code: return "chevron.left.forwardslash.chevron.right"
+        case .camera: return "camera"
+        case .event: return "calendar"
+        case .friends: return "person.2"
         case .noIcon: return "circle.slash"
         }
     }
@@ -161,9 +193,18 @@ struct CustomCategory: Codable, Identifiable, Hashable {
     var createdAt: EpochMillis = .now
     /// "REAL takviminde göster"; nil (older data) means shown.
     var showInCalendar: Bool? = nil
+    /// Ortak kategori: the shared category id on the server; nil = private.
+    var sharedId: String? = nil
+    /// "owner", "full" (add / edit / complete / delete) or "view" (read only).
+    var sharedRole: String? = nil
+    var sharedOwnerName: String? = nil
 
     var icon: CategoryIcon { CategoryIcon.from(key: iconKey) }
     var isShownInCalendar: Bool { showInCalendar ?? true }
+    var isShared: Bool { sharedId != nil }
+    /// Someone else's category on this phone.
+    var isSharedMirror: Bool { sharedId != nil && sharedRole != nil && sharedRole != "owner" }
+    var isReadOnlyShared: Bool { sharedRole == "view" }
 }
 
 /// Home deck entries in their saved order (OrderedCategoryItem).
