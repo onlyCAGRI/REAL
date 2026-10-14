@@ -10,8 +10,6 @@ struct RealApp: App {
     @State private var books: BookStore
     @State private var discovery: DiscoveryStore
     private let initialPath: [Route]
-    /// Changing the colour palette rebuilds the screens so every colour is drawn from the new palette.
-    @AppStorage(colorPaletteKey) private var colorPalette = 1
 
     init() {
         let args = ProcessInfo.processInfo.arguments
@@ -47,7 +45,6 @@ struct RealApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(initialPath: initialPath)
-                .id(colorPalette)
                 .environment(store)
                 .environment(life)
                 .environment(pano)

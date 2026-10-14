@@ -48,37 +48,37 @@ private let rawPalette: [(String, UInt32)] = [
     ("Yakut", 0xFFA83B5D), ("Fuşya", 0xFFC85AB4), ("Lavanta", 0xFFD9B8F3), ("Menekşe", 0xFF8666D6),
     ("Erik", 0xFF70436F), ("Koleksiyon Lavanta", 0xFFDAB7F3), ("Koleksiyon Lime", 0xFFE0F37D),
     ("Koleksiyon Mavi", 0xFF4658C8), ("Koleksiyon Turuncu", 0xFFEE5E36),
+    // Vivid companions, each shown next to the colour it echoes (24 + (k - 2) pairs with k). Append only: saved
+    // choices are indices, shared with Android.
+    ("Elektrik Mavisi", 0xFF2F5BEA),
+    ("Lacivert", 0xFF1B2A6B),
+    ("Periwinkle", 0xFF8FA8E6),
+    ("Adaçayı Koyu", 0xFF3E6E62),
+    ("Aqua", 0xFF2ED3A2),
+    ("Adaçayı", 0xFF8FB5A2),
+    ("Yaprak", 0xFF6BB300),
+    ("Neon Sarı", 0xFFE8F24A),
+    ("Zeytin", 0xFFB6B12E),
+    ("Bakır", 0xFFA0603C),
+    ("Yanık Turuncu", 0xFFD9622B),
+    ("Somon", 0xFFE6806D),
+    ("Şeker Pembe", 0xFFE58BC6),
+    ("Şarap", 0xFFA3123F),
+    ("Magenta", 0xFFE0136C),
+    ("Leylak", 0xFFC9A6E8),
+    ("Mor", 0xFF8D6BE0),
+    ("Mürdüm", 0xFF5A2440),
 ]
 
-/// Palette 2 "Canlı" (vivid analytics / widget references), slot for slot with the REAL palette.
-private let rawPaletteCanli: [(String, UInt32)] = [
-    ("İnci", 0xFFE8E6EE), ("Mürekkep", 0xFF2A2329), ("Elektrik Mavisi", 0xFF2F5BEA),
-    ("Lacivert", 0xFF1B2A6B), ("Periwinkle", 0xFF8FA8E6), ("Adaçayı Koyu", 0xFF3E6E62), ("Aqua", 0xFF2ED3A2),
-    ("Adaçayı", 0xFF8FB5A2), ("Yaprak", 0xFF6BB300), ("Neon Sarı", 0xFFE8F24A), ("Zeytin", 0xFFB6B12E),
-    ("Bakır", 0xFFA0603C), ("Yanık Turuncu", 0xFFD9622B), ("Somon", 0xFFE6806D), ("Şeker Pembe", 0xFFE58BC6),
-    ("Şarap", 0xFFA3123F), ("Magenta", 0xFFE0136C), ("Leylak", 0xFFC9A6E8), ("Mor", 0xFF8D6BE0),
-    ("Mürdüm", 0xFF5A2440), ("Leylak", 0xFFC9A6E8), ("Neon Sarı", 0xFFE8F24A),
-    ("Elektrik Mavisi", 0xFF2F5BEA), ("Yanık Turuncu", 0xFFD9622B),
-]
-
-private func choices(_ raw: [(String, UInt32)]) -> [ReminderColorChoice] {
-    raw.enumerated().map { ReminderColorChoice(index: $0.offset, label: $0.element.0, color: Color(argb: $0.element.1)) }
+let reminderColorChoices: [ReminderColorChoice] = rawPalette.enumerated().map { pair in
+    ReminderColorChoice(index: pair.offset, label: pair.element.0, color: Color(argb: pair.element.1))
 }
-let paletteRealChoices = choices(rawPalette)
-let paletteCanliChoices = choices(rawPaletteCanli)
 
-/// Ayarlar > Görünüm > Renk paleti: 1 = REAL, 2 = Canlı. Cards store a colour's index, so switching recolours every
-/// card with the chosen palette's colour in the same slot; the root view is rebuilt on change (RealApp).
-let colorPaletteKey = "color_palette"
-var activeColorPalette: Int { UserDefaults.standard.integer(forKey: colorPaletteKey) == 2 ? 2 : 1 }
-
-var reminderColorChoices: [ReminderColorChoice] { activeColorPalette == 2 ? paletteCanliChoices : paletteRealChoices }
-
-/// ReminderColorDisplayOrder: the 20 colours as pickers show them, REAL-style — the two signature neutrals, then
-/// round the colour wheel (yellow, orange, pink-red, purple, blue, teal, green), light to dark in each family. Cards
+/// ReminderColorDisplayOrder: the colours as pickers show them, REAL-style — the two signature neutrals, then
+/// round the colour wheel (yellow, orange, pink-red, purple, blue, teal, green), each followed by its vivid companion. Cards
 /// store the index, so the order changes nothing saved; the four "Koleksiyon" duplicates are not offered.
-let reminderColorDisplayOrder = [0, 1, 9, 10, 11, 13, 12, 14, 16, 15, 17, 18, 19, 4, 2, 3, 5, 6, 7, 8]
-var pickerColorChoices: [ReminderColorChoice] { reminderColorDisplayOrder.map { reminderColorChoices[$0] } }
+let reminderColorDisplayOrder = [0, 1, 9, 31, 10, 32, 11, 33, 13, 35, 12, 34, 14, 36, 16, 38, 15, 37, 17, 39, 18, 40, 19, 41, 4, 26, 2, 24, 3, 25, 5, 27, 6, 28, 7, 29, 8, 30]
+let pickerColorChoices: [ReminderColorChoice] = reminderColorDisplayOrder.map { reminderColorChoices[$0] }
 
 func paletteColor(_ index: Int?) -> Color? {
     guard let index, reminderColorChoices.indices.contains(index) else { return nil }
