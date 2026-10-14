@@ -84,7 +84,7 @@ struct HomeView: View {
     @Binding var path: [Route]
     @State private var expanded = false
     /// Home "Tamamlandı": 3 (the 3rd under glass) until "Daha fazla" opens 10, then 10 more each time.
-    @State private var completedShown = 3
+    @State private var completedShown = 4
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedIds: Set<Int64> = []
     @State private var editingBuiltIn: ReminderCategory?
@@ -139,6 +139,8 @@ struct HomeView: View {
                 ForEach(active) { reminder in
                     card(reminder, swipe: true)
                 }
+                let completedMore = completed.count > completedShown
+                if completedMore && selectedIds.isEmpty { HomeContextCard(onOpen: openContext) }
                 if !completed.isEmpty {
                     SectionTitle(text: "Tamamlandı").padding(.top, 18)
                     let shown = Array(completed.prefix(completedShown))
@@ -150,10 +152,11 @@ struct HomeView: View {
                                 .blur(radius: 6)
                                 .opacity(0.5)
                                 .allowsHitTesting(false)
-                                .overlay {
+                                .padding(.top, 4)
+                                .overlay(alignment: .top) {
                                     Button {
                                         withAnimation(.spring(duration: 0.35)) {
-                                            completedShown = completedShown < 10 ? 10 : completedShown + 10
+                                            completedShown = completedShown < 11 ? 11 : completedShown + 10
                                         }
                                     } label: {
                                         Text("Daha fazla").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
@@ -161,15 +164,16 @@ struct HomeView: View {
                                             .liquidGlass(Capsule(), role: .chrome)
                                     }
                                     .buttonStyle(.plain)
-                                    .padding(.bottom, 8)
+                                    .offset(y: -6)
                                 }
+                                .padding(.bottom, -84)   // behind the dock
                         } else {
                             card(reminder, swipe: false)
                         }
                     }
                 }
-                if selectedIds.isEmpty { HomeContextCard(onOpen: openContext) }
-                Color.clear.frame(height: 140)
+                if !completedMore && selectedIds.isEmpty { HomeContextCard(onOpen: openContext) }
+                if !completedMore { Color.clear.frame(height: 140) }
             }
             .animation(.spring(duration: 0.35), value: active.map(\.id))
         }
@@ -199,9 +203,9 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: path) { _, now in
-            if now.contains(where: { if case .detail = $0 { return false } else { return true } }) { completedShown = 3 }
+            if now.contains(where: { if case .detail = $0 { return false } else { return true } }) { completedShown = 4 }
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .background { completedShown = 3 } }
+        .onChange(of: scenePhase) { _, phase in if phase == .background { completedShown = 4 } }
         .sheet(item: $editingBuiltIn) { category in
             BuiltInCategoryColorSheet(category: category)
         }

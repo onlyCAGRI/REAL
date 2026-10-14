@@ -92,10 +92,11 @@ struct CategoryScreen: View {
                             if more && index == shown.count - 1 {
                                 card(reminder)
                                     .blur(radius: 6).opacity(0.5).allowsHitTesting(false)
-                                    .overlay {
+                                    .padding(.top, 4)
+                                    .overlay(alignment: .top) {
                                         Button {
                                             withAnimation(.spring(duration: 0.35)) {
-                                                completedShown = completedShown < 10 ? 10 : completedShown + 10
+                                                completedShown = completedShown < 11 ? 11 : completedShown + 10
                                             }
                                         } label: {
                                             Text("Daha fazla").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
@@ -103,14 +104,15 @@ struct CategoryScreen: View {
                                                 .liquidGlass(Capsule(), role: .chrome)
                                         }
                                         .buttonStyle(.plain)
-                                        .padding(.bottom, 8)
+                                        .offset(y: -6)
                                     }
+                                    .padding(.bottom, -84)   // behind the dock
                             } else {
                                 card(reminder)
                             }
                         }
                     }
-                    Color.clear.frame(height: 140)
+                    if !(builtIn != .completed && lists.completed.count > completedShown) { Color.clear.frame(height: 140) }
                 }
                 .animation(.spring(duration: 0.35), value: lists.active.map(\.id))
                 .animation(.spring(duration: 0.3), value: showProgress)
@@ -158,7 +160,7 @@ struct CategoryScreen: View {
 
     /// The arrow's new meaning, shown briefly under the header (id restarts the fade on every press).
     @State private var sortHint: (id: Int, text: String)?
-    @State private var completedShown = 3
+    @State private var completedShown = 4
 
     private func changeSort() {
         let next = nextSort
