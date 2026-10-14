@@ -120,6 +120,7 @@ jobs:
         # Manual runs only: builds are tested on the Mac now, and this step kept timing out on pushes.
         if: success() && github.event_name == 'workflow_dispatch'
         run: |
+          mkdir -p build   # the test step that used to create it is skipped on manual runs
           xcodebuild build -project Real.xcodeproj -scheme Real -configuration Release \
             -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
             -derivedDataPath build-appetize ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
