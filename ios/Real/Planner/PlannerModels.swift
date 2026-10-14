@@ -147,16 +147,21 @@ func uncategorizedPastel(_ id: Int64) -> Color {
     return realCalendarPastels[((kotlinHash(id) % n) + n) % n]
 }
 
-/// resolveNext24CardColor
+/// resolveNext24CardColor: the category's own colour, else the card's, else a REAL palette colour picked from its id.
 func plannerCardColor(_ reminder: ReminderItem, categories: [CustomCategory]) -> Color {
     if let i = reminder.plannerColorIndex, realCalendarPastels.indices.contains(i) { return realCalendarPastels[i] }
     if let id = reminder.customCategoryId, let cat = categories.first(where: { $0.id == id }), !cat.name.isEmpty {
-        let raw = cat.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(cat.accentStart) ?? Color(argb: 0xFF4558C8)
-        return nearestCalendarPastel(raw)
+        return cat.visual.stripe.0
     }
-    if let solid = reminder.customSolidColorArgb { return nearestCalendarPastel(Color(argbInt: solid)) }
-    if let raw = paletteColor(reminder.accentStart) { return nearestCalendarPastel(raw) }
-    return uncategorizedPastel(reminder.id)
+    if let solid = reminder.customSolidColorArgb { return Color(argbInt: solid) }
+    if let raw = paletteColor(reminder.accentStart) { return raw }
+    let n = reminderColorChoices.count
+    return reminderColorChoices[((kotlinHash(reminder.id) % n) + n) % n].color
+}
+
+/// Text on a planner card: dark on light colours, white on dark ones.
+func plannerInk(on surface: Color) -> Color {
+    categoryForeground(start: surface, end: surface) == .white ? .white : RealColors.plannerInk
 }
 
 // MARK: - Timeline geometry (PlannerTimelineGeometry.kt)

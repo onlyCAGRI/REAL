@@ -56,11 +56,16 @@ struct ReminderDetailView: View {
                         let order = blockOrder(r)
                         let heroKey = editing ? nil : order.first.flatMap { isHero(r.contentBlockLayout[$0]) ? $0 : nil }
                         if let heroKey {
+                            // The cover reaches the screen edges and up under the status bar, like a category's header;
+                            // the column's side margins and top padding are undone here.
                             let hero = (r.contentBlockLayout[heroKey] ?? CardBlockPlacement()).normalized
-                            block(heroKey, r)
-                                .environment(\.cardBlockHeight, CGFloat(hero.minHeight))
-                                .frame(maxWidth: .infinity, minHeight: CGFloat(hero.minHeight), alignment: .top)
-                                .overlay(alignment: .top) { header(r).padding(.horizontal, 6).padding(.top, 6) }
+                            let inset = windowTopInset + 10
+                            block(heroKey, r, heroInset: inset)
+                                .environment(\.cardBlockHeight, CGFloat(hero.minHeight) + inset)
+                                .frame(maxWidth: .infinity, minHeight: CGFloat(hero.minHeight) + inset, alignment: .top)
+                                .overlay(alignment: .top) { header(r).padding(.horizontal, 22).padding(.top, inset - 4) }
+                                .padding(.horizontal, -16)
+                                .padding(.top, -inset)
                                 .padding(.bottom, 2)
                         } else if !editing { header(r) } else { Color.clear.frame(height: 4) }
                         CardBlockGrid(keys: heroKey == nil ? order : Array(order.dropFirst()),
@@ -200,11 +205,11 @@ struct ReminderDetailView: View {
     }
 
     @ViewBuilder
-    private func block(_ key: String, _ r: ReminderItem) -> some View {
+    private func block(_ key: String, _ r: ReminderItem, heroInset: CGFloat = 0) -> some View {
         let kind = key.split(separator: ":").first.map(String.init) ?? key
         let id = key.contains(":") ? String(key.split(separator: ":", maxSplits: 1)[1]) : ""
         switch kind {
-        case "text": textBlock(r)
+        case "text": textBlock(r, heroInset: heroInset)
         case "card_stack": if let stack = r.cardStack { CardStackDeck(stack: stack, editing: editing, onEdit: { editingStackCard = $0 },
                                                                        onAdd: { editingStackCard = CardStackCard() }) }
         case "mood": if let mood = r.mood { moodBlock(mood) }
@@ -246,10 +251,11 @@ struct ReminderDetailView: View {
             .accessibilityLabel("Geri")
             Spacer()
             HStack(spacing: 0) {
-                // Now Bar has no iOS counterpart yet; shown disabled like Android when unavailable.
-                ActionIcon(.nowBar, color: Color(argb: 0xFF66666F), size: 20)
+                // iOS counterpart of Android's Now Bar is the Dynamic Island (a Live Activity). That needs a widget
+                // extension that is not built yet, so the island mark is shown dimmed.
+                DynamicIslandMark(color: Color(argb: 0xFF66666F))
                     .frame(width: 48, height: 40)
-                    .accessibilityLabel("Now Bar kullanılamıyor")
+                    .accessibilityLabel("Dynamic Island henüz kullanılamıyor")
                 Rectangle().fill(.white.opacity(0.13)).frame(width: 1, height: 18)
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -269,14 +275,16 @@ struct ReminderDetailView: View {
 
     // MARK: Text block (the card itself)
 
-    private func textBlock(_ r: ReminderItem) -> some View {
+    /// heroInset > 0: the text is the cover — centred in the block, below the status bar.
+    private func textBlock(_ r: ReminderItem, heroInset: CGFloat = 0) -> some View {
+        let cover = heroInset > 0 && !editing
         let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
         let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: r.isCompleted,
                                             blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
         let dark = r.useDarkText
         let struck = r.isCompleted && r.journal == nil
         let ink: Color = dark ? (struck ? Color(argb: 0xFF55555A) : Color(argb: 0xFF101010)) : (struck ? Color(argb: 0xFF9999A2) : Color(argb: 0xFFF4F4F6))
-        return VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: cover ? .center : .leading, spacing: 0) {
             if editing {
                 TextField("Hatırlatıcı metni", text: Binding(get: { draft?.text ?? "" }, set: { draft?.text = $0 }), axis: .vertical)
                     .font(RealFont.inter(21))
@@ -294,7 +302,8 @@ struct ReminderDetailView: View {
                     .foregroundStyle(ink)
                     .strikethrough(struck, color: ink)
                     .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(cover ? .center : .leading)
+                    .frame(maxWidth: .infinity, alignment: cover ? .center : .leading)
                 Rectangle().fill(dark ? Color(argb: 0xFF101010).opacity(0.2) : Color(argb: 0xFF38383F)).frame(height: 1)
                     .padding(.top, 24).padding(.bottom, 18)
                 statusArea(r)
@@ -302,7 +311,8 @@ struct ReminderDetailView: View {
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 25)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, cover ? heroInset : 0)
+        .frame(maxWidth: .infinity, maxHeight: cover ? .infinity : nil, alignment: cover ? .center : .leading)
         .background {
             if let accent { shape.fill(accent) }
             else { shape.fill(LinearGradient(colors: [Color(argb: 0xFF18181A), LiquidGlassTokens.contentColor], startPoint: .top, endPoint: .bottom)) }
@@ -1733,3 +1743,13 @@ struct CardTextTools: View {
 
 /// DETAIL_HERO_MIN_HEIGHT_DP: the hero block's minimum height.
 let detailHeroMinHeight = 360
+
+/// The Dynamic Island shape: a wide pill with the camera dot on its right.
+struct DynamicIslandMark: View {
+    let color: Color
+    var body: some View {
+        Capsule().strokeBorder(color, lineWidth: 1.6)
+            .frame(width: 24, height: 10)
+            .overlay(alignment: .trailing) { Circle().fill(color).frame(width: 4, height: 4).padding(.trailing, 4) }
+    }
+}

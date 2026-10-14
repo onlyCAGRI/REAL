@@ -45,7 +45,7 @@ struct CategoryScreen: View {
                             onBack: { dismiss() },
                             onEdit: { if custom != nil { showEditor = true } else { showColorSheet = true } },
                             onFilter: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.2)) { filterMode = true } },
-                            onSort: { sortRaw = nextSort.rawValue },
+                            onSort: { changeSort() },
                             onGoals: customId.map { id in { path.append(.goal(id)) } }
                         )
                         .opacity(selectedIds.isEmpty ? 1 : 0.35)
@@ -56,6 +56,17 @@ struct CategoryScreen: View {
                     }
                     if filterMode {
                         colorSelectorHeader.padding(.top, 12).transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                    if let sortHint {
+                        // What the arrow now does, on the right under the header; it fades after a moment.
+                        Text(sortHint.text).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB8B9C2))
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.horizontal, 24).padding(.top, 10)
+                            .transition(.opacity)
+                            .task(id: sortHint.id) {
+                                try? await Task.sleep(for: .seconds(1.6))
+                                withAnimation(.easeOut(duration: 0.3)) { self.sortHint = nil }
+                            }
                     }
                     Color.clear.frame(height: 18)
                     if lists.active.isEmpty && lists.completed.isEmpty {
@@ -85,7 +96,7 @@ struct CategoryScreen: View {
             .overlay(alignment: .top) {
                 if let visual, heroBottom < topInset + 64, selectedIds.isEmpty {
                     CategoryCompactBar(visual: visual, topInset: topInset, sort: sort, showSort: builtIn != .journalEntries,
-                                       onBack: { dismiss() }, onSort: { sortRaw = nextSort.rawValue })
+                                       onBack: { dismiss() }, onSort: { changeSort() })
                         .ignoresSafeArea(edges: .top)
                         .transition(.move(edge: .top))
                 }
@@ -118,6 +129,21 @@ struct CategoryScreen: View {
 
     private var nextSort: ReminderSortOrder {
         sort == .recentlyAdded ? .oldestFirst : (sort == .oldestFirst ? .nearestDate : .recentlyAdded)
+    }
+
+    /// The arrow's new meaning, shown briefly under the header (id restarts the fade on every press).
+    @State private var sortHint: (id: Int, text: String)?
+
+    private func changeSort() {
+        let next = nextSort
+        sortRaw = next.rawValue
+        let text: String
+        switch next {
+        case .oldestFirst: text = "Son eklenen altta"
+        case .nearestDate, .reminderTime: text = "Tarihi en yakın üstte"
+        case .recentlyAdded: text = "Son eklenen üstte"
+        }
+        withAnimation(.easeOut(duration: 0.2)) { sortHint = ((sortHint?.id ?? 0) + 1, text) }
     }
 
     private var visual: CategoryVisual? {
@@ -367,7 +393,7 @@ private struct CategoryHero: View {
                 Spacer()
                 if let stats {
                     Button { withAnimation(.spring(duration: 0.35)) { showProgress.toggle() } } label: {
-                        CategoryProgressDisc(fraction: stats.fraction, active: showProgress, tint: visual.stripe.0).frame(width: 44, height: 44)
+                        CategoryProgressDisc(fraction: stats.fraction, active: showProgress, tint: fg).frame(width: 44, height: 44)
                     }
                     .accessibilityLabel(showProgress ? "İlerlemeyi gizle" : "Kategori ilerlemesini göster")
                 }
@@ -480,24 +506,19 @@ struct ProgressRing: View {
     }
 }
 
-/// The hero's progress button: a disc in the category colour's deep shade with a thick ring in its light shade.
+/// The hero's progress button: a plain ring in the header's text colour, like the sort arrow beside it.
 struct CategoryProgressDisc: View {
     let fraction: Double
     let active: Bool
     let tint: Color
     var body: some View {
-        let deep = tint.lerp(.black, 0.42)
-        let light = tint.lerp(.white, 0.55)
         ZStack {
-            Circle().fill(deep.opacity(active ? 1 : 0.88))
-            Circle().strokeBorder(.white.opacity(0.16), lineWidth: 0.8)
-            Circle().stroke(.white.opacity(0.18), lineWidth: 3.4).padding(9)
+            Circle().stroke(tint.opacity(active ? 0.34 : 0.24), lineWidth: 2.6)
             Circle().trim(from: 0, to: max(0, min(fraction, 1)))
-                .stroke(light, style: StrokeStyle(lineWidth: 3.4, lineCap: .round))
+                .stroke(tint, style: StrokeStyle(lineWidth: 2.6, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .padding(9)
         }
-        .frame(width: 38, height: 38)
+        .frame(width: 22, height: 22)
     }
 }
 

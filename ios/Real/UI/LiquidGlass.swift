@@ -42,12 +42,12 @@ extension View {
     static func rim(_ role: LiquidGlassRole) -> LinearGradient { liquidRim(role) }
 
     #if compiler(>=6.2)
-    /// Dock and buttons: clear glass with a light dark tint; panels (role .sheet): the same glass, deeper tint.
+    /// Dock and buttons: clear glass with a light dark tint. Panels (role .sheet) carry a lot of text, so they use the
+    /// frosted glass (it blurs what is behind) with a deeper tint.
     @available(iOS 26.0, *)
     static func clearGlass(role: LiquidGlassRole, dim: Double) -> Glass {
-        let tint = min((role == .sheet ? 0.55 : 0.14) + dim, 0.85)
-        let glass = Glass.clear.tint(.black.opacity(tint))
-        return role == .sheet ? glass : glass.interactive()
+        if role == .sheet { return Glass.regular.tint(.black.opacity(min(0.45 + dim, 0.85))) }
+        return Glass.clear.tint(.black.opacity(min(0.14 + dim, 0.85))).interactive()
     }
     #endif
 

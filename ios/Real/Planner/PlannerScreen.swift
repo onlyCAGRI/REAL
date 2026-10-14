@@ -310,13 +310,14 @@ struct PlannerScreen: View {
 
     @ViewBuilder
     private func allDayNote(_ event: PlannerEvent) -> some View {
-        let surface = plannerSoftPastel(plannerCardColor(event.reminder, categories: store.categories))
+        let surface = plannerCardColor(event.reminder, categories: store.categories)
         if event.reminder.isCompleted {
             HStack(spacing: 8) {
-                PlannerEventLogo(category: store.category(event.reminder.customCategoryId), starred: event.reminder.isImportant, size: 24)
+                PlannerEventLogo(category: store.category(event.reminder.customCategoryId), starred: event.reminder.isImportant, size: 24,
+                                 ink: plannerInk(on: surface))
                 Text(event.reminder.text).font(RealFont.inter(14)).kerning(-0.2).lineLimit(1)
             }
-            .foregroundStyle(RealColors.plannerInk)
+            .foregroundStyle(plannerInk(on: surface))
             .padding(.leading, 7).padding(.trailing, 16).padding(.vertical, 7)
             .background(Capsule().fill(surface))
             .opacity(0.62)
@@ -327,7 +328,7 @@ struct PlannerScreen: View {
                 .font(RealFont.inter(17))
                 .kerning(-0.3)
                 .lineLimit(3)
-                .foregroundStyle(RealColors.plannerInk)
+                .foregroundStyle(plannerInk(on: surface))
                 .padding(.horizontal, 18).padding(.vertical, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(surface))
@@ -405,7 +406,7 @@ struct PlannerFocusCard: View {
 
     var body: some View {
         let category = event.reminder.customCategoryId.flatMap { id in categories.first { $0.id == id } }
-        let surface = plannerSoftPastel(plannerCardColor(event.reminder, categories: categories))
+        let surface = plannerCardColor(event.reminder, categories: categories)
         let start = event.startMillis, end = event.endMillis
         let nowMs = now.epochMillis
         let hasSpan = end.map { $0 > start } ?? false
@@ -568,12 +569,13 @@ struct PlannerEventLogo: View {
     let category: CustomCategory?
     let starred: Bool
     let size: CGFloat
+    var ink: Color = RealColors.plannerInk
 
     var body: some View {
         RealSymbol(category?.icon.symbol ?? (starred ? "star.fill" : "calendar"), size: size * 0.55)
-            .foregroundStyle(RealColors.plannerInk)
+            .foregroundStyle(ink)
             .frame(width: size, height: size)
-            .background(Circle().fill(RealColors.plannerInk.opacity(0.13)))
+            .background(Circle().fill(ink.opacity(0.13)))
     }
 }
 
@@ -678,7 +680,7 @@ struct PlannerTimelineEvent: View {
     let ownerName: String
 
     var body: some View {
-        let surface = plannerSoftPastel(plannerCardColor(event.reminder, categories: categories))
+        let surface = plannerCardColor(event.reminder, categories: categories)
         let category = event.reminder.customCategoryId.flatMap { id in categories.first { $0.id == id } }
         if event.reminder.isCompleted {
             HStack(spacing: 8) {
@@ -887,16 +889,16 @@ struct PlannerNext24Card: View {
     }
 
     var body: some View {
-        let surface = plannerSoftPastel(plannerCardColor(event.reminder, categories: categories))
+        let surface = plannerCardColor(event.reminder, categories: categories)
         let end = event.endMillis
         let span: EpochMillis = (!event.isDateOnly && end != nil && end! > event.startMillis) ? end! - event.startMillis : 0
         let progress: Double = span > 0 ? min(max(Double(now.epochMillis - event.startMillis) / Double(span), 0), 1) : 0
-        let ink = RealColors.plannerInk
+        let ink = plannerInk(on: surface)
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
                 Text(event.reminder.text)
                     .font(RealType.editorialItem).kerning(-1)
-                    .foregroundStyle(event.reminder.isCompleted ? Color(argb: 0xFF6F6F78) : ink)
+                    .foregroundStyle(event.reminder.isCompleted ? ink.opacity(0.5) : ink)
                     .strikethrough(event.reminder.isCompleted)
                     .lineLimit(2)
                 Spacer(minLength: 12)

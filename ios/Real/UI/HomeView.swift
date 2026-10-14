@@ -83,6 +83,9 @@ struct HomeView: View {
     @Environment(\.navNamespace) private var nav
     @Binding var path: [Route]
     @State private var expanded = false
+    /// Home "Tamamlandı": 3 (the 3rd under glass) until "Daha fazla" opens 10, then 10 more each time.
+    @State private var completedShown = 3
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedIds: Set<Int64> = []
     @State private var editingBuiltIn: ReminderCategory?
     @State private var showNewCategory = false
@@ -138,14 +141,31 @@ struct HomeView: View {
                 }
                 if !completed.isEmpty {
                     SectionTitle(text: "Tamamlandı").padding(.top, 18)
-                    ForEach(completed.prefix(8)) { reminder in
-                        card(reminder, swipe: false)
-                    }
-                    if completed.count > 8 {
-                        Button("Tümünü gör (\(completed.count))") { path.append(.category(.completed)) }
-                            .font(RealFont.inter(14, .medium))
-                            .foregroundStyle(Color(argb: 0xFFB7B7C0))
-                            .padding(.vertical, 12)
+                    let shown = Array(completed.prefix(completedShown))
+                    let more = completed.count > completedShown
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, reminder in
+                        if more && index == shown.count - 1 {
+                            // The last card shown, while more remain, sits under glass with "Daha fazla" on it.
+                            card(reminder, swipe: false)
+                                .blur(radius: 6)
+                                .opacity(0.5)
+                                .allowsHitTesting(false)
+                                .overlay {
+                                    Button {
+                                        withAnimation(.spring(duration: 0.35)) {
+                                            completedShown = completedShown < 10 ? 10 : completedShown + 10
+                                        }
+                                    } label: {
+                                        Text("Daha fazla").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+                                            .padding(.horizontal, 18).padding(.vertical, 9)
+                                            .liquidGlass(Capsule(), role: .chrome)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.bottom, 8)
+                                }
+                        } else {
+                            card(reminder, swipe: false)
+                        }
                     }
                 }
                 if selectedIds.isEmpty { HomeContextCard(onOpen: openContext) }
@@ -178,6 +198,10 @@ struct HomeView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .onChange(of: path) { _, now in
+            if now.contains(where: { if case .detail = $0 { return false } else { return true } }) { completedShown = 3 }
+        }
+        .onChange(of: scenePhase) { _, phase in if phase == .background { completedShown = 3 } }
         .sheet(item: $editingBuiltIn) { category in
             BuiltInCategoryColorSheet(category: category)
         }
