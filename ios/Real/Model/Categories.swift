@@ -83,6 +83,8 @@ struct CategoryColorOverride: Codable, Hashable {
 }
 
 enum CategoryIcon: String, CaseIterable, Codable, Identifiable {
+    /// A category does not need an icon (listed first in the picker).
+    case noIcon = "NONE"
     case work = "WORK", home = "HOME", shopping = "SHOPPING", health = "HEALTH", sport = "SPORT", money = "MONEY",
          school = "SCHOOL", travel = "TRAVEL", family = "FAMILY", pet = "PET", food = "FOOD", idea = "IDEA",
          heart = "HEART", star = "STAR", file = "FILE", location = "LOCATION", bookmark = "BOOKMARK", gift = "GIFT"
@@ -108,6 +110,7 @@ enum CategoryIcon: String, CaseIterable, Codable, Identifiable {
         case .location: return "Konum"
         case .bookmark: return "Kaydedilen"
         case .gift: return "Hediye"
+        case .noIcon: return "İkon yok"
         }
     }
     /// RealSymbol key: draws the Android CategoryIcon glyph.
@@ -133,6 +136,7 @@ enum CategoryIcon: String, CaseIterable, Codable, Identifiable {
         case .location: return "mappin.and.ellipse"
         case .bookmark: return "bookmark"
         case .gift: return "gift"
+        case .noIcon: return "circle.slash"
         }
     }
 

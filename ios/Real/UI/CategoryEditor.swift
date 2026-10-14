@@ -125,7 +125,7 @@ struct CategoryEditorSheet: View {
 
     @State private var name = ""
     @State private var description = ""
-    @State private var icon: CategoryIcon = .work
+    @State private var icon: CategoryIcon = .noIcon
     @State private var start: Int? = 2
     @State private var end: Int?
     @State private var blend = 0.5
@@ -256,7 +256,11 @@ struct CategoryEditorSheet: View {
     private func iconTile(_ option: CategoryIcon) -> some View {
         let on = icon == option
         return Button { icon = option } label: {
-            RealSymbol(option.symbol, size: 21.8).foregroundStyle(.white)
+            Group {
+                if option == .noIcon { Image(systemName: "circle.slash").font(.system(size: 19)) }
+                else { RealSymbol(option.symbol, size: 21.8) }
+            }
+            .foregroundStyle(.white)
                 .frame(maxWidth: .infinity).frame(height: 50)
                 .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(argb: on ? 0xFF2A2A30 : 0xFF1E1E23)))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(on ? Color.white : Color.clear, lineWidth: 2))

@@ -113,6 +113,8 @@ struct CategoryIconGlyph: View {
             g.circle(2.2, 12, 9.5)
         case .bookmark:
             g.poly([(7, 3.5), (17, 3.5), (17, 20.5), (12, 17), (7, 20.5)], close: true)
+        case .noIcon:
+            break
         case .gift:
             g.roundRect(3, 8, 18, 4, 1.2)
             g.path { p in
