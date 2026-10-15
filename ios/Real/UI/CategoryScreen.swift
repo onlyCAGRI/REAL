@@ -577,22 +577,6 @@ private struct CategoryCompactBar: View {
     }
 }
 
-/// Ring that fills with completion, lime → aqua (ProgressRingIcon).
-struct ProgressRing: View {
-    let fraction: Double
-    let active: Bool
-    var body: some View {
-        ZStack {
-            Circle().stroke(Color.white.opacity(active ? 0.34 : 0.22), lineWidth: 2.2)
-            Circle().trim(from: 0, to: max(0, min(fraction, 1)))
-                .stroke(AngularGradient(colors: [Color(argb: 0xFFC4FF6A), Color(argb: 0xFF62F5DC), Color(argb: 0xFFC4FF6A)], center: .center),
-                        style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-        }
-        .frame(width: 20, height: 20)
-    }
-}
-
 /// The hero's progress button: a plain ring in the header's text colour, like the sort arrow beside it.
 struct CategoryProgressDisc: View {
     let fraction: Double

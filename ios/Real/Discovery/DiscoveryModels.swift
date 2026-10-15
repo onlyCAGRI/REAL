@@ -228,6 +228,16 @@ final class DiscoveryStore {
         set(kind, s)
     }
 
+    /// Settings "Önerileri sıfırla": passed titles can come back and the decks start over; saved lists and
+    /// "İzledim / Oynadım" stay.
+    func resetSeen() {
+        for kind in [DiscoveryKind.film, .game] {
+            var s = snapshot(kind)
+            s.cards = []; s.excluded = []
+            set(kind, s)
+        }
+    }
+
     /// DiscoveryQueueTransitions.apply
     func act(_ kind: DiscoveryKind, _ card: DiscoveryCard, _ action: DiscoveryAction) throws {
         var s = snapshot(kind)

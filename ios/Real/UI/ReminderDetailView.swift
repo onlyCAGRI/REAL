@@ -1567,38 +1567,6 @@ private struct LinkEditor: View {
     }
 }
 
-private struct MoodPickerSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let selected: JournalMood?
-    let onPick: (JournalMood?) -> Void
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
-                    ForEach(JournalMood.allCases) { mood in
-                        Button { onPick(mood); dismiss() } label: {
-                            VStack(spacing: 6) {
-                                Text(mood.emoji).font(.system(size: 34))
-                                Text(mood.label).font(RealFont.inter(12)).foregroundStyle(.white)
-                            }
-                            .frame(maxWidth: .infinity).padding(.vertical, 12)
-                            .background(RoundedRectangle(cornerRadius: 18).fill(selected == mood ? RealColors.accentBlue.opacity(0.25) : .white.opacity(0.05)))
-                        }
-                    }
-                }
-                .padding(16)
-            }
-            .navigationTitle("Mood")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
-                if selected != nil { ToolbarItem(placement: .destructiveAction) { Button("Kaldır") { onPick(nil); dismiss() } } }
-            }
-        }
-    }
-}
-
 /// İçerik Sıralaması: drag blocks into a new order.
 private struct BlockReorderSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -1798,23 +1766,6 @@ enum AttachmentStorage {
     }
 }
 
-/// Shared by journal list cells.
-struct AttachmentThumb: View {
-    let attachment: ReminderAttachment
-    var body: some View {
-        Group {
-            if let image = AttachmentStorage.image(attachment.localPath) {
-                Image(uiImage: image).resizable().scaledToFill()
-            } else {
-                RealSymbol("doc", size: 27.6).foregroundStyle(RealColors.subtext)
-            }
-        }
-        .frame(width: 96, height: 96)
-        .background(RealColors.field)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
 struct IdentifiedKey: Identifiable { let id: String }
 
 /// CardTitleTools: "Metin biçimi" — Sola / Ortala / Sağa, Kalın, İtalik.
@@ -1867,16 +1818,6 @@ struct CardTextTools: View {
 
 /// DETAIL_HERO_MIN_HEIGHT_DP: the hero block's minimum height.
 let detailHeroMinHeight = 360
-
-/// The Dynamic Island shape: a wide pill with the camera dot on its right.
-struct DynamicIslandMark: View {
-    let color: Color
-    var body: some View {
-        Capsule().strokeBorder(color, lineWidth: 1.6)
-            .frame(width: 24, height: 10)
-            .overlay(alignment: .trailing) { Circle().fill(color).frame(width: 4, height: 4).padding(.trailing, 4) }
-    }
-}
 
 /// Short name for the map's corner: the place's name, or the street when an empty spot was picked.
 func reminderLocationLabel(_ l: ReminderLocation) -> String? {

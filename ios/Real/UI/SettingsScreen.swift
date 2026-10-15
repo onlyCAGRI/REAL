@@ -167,14 +167,13 @@ struct SettingsScreen: View {
     @AppStorage("reduce_animations") private var reduceAnimations = false
     @AppStorage("reduce_dynamic_blur") private var reduceDynamicBlur = false
     @AppStorage("context_cards_enabled") private var contextCards = true
-    @AppStorage("planner_daily_view") private var dailyView = "new"
     @State private var notificationsAllowed = true
     @State private var page: Page = .main
-    @State private var showDailyChoice = false
     @State private var showLicenses = false
     @State private var showAiPrivacy = false
     @State private var showClearMoods = false
     @State private var showRatingReset = false
+    @State private var showSuggestionReset = false
     @Environment(DiscoveryStore.self) private var discovery
     @State private var showCalendar = false
     @State private var notice: String?
@@ -193,16 +192,18 @@ struct SettingsScreen: View {
             }
         }
         .task { await refreshNotificationStatus() }
-        .confirmationDialog("Daily Planner View", isPresented: $showDailyChoice, titleVisibility: .visible) {
-            ForEach([("classic", "Classic"), ("new", "New"), ("new_plus", "New+")], id: \.0) { key, label in
-                Button(label + (dailyView == key ? "  ✓" : "")) { dailyView = key }
-            }
-            Button("Kapat", role: .cancel) {}
-        }
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
         .sheet(isPresented: $showAiPrivacy) { AiPrivacySheet() }
         .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false }.liftedTopSafeArea() }
-        .alert("Puanlar sıfırlansın mı?", isPresented: $showRatingReset) {
+        .alert("Önerileri sıfırlamak istediğine emin misin?", isPresented: $showSuggestionReset) {
+            Button("Sıfırla", role: .destructive) {
+                MusicDiscoveryStore.shared.resetSeen()
+                discovery.resetSeen()
+                RealToast.shared.show("Öneriler sıfırlandı")
+            }
+            Button("Vazgeç", role: .cancel) {}
+        } message: { Text("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır.") }
+        .alert("Puanları sıfırlamak istediğine emin misin?", isPresented: $showRatingReset) {
             Button("Sıfırla", role: .destructive) {
                 MediaRatingStore.shared.reset(watched: discovery.film.watched)
                 RealToast.shared.show("Puanlar sıfırlandı")
@@ -221,8 +222,6 @@ struct SettingsScreen: View {
         } message: { Text(notice ?? "") }
     }
 
-    private var dailyLabel: String { dailyView == "new_plus" ? "New+" : (dailyView == "classic" ? "Classic" : "New") }
-
     @AppStorage(HomeCardStyle.plainKey) private var plainCards = false
     @AppStorage(CalendarCards.homeDaysKey) private var calendarHomeDays = 0
     @State private var musicSource = MusicSource.saved
@@ -238,8 +237,6 @@ struct SettingsScreen: View {
             SettingsToggleRow(icon: .cat, title: "REAL Pet", subtitle: "Geçici olarak devre dışı bırakıldı", isOn: .constant(false), enabled: false)
             SettingsDivider()
             SettingsToggleRow(icon: .bell, title: "Bağlam kartları", subtitle: "Ana ekranın altında arada su, mood, kitap ve film önerisi gösterir", isOn: $contextCards)
-            SettingsDivider()
-            SettingsActionRow(icon: .calendar, title: "Daily Planner View", subtitle: dailyLabel) { showDailyChoice = true }
             SettingsDivider()
             SettingsActionRow(icon: .calendar, title: "Takvim bağlantısı", subtitle: "Google / iCloud takvimlerini göster ve planlarını gönder") {
                 showCalendar = true
@@ -261,6 +258,11 @@ struct SettingsScreen: View {
             }
             SettingsDivider()
             // Puanlarım: film / dizi / bölüm puanlarını siler (şimdilik test için).
+            // Öneriler (müzik, film / dizi, oyun): geçilenler yeniden gelebilir; kayıtlı listeler ve İzledim / Oynadım kalır.
+            SettingsActionRow(icon: .music, title: "Önerileri sıfırla", subtitle: "Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez") {
+                showSuggestionReset = true
+            }
+            SettingsDivider()
             SettingsActionRow(icon: .delete, title: "Puanlarımı sıfırla", subtitle: "Film, dizi ve bölüm puanlarının hepsini siler") {
                 showRatingReset = true
             }

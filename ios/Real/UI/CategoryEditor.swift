@@ -65,49 +65,6 @@ struct PaletteGradientPicker: View {
     }
 }
 
-/// Card colour sheet in the detail screen.
-struct ReminderColorSheet: View {
-    @Environment(ReminderStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-    let reminderId: Int64
-    @State private var start: Int?
-    @State private var end: Int?
-    @State private var blend = 0.5
-    @State private var dark = false
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                PaletteGradientPicker(start: $start, end: $end, blend: $blend, darkText: $dark).padding(20)
-            }
-            .navigationTitle("Renk")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") {
-                        store.mutate(reminderId) {
-                            $0.accentStart = start
-                            $0.accentEnd = end
-                            $0.gradientBlendFraction = (start != nil && end != nil) ? blend : nil
-                            $0.customSolidColorArgb = nil
-                            $0.useDarkText = dark
-                        }
-                        dismiss()
-                    }
-                }
-            }
-            .onAppear {
-                let r = store.reminder(reminderId)
-                start = r?.accentStart
-                end = r?.accentEnd
-                blend = r?.gradientBlendResolved ?? 0.5
-                dark = r?.useDarkText ?? false
-            }
-        }
-    }
-}
-
 /// Built-in category colour override (long press on a deck tile): same editor, colour only.
 struct BuiltInCategoryColorSheet: View {
     let category: ReminderCategory
@@ -370,45 +327,6 @@ struct RealSwitch: View {
                 Circle().fill(Color.white).frame(width: 26, height: 26).padding(3).shadow(color: .black.opacity(0.2), radius: 2, y: 1)
             }
             .animation(.easeOut(duration: 0.18), value: isOn)
-    }
-}
-
-/// Owner name (used by the calendar greeting) and notification permission.
-struct SettingsSheet: View {
-    @Environment(ReminderStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var showOrder = false
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Profil") {
-                    TextField("Adın", text: $name)
-                }
-                Section {
-                    Button("Bildirim izni iste") { NotificationScheduler.requestAuthorization() }
-                    Button("Kategori sırasını düzenle") { showOrder = true }
-                }
-                Section {
-                    LabeledContent("Kart", value: "\(store.reminders.count)")
-                    LabeledContent("Kategori", value: "\(store.categories.count)")
-                    LabeledContent("Sürüm", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-")
-                } header: { Text("REAL iOS") }
-            }
-            .navigationTitle("Hesap")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Bitti") {
-                        store.setOwnerName(name)
-                        dismiss()
-                    }
-                }
-            }
-            .onAppear { name = store.ownerName }
-            .sheet(isPresented: $showOrder) { CategoryOrderSheet() }
-        }
     }
 }
 

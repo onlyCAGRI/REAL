@@ -206,6 +206,11 @@ private struct GenreRow: View {
                         let on = (position ?? Self.all) == g
                         Text(g == Self.all ? "Hepsi" : g).font(RealFont.inter(on ? 14 : 12)).foregroundStyle(on ? .white : faded)
                             .padding(.vertical, 6).contentShape(Rectangle())
+                            // Only the chosen word stays; the others fade out as they move away from the left edge,
+                            // on either side (the ones already passed disappear too).
+                            .visualEffect { content, proxy in
+                                content.opacity(max(0, 1 - abs(proxy.frame(in: .scrollView).minX) / 120))
+                            }
                             .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { position = g } }
                             .id(g)
                     }

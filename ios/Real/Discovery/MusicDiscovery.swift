@@ -34,6 +34,8 @@ struct MusicMood: Hashable, Identifiable {
 struct MusicCard: Codable, Hashable, Identifiable {
     var music: MusicBlock
     var genre: String
+    /// Release year when known (artist songs, charts); used for "Dönem".
+    var year: Int? = nil
     var id: String { "iTunes:\(music.providerTrackId ?? music.providerUrl)" }
 }
 
@@ -70,19 +72,32 @@ final class MusicDiscoveryStore {
         return keys.filter { seen.insert($0).inserted }.compactMap(MusicGenre.of)
     }
 
+    /// Settings "Önerileri sıfırla": passed songs can come back and the deck starts over; "Müzik listem" stays.
+    func resetSeen() {
+        var s = snapshot
+        s.cards = []; s.excluded = []
+        set(s)
+        MusicSources.clearCaches()
+    }
+
     func fetch(_ selection: Set<String>) async throws {
         let list = Array((genres(selection).isEmpty ? [MusicGenre.all[0]] : genres(selection)).prefix(6))
+        let era = MusicEra.of(selection)
         let country = MusicStorefront.code.lowercased()
         let known = Set(snapshot.excluded + snapshot.list.map(\.id) + snapshot.cards.map(\.id))
+        let budget = MusicLookupBudget(12)
         var perGenre: [[MusicCard]] = []
         await withTaskGroup(of: (Int, [MusicCard]).self) { group in
-            // The country's chart first; the US chart of the same genre is woven in, so small local charts (jazz,
-            // classical…) do not fill the deck with songs nobody knows.
+            // The country's chart and the US chart woven in, plus songs of the genre's artists (MusicSources); an
+            // older era is built from its artists alone (the weekly charts only fit today's music).
+            let withCharts = era == nil || era == .now
             for (i, g) in list.enumerated() {
                 group.addTask {
-                    async let local = Self.chart(country, g)
-                    async let us = country == "us" ? [] : Self.chart("us", g)
-                    return (i, Self.interleave(await local, await us))
+                    async let local = Self.chart(country, g, when: withCharts)
+                    async let us = Self.chart("us", g, when: withCharts && country != "us")
+                    async let seeds = MusicSources.seedSongs(country: country, genre: g, known: known, budget: budget, era: era)
+                    let charts = Self.windows(Self.interleave(await local, await us).filter { !known.contains($0.id) && MusicSources.inEra($0, era) })
+                    return (i, MusicSources.weave(await seeds, charts))
                 }
             }
             var results = Array(repeating: [MusicCard](), count: list.count)
@@ -90,14 +105,7 @@ final class MusicDiscoveryStore {
             perGenre = results
         }
         if perGenre.allSatisfy(\.isEmpty) { throw BookError.message("Müzik listeleri alınamadı. Bağlantını kontrol edip yeniden dene.") }
-        // Each genre keeps Apple's ranking (most played first), only mixed inside small windows; songs with a
-        // preview come first within a window.
-        var queues: [[MusicCard]] = perGenre.map { list in
-            let fresh = list.filter { !known.contains($0.id) }
-            return stride(from: 0, to: fresh.count, by: 6).flatMap { start in
-                fresh[start..<min(start + 6, fresh.count)].shuffled().sorted { ($0.music.previewUrl != nil ? 0 : 1) < ($1.music.previewUrl != nil ? 0 : 1) }
-            }
-        }
+        var queues: [[MusicCard]] = perGenre.map { $0.filter { !known.contains($0.id) } }
         var fresh: [MusicCard] = []
         var seen = Set<String>()
         while fresh.count < 40, queues.contains(where: { !$0.isEmpty }) {
@@ -106,7 +114,10 @@ final class MusicDiscoveryStore {
                 if seen.insert(next.id).inserted { fresh.append(next) }
             }
         }
-        guard !fresh.isEmpty else { throw BookError.message("Bu seçimlerde yeni şarkı kalmadı. Başka bir tür dene.") }
+        guard !fresh.isEmpty else {
+            throw BookError.message(era != nil ? "Bu dönemde yeni şarkı bulunamadı. Biraz sonra tekrar dene ya da başka bir tür seç."
+                                    : "Bu seçimlerde yeni şarkı kalmadı. Başka bir tür dene.")
+        }
         var s = snapshot
         let same = Set(s.selection) == selection
         s.selection = Array(selection)
@@ -124,6 +135,17 @@ final class MusicDiscoveryStore {
         case .remove: s.list = s.list.filter { $0.id != card.id }
         }
         set(s)
+    }
+
+    /// Apple's ranking (most played first) kept, only mixed inside windows of six; previews first in a window.
+    nonisolated static func windows(_ list: [MusicCard]) -> [MusicCard] {
+        stride(from: 0, to: list.count, by: 6).flatMap { start in
+            list[start..<min(start + 6, list.count)].shuffled().sorted { ($0.music.previewUrl != nil ? 0 : 1) < ($1.music.previewUrl != nil ? 0 : 1) }
+        }
+    }
+
+    nonisolated static func chart(_ country: String, _ genre: MusicGenre, when: Bool) async -> [MusicCard] {
+        when ? await chart(country, genre) : []
     }
 
     nonisolated static func interleave(_ a: [MusicCard], _ b: [MusicCard]) -> [MusicCard] {
@@ -159,7 +181,8 @@ final class MusicDiscoveryStore {
             let album = label(e["im:collection"], "im:name")
             return MusicCard(music: MusicBlock(title: String(title.prefix(300)), artist: label(e, "im:artist") ?? "", album: album,
                                                artworkUrl: art, provider: "iTunes", providerTrackId: id, providerUrl: page,
-                                               previewUrl: preview, previewDurationMillis: preview == nil ? nil : 30_000), genre: genre.key)
+                                               previewUrl: preview, previewDurationMillis: preview == nil ? nil : 30_000), genre: genre.key,
+                             year: label(e, "im:releaseDate").flatMap { Int($0.prefix(4)) })
         }
     }
 }
@@ -186,7 +209,8 @@ struct MusicDiscoveryScreen: View {
             if deck || list { deckPage } else { filterPage }
         }
         .onAppear {
-            selection = Set(music.snapshot.selection)
+            // "Nasıl hissettirsin" is gone; old mood keys are dropped.
+            selection = Set(music.snapshot.selection.filter { k in !MusicMood.all.contains { $0.key == k } })
             if startInList { list = true }
         }
     }
@@ -210,9 +234,19 @@ struct MusicDiscoveryScreen: View {
                         ChipFlow(spacing: 8) {
                             ForEach(MusicGenre.all) { g in chip(g.key, g.label) }
                         }
-                        Text("Nasıl hissettirsin?").font(RealFont.inter(17, .medium)).foregroundStyle(.white.opacity(0.8))
+                        // Dönem: one era or every era ("Hepsi").
+                        Text("Dönem").font(RealFont.inter(17, .medium)).foregroundStyle(.white.opacity(0.8))
                         ChipFlow(spacing: 8) {
-                            ForEach(MusicMood.all) { m in chip(m.key, m.label) }
+                            let current = MusicEra.of(selection)
+                            DiscoveryChip(label: "Hepsi", selected: current == nil, enabled: !loading, accent: musicTone) {
+                                for e in MusicEra.allCases { selection.remove(e.rawValue) }
+                            }
+                            ForEach(MusicEra.allCases) { e in
+                                DiscoveryChip(label: e.label, selected: current == e, enabled: !loading, accent: musicTone) {
+                                    for x in MusicEra.allCases { selection.remove(x.rawValue) }
+                                    selection.insert(e.rawValue)
+                                }
+                            }
                         }
                         Text("Apple Music · \(MusicStorefront.name) listeleri").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF5E5E66))
                     }
@@ -228,7 +262,8 @@ struct MusicDiscoveryScreen: View {
 
     private func chip(_ key: String, _ label: String) -> some View {
         let on = selection.contains(key)
-        return DiscoveryChip(label: label, selected: on, enabled: !loading && (on || selection.count < 6), accent: musicTone) {
+        let genreCount = selection.filter { MusicGenre.of($0) != nil }.count
+        return DiscoveryChip(label: label, selected: on, enabled: !loading && (on || genreCount < 6), accent: musicTone) {
             if on { selection.remove(key) } else { selection.insert(key) }
         }
     }
