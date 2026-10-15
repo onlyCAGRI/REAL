@@ -52,6 +52,7 @@ struct PanoBoardScreen: View {
         .background(Color.black.ignoresSafeArea())
         .onAppear {
             viewport = pano.viewports[boardId] ?? BoardViewport()
+            pano.requestSync(delay: 0.1)
             withAnimation(.easeOut(duration: 0.44)) { revealed = true }
         }
         .onDisappear { pano.viewports[boardId] = viewport; pano.save() }
@@ -315,9 +316,17 @@ struct PanoBlockView: View {
                 ReminderCardView(reminder: reminder, showCategoryStripes: false)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
-                Text("REAL card").font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.6))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RoundedRectangle(cornerRadius: 22).fill(RealColors.cardSurface))
+                // A card someone else put on the board: its copy on the server, not a card on this phone.
+                let card = item.rawPayload.flatMap { $0.data(using: .utf8) }
+                    .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["card"] as? [String: Any]
+                VStack(alignment: .leading, spacing: 6) {
+                    Text((card?["text"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "REAL card")
+                        .font(RealFont.inter(17, .medium)).foregroundStyle(.white).lineLimit(4)
+                    Text(item.authorName).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.5))
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(RoundedRectangle(cornerRadius: 22).fill(RealColors.cardSurface))
             }
         case .checklist:
             VStack(alignment: .leading, spacing: 8) {

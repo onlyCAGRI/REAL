@@ -1,8 +1,7 @@
 import Foundation
 
-/// BoardRepository.sync's pull half (first iOS step): reads the account's boards from /api/boards/v1 and puts them on
-/// this device. Text, checklist, card and card-stack blocks come across; photo and other file blocks need the board
-/// file store and come in a later step. Boards made only on this iPhone stay; nothing is sent back yet.
+/// "Hesabından yeniden yükle": reads the account's boards from /api/boards/v1 and puts them on this device in one go.
+/// The everyday two-way sync (and photo downloads) is PanoStore.sync.
 @MainActor
 enum RealBoardsRestore {
     struct Summary { let boards: Int; let blocks: Int; let skipped: Int }
@@ -44,38 +43,6 @@ enum RealBoardsRestore {
         return Summary(boards: boards.count, blocks: items.values.reduce(0) { $0 + $1.count }, skipped: skipped)
     }
 
-    /// PanoItem.from (Android) → the iOS block types.
-    private static func item(_ o: [String: Any], boardId: String) -> PanoItem? {
-        guard let typeName = o["type"] as? String, let type = BoardBlockType(rawValue: typeName), type != .photo else { return nil }
-        let t = (o["transform"] as? [String: Any]) ?? [:]
-        func num(_ key: String, _ fallback: Double) -> Double { (t[key] as? NSNumber)?.doubleValue ?? fallback }
-        let transform = BoardTransform(x: num("x", 0), y: num("y", 0), width: num("width", 280), height: num("height", 180),
-                                       rotation: num("rotation", 0), z: (t["z"] as? NSNumber)?.intValue ?? 0)
-        let payload = (o["payload"] as? [String: Any]) ?? [:]
-        var item = PanoItem(id: o["id"] as? String ?? UUID().uuidString, boardId: boardId, type: type, transform: transform)
-        item.authorName = (o["author_name"] as? String) ?? "REAL user"
-        switch type {
-        case .text:
-            item.text = (payload["text"] as? String) ?? ""
-        case .checklist:
-            item.text = (payload["title"] as? String) ?? ""
-            item.checklist = ((payload["items"] as? [[String: Any]]) ?? []).map {
-                PanoChecklistEntry(id: ($0["id"] as? String) ?? UUID().uuidString, text: ($0["text"] as? String) ?? "", done: ($0["done"] as? Bool) ?? false)
-            }
-        case .card:
-            guard let card = payload["card"] as? [String: Any], let cardId = (card["id"] as? NSNumber)?.int64Value else { return nil }
-            item.reminderId = cardId
-        case .stack:
-            let cards = ((payload["stack"] as? [String: Any])?["cards"] as? [[String: Any]]) ?? []
-            item.stack = cards.compactMap { c in
-                var copy = c
-                copy["imageUri"] = nil                 // board stack photos live in the board file store
-                guard let data = try? JSONSerialization.data(withJSONObject: copy) else { return nil }
-                return try? JSONDecoder().decode(CardStackCard.self, from: data)
-            }
-        case .photo:
-            return nil
-        }
-        return item
-    }
+    /// PanoItem.from (Android) → the iOS block types (shared with the two-way sync).
+    private static func item(_ o: [String: Any], boardId: String) -> PanoItem? { PanoStore.item(o, boardId: boardId) }
 }

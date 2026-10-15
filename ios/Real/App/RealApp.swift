@@ -86,9 +86,12 @@ struct RealApp: App {
                     NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
                         Task { @MainActor in ShareImport.run(store) }
                     }
-                    // Two-way cloud sync and shared categories, every minute while the app is open.
+                    // Two-way cloud sync, shared categories and Pano, every minute while the app is open.
+                    pano.reminders = store
+                    pano.life = life
                     while !Task.isCancelled {
                         await RealCloudSync.shared.run(store, life)
+                        await pano.sync()
                         await SharedCategorySync.shared.syncNow(store)
                         await CardShareClient.receive(store: store, life: life)
                         await AnnouncementClient.receive(store: store, life: life)

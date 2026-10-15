@@ -41,7 +41,8 @@ struct AccountMenuOverlay: View {
                 // Boards come from their own service; a failure there does not undo the cards.
                 if let boards = try? await RealBoardsRestore.run(pano: pano) {
                     text += ". \(boards.boards) pano geldi"
-                    if boards.skipped > 0 { text += " (fotoğraf blokları sonraki adımda)" }
+                    if boards.skipped > 0 { text += " (\(boards.skipped) blok türü iOS'ta henüz gösterilemiyor)" }
+                    await pano.sync()
                 } else {
                     text += ". Panolar şu anda alınamadı"
                 }

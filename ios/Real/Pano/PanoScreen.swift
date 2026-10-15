@@ -78,7 +78,10 @@ struct PanoScreen: View {
         }
         .background(Color.black.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { withAnimation { revealed = true } }
+        .onAppear {
+            withAnimation { revealed = true }
+            pano.requestSync(delay: 0.1)        // boards and blocks changed on other devices
+        }
         .fullScreenCover(item: $peek) { b in
             PanoBoardPeek(board: b, color: colors[b.id] ?? PanoColors.sand,
                           onOpen: { peek = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { openBoard = b } },
