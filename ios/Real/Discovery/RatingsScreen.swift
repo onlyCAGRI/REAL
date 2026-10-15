@@ -27,6 +27,8 @@ private let periods = [Period(short: "7", long: "Son 7 gün", days: 7), Period(s
                        Period(short: "3 ay", long: "Son 3 ay", days: 90), Period(short: "6 ay", long: "Son 6 ay", days: 180),
                        Period(short: "1 yıl", long: "Son 1 yıl", days: 365), Period(short: "Tümü", long: "Tümü", days: nil)]
 
+private let periodLabels = periods.map { p in p.days.map { $0 <= 30 ? "\(p.short) gün" : p.short } ?? p.short }
+
 private func genresOf(_ e: RatingEntry) -> [String] {
     var seen = Set<String>()
     return (e.media.genre ?? "").split(whereSeparator: { ",/|".contains($0) })
@@ -56,6 +58,7 @@ struct RatingsScreen: View {
     @State private var seriesKey: String?
     @State private var target: RateTarget?
     @State private var searching = false
+    @State private var addPast = true
 
     var body: some View {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -76,20 +79,25 @@ struct RatingsScreen: View {
             screenBg.ignoresSafeArea()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    PeriodPicker(selected: $period).padding(.top, 10)
+                    Color.clear.frame(height: 54)
                     Text(avg.map { scoreText(round1($0)) } ?? "–").font(RealFont.inter(56, .medium)).foregroundStyle(.white)
                         .contentTransition(.numericText()).frame(maxWidth: .infinity).padding(.top, 6)
-                    let films = shown.filter { !$0.series }.count, dizi = shown.count - films
-                    Text(shown.isEmpty ? "Henüz puan yok" : (genre.map { "\($0) ortalaman · " } ?? "ortalaman · ") +
-                         [films > 0 ? "\(films) film" : nil, dizi > 0 ? "\(dizi) dizi" : nil].compactMap { $0 }.joined(separator: ", "))
-                        .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF888888)).frame(maxWidth: .infinity)
-                        .padding(.top, 4).padding(.bottom, 14)
-                    if genres.count > 1 || genre != nil { GenreRow(genres: genres, selected: $genre).padding(.bottom, 16) }
+                    // One row: genres pull in from the left of "Hepsi", periods from the right of "Tümü".
+                    let genreLabels = genres.reversed() + ["Hepsi"]
+                    HStack(spacing: 0) {
+                        AnchoredPicker(labels: genreLabels, selected: Binding(
+                            get: { genre.flatMap { genreLabels.firstIndex(of: $0) } ?? genreLabels.count - 1 },
+                            set: { i in withAnimation(.easeOut(duration: 0.2)) { genre = i == genreLabels.count - 1 ? nil : genreLabels[i] } }),
+                                       rtl: false)
+                        AnchoredPicker(labels: periodLabels, selected: Binding(
+                            get: { period }, set: { i in withAnimation(.easeOut(duration: 0.2)) { period = i } }), rtl: true)
+                    }
+                    .padding(.top, 14).padding(.bottom, 16)
                     if !shown.isEmpty {
                         HStack { ForEach(["altında", "ortalama", "üstünde"], id: \.self) { Text($0); if $0 != "üstünde" { Spacer() } } }
                             .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF555555)).padding(.leading, 46).padding(.bottom, 2)
                     } else {
-                        Text(days == nil ? "Keşifte İzledim dediğin film ve diziler burada puanlanır. Eskiden izlediklerini aşağıdan ekleyebilirsin."
+                        Text(days == nil ? "Keşifte İzledim dediğin film ve diziler burada puanlanır. İzlediklerini aşağıdan da ekleyebilirsin."
                              : "Bu aralıkta eklenen yok.")
                             .font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF777777)).padding(.vertical, 20)
                     }
@@ -102,12 +110,18 @@ struct RatingsScreen: View {
                     if let line = tasteLine(inPeriod) {
                         Text(line).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A8A)).padding(.top, 18)
                     }
-                    Button { searching = true } label: {
-                        HStack(spacing: 8) { RealSymbol("plus", size: 15); Text("Geçmişten ekle").font(RealFont.inter(14)) }
-                            .foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 48)
-                            .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color(argb: 0xFF2E2E2E), lineWidth: 1))
+                    // "Ekle": watched now (today's date); "Geçmişten ekle": no date ("eskiden").
+                    HStack(spacing: 10) {
+                        ForEach([(false, "Ekle"), (true, "Geçmişten ekle")], id: \.1) { past, label in
+                            Button { addPast = past; searching = true } label: {
+                                HStack(spacing: 8) { RealSymbol("plus", size: 15); Text(label).font(RealFont.inter(14)) }
+                                    .foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 48)
+                                    .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color(argb: 0xFF2E2E2E), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain).padding(.top, 14).padding(.bottom, 40)
+                    .padding(.top, 14).padding(.bottom, 40)
                 }
                 .padding(.horizontal, 20)
                 .animation(.easeOut(duration: 0.25), value: genre)
@@ -124,10 +138,11 @@ struct RatingsScreen: View {
         .onAppear { ratings.importWatched(discovery.film.watched) }
         .sheet(isPresented: $searching) {
             MediaSearchSheet { media in
-                if media.type == .TV { ratings.add(media, past: true); seriesKey = ratingKey(media) }
+                let past = addPast
+                if media.type == .TV { ratings.add(media, past: past); seriesKey = ratingKey(media) }
                 else {
                     let existing = ratings.entries.first { $0.key == ratingKey(media) }?.score
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { target = .film(media, initial: existing, past: true, inList: false) }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { target = .film(media, initial: existing, past: past, inList: false) }
                 }
             }
         }
@@ -160,59 +175,31 @@ struct RatingsScreen: View {
     }
 }
 
-/// Faded options right-aligned on the top line; the chosen one slides to the centre as a title.
-private struct PeriodPicker: View {
+/// A picker with its default ("Hepsi" / "Tümü", the last label) at one edge and the other options waiting off screen
+/// beyond it (left of "Hepsi"; right of "Tümü" when `rtl`). Pulling the row brings them in; whichever word reaches the
+/// edge is chosen while scrolling, and the row snaps to it. Right-to-left layout makes the right edge the leading one,
+/// so the system's view-aligned snapping lands there.
+private struct AnchoredPicker: View {
+    let labels: [String]
     @Binding var selected: Int
-    private func width(_ s: String, _ size: CGFloat) -> CGFloat {
-        (s as NSString).size(withAttributes: [.font: UIFont(name: "Inter-Regular", size: size) ?? .systemFont(ofSize: size)]).width
-    }
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let rest = periods.indices.filter { $0 != selected }
-            let xs: [Int: CGFloat] = {
-                var x = w; var map: [Int: CGFloat] = [:]
-                for i in rest.reversed() { x -= width(periods[i].short, 12); map[i] = x; x -= 14 }
-                map[selected] = (w - width(periods[selected].long, 16)) / 2
-                return map
-            }()
-            ZStack(alignment: .topLeading) {
-                ForEach(periods.indices, id: \.self) { i in
-                    let on = i == selected
-                    Text(on ? periods[i].long : periods[i].short)
-                        .font(RealFont.inter(on ? 16 : 12)).foregroundStyle(on ? .white : faded).fixedSize()
-                        .offset(x: xs[i] ?? 0, y: on ? 26 : 0)
-                        .onTapGesture { if !on { withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) { selected = i } } }
-                }
-            }
-        }
-        .frame(height: 50)
-    }
-}
-
-/// Genre filter: "Hepsi" sits at the left edge with nothing to its right; the genres wait off screen to its left (most
-/// common nearest). Pulling the row right brings them in from the left; whichever word reaches the left edge is chosen
-/// while scrolling, and the row snaps to it.
-private struct GenreRow: View {
-    let genres: [String]
-    @Binding var selected: String?
-    @State private var position: String?
-    private static let all = "*hepsi*"
+    let rtl: Bool
+    @State private var position: Int?
     var body: some View {
         GeometryReader { geo in
             ScrollView(.horizontal) {
-                HStack(spacing: 16) {
-                    ForEach(genres.reversed() + [Self.all], id: \.self) { g in
-                        let on = (position ?? Self.all) == g
-                        Text(g == Self.all ? "Hepsi" : g).font(RealFont.inter(on ? 14 : 12)).foregroundStyle(on ? .white : faded)
+                HStack(spacing: 14) {
+                    ForEach(Array(labels.enumerated()), id: \.offset) { i, label in
+                        let on = (position ?? labels.count - 1) == i
+                        Text(label).font(RealFont.inter(on ? 14 : 12)).foregroundStyle(on ? .white : faded).lineLimit(1)
+                            .environment(\.layoutDirection, .leftToRight)
                             .padding(.vertical, 6).contentShape(Rectangle())
-                            // Only the chosen word stays; the others fade out as they move away from the left edge,
-                            // on either side (the ones already passed disappear too).
                             .visualEffect { content, proxy in
-                                content.opacity(max(0, 1 - abs(proxy.frame(in: .scrollView).minX) / 120))
+                                // Only the chosen word stays; the others fade out as they move away from the edge.
+                                let frame = proxy.frame(in: .scrollView)
+                                return content.opacity(max(0, 1 - abs(frame.minX) / 90))
                             }
-                            .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { position = g } }
-                            .id(g)
+                            .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { position = i } }
+                            .id(i)
                     }
                 }
                 .scrollTargetLayout()
@@ -221,14 +208,12 @@ private struct GenreRow: View {
             .scrollTargetBehavior(.viewAligned)
             .scrollPosition(id: $position)
             .scrollIndicators(.hidden)
+            .environment(\.layoutDirection, rtl ? .rightToLeft : .leftToRight)
         }
         .frame(height: 30)
-        .onAppear { position = selected ?? Self.all }
-        .onChange(of: genres) { _, _ in position = selected ?? Self.all }
-        .onChange(of: position) { _, p in
-            let next = p == nil || p == Self.all ? nil : p
-            if next != selected { withAnimation(.easeOut(duration: 0.2)) { selected = next } }
-        }
+        .onAppear { position = selected }
+        .onChange(of: labels) { _, _ in position = selected }
+        .onChange(of: position) { _, p in if let p, p != selected { selected = p } }
     }
 }
 
@@ -268,8 +253,8 @@ private struct RatingRow: View {
                     }
                     .frame(height: 6).padding(.top, 7)
                     let when: String = entry.addedAt.map { at in
-                        let d = Int((now - at) / 86_400_000)
-                        return d == 0 ? "bugün" : d == 1 ? "dün" : "\(d) gün önce"
+                        let f = DateFormatter(); f.dateFormat = "dd.MM"
+                        return f.string(from: Date(timeIntervalSince1970: Double(at) / 1000))
                     } ?? "eskiden"
                     Text([diff.map { ($0 >= 0 ? "+" : "−") + scoreText(round1(abs($0))) }, when].compactMap { $0 }.joined(separator: " · "))
                         .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF666666)).padding(.top, 3)

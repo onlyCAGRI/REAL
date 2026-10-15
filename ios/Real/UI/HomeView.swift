@@ -16,6 +16,8 @@ struct RootView: View {
     @State private var path: [Route]
     @Namespace private var nav
     @State private var showWelcome = false
+    /// Cold start: the skeleton with its shimmer, then a wipe to the real home (StartupSkeletonReveal).
+    @State private var startupShown = !ProcessInfo.processInfo.arguments.contains("-REALNoStartup")
 
     init(initialPath: [Route] = []) {
         _path = State(initialValue: initialPath)
@@ -59,6 +61,11 @@ struct RootView: View {
         .environment(\.navNamespace, nav)
         .tint(RealColors.accentBlue)
         .preferredColorScheme(.dark)
+        .overlay {
+            if startupShown && !showWelcome {
+                StartupSkeletonReveal { startupShown = false }
+            }
+        }
         .overlay {
             // WelcomeScreen on first launch (no name yet), like MainActivity.
             if showWelcome {
