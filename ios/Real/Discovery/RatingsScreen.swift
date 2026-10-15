@@ -136,7 +136,8 @@ struct RatingsScreen: View {
             BackCircle(action: onClose).padding(.leading, 20).padding(.top, 10)
             if let s = ratings.entries.first(where: { $0.key == seriesKey }) {
                 SeriesGrid(entry: s, onBack: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32)) { seriesKey = nil } },
-                           onRate: { target = $0 })
+                           onRate: { target = $0 },
+                           onRemove: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32)) { seriesKey = nil }; ratings.remove(s.key) })
                     .transition(.move(edge: .trailing).combined(with: .opacity)).zIndex(2)
             }
         }
@@ -277,6 +278,8 @@ private struct SeriesGrid: View {
     let entry: RatingEntry
     let onBack: () -> Void
     let onRate: (RateTarget) -> Void
+    let onRemove: () -> Void
+    @State private var confirmRemove = false
     @State private var episodes: [SeriesEpisode]?
     @State private var error: String?
 
@@ -333,14 +336,21 @@ private struct SeriesGrid: View {
                             Text("Kötü"); Capsule().fill(LinearGradient(colors: ratingScale, startPoint: .leading, endPoint: .trailing)).frame(height: 6); Text("Efsane")
                         }
                         .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF777777)).padding(.top, 10)
-                        Color.clear.frame(height: 40)
                     }
+                    Button { confirmRemove = true } label: {
+                        Text("Listeden çıkar").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFF8A80)).padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 28).padding(.bottom, 40)
                 }
                 .padding(.horizontal, 20)
             }
             .scrollIndicators(.hidden)
             BackCircle(action: onBack).padding(.leading, 20).padding(.top, 10)
         }
+        .alert("Diziyi listeden çıkarmak istediğine emin misin?", isPresented: $confirmRemove) {
+            Button("Çıkar", role: .destructive, action: onRemove)
+            Button("Vazgeç", role: .cancel) {}
+        } message: { Text("\(entry.media.title) ve bölüm puanları Puanlarım'dan silinir.") }
         .task(id: entry.key) {
             do { episodes = try await MediaRatingStore.shared.episodes(entry.media) } catch { self.error = error.localizedDescription; episodes = [] }
         }
