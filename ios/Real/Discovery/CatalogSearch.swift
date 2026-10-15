@@ -205,10 +205,13 @@ struct MusicSearchSheet: View {
     @State private var results: [MusicBlock] = []
     @State private var searching = false
     @State private var message: String?
+    @State private var source = MusicSource.saved
 
     var body: some View {
-        CatalogPanel(title: "Müzik", placeholder: "Şarkı veya sanatçı ara", query: $query, searching: searching, message: message,
-                     attribution: "Apple Music • \(MusicStorefront.name) kataloğu", onClose: { dismiss() }) {
+        CatalogPanel(title: "Müzik", placeholder: source == .apple ? "Şarkı veya sanatçı ara" : "Spotify şarkı bağlantısını yapıştır",
+                     query: $query, searching: searching, message: message,
+                     attribution: source == .apple ? "Apple Music • \(MusicStorefront.name) kataloğu" : "Spotify",
+                     onClose: { dismiss() }, header: AnyView(sourceHeader)) {
             ForEach(results) { m in
                 Button { onSelect(m); dismiss() } label: {
                     HStack(spacing: 12) {
@@ -225,7 +228,44 @@ struct MusicSearchSheet: View {
                 .buttonStyle(.plain)
             }
         }
-        .task(id: query) { await search(query) }
+        .task(id: "\(source.rawValue)|\(query)") { await search(query) }
+    }
+
+    /// Logos only (remembered). Spotify has no open search for apps: open Spotify, copy the song's link, paste it here.
+    private var sourceHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 0) {
+                ForEach(MusicSource.allCases, id: \.self) { s in
+                    Button { source = s; MusicSource.saved = s; results = []; message = nil } label: {
+                        MusicSourceLogo(provider: s == .spotify ? "Spotify" : "iTunes", size: 24).opacity(source == s ? 1 : 0.45)
+                            .frame(maxWidth: .infinity).frame(height: 40)
+                            .background(Capsule().fill(source == s ? Color.white.opacity(0.16) : .clear))
+                    }
+                    .buttonStyle(.plain).accessibilityLabel(s.label)
+                }
+            }
+            .padding(4).background(Capsule().fill(Color.white.opacity(0.06)))
+            if source == .spotify {
+                Text("1. Spotify'ı aç, şarkıyı bul.\n2. ⋯ → Paylaş → Bağlantıyı kopyala, sonra buraya dön ve yapıştır.")
+                    .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFBCBCC5))
+                HStack(spacing: 10) {
+                    Button {
+                        if let app = URL(string: "spotify:"), let web = URL(string: "https://open.spotify.com") {
+                            UIApplication.shared.open(app) { ok in if !ok { UIApplication.shared.open(web) } }
+                        }
+                    } label: {
+                        HStack(spacing: 8) { MusicSourceLogo(provider: "Spotify", size: 16); Text("Spotify'ı aç").font(RealFont.inter(14, .medium)) }
+                            .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 40)
+                            .background(Capsule().fill(Color.white.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
+                    PasteButton(payloadType: String.self) { strings in
+                        if let first = strings.first { Task { @MainActor in query = first } }
+                    }
+                    .labelStyle(.titleAndIcon).buttonBorderShape(.capsule).tint(Color.white.opacity(0.18))
+                }
+            }
+        }
     }
 
     private func search(_ raw: String) async {
@@ -235,6 +275,16 @@ struct MusicSearchSheet: View {
         guard !Task.isCancelled else { return }
         searching = true
         message = nil
+        if source == .spotify {
+            guard let r = q.range(of: #"https://(open\.spotify\.com/(intl-[a-z-]+/)?track/[A-Za-z0-9]{22}|spotify\.link/[A-Za-z0-9]+)"#, options: .regularExpression) else {
+                searching = false; results = []; message = "Spotify'da bir şarkının bağlantısını yapıştır."; return
+            }
+            let found = await LinkResolver.resolve(String(q[r])).music
+            guard !Task.isCancelled else { return }
+            searching = false
+            if let found, found.provider == "Spotify" { results = [found] } else { results = []; message = "Bu bağlantıdan şarkı okunamadı." }
+            return
+        }
         do {
             let found = try await MusicCatalog.search(q)
             guard !Task.isCancelled else { return }
@@ -309,12 +359,14 @@ private struct CatalogPanel<Rows: View>: View {
     let message: String?
     let attribution: String
     let onClose: () -> Void
+    var header: AnyView? = nil
     @ViewBuilder let rows: () -> Rows
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title).font(RealFont.inter(19, .semibold)).foregroundStyle(.white)
+            if let header { header }
             TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(Color(argb: 0xFF8E8E98)))
                 .font(RealFont.inter(16)).foregroundStyle(.white).tint(.white)
                 .focused($focused).submitLabel(.search)
@@ -409,25 +461,61 @@ struct MusicBlockView: View {
     var editing = false
     var onRemove: () -> Void = {}
     @State private var ambient: Color = Color(argb: 0xFF3A3530)
+    @State private var flipped = false
     private var preview: MusicPreviewPlayer { .shared }
+    private var spotifyCodeId: String? {
+        guard block.provider == "Spotify", let id = block.providerTrackId, id.count == 22 else { return nil }
+        return id
+    }
 
     var body: some View {
         let playing = preview.playingId == block.id
+        ZStack {
+            front(playing: playing).opacity(flipped ? 0 : 1)
+            if flipped, let id = spotifyCodeId { back(id) }
+        }
+        .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0), perspective: 0.6)
+        .animation(.easeInOut(duration: 0.45), value: flipped)
+        .background(
+            TimelineView(.animation(paused: !playing)) { t in
+                // While the preview plays, the cover colour washes through the whole block, softly pulsing.
+                let wave = playing ? (sin(t.date.timeIntervalSinceReferenceDate * 3.2) * 0.5 + 0.5) : 0
+                LinearGradient(colors: [ambient.opacity(0.55 + 0.25 * wave), Color(argb: 0xFF17171B)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .overlay(RadialGradient(colors: [ambient.opacity(playing ? 0.18 + 0.22 * wave : 0), .clear],
+                                            center: .bottomTrailing, startRadius: 0, endRadius: 320))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        )
+        .task(id: block.artworkUrl) {
+            guard let s = block.artworkUrl, let u = URL(string: s),
+                  let result = try? await URLSession.shared.data(from: u), let img = UIImage(data: result.0),
+                  let c = CoverPalette.dominant(img) else { return }
+            withAnimation(.easeOut(duration: 0.3)) { ambient = c }
+        }
+    }
+
+    private func front(playing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Müzik").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
-                Spacer()
-                if editing {
+            if editing {
+                HStack {
+                    Spacer()
                     Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 36, height: 36) }
                         .accessibilityLabel("İçeriği kaldır")
                 }
             }
-            HStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 MusicArtwork(url: block.artworkUrl).frame(width: 64, height: 64)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(block.title).font(RealFont.inter(18, .semibold)).foregroundStyle(Color(argb: 0xFFF1F1F4)).lineLimit(2)
                     Text(block.artist).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFB1B1BC)).lineLimit(1)
-                    Text(block.provider).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF868690))
+                }
+                Spacer(minLength: 4)
+                // Source logo top-right; on Spotify it turns the card over to its Spotify Code.
+                if spotifyCodeId != nil {
+                    Button { flipped = true } label: { MusicSourceLogo(provider: block.provider, size: 18).frame(width: 30, height: 30) }
+                        .buttonStyle(.plain).accessibilityLabel("Spotify kodunu göster")
+                } else {
+                    MusicSourceLogo(provider: block.provider, size: 18)
                 }
             }
             if block.previewUrl != nil {
@@ -445,25 +533,29 @@ struct MusicBlockView: View {
                         .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFB1B1BC)).monospacedDigit()
                 }
             }
-            if let url = URL(string: block.providerUrl), url.scheme == "https" {
-                Link(destination: url) {
-                    Text("\(block.provider == "iTunes" ? "iTunes" : block.provider)'da aç ↗").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD0D0D8))
-                        .frame(maxWidth: .infinity).frame(height: 40)
-                        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 24))
-                }
+            Button { if playing { preview.toggle(block) }; openMusicBlock(block) } label: {
+                Text("\(musicProviderLabel(block.provider))'\(block.provider == "Spotify" ? "da" : "te") aç ↗").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD0D0D8))
+                    .frame(maxWidth: .infinity).frame(height: 40)
+                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 24))
             }
-            if block.provider == "iTunes" {
+            .buttonStyle(.plain)
+            if block.provider == "iTunes", block.previewUrl != nil {
                 Text("Preview provided courtesy of iTunes").font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF868690))
             }
         }
         .padding(16)
-        .background(LinearGradient(colors: [ambient.opacity(0.55), Color(argb: 0xFF17171B)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .task(id: block.artworkUrl) {
-            guard let s = block.artworkUrl, let u = URL(string: s),
-                  let result = try? await URLSession.shared.data(from: u), let img = UIImage(data: result.0),
-                  let c = CoverPalette.dominant(img) else { return }
-            withAnimation(.easeOut(duration: 0.3)) { ambient = c }
+    }
+
+    private func back(_ id: String) -> some View {
+        AsyncImage(url: URL(string: "https://scannables.scdn.co/uri/plain/png/000000/white/640/spotify:track:\(id)")) { phase in
+            if let image = phase.image { image.resizable().scaledToFit() } else { ProgressView().tint(.white) }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+        .contentShape(Rectangle())
+        .onTapGesture { flipped = false }
+        .accessibilityLabel("Spotify kodu. Geri dönmek için dokun.")
     }
 }

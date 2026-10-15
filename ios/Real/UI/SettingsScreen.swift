@@ -18,6 +18,7 @@ struct AccountMenuOverlay: View {
     @State private var showPhotoPicker = false
     @State private var notice: String?
     @State private var showPeople = false
+    @State private var showManage = false
 
     /// Google sign-in, then the account's cards / categories / moods replace this device's (read-only restore).
     private func signInAndRestore() {
@@ -75,13 +76,8 @@ struct AccountMenuOverlay: View {
                     if auth.account == nil {
                         item(.add, auth.busy ? "Google açılıyor…" : "Hesap ekle") { signInAndRestore() }
                     } else {
-                        item(.edit, "Adın") { close(then: { RealAuth.shared.nameEditRequested = true }) }
+                        item(.manage, "Hesapları yönet") { showManage = true }
                         item(.person, "Kişilerim") { showPeople = true }
-                        item(.manage, "Kartları hesaptan yeniden yükle") { restore() }
-                        item(.close, "Hesaptan çık") {
-                            auth.signOut()
-                            notice = "Hesaptan çıkıldı. Kartlar bu cihazda kalmaya devam ediyor."
-                        }
                     }
                     item(.category, "Kategori sıralaması") { close(then: onCategoryOrder) }
                     item(.settings, "Ayarlar") { close(then: onSettings) }
@@ -111,6 +107,16 @@ struct AccountMenuOverlay: View {
             Button("Tamam", role: .cancel) {}
         } message: { Text(notice ?? "") }
         .sheet(isPresented: $showPeople) { PeopleScreen() }
+        .sheet(isPresented: $showManage) {
+            AccountManageSheet(
+                onEditName: { showManage = false; close(then: { RealAuth.shared.nameEditRequested = true }) },
+                onRestore: { showManage = false; restore() },
+                onSignOut: {
+                    showManage = false
+                    auth.signOut()
+                    notice = "Hesaptan çıkıldı. Kartlar bu cihazda kalmaya devam ediyor."
+                })
+        }
     }
 
     private func item(_ glyph: ActionGlyph, _ label: String, action: @escaping () -> Void) -> some View {
@@ -210,6 +216,7 @@ struct SettingsScreen: View {
 
     @AppStorage(HomeCardStyle.plainKey) private var plainCards = false
     @AppStorage(CalendarCards.homeDaysKey) private var calendarHomeDays = 0
+    @State private var musicSource = MusicSource.saved
 
     @ViewBuilder
     private var mainPage: some View {
@@ -236,6 +243,12 @@ struct SettingsScreen: View {
             SettingsActionRow(icon: .calendar, title: "Ana ekranda takvim",
                               subtitle: calendarHomeDays > 0 ? "Önümüzdeki \(calendarHomeDays) gün" : "Kapalı") {
                 calendarHomeDays = calendarHomeDays == 0 ? 7 : (calendarHomeDays == 7 ? 14 : 0)
+            }
+            SettingsDivider()
+            // Where songs open (music discovery's up-swipe, the music search's default).
+            SettingsActionRow(icon: .music, title: "Müzik uygulaması", subtitle: musicSource.label + " · şarkılar burada açılır") {
+                musicSource = musicSource == .apple ? .spotify : .apple
+                MusicSource.saved = musicSource
             }
         }
         SettingsSectionHeader(title: "BİLDİRİMLER VE DAVRANIŞ")
@@ -611,3 +624,49 @@ struct LicensesSheet: View {
     }
 }
 
+
+/// Hesapları yönet (AccountManagementSheet.kt): the account card with "Adını değiştir", reload cards, sign out.
+struct AccountManageSheet: View {
+    let onEditName: () -> Void
+    let onRestore: () -> Void
+    let onSignOut: () -> Void
+    @State private var auth = RealAuth.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3).frame(maxWidth: .infinity)
+            Text("Hesapları yönet").font(RealFont.inter(26, .semibold)).foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 14) {
+                    ProfileAvatar(name: auth.account?.displayName ?? "REAL", size: 48)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(auth.account?.displayName ?? "REAL hesabı").font(RealFont.inter(17, .medium)).foregroundStyle(.white).lineLimit(1)
+                        if let email = auth.account?.email { Text(email).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA4A4AD)).lineLimit(1) }
+                    }
+                }
+                HStack(spacing: 10) {
+                    Text("Ortak kategorilerde ve paylaşımlarda bu ad görünür.").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA4A4AD))
+                    Spacer(minLength: 8)
+                    Button("Adını değiştir", action: onEditName)
+                        .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 7).background(Capsule().fill(.white.opacity(0.10)))
+                }
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.05)))
+            Button(action: onRestore) {
+                Text("Kartları hesaptan yeniden yükle").font(RealFont.inter(15)).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
+            Button(action: onSignOut) {
+                Text("Hesaptan çık").font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFFFB4AB))
+                    .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white.opacity(0.05)))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(22)
+        .presentationDetents([.height(420)])
+        .presentationBackground(Color(argb: 0xFF111113))
+    }
+}

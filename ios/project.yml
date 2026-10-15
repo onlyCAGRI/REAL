@@ -35,15 +35,35 @@ targets:
         product: FirebaseAppCheck
       - package: GoogleSignIn
         product: GoogleSignIn
+      - target: RealShare
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cagri.real
         PRODUCT_NAME: REAL
         INFOPLIST_FILE: Real/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Real/Real.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_PREVIEWS: YES
+  # Share → REAL: the system share sheet's REAL entry (leaves shares in the App Group inbox; the app imports them).
+  RealShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: RealShare
+        excludes:
+          - "*.entitlements"
+          - Info.plist
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cagri.real.share
+        PRODUCT_NAME: RealShare
+        INFOPLIST_FILE: RealShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: RealShare/RealShare.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
   RealTests:
     type: bundle.unit-test
     platform: iOS

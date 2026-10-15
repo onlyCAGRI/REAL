@@ -76,7 +76,15 @@ struct RealApp: App {
                         Task { @MainActor in
                             SharedCategorySync.shared.request(store)
                             RealCloudSync.shared.request(store, life)
+                            ShareImport.writeSnapshot(store)
                         }
+                    }
+                    // Share → REAL: shares left by the share extension, and the card list it shows.
+                    ShareImport.run(store)
+                    ShareImport.writeSnapshot(store)
+                    _ = ClipboardWatcher.shared
+                    NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+                        Task { @MainActor in ShareImport.run(store) }
                     }
                     // Two-way cloud sync and shared categories, every minute while the app is open.
                     while !Task.isCancelled {

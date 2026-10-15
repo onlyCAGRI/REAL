@@ -25,6 +25,7 @@ struct DiscoveryScreen: View {
     @State private var detail: DiscoveryCard?
     @State private var entered = false
     @State private var reportNotice = false
+    @State private var dragOffset: CGSize = .zero
 
     private var accent: Color { kind == .film ? discoveryBlue : discoveryOrange }
     private var catalog: [DiscoveryFilter] { kind == .film ? DiscoveryFilter.film : DiscoveryFilter.game }
@@ -177,6 +178,7 @@ struct DiscoveryScreen: View {
         let isList = page == .list
         return ZStack(alignment: .top) {
             PosterAmbient(url: cards.first?.media.artworkUrl)
+            SwipeEdgeGlow(offset: dragOffset, listMode: isList).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack { BackCircle(action: back); Spacer() }.padding(.horizontal, 20).padding(.vertical, 10)
                 DiscoveryHeadline(text: isList ? (kind == .film ? "İZLENECEK LİSTEM" : "OYNANACAK LİSTEM") : "SANA GÖRE", small: isList)
@@ -188,8 +190,9 @@ struct DiscoveryScreen: View {
                     .buttonStyle(.plain)
                     .accessibilityHint(first.media.title)
                     PosterDeck(cards: cards, filters: Set(discovery.snapshot(kind).filters), kind: kind, later: isList, accent: accent,
+                               offset: $dragOffset,
                                onOpenDetails: { c in withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.38)) { detail = c } },
-                               onDecision: decide)
+                               onDecision: decide, onAddToReal: { c in addToReal(c) })
                         .padding(.horizontal, 14)
                 } else {
                     VStack(spacing: 16) {
@@ -208,6 +211,7 @@ struct DiscoveryScreen: View {
                 }
                 if let error { errorLine(error) }
             }
+            if !cards.isEmpty { SwipeTutorial(kind: kind == .film ? "film" : "game", rightLabel: "Kaydet", leftLabel: "Geç") }
         }
         // Keep the deck stocked: with a couple of posters left the next ones load in the background.
         .onChange(of: cards.count, initial: true) { _, count in
@@ -223,13 +227,29 @@ struct DiscoveryScreen: View {
     private func decide(_ card: DiscoveryCard, _ action: DiscoveryAction) -> Bool {
         error = nil
         do {
-            if action == .saveDiscovery || action == .saveList { addToReal(card.media) }
+            if action == .saveDiscovery || action == .saveList { addToReal(card) }
             try discovery.act(kind, card, action)
             return true
         } catch let e {
             error = e.localizedDescription
             return false
         }
+    }
+
+    /// "REAL'e ekle": films / series as a media block, games as a game block (a game stays in the deck).
+    private func addToReal(_ card: DiscoveryCard) {
+        if kind == .game {
+            let m = card.media
+            let id = m.providerId ?? m.providerUrl
+            guard !store.reminders.contains(where: { r in r.gameBlocks.contains { $0.providerId == id } }) else { RealToast.shared.show("Bu oyun zaten bir kartta"); return }
+            let block = CardGameBlock(providerId: id, title: m.title, year: m.year,
+                                      genres: (m.genre ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
+                                      platforms: card.platforms, artworkUrl: m.artworkUrl, description: m.description, providerUrl: m.providerUrl)
+            _ = store.addReminder(text: m.title) { r in r.gameBlocks = [block] }
+            RealToast.shared.show("REAL'e eklendi")
+            return
+        }
+        addToReal(card.media)
     }
 
     private func addToReal(_ media: MediaBlock) {
@@ -464,10 +484,11 @@ private struct PosterDeck: View {
     let kind: DiscoveryKind
     let later: Bool
     let accent: Color
+    @Binding var offset: CGSize
     let onOpenDetails: (DiscoveryCard) -> Void
     let onDecision: (DiscoveryCard, DiscoveryAction) -> Bool
+    let onAddToReal: (DiscoveryCard) -> Void
 
-    @State private var offset: CGSize = .zero
     @State private var busy = false
     private let threshold: CGFloat = 85
 
@@ -545,10 +566,10 @@ private struct PosterDeck: View {
             .onChanged { v in if !busy { offset = v.translation } }
             .onEnded { _ in
                 guard !busy else { return }
-                let action: DiscoveryAction = later ? .browseList : .skip
-                if offset.height > threshold && offset.height > abs(offset.width) { decide(item, action, fly: CGSize(width: 0, height: threshold * 9)) }
-                else if offset.width > threshold { decide(item, action, fly: CGSize(width: threshold * 6, height: 0)) }
-                else if offset.width < -threshold { decide(item, action, fly: CGSize(width: -threshold * 6, height: 0)) }
+                // Right = save (list: keep, next) · left = pass (list: remove) · up / down: nothing yet.
+                if abs(offset.height) > abs(offset.width) { withAnimation(.spring()) { offset = .zero } }
+                else if offset.width > threshold { decide(item, later ? .browseList : .addToList, fly: CGSize(width: threshold * 6, height: 0)) }
+                else if offset.width < -threshold { decide(item, later ? .removeFromList : .skip, fly: CGSize(width: -threshold * 6, height: 0)) }
                 else { withAnimation(.spring()) { offset = .zero } }
             }
     }
@@ -564,33 +585,38 @@ private struct PosterDeck: View {
         }
     }
 
+    /// Under the poster: "REAL'e ekle" and "İzledim" / "Oynadım" (swipes save and pass).
     private var actionBar: some View {
         HStack(spacing: 6) {
             if let first = cards.first {
-                if later {
-                    barIcon("xmark", "Listemden çıkar") { decide(first, .removeFromList, fly: CGSize(width: -threshold * 6, height: 0)) }
-                } else if kind == .film {
-                    barIcon("calendar", "İzlenecek listeme ekle") { decide(first, .addToList, fly: CGSize(width: 0, height: threshold * 9)) }
-                } else {
-                    barIcon("xmark", "Geç") { decide(first, .skip, fly: CGSize(width: -threshold * 6, height: 0)) }
-                }
                 Button {
-                    if kind == .game { if !later { decide(first, .addToList, fly: CGSize(width: 0, height: threshold * 9)) } }
+                    if kind == .game { onAddToReal(first) }
                     else { decide(first, later ? .saveList : .saveDiscovery, fly: CGSize(width: threshold * 6, height: 0)) }
                 } label: {
                     HStack(spacing: 7) {
                         RealSymbol("plus", size: 18.4)
-                        Text(kind == .game ? "Oynanacak listeme ekle" : "REAL'e ekle").font(RealFont.inter(13, .medium)).lineLimit(1)
+                        Text("REAL'e ekle").font(RealFont.inter(13, .medium)).lineLimit(1)
                     }
                     .foregroundStyle(busy ? Color(argb: 0xFF66666C) : .white)
                     .padding(.horizontal, 16).frame(minHeight: 48)
                     .background(accent.opacity(0.9), in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .disabled(busy || (kind == .game && later))
+                .disabled(busy)
+                Button { decide(first, .watched, fly: CGSize(width: 0, height: -threshold * 9)) } label: {
+                    HStack(spacing: 7) {
+                        RealSymbol("checkmark", size: 17)
+                        Text(kind == .game ? "Oynadım" : "İzledim").font(RealFont.inter(13, .medium)).lineLimit(1)
+                    }
+                    .foregroundStyle(busy ? Color(argb: 0xFF66666C) : .white)
+                    .padding(.horizontal, 16).frame(minHeight: 48)
+                    .background(Color.white.opacity(0.10), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(busy)
             }
         }
-        .padding(.horizontal, 10).padding(.vertical, 8)
+        .padding(.horizontal, 8).padding(.vertical, 8)
         .background(Color.black.opacity(0.55), in: Capsule())
         .liquidGlass(Capsule(), role: .chrome)
     }

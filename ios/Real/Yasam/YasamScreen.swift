@@ -12,6 +12,8 @@ struct YasamScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showBooks = false
     @State private var discoveryTarget: (kind: DiscoveryKind, list: Bool)?
+    /// Müzik keşfi: false = öneri, true = Müzik listem.
+    @State private var musicTarget: Bool?
     @State private var resumeBook: String?
     var onOpenCard: (Int64) -> Void = { _ in }
 
@@ -69,6 +71,13 @@ struct YasamScreen: View {
             if let target = discoveryTarget {
                 DiscoveryScreen(kind: target.kind, startInList: target.list) {
                     withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { discoveryTarget = nil }
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .zIndex(4)
+            }
+            if let list = musicTarget {
+                MusicDiscoveryScreen(startInList: list) {
+                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = nil }
                 }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
                 .zIndex(4)
@@ -246,7 +255,7 @@ struct YasamScreen: View {
                         YasamTextAction(text: "RAFINI AÇ  ›", tone: YasamTone.book) { resumeBook = nil; showBooks = true }
                     }
                 }
-                YasamRow(label: "FİLM & DİZİ · OYUN", value: "Öneri al", expanded: open == "media", index: 4, revealed: revealed,
+                YasamRow(label: "FİLM & DİZİ · OYUN · MÜZİK", value: "Öneri al", expanded: open == "media", index: 4, revealed: revealed,
                          toggle: { toggle("media") }) {
                     Text(mediaPrompt).font(.system(size: 19, weight: .light)).foregroundStyle(.white)
                 } content: {
@@ -255,6 +264,13 @@ struct YasamScreen: View {
                     Rectangle().fill(.white.opacity(0.10)).frame(height: 1).padding(.vertical, 4)
                     YasamTextAction(text: "OYUN ÖNERİ AL  ›", tone: YasamTone.media) { openDiscovery(.game, list: false) }
                     YasamTextAction(text: "OYNANACAK LİSTEM" + listCount(.game) + "  ›", tone: YasamTone.muted) { openDiscovery(.game, list: true) }
+                    Rectangle().fill(.white.opacity(0.10)).frame(height: 1).padding(.vertical, 4)
+                    YasamTextAction(text: "MÜZİK ÖNERİ AL  ›", tone: YasamTone.media) {
+                        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = false }
+                    }
+                    YasamTextAction(text: "MÜZİK LİSTEM" + musicCount + "  ›", tone: YasamTone.muted) {
+                        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = true }
+                    }
                 }
             }
             Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
@@ -266,6 +282,11 @@ struct YasamScreen: View {
 
     private func openDiscovery(_ kind: DiscoveryKind, list: Bool) {
         withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { discoveryTarget = (kind, list) }
+    }
+
+    private var musicCount: String {
+        let n = MusicDiscoveryStore.shared.snapshot.list.count
+        return n > 0 ? " · \(n)" : ""
     }
 
     private func listCount(_ kind: DiscoveryKind) -> String {

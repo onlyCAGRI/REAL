@@ -118,7 +118,9 @@ let discoveryExcludeSent = 40
 
 enum DiscoveryKind: String { case film, game }
 
-enum DiscoveryAction { case skip, addToList, removeFromList, saveDiscovery, saveList, browseList }
+/// Right swipe saves to the list (list: keep, next), left passes (list: remove); "İzledim / Oynadım" = done, never
+/// suggested again (kept for the coming rating list).
+enum DiscoveryAction { case skip, addToList, removeFromList, saveDiscovery, saveList, browseList, watched }
 
 /// MediaDiscoveryRepository / GameDiscoveryRepository: local, per-device deck + watchlist + excluded titles.
 @Observable
@@ -129,6 +131,19 @@ final class DiscoveryStore {
         var cards: [DiscoveryCard] = []
         var later: [DiscoveryCard] = []
         var excluded: [String] = []
+        /// "İzledim / Oynadım": filtered here in the app (the guarantee); only the latest 10 go into a request.
+        var watched: [DiscoveryCard] = []
+
+        init() {}
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            type = (try? c.decodeIfPresent(String.self, forKey: .type)) ?? "BOTH"
+            filters = (try? c.decodeIfPresent([String].self, forKey: .filters)) ?? []
+            cards = (try? c.decodeIfPresent([DiscoveryCard].self, forKey: .cards)) ?? []
+            later = (try? c.decodeIfPresent([DiscoveryCard].self, forKey: .later)) ?? []
+            excluded = (try? c.decodeIfPresent([String].self, forKey: .excluded)) ?? []
+            watched = (try? c.decodeIfPresent([DiscoveryCard].self, forKey: .watched)) ?? []
+        }
     }
 
     private(set) var film = Snapshot()
@@ -158,6 +173,7 @@ final class DiscoveryStore {
     private func set(_ kind: DiscoveryKind, _ s: Snapshot) {
         var s = s
         s.cards = Array(s.cards.prefix(60)); s.later = Array(s.later.prefix(40)); s.excluded = Array(s.excluded.suffix(discoverySeenLimit))
+        s.watched = Array(s.watched.suffix(2000))
         if kind == .film { film = s } else { game = s }
         guard persist, let data = try? JSONEncoder().encode(s) else { return }
         UserDefaults.standard.set(data, forKey: kind == .film ? "real_media_discovery" : "real_game_discovery")
@@ -171,15 +187,15 @@ final class DiscoveryStore {
         let sameDeck = prior.type == type && Set(prior.filters) == filters
         let keep = sameDeck ? prior.cards : []
         func norm(_ t: String) -> String { t.trimmingCharacters(in: .whitespaces).lowercased() }
-        var known = Set((prior.excluded + prior.later.flatMap(\.seenTitles) + keep.flatMap(\.seenTitles)).map(norm))
-        var knownKeys = Set((prior.later + keep).map(\.id))
+        var known = Set((prior.excluded + prior.later.flatMap(\.seenTitles) + keep.flatMap(\.seenTitles) + prior.watched.flatMap(\.seenTitles)).map(norm))
+        var knownKeys = Set((prior.later + keep + prior.watched).map(\.id))
         var asked: [String] = []
         var fresh: [DiscoveryCard] = []
         var lastError: Error?
         let catalog = kind == .film ? DiscoveryFilter.film : DiscoveryFilter.game
         let genreKeys = Set(filters.filter { k in catalog.first { $0.key == k }?.genre == true })
         for _ in 0..<(kind == .film ? 3 : 2) where fresh.count < 8 {
-            var exclude = prior.excluded + keep.flatMap(\.seenTitles) + asked
+            var exclude = prior.watched.suffix(10).flatMap(\.seenTitles) + prior.excluded + keep.flatMap(\.seenTitles) + asked
             var dedup = Set<String>()
             exclude = Array(exclude.reversed().filter { dedup.insert($0).inserted }.reversed())
             let cards: [DiscoveryCard]
@@ -220,6 +236,11 @@ final class DiscoveryStore {
         switch action {
         case .browseList, .saveList: s.later = rotated()
         case .removeFromList: s.later = s.later.filter { $0.id != card.id }
+        case .watched:
+            s.cards = remainder
+            s.later = s.later.filter { $0.id != card.id }
+            s.watched = s.watched.filter { $0.id != card.id } + [card]
+            for t in card.seenTitles where !s.excluded.contains(t) { s.excluded.append(t) }
         case .skip, .saveDiscovery:
             s.cards = remainder
             for t in card.seenTitles where !s.excluded.contains(t) { s.excluded.append(t) }
