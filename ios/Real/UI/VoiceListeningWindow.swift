@@ -22,8 +22,10 @@ struct VoiceListeningWindow: View {
                 if !processing {
                     Text("Dinleniyor…").font(RealFont.inter(12, .medium)).foregroundStyle(blueSoft.opacity(0.9))
                 }
+                // Grows with the words, up to a few lines; never the whole screen (the composer area is unbounded).
                 transcript
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Button(action: onMic) {
                 ActionIcon(.mic, color: blue, size: processing ? 20 : 24)
@@ -38,7 +40,7 @@ struct VoiceListeningWindow: View {
             .accessibilityLabel(listening ? "Dinlemeyi bitir" : "REAL düşünüyor")
         }
         .padding(.leading, 22).padding(.trailing, 9).padding(.top, 16).padding(.bottom, 8)
-        .frame(maxWidth: .infinity, minHeight: 118)
+        .frame(maxWidth: .infinity, minHeight: 118, maxHeight: 230, alignment: .bottom)
         .background {
             ZStack {
                 shape.fill(Color.black.opacity(0.26))

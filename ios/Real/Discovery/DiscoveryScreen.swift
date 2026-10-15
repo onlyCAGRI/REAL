@@ -27,6 +27,7 @@ struct DiscoveryScreen: View {
     @State private var entered = false
     @State private var reportNotice = false
     @State private var dragOffset: CGSize = .zero
+    @State private var pickerStep = 0
 
     private var accent: Color { kind == .film ? discoveryBlue : discoveryOrange }
     private var catalog: [DiscoveryFilter] { kind == .film ? DiscoveryFilter.film : DiscoveryFilter.game }
@@ -64,97 +65,68 @@ struct DiscoveryScreen: View {
 
     private func back() {
         if detail != nil { detail = nil; return }
-        if page == .filters || (startInList && page == .list) { onClose() }
+        // Inside the picker: the previous question. From the deck: straight back to Yaşam (the picker was done).
+        if page == .filters && pickerStep > 0 { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32)) { pickerStep -= 1 }; return }
+        if page == .filters || page == .discover || (startInList && page == .list) { onClose() }
         else { withAnimation(.easeOut(duration: 0.25)) { page = .filters }; error = nil }
     }
 
     // MARK: Filters
 
     private var filterPage: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ZStack(alignment: .topLeading) {
-                        YasamHeroSentence(greeting: "", sentence: kind == .film ? "Ne izlesek" : "Ne oynasak", tone: accent,
-                                          hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
-                            .padding(.top, 4)
-                        BackCircle(action: back).padding(.leading, 22).padding(.top, 12)
-                            .accessibilityLabel("Yaşam'a dön")
-                    }
-                    Text("Birlikte uyanlar önce gelir.").font(RealFont.inter(15)).foregroundStyle(YasamTone.muted)
-                        .padding(.leading, 22).padding(.top, 12).padding(.bottom, 8)
-                    filterBody
-                        .padding(.horizontal, 20).padding(.top, 12)
-                        .opacity(entered ? 1 : 0).offset(y: entered ? 0 : 16)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                YasamHeroSentence(greeting: "", sentence: kind == .film ? "Ne izlesek" : "Ne oynasak", tone: accent,
+                                  hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
+                    .padding(.top, 4)
+                BackCircle(action: back).padding(.leading, 22).padding(.top, 12)
+                    .accessibilityLabel("Yaşam'a dön")
             }
-            .scrollIndicators(.hidden)
             if let error { errorLine(error) }
-            DiscoveryLoadingButton(label: "Afişleri getir", loading: loading, enabled: discovery.service.available, accent: accent, action: fetch)
-                .padding(.horizontal, 20).padding(.vertical, 14)
+            // One question at a time (DiscoveryStepper): 2 genres at most, then optional extras.
+            DiscoveryStepper(steps: kind == .film ? filmSteps : gameSteps, selection: Binding(
+                get: { filters.union(platforms) },
+                set: { all in
+                    let platformKeys = Set(GamePlatformGroup.all.map(\.key))
+                    filters = all.subtracting(platformKeys); platforms = all.intersection(platformKeys)
+                }),
+                accent: accent, loading: loading, enabled: discovery.service.available,
+                doneLabel: kind == .film ? "afişleri getir" : "oyunları getir", step: $pickerStep,
+                rare: { chosen, key in DiscoveryRarePairs.rare(kind == .film ? DiscoveryRarePairs.film : DiscoveryRarePairs.game, chosen, key) },
+                onDone: fetch)
+                .opacity(entered ? 1 : 0).offset(y: entered ? 0 : 16)
         }
     }
 
-    @ViewBuilder
-    private var filterBody: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if kind == .film {
-                ChipFlow(spacing: 8) {
-                    ForEach([("BOTH", "Film + Dizi"), ("MOVIE", "Film"), ("TV", "Dizi")], id: \.0) { key, label in
-                        DiscoveryChip(label: label, selected: type == key, enabled: !loading, accent: accent) { type = key }
-                    }
-                }
-            } else {
-                Text("Platform").font(RealFont.inter(17, .medium)).foregroundStyle(.white.opacity(0.8))
-                ChipFlow(spacing: 8) {
-                    ForEach(GamePlatformGroup.all) { p in
-                        let selected = platforms.contains(p.key)
-                        DiscoveryChip(label: p.label, selected: selected, enabled: !loading, accent: accent) {
-                            if selected { platforms.remove(p.key) } else { platforms.insert(p.key) }
-                        }
-                    }
-                }
+    private var filmSteps: [DiscoveryStep] {
+        let film = DiscoveryFilter.film
+        var themeOrder: [String] = []
+        for f in film where f.themeGroup != nil { if !themeOrder.contains(f.themeGroup!) { themeOrder.append(f.themeGroup!) } }
+        let typeRow = AnyView(ChipFlow(spacing: 8) {
+            ForEach([("BOTH", "Film + Dizi"), ("MOVIE", "Film"), ("TV", "Dizi")], id: \.0) { key, label in
+                DiscoveryChip(label: label, selected: type == key, enabled: !loading, accent: accent) { type = key }
             }
-            Text("Tür").font(RealFont.inter(17, .medium)).foregroundStyle(.white.opacity(0.8))
-            let genrePages = self.genrePages
-            DiscoverySelectionPager(titles: genrePages.map(\.0), selectedCounts: genrePages.map { $0.1.filter { filters.contains($0.key) }.count },
-                                    accent: accent) { i in chips(genrePages[i].1) }
-            Text("Nasıl hissettirsin?").font(RealFont.inter(17, .medium)).foregroundStyle(.white.opacity(0.8))
-            let feelings = feelingPages
-            DiscoverySelectionPager(titles: feelings.indices.map { $0 == 0 ? "Hisler" : "Diğer hisler" },
-                                    selectedCounts: feelings.map { $0.filter { filters.contains($0.key) }.count }, accent: accent) { i in chips(feelings[i]) }
-            // Catalog credit only, small and quiet.
-            Text(kind == .film ? "TVmaze · TheTVDB" : "IGDB")
-                .font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF5E5E66))
-                .padding(.bottom, 12)
-        }
+        })
+        return [
+            DiscoveryStep(title: "Hangi türde bir şey olsun?", subtitle: "En fazla 2 tür", max: 2, optional: false,
+                          groups: [(nil, film.filter(\.genre).map { StepOption(key: $0.key, label: $0.label) })], top: typeRow),
+            DiscoveryStep(title: "Konusu ne olsun?", subtitle: "İstersen bir tane", max: 1, optional: true,
+                          groups: themeOrder.map { g in (g, film.filter { $0.themeGroup == g }.map { StepOption(key: $0.key, label: $0.label) }) }),
+            DiscoveryStep(title: "Nasıl hissettirsin?", subtitle: "İstersen bir tane", max: 1, optional: true,
+                          groups: [(nil, film.filter { !$0.genre && $0.themeGroup == nil }.map { StepOption(key: $0.key, label: $0.label) })]),
+        ]
     }
 
-    private var genrePages: [(String, [DiscoveryFilter])] {
-        let genres = catalog.filter(\.genre)
-        if kind == .game { return stride(from: 0, to: genres.count, by: 8).map { ("Türler", Array(genres[$0..<min($0 + 8, genres.count)])) } }
-        var pages: [(String, [DiscoveryFilter])] = [("Türler", genres)]
-        var order: [String] = []
-        for f in catalog where f.themeGroup != nil { if !order.contains(f.themeGroup!) { order.append(f.themeGroup!) } }
-        pages += order.map { g in (g, catalog.filter { $0.themeGroup == g }) }
-        return pages
-    }
-
-    private var feelingPages: [[DiscoveryFilter]] {
-        let list = catalog.filter { !$0.genre && $0.themeGroup == nil }
-        return stride(from: 0, to: list.count, by: kind == .film ? 4 : 6).map { Array(list[$0..<min($0 + (kind == .film ? 4 : 6), list.count)]) }
-    }
-
-    private func chips(_ options: [DiscoveryFilter]) -> some View {
-        ChipFlow(spacing: 8) {
-            ForEach(options) { f in
-                let selected = filters.contains(f.key)
-                let groupCount = filters.compactMap { k in catalog.first { $0.key == k } }.filter { $0.selectionGroup == f.selectionGroup }.count
-                DiscoveryChip(label: f.label, selected: selected, enabled: !loading && (selected || groupCount < DiscoveryFilter.maxPerGroup), accent: accent) {
-                    if selected { filters.remove(f.key) } else { filters.insert(f.key) }
-                }
-            }
-        }
+    private var gameSteps: [DiscoveryStep] {
+        let game = DiscoveryFilter.game
+        return [
+            DiscoveryStep(title: "Hangi türde bir oyun?", subtitle: "En fazla 2 tür", max: 2, optional: false,
+                          groups: [(nil, game.filter(\.genre).map { StepOption(key: $0.key, label: $0.label) })]),
+            DiscoveryStep(title: "Nasıl hissettirsin?", subtitle: "İstersen bir tane", max: 1, optional: true,
+                          groups: [(nil, game.filter { !$0.genre }.map { StepOption(key: $0.key, label: $0.label) })]),
+            DiscoveryStep(title: "Nerede oynayacaksın?", subtitle: "İstersen bir platform", max: 1, optional: true,
+                          groups: [(nil, GamePlatformGroup.all.map { StepOption(key: $0.key, label: $0.label) })]),
+        ]
     }
 
     private func fetch() {
@@ -163,13 +135,31 @@ struct DiscoveryScreen: View {
         error = nil
         Task {
             do {
-                try await discovery.fetch(kind, type: kind == .film ? type : "GAME", filters: filters, platforms: kind == .game ? platforms : [])
+                try await fetchWidening()
                 withAnimation(.easeOut(duration: 0.3)) { page = .discover }
             } catch let e {
                 error = e.localizedDescription
             }
             loading = false
         }
+    }
+
+    /// The exact choice first; when it finds fewer than six titles the request widens quietly into the same deck:
+    /// feeling / theme go, then the platform, then each genre on its own.
+    private func fetchWidening() async throws {
+        let t = kind == .film ? type : "GAME"
+        let p = kind == .game ? platforms : []
+        let genres = Set(filters.filter { k in catalog.first { $0.key == k }?.genre == true })
+        var firstError: Error?
+        do { try await discovery.fetch(kind, type: t, filters: filters, platforms: p) } catch { firstError = error }
+        var wider: [(Set<String>, Set<String>)] = []
+        if !genres.isEmpty && genres.count < filters.count { wider.append((genres, p)) }
+        if !p.isEmpty && !genres.isEmpty { wider.append((genres, [])) }
+        if genres.count > 1 { wider += genres.map { ([$0], []) } }
+        for (f, plat) in wider where discovery.snapshot(kind).cards.count < 6 {
+            do { try await discovery.fetch(kind, type: t, filters: f, platforms: plat, deckFilters: filters); firstError = nil } catch {}
+        }
+        if let firstError, discovery.snapshot(kind).cards.isEmpty { throw firstError }
     }
 
     private func errorLine(_ text: String) -> some View {
@@ -741,6 +731,9 @@ struct MediaDiscoveryDetail: View {
             if description?.isEmpty == false {
                 Button(readMore ? "Daha az" : "Devamını oku") { readMore.toggle() }
                     .font(RealFont.inter(12, .semibold)).foregroundStyle(.white).padding(8).padding(.horizontal, 12)
+            }
+            if kind == .game, let id = card.media.providerId {
+                GameMediaSection(providerId: id, accent: discoveryOrange).padding(.horizontal, 20).padding(.top, 14)
             }
             Text("Cast").font(RealFont.inter(19, .medium)).foregroundStyle(.white).padding(.leading, 20).padding(.top, 22).padding(.bottom, 12)
             castRow

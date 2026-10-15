@@ -156,26 +156,88 @@ struct MoodFace: View {
     }
 }
 
-/// MoodV2FullScreen: step 0 scope, step 1 face + slider + descriptors (max 3), step 2 factors. Back / × / İleri–Kaydet.
+/// Moods V3 (MoodV3Screen.kt): the whole screen takes the mood's colour; `ink` is the face, text and controls on it.
+enum MoodV3 {
+    static let tones: [(paper: Color, ink: Color)] = [
+        (Color(argb: 0xFFFF8A7A), Color(argb: 0xFF5A1712)),   // Kötü: salmon
+        (Color(argb: 0xFFFFB45A), Color(argb: 0xFF5A2E05)),   // Zor: orange
+        (Color(argb: 0xFFF2D96B), Color(argb: 0xFF4A3C08)),   // Normal: sand
+        (Color(argb: 0xFFC8E86A), Color(argb: 0xFF2E3D07)),   // İyi: lime
+        (Color(argb: 0xFF8EE6A0), Color(argb: 0xFF0E3B1C)),   // Çok iyi: mint
+    ]
+
+    static func tone(_ progress: Double) -> (paper: Color, ink: Color) {
+        let p = min(max(progress, 0), 4)
+        let l = min(max(Int(p.rounded(.down)), 0), 4)
+        let r = min(l + 1, 4)
+        let t = p - Double(l)
+        return (tones[l].paper.lerp(tones[r].paper, t), tones[l].ink.lerp(tones[r].ink, t))
+    }
+}
+
+/// The V2 face drawn chunkier and in ink: bigger eyes kept apart, a heavier mouth.
+struct MoodV3Face: View {
+    let params: MoodFaceParams
+    let ink: Color
+
+    var body: some View {
+        Canvas { ctx, size in
+            let f = params
+            let w = Double(size.width), h = Double(size.height)
+            let stroke = w * 0.075
+            let eyeW = w * f.eyeWidth * 1.25, eyeH = h * f.eyeHeight * 1.25, eyeY = h * f.eyeY
+            // Wide flat eyes (Normal, Zor) never touch: a clear gap instead of one long brow.
+            let spacing = max(w * f.eyeSpacing * 1.12, eyeW * 1.45)
+            let cx = w / 2
+            for side in [-1.0, 1.0] {
+                let ex = cx + side * spacing / 2
+                ctx.fill(Path(roundedRect: CGRect(x: ex - eyeW / 2, y: eyeY - eyeH / 2, width: eyeW, height: eyeH), cornerRadius: eyeH / 2), with: .color(ink))
+            }
+            if f.brow > 0.05 {
+                let browY = eyeY - eyeH * 1.1, half = eyeW * 0.5, tilt = eyeH * 0.7 * f.brow
+                var left = Path()
+                left.move(to: CGPoint(x: cx - spacing / 2 - half, y: browY - tilt))
+                left.addLine(to: CGPoint(x: cx - spacing / 2 + half, y: browY + tilt))
+                var right = Path()
+                right.move(to: CGPoint(x: cx + spacing / 2 - half, y: browY + tilt))
+                right.addLine(to: CGPoint(x: cx + spacing / 2 + half, y: browY - tilt))
+                let style = StrokeStyle(lineWidth: stroke * 0.6, lineCap: .round)
+                ctx.stroke(left, with: .color(ink), style: style)
+                ctx.stroke(right, with: .color(ink), style: style)
+            }
+            let my = h * f.mouthY, mh = w * f.mouthWidth / 2, curve = h * 0.13 * f.mouthCurve
+            var mouth = Path()
+            mouth.move(to: CGPoint(x: cx - mh, y: my))
+            mouth.addCurve(to: CGPoint(x: cx + mh, y: my), control1: CGPoint(x: cx - mh * 0.45, y: my + curve), control2: CGPoint(x: cx + mh * 0.45, y: my + curve))
+            ctx.stroke(mouth, with: .color(ink), style: StrokeStyle(lineWidth: stroke * f.mouthStroke, lineCap: .round))
+        }
+    }
+}
+
+/// Moods V3 (same data and save as V2): one full-colour screen — a big face that morphs as the slider moves, the
+/// feeling in large letters and "Kaydet" right there. Details (what describes it, what caused it) are one optional
+/// step away under "Ayrıntı ekle"; "Şu an / Bugün" is a small switch instead of a first screen.
 struct MoodAddSheet: View {
     @Environment(LifeStore.self) private var life
     @Environment(\.dismiss) private var dismiss
     var onSaved: ((JournalMood, MoodDetails) -> Void)? = nil
 
-    @State private var step = 0
-    @State private var scope: MoodScope?
+    @State private var details = false
+    @State private var scope: MoodScope = .moment
     @State private var progress: Double = 2
     @State private var dragging = false
     @State private var mood: JournalMood = .neutral
     @State private var descriptorKeys: Set<String> = []
     @State private var factorKeys: Set<String> = []
-    @State private var expandedGroups: Set<String> = []
-    @State private var lastHaptic = 2
+    @State private var lastTick = 2
+    @State private var shownFamily = 2
+    @State private var titleForward = true
+    @State private var motion: Task<Void, Never>?
     /// Set after saving (signed in): the sheet turns into the AI suggestions for that mood (MoodSuggestionsScreen).
     @State private var suggestFor: (mood: JournalMood, details: MoodDetails)?
 
-    private var nearest: Int { min(max(Int(progress.rounded()), 0), 4) }
-    private var ambient: Color { MoodV2.lerpColor(progress) }
+    private var family: Int { min(max(Int(progress.rounded()), 0), 4) }
+    private var reminderFlow: Bool { onSaved != nil }
 
     var body: some View {
         if let s = suggestFor {
@@ -187,257 +249,255 @@ struct MoodAddSheet: View {
     }
 
     private var entry: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            LinearGradient(colors: [Color.black.lerp(ambient, 0.42), Color(argb: 0xFF0B0B0D), .black], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-                .animation(.easeOut(duration: 0.12), value: nearest)
-            ScrollView {
-                VStack(spacing: 0) {
-                    Color.clear.frame(height: 52)
-                    switch step {
-                    case 0: scopeStep
-                    case 1: faceStep
-                    default: factorStep
-                    }
-                    Color.clear.frame(height: 108)
-                }
-                .padding(.horizontal, 22)
-            }
-            .scrollIndicators(.hidden)
-        }
-        .overlay(alignment: .topLeading) {
-            Button { if step == 0 { dismiss() } else { step -= 1 } } label: {
-                RealSymbol("chevron.left", size: 20.7).foregroundStyle(.white)
-                    .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
-            }
-            .padding(.leading, 8).padding(.top, 2)
-            .accessibilityLabel("Geri")
-        }
-        .overlay(alignment: .topTrailing) {
-            Button { dismiss() } label: { Text("×").font(.system(size: 28)).foregroundStyle(Color(argb: 0xFFE0E0E5)).frame(width: 44, height: 44) }
-                .padding(.trailing, 8).padding(.top, 2)
-        }
-        .overlay(alignment: .bottomTrailing) {
-            let enabled = step != 0 || scope != nil
-            Button(action: advance) {
-                Text(step >= 2 ? "Kaydet" : "İleri").font(RealFont.inter(14, .semibold))
-                    .foregroundStyle(enabled ? Color(argb: 0xFF111114) : Color(argb: 0xFF9A9AA2))
-                    .padding(.horizontal, 20).frame(height: 42)
-                    .background(RoundedRectangle(cornerRadius: 22).fill(enabled ? Color(argb: 0xFFF3F3F5) : Color(argb: 0xFF4A4A50)))
-            }
-            .disabled(!enabled)
-            .padding(.trailing, 20).padding(.bottom, 18)
-        }
-        .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.22), value: step)
-    }
-
-    private func advance() {
-        switch step {
-        case 0: if scope != nil { step = 1 }
-        case 1:
-            let valid = Set(MoodV2.descriptors[nearest].map(\.0))
-            descriptorKeys = descriptorKeys.intersection(valid)
-            step = 2
-        default:
-            let saved: JournalMood = mood == .fuckOff ? .bad : mood
-            let details = MoodDetails(scope: scope ?? .daily, descriptors: Array(descriptorKeys), energy: nil, factors: Array(factorKeys), loggedAt: .now)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            if let onSaved {
-                onSaved(saved, details)
-                dismiss()
-            } else {
-                life.addMood(saved, details: details)
-                // The mood is already saved; signed-in accounts get ideas for it (consent is asked there).
-                if RealAuth.shared.account != nil {
-                    withAnimation(.easeOut(duration: 0.25)) { suggestFor = (saved, details) }
-                } else {
-                    dismiss()
-                }
-            }
-        }
-    }
-
-    private var scopeStep: some View {
-        VStack(spacing: 0) {
-            Color.clear.frame(height: 20)
-            Text("Bir iz bırak").font(RealFont.inter(30, .semibold)).foregroundStyle(Color(argb: 0xFFF4F4F6))
-            Text("Neyi kaydetmek istiyorsun?").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF9A9AA3)).padding(.top, 8)
-            Color.clear.frame(height: 34)
-            scopeCard(.moment, "Anlık his", "Şu anda ya da belirli bir anda nasıl hissettiğin")
-            Color.clear.frame(height: 12)
-            scopeCard(.daily, "Günün havası", "Bugünün genel hissi")
-        }
-    }
-
-    private func scopeCard(_ value: MoodScope, _ title: String, _ subtitle: String) -> some View {
-        let on = scope == value
-        return Button {
-            scope = value
-            UISelectionFeedbackGenerator().selectionChanged()
-        } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle().strokeBorder(on ? ambient : Color(argb: 0xFF777780), lineWidth: 1.5)
-                    if on { Circle().fill(ambient).padding(4) }
-                }
-                .frame(width: 18, height: 18)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(RealFont.inter(17, .semibold)).foregroundStyle(Color(argb: 0xFFF4F4F6))
-                    Text(subtitle).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF92929B)).multilineTextAlignment(.leading)
-                }
-                Spacer()
-            }
-            .padding(18)
-            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(on ? ambient.opacity(0.22) : Color(argb: 0xFF18181C)))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(on ? ambient.opacity(0.72) : Color(argb: 0xFF303036), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var faceStep: some View {
-        let family = MoodV2.families[nearest]
-        let face = MoodFaceParams.at(progress, mood: dragging ? nil : mood)
-        let showHand = nearest == 0 && descriptorKeys.contains("fuck_off")
+        let tone = MoodV3.tone(progress)
         return VStack(spacing: 0) {
-            Text(scope == .moment ? "Şu an içeride hava nasıl?" : "Bugünün havası nasıldı?")
-                .font(RealFont.inter(18, .medium)).foregroundStyle(Color(argb: 0xFFE0E0E5))
+            // Top: close (or back from the details) on the left, the Şu an / Bugün switch on the right.
+            HStack {
+                Button { if details { withAnimation(.easeOut(duration: 0.25)) { details = false } } else { dismiss() } } label: {
+                    Text(details ? "‹" : "×").font(.system(size: 30)).foregroundStyle(tone.ink).frame(width: 44, height: 44)
+                }
+                .accessibilityLabel(details ? "Geri" : "Kapat")
+                Spacer()
+                if !reminderFlow {
+                    HStack(spacing: 0) {
+                        ForEach([(MoodScope.moment, "Şu an"), (MoodScope.daily, "Bugün")], id: \.1) { value, label in
+                            let on = scope == value
+                            Button {
+                                scope = value
+                                UISelectionFeedbackGenerator().selectionChanged()
+                            } label: {
+                                Text(label).font(RealFont.inter(13, .medium)).foregroundStyle(on ? tone.paper : tone.ink.opacity(0.75))
+                                    .padding(.horizontal, 14).padding(.vertical, 7)
+                                    .background(Capsule().fill(on ? tone.ink : .clear))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(3)
+                    .background(Capsule().fill(tone.ink.opacity(0.10)))
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 6)
+
             Group {
-                if showHand {
-                    Text("🖕").font(.system(size: 130)).frame(width: 216, height: 216)
-                } else {
-                    MoodFace(params: face, browInk: ambient.opacity(0.96)).frame(width: 216, height: 216)
-                }
+                if details { detailStep(tone).transition(.opacity.combined(with: .offset(y: 30))) }
+                else { faceStep(tone).transition(.opacity) }
             }
-            .padding(.top, 22)
-            Text(family.title.uppercased(with: Locale(identifier: "tr_TR"))).font(RealFont.inter(30, .semibold)).kerning(0.6).foregroundStyle(ambient)
-                .padding(.top, 14)
-            slider.padding(.top, 24)
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Biraz daha netleştir").font(RealFont.inter(16, .medium)).foregroundStyle(Color(argb: 0xFFE6E6EB))
-                Text("Bu hissi en iyi anlatanları seç. En fazla 3 tane.").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF85858E))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 28)
-            ChipFlow(spacing: 8, lineSpacing: 9) {
-                ForEach(MoodV2.descriptors[nearest], id: \.0) { option in
-                    chip(option.1, selected: descriptorKeys.contains(option.0)) {
-                        if descriptorKeys.contains(option.0) { descriptorKeys.remove(option.0) }
-                        else if descriptorKeys.count < 3 { descriptorKeys.insert(option.0) }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Bottom: "Ayrıntı ekle" (optional) and "Kaydet", always one tap away.
+            HStack(spacing: 10) {
+                if !details {
+                    let count = descriptorKeys.count + factorKeys.count
+                    Button { withAnimation(.easeOut(duration: 0.3)) { details = true } } label: {
+                        Text(count > 0 ? "Ayrıntılar · \(count)" : "Ayrıntı ekle").font(RealFont.inter(15, .medium)).foregroundStyle(tone.ink)
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .overlay(Capsule().strokeBorder(tone.ink.opacity(0.5), lineWidth: 1.5))
+                            .contentShape(Capsule())
                     }
+                    .buttonStyle(.plain)
                 }
+                Button(action: save) {
+                    Text("Kaydet").font(RealFont.inter(15, .semibold)).foregroundStyle(tone.paper)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(Capsule().fill(tone.ink))
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.top, 13)
-            if !descriptorKeys.isEmpty {
-                Text(descriptorKeys.prefix(3).map(MoodV2.descriptorLabel).joined(separator: " · "))
-                    .font(RealFont.inter(12)).foregroundStyle(ambient.opacity(0.88))
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 13)
+            .padding(.horizontal, 20).padding(.vertical, 14)
+        }
+        .background(tone.paper.ignoresSafeArea())
+        .onChange(of: family) { old, new in
+            titleForward = new > old
+            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.32)) { shownFamily = new }
+        }
+        .onDisappear { motion?.cancel() }
+    }
+
+    private func faceStep(_ tone: (paper: Color, ink: Color)) -> some View {
+        let showHand = family == 0 && descriptorKeys.contains("fuck_off")
+        return VStack(spacing: 0) {
+            Text(reminderFlow ? "Bu REAL nasıl hissettirdi?" : scope == .moment ? "Şu an nasılsın?" : "Bugün genel olarak nasıldı?")
+                .font(RealFont.inter(20, .medium)).foregroundStyle(tone.ink).multilineTextAlignment(.center)
+                .padding(.top, 18)
+            Spacer(minLength: 8)
+            Group {
+                if showHand { Text("🖕").font(.system(size: 170)) }
+                else { MoodV3Face(params: MoodFaceParams.at(progress, mood: dragging ? nil : mood), ink: tone.ink) }
             }
+            .frame(width: 300, height: 300)
+            .accessibilityLabel("\(MoodV2.families[family].title) mood yüzü")
+            Spacer(minLength: 8)
+            // The feeling in big letters; a new word slides in from the side the mood moved to.
+            ZStack {
+                Text(MoodV2.families[shownFamily].title.uppercased(with: Locale(identifier: "tr_TR")))
+                    .font(RealFont.inter(64, .black)).foregroundStyle(tone.ink.opacity(0.82))
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .id(shownFamily)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: titleForward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: titleForward ? .leading : .trailing).combined(with: .opacity)))
+            }
+            .frame(maxWidth: .infinity)
+            .clipped()
+            slider(tone).padding(.top, 26)
+            Color.clear.frame(height: 30)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private func slider(_ tone: (paper: Color, ink: Color)) -> some View {
+        VStack(spacing: 8) {
+            GeometryReader { geo in
+                let knob: CGFloat = 44
+                let usable = max(geo.size.width - knob, 1)
+                let at: (CGFloat) -> Double = { x in min(max(Double((x - knob / 2) / usable) * 4, 0), 4) }
+                ZStack(alignment: .leading) {
+                    Capsule().fill(tone.ink.opacity(0.22)).frame(height: 4).padding(.horizontal, knob / 2)
+                    HStack {
+                        ForEach(0..<5, id: \.self) { i in
+                            Circle().fill(tone.ink.opacity(0.35)).frame(width: 6, height: 6)
+                            if i < 4 { Spacer() }
+                        }
+                    }
+                    .padding(.horizontal, knob / 2 - 3)
+                    Circle().fill(tone.ink).frame(width: knob, height: knob)
+                        .overlay(MoodV3Face(params: MoodFaceParams.at(progress, mood: nil), ink: tone.paper).frame(width: 30, height: 30))
+                        .offset(x: usable * progress / 4)
+                }
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 4)
+                    .onChanged { v in
+                        motion?.cancel()
+                        dragging = true
+                        progress = at(v.location.x)
+                        tick()
+                    }
+                    .onEnded { _ in
+                        dragging = false
+                        settle()
+                    })
+                .simultaneousGesture(SpatialTapGesture().onEnded { v in glide(to: Int(at(v.location.x).rounded())) })
+            }
+            .frame(height: 44)
+            HStack {
+                Text("Kötü"); Spacer(); Text("Normal"); Spacer(); Text("Çok iyi")
+            }
+            .font(RealFont.inter(12)).foregroundStyle(tone.ink.opacity(0.6))
         }
     }
 
-    private var slider: some View {
-        GeometryReader { geo in
-            let thumb: CGFloat = 28
-            let usable = geo.size.width - thumb
-            ZStack(alignment: .leading) {
-                Capsule().fill(LinearGradient(colors: MoodV2.families.map { $0.tint.opacity(0.68) }, startPoint: .leading, endPoint: .trailing))
-                    .frame(height: 6)
-                HStack {
-                    ForEach(0..<5, id: \.self) { i in
-                        Circle().fill(i == nearest ? Color.white : MoodV2.families[i].tint.opacity(0.72))
-                            .frame(width: i == nearest ? 8 : 5, height: i == nearest ? 8 : 5)
-                        if i < 4 { Spacer() }
-                    }
-                }
-                Circle().fill(Color(argb: 0xFFF4F4F6)).frame(width: thumb, height: thumb)
-                    .overlay(Circle().strokeBorder(ambient.opacity(0.8), lineWidth: 3))
-                    .offset(x: usable * progress / 4)
-            }
-            .frame(maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { v in
-                    dragging = true
-                    setProgress(Double(v.location.x / max(geo.size.width, 1)) * 4, finish: false)
-                }
-                .onEnded { v in
-                    dragging = false
-                    setProgress(Double(v.location.x / max(geo.size.width, 1)) * 4, finish: true)
-                })
-        }
-        .frame(height: 58)
-    }
-
-    private func setProgress(_ value: Double, finish: Bool) {
-        progress = min(max(value, 0), 4)
-        let anchor = min(max(Int(progress.rounded()), 0), 4)
-        if anchor != lastHaptic {
-            lastHaptic = anchor
+    private func tick() {
+        if family != lastTick {
+            lastTick = family
             UISelectionFeedbackGenerator().selectionChanged()
         }
-        if finish {
-            withAnimation(.easeOut(duration: 0.19)) { progress = Double(anchor) }
-            let family = MoodV2.families[anchor]
-            let valid = Set(MoodV2.descriptors[anchor].map(\.0))
-            descriptorKeys = descriptorKeys.intersection(valid)
-            if !family.moods.contains(mood) { mood = family.defaultMood }
+    }
+
+    /// Moves `progress` frame by frame (the face is drawn from it, so it has to change continuously).
+    private func move(to target: Double, duration: Double, then: (() -> Void)? = nil) {
+        motion?.cancel()
+        let start = progress
+        motion = Task { @MainActor in
+            let t0 = Date()
+            while !Task.isCancelled {
+                let t = min(Date().timeIntervalSince(t0) / duration, 1)
+                let e = t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+                progress = start + (target - start) * e
+                tick()
+                if t >= 1 { break }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            if !Task.isCancelled { then?() }
         }
     }
 
-    private var factorStep: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 14) {
-                if descriptorKeys.contains("fuck_off") { Text("🖕").font(.system(size: 56)) }
-                else { MoodFace(mood: mood, tint: ambient).frame(width: 78, height: 78) }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(scope?.label ?? "Mood").font(RealFont.inter(12, .medium)).foregroundStyle(Color(argb: 0xFF85858E))
-                    Text(MoodV2.families[MoodV2.familyIndex(mood)].title).font(RealFont.inter(24, .semibold)).foregroundStyle(Color(argb: 0xFFF5F5F7))
-                    if !descriptorKeys.isEmpty {
-                        Text(descriptorKeys.prefix(3).map(MoodV2.descriptorLabel).joined(separator: " · ")).font(RealFont.inter(13)).foregroundStyle(ambient.opacity(0.92))
-                    }
-                }
+    /// Kötü → Çok iyi in one tap: glide through the faces in between, ticking at each stop.
+    private func glide(to anchor: Int) {
+        let target = Double(min(max(anchor, 0), 4))
+        dragging = true
+        move(to: target, duration: 0.26 + abs(target - progress) * 0.17) {
+            dragging = false
+            settle()
+        }
+    }
+
+    private func settle() {
+        let anchor = family
+        if abs(progress - Double(anchor)) > 0.001 { move(to: Double(anchor), duration: 0.2) }
+        let valid = Set(MoodV2.descriptors[anchor].map(\.0))
+        descriptorKeys = descriptorKeys.intersection(valid)
+        let target = MoodV2.families[anchor]
+        if !target.moods.contains(mood) { mood = target.defaultMood }
+    }
+
+    private func save() {
+        let saved: JournalMood = mood == .fuckOff ? .bad : mood
+        let details = MoodDetails(scope: scope, descriptors: Array(descriptorKeys), energy: nil, factors: Array(factorKeys), loggedAt: .now)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        if let onSaved {
+            onSaved(saved, details)
+            dismiss()
+        } else {
+            life.addMood(saved, details: details)
+            // The mood is already saved; signed-in accounts get ideas for it (consent is asked there).
+            if RealAuth.shared.account != nil {
+                withAnimation(.easeOut(duration: 0.25)) { suggestFor = (saved, details) }
+            } else {
+                dismiss()
             }
-            Text("Bunu en çok ne etkiledi?").font(RealFont.inter(22, .semibold)).foregroundStyle(Color(argb: 0xFFF1F1F4)).padding(.top, 22)
-            Text("Hissi değil, kaynağını seç. Birden fazla olabilir.").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF85858E)).padding(.top, 7)
-            ForEach(Array(MoodV2.factorGroups.enumerated()), id: \.offset) { index, group in
-                Text(group.0).font(RealFont.inter(12, .medium)).foregroundStyle(Color(argb: 0xFF777780)).padding(.top, index == 0 ? 18 : 20)
-                let expanded = expandedGroups.contains(group.0)
-                let base = Array(group.1.prefix(9))
-                let extras = group.1.dropFirst(9).filter { factorKeys.contains($0.0) }
-                let visible = expanded ? group.1 : base + extras
-                ChipFlow(spacing: 8, lineSpacing: 9) {
-                    ForEach(visible, id: \.0) { option in
-                        chip(option.1, selected: factorKeys.contains(option.0)) {
-                            if factorKeys.contains(option.0) { factorKeys.remove(option.0) } else { factorKeys.insert(option.0) }
-                        }
-                    }
-                    if group.1.count > 9 {
-                        Button {
-                            if expanded { expandedGroups.remove(group.0) } else { expandedGroups.insert(group.0) }
-                        } label: {
-                            Text(expanded ? "Daha az" : "+ \(group.1.count - 9) daha").font(RealFont.inter(12, .medium)).foregroundStyle(ambient.opacity(0.9))
-                                .padding(.horizontal, 13).padding(.vertical, 10)
-                                .background(Capsule().fill(Color(argb: 0xFF151519)))
-                                .overlay(Capsule().strokeBorder(ambient.opacity(0.28), lineWidth: 0.8))
-                        }
-                    }
+        }
+    }
+
+    private func detailStep(_ tone: (paper: Color, ink: Color)) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 12) {
+                    MoodV3Face(params: MoodFaceParams.at(Double(family), mood: mood), ink: tone.ink).frame(width: 54, height: 54)
+                    Text(MoodV2.families[family].title).font(RealFont.inter(30, .black)).foregroundStyle(tone.ink)
                 }
                 .padding(.top, 8)
+                Text("Bunu en iyi ne anlatır?").font(RealFont.inter(20, .semibold)).foregroundStyle(tone.ink).padding(.top, 26)
+                Text("En fazla 3 tane").font(RealFont.inter(12)).foregroundStyle(tone.ink.opacity(0.6)).padding(.top, 4).padding(.bottom, 12)
+                ChipFlow(spacing: 8, lineSpacing: 8) {
+                    ForEach(MoodV2.descriptors[family], id: \.0) { option in
+                        chip(option.1, selected: descriptorKeys.contains(option.0), tone) {
+                            if descriptorKeys.contains(option.0) { descriptorKeys.remove(option.0) }
+                            else if descriptorKeys.count < 3 { descriptorKeys.insert(option.0) }
+                        }
+                    }
+                }
+                Text("Ne etkiledi?").font(RealFont.inter(20, .semibold)).foregroundStyle(tone.ink).padding(.top, 30)
+                Text("Hissin kaynağı; birden fazla olabilir").font(RealFont.inter(12)).foregroundStyle(tone.ink.opacity(0.6)).padding(.top, 4)
+                ForEach(Array(MoodV2.factorGroups.enumerated()), id: \.offset) { _, group in
+                    Text(group.0).font(RealFont.inter(12, .medium)).foregroundStyle(tone.ink.opacity(0.55)).padding(.top, 16).padding(.bottom, 8)
+                    ChipFlow(spacing: 8, lineSpacing: 8) {
+                        ForEach(group.1, id: \.0) { option in
+                            chip(option.1, selected: factorKeys.contains(option.0), tone) {
+                                if factorKeys.contains(option.0) { factorKeys.remove(option.0) } else { factorKeys.insert(option.0) }
+                            }
+                        }
+                    }
+                }
+                Color.clear.frame(height: 24)
             }
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.hidden)
     }
 
-    private func chip(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func chip(_ label: String, selected: Bool, _ tone: (paper: Color, ink: Color), action: @escaping () -> Void) -> some View {
         Button {
             action()
             UISelectionFeedbackGenerator().selectionChanged()
         } label: {
-            Text(label).font(RealFont.inter(13, selected ? .medium : .regular))
-                .foregroundStyle(selected ? Color(argb: 0xFFF5F5F7) : Color(argb: 0xFFB1B1BA))
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(Capsule().fill(selected ? ambient.opacity(0.24) : Color(argb: 0xFF1D1D21)))
-                .overlay(Capsule().strokeBorder(selected ? ambient.opacity(0.72) : Color(argb: 0xFF303037), lineWidth: 0.8))
+            Text(label).font(RealFont.inter(14, selected ? .semibold : .regular))
+                .foregroundStyle(selected ? tone.paper : tone.ink)
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .background(Capsule().fill(selected ? tone.ink : .clear))
+                .overlay(Capsule().strokeBorder(selected ? .clear : tone.ink.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }

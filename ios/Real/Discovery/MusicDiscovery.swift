@@ -197,6 +197,7 @@ struct MusicDiscoveryScreen: View {
     @State private var list = false
     @State private var selection: Set<String> = []
     @State private var deck = false
+    @State private var pickerStep = 0
     @State private var loading = false
     @State private var error: String?
     @State private var dragOffset: CGSize = .zero
@@ -216,47 +217,33 @@ struct MusicDiscoveryScreen: View {
     }
 
     private func back() {
-        if startInList || (!deck && !list) { onClose() } else { withAnimation(.easeOut(duration: 0.25)) { deck = false; list = false } }
+        // Inside the picker: the previous question. From the deck: straight back to Yaşam (the picker was done).
+        if !deck && !list && pickerStep > 0 { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32)) { pickerStep -= 1 }; return }
+        if startInList || deck || !list { onClose() } else { withAnimation(.easeOut(duration: 0.25)) { deck = false; list = false } }
     }
 
     private var filterPage: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ZStack(alignment: .topLeading) {
-                        YasamHeroSentence(greeting: "", sentence: "Ne dinlesek", tone: musicTone,
-                                          hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
-                            .padding(.top, 4)
-                        BackCircle(action: back).padding(.leading, 22).padding(.top, 12).accessibilityLabel("Yaşam'a dön")
-                    }
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Tür").font(RealFont.inter(17, .medium)).foregroundStyle(.white.opacity(0.8))
-                        ChipFlow(spacing: 8) {
-                            ForEach(MusicGenre.all) { g in chip(g.key, g.label) }
-                        }
-                        // Dönem: one era or every era ("Hepsi").
-                        Text("Dönem").font(RealFont.inter(17, .medium)).foregroundStyle(.white.opacity(0.8))
-                        ChipFlow(spacing: 8) {
-                            let current = MusicEra.of(selection)
-                            DiscoveryChip(label: "Hepsi", selected: current == nil, enabled: !loading, accent: musicTone) {
-                                for e in MusicEra.allCases { selection.remove(e.rawValue) }
-                            }
-                            ForEach(MusicEra.allCases) { e in
-                                DiscoveryChip(label: e.label, selected: current == e, enabled: !loading, accent: musicTone) {
-                                    for x in MusicEra.allCases { selection.remove(x.rawValue) }
-                                    selection.insert(e.rawValue)
-                                }
-                            }
-                        }
-                        Text("Apple Music · \(MusicStorefront.name) listeleri").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF5E5E66))
-                    }
-                    .padding(.horizontal, 20).padding(.top, 20)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                YasamHeroSentence(greeting: "", sentence: "Ne dinlesek", tone: musicTone,
+                                  hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
+                    .padding(.top, 4)
+                BackCircle(action: back).padding(.leading, 22).padding(.top, 12).accessibilityLabel("Yaşam'a dön")
             }
-            .scrollIndicators(.hidden)
             if let error { errorLine(error) }
-            DiscoveryLoadingButton(label: "Şarkıları getir", loading: loading, enabled: true, accent: musicTone, action: fetch)
-                .padding(.horizontal, 20).padding(.vertical, 14)
+            // One question at a time: 2 genres at most, then (optional) one era; "Hepsi" = every era.
+            let allEras = "era_all"
+            DiscoveryStepper(steps: [
+                DiscoveryStep(title: "Hangi türde müzik?", subtitle: "En fazla 2 tür", max: 2, optional: false,
+                              groups: [(nil, MusicGenre.all.map { StepOption(key: $0.key, label: $0.label) })]),
+                DiscoveryStep(title: "Hangi dönemden?", subtitle: "İstersen bir dönem · Apple Music \(MusicStorefront.name) listeleri", max: 1, optional: true,
+                              groups: [(nil, [StepOption(key: allEras, label: "Hepsi")] + MusicEra.allCases.map { StepOption(key: $0.rawValue, label: $0.label) })]),
+            ], selection: Binding(
+                get: { MusicEra.of(selection) == nil ? selection.union([allEras]) : selection },
+                set: { selection = $0.subtracting([allEras]) }),
+                accent: musicTone, loading: loading, enabled: true, doneLabel: "şarkıları getir", step: $pickerStep,
+                rare: { chosen, key in DiscoveryRarePairs.rare(DiscoveryRarePairs.music, chosen, key) },
+                onDone: fetch)
         }
     }
 

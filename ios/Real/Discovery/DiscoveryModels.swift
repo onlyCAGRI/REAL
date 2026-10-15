@@ -182,9 +182,12 @@ final class DiscoveryStore {
     /// Adds fresh posters behind the ones still in the deck. Seen, saved and queued titles are dropped here too (the
     /// service only takes the latest 40), and a round that brings back mostly known titles is followed by another with
     /// those excluded, so a repeating recommender never leaves the deck empty.
-    func fetch(_ kind: DiscoveryKind, type: String, filters: Set<String>, platforms: Set<String> = []) async throws {
+    /// `deckFilters`: the person's choice the deck belongs to; a widened request (fewer keys, when the exact choice
+    /// found too few titles) adds to that same deck.
+    func fetch(_ kind: DiscoveryKind, type: String, filters: Set<String>, platforms: Set<String> = [], deckFilters: Set<String>? = nil) async throws {
         let prior = snapshot(kind)
-        let sameDeck = prior.type == type && Set(prior.filters) == filters
+        let deck = deckFilters ?? filters
+        let sameDeck = prior.type == type && Set(prior.filters) == deck
         let keep = sameDeck ? prior.cards : []
         func norm(_ t: String) -> String { t.trimmingCharacters(in: .whitespaces).lowercased() }
         var known = Set((prior.excluded + prior.later.flatMap(\.seenTitles) + keep.flatMap(\.seenTitles) + prior.watched.flatMap(\.seenTitles)).map(norm))
@@ -224,7 +227,7 @@ final class DiscoveryStore {
         let ranked = fresh.sorted { DiscoveryRanking.match($0, filters, kind: kind).count > DiscoveryRanking.match($1, filters, kind: kind).count }
         s.cards = (sameDeck ? s.cards : []) + ranked
         s.type = type
-        s.filters = Array(filters)
+        s.filters = Array(deck)
         set(kind, s)
     }
 
