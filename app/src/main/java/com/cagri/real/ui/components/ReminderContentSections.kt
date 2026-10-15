@@ -3,6 +3,7 @@ package com.cagri.real.ui.components
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import com.cagri.real.data.*
 import com.cagri.real.ui.LocalCardContentComposition
 import com.cagri.real.ui.cardBlockSurface
@@ -51,9 +54,24 @@ import kotlinx.coroutines.launch
 
 
 @Composable
-internal fun TimelineContent(style: DesignStyle, ambience: Color = Color.Transparent, content: @Composable ColumnScope.() -> Unit) {
-    val tint = if (ambience == Color.Transparent) Modifier else Modifier.background(
-        Brush.linearGradient(listOf(ambience.copy(alpha = 0.19f), ambience.copy(alpha = 0.07f), Color.Transparent)))
+internal fun TimelineContent(
+    style: DesignStyle, ambience: Color = Color.Transparent,
+    /** Live sound level 0..1 (music preview): the whole block glows with it, like the voice block. Read while drawing. */
+    liveLevel: (() -> Float)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val glowColor = if (ambience == Color.Transparent) Color(0xFF2D6FD6) else ambience
+    val glow = if (liveLevel == null) Modifier else Modifier.drawBehind {
+        val level = liveLevel()
+        if (level > 0.001f) {
+            val maxDimension = maxOf(size.width, size.height)
+            drawRect(Brush.radialGradient(listOf(glowColor.copy(alpha = 0.12f + level * 0.32f), Color.Transparent),
+                center = Offset(size.width * 0.86f, size.height * 0.95f), radius = maxDimension * (1.10f + level * 0.30f)))
+            drawRect(Brush.verticalGradient(listOf(glowColor.copy(alpha = 0.04f + level * 0.12f), Color.Transparent)))
+        }
+    }
+    val tint = glow.then(if (ambience == Color.Transparent) Modifier else Modifier.background(
+        Brush.linearGradient(listOf(ambience.copy(alpha = 0.19f), ambience.copy(alpha = 0.07f), Color.Transparent))))
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         if (LocalCardContentComposition.current) {
             Column(Modifier.fillMaxWidth().cardBlockSurface().clip(RoundedCornerShape(22.dp)).background(Color(0xFF141416)).then(tint).padding(16.dp), content = content)
@@ -78,12 +96,27 @@ fun ReminderContentSections(
     val context = LocalContext.current
     val files = attachments.filter { it.type == AttachmentType.FILE }
     val snippets = attachments.filter { it.type == AttachmentType.TEXT_SNIPPET }
-    var reading by remember { mutableStateOf<ReminderAttachment?>(null) }
+    // "Metni aç" grows the block downward in place (no separate window).
+    var expanded by remember { mutableStateOf(setOf<String>()) }
     var editingSnippet by remember { mutableStateOf<ReminderAttachment?>(null) }
     var editingSnippetText by remember { mutableStateOf("") }
     var snippetSaving by remember { mutableStateOf(false) }
     var snippetError by remember { mutableStateOf<String?>(null) }
     val snippetScope = rememberCoroutineScope()
+    /** Saves the in-place edit; an unchanged text just closes it. */
+    fun saveInlineSnippet(snippet: ReminderAttachment) {
+        if (snippetSaving || editingSnippet?.id != snippet.id) return
+        val text = editingSnippetText
+        if (text == snippet.text.orEmpty()) { editingSnippet = null; snippetError = null; return }
+        snippetSaving = true
+        snippetError = null
+        snippetScope.launch {
+            val saved = runCatching { onUpdateSnippet(snippet, text) }.getOrDefault(false)
+            snippetSaving = false
+            if (saved) { editingSnippet = null; snippetError = null }
+            else snippetError = "Not kaydedilemedi. Yeniden dene."
+        }
+    }
 
     if (files.isNotEmpty() || !referenceUrl.isNullOrBlank()) {
         TimelineContent(designStyle) {
@@ -94,8 +127,8 @@ fun ReminderContentSections(
                     FileContentRow(fileBadge(file), file.displayName ?: "Dosya", fileMetadata(file), editing,
                         onOpen = {
                             try { if (onOpenAttachment != null) onOpenAttachment(file) else AttachmentStorage.open(context, file) }
-                            catch (_: android.content.ActivityNotFoundException) { Toast.makeText(context, "Bu dosyayı açabilecek bir uygulama bulunamadı", Toast.LENGTH_LONG).show() }
-                            catch (_: Exception) { Toast.makeText(context, "Dosyaya erişilemiyor. Silinmiş veya erişim izni kaldırılmış olabilir.", Toast.LENGTH_LONG).show() }
+                            catch (_: android.content.ActivityNotFoundException) { com.cagri.real.ui.components.RealToast.show(context, "Bu dosyayı açabilecek bir uygulama bulunamadı", long = true) }
+                            catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, "Dosyaya erişilemiyor. Silinmiş veya erişim izni kaldırılmış olabilir.", long = true) }
                         }, onRemove = { onRemove(file) })
                 }
             }
@@ -104,7 +137,7 @@ fun ReminderContentSections(
                 val domain = remember(referenceUrl) { runCatching { Uri.parse(referenceUrl).host?.removePrefix("www.") }.getOrNull() ?: referenceUrl }
                 FileContentRow("LINK", domain, referenceUrl, editing, onOpen = {
                     try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(referenceUrl))) }
-                    catch (_: Exception) { Toast.makeText(context, "Bağlantı açılamadı", Toast.LENGTH_SHORT).show() }
+                    catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, "Bağlantı açılamadı") }
                 }, onRemove = onRemoveLink)
             }
         }
@@ -113,169 +146,93 @@ fun ReminderContentSections(
     snippets.forEach { snippet ->
         key(snippet.id) {
             TimelineContent(designStyle) {
+                val inlineEditing = editingSnippet?.id == snippet.id
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     ActionIcon(if (snippet.source == SnippetSource.WHATSAPP_TEXT) ActionGlyph.WhatsApp else ActionGlyph.Note,
                         Modifier.size(18.dp), Color(0xFFC2C6CB))
                     Text(snippet.source.label, color = Color(0xFFD1D1D8), style = RealType.detailSnippetSource,
                         modifier = Modifier.weight(1f).padding(start = 8.dp), maxLines = if (LocalCardContentComposition.current) 1 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
-                    if (allowSnippetEditing) Text(
-                        "Düzenle",
-                        color = Color(0xFFBFC9D2),
+                    // Editing happens in place: tap the text, type, "Bitti" (or tap elsewhere) saves.
+                    if (inlineEditing) Text(
+                        if (snippetSaving) "Kaydediliyor…" else "Bitti",
+                        color = Color(0xFFE6E6EC),
                         style = RealType.detailBlockMetaSecondary,
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
-                            .clickable {
-                                snippetError = null
-                                editingSnippetText = snippet.text.orEmpty()
-                                editingSnippet = snippet
-                            }
+                            .clickable(enabled = !snippetSaving) { saveInlineSnippet(snippet) }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                     )
                     if (editing) IconButton(onClick = { onRemove(snippet) }, modifier = Modifier.semantics { contentDescription = "Metin alıntısını kaldır" }) {
                         ActionIcon(ActionGlyph.Close, Modifier.size(17.dp), Color(0xFFAEAFB8))
                     }
                 }
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).padding(top = 8.dp, bottom = 4.dp)) {
+                val open = snippet.id in expanded
+                val long = remember(snippet.text) { snippet.text.orEmpty().let { it.length > 180 || it.lines().size > 4 } }
+                fun toggle() { if (long) expanded = if (open) expanded - snippet.id else expanded + snippet.id }
+                fun startEditing() {
+                    if (!allowSnippetEditing) { toggle(); return }
+                    if (editingSnippet != null && editingSnippet?.id != snippet.id) editingSnippet?.let { saveInlineSnippet(it) }
+                    snippetError = null
+                    editingSnippetText = snippet.text.orEmpty()
+                    editingSnippet = snippet
+                }
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .animateContentSize(androidx.compose.animation.core.tween(240))
+                    .padding(top = 8.dp, bottom = 4.dp)) {
                     snippet.sourceTitle?.let {
                         Text(
                             it,
                             color = Color(0xFFE6E6EC),
                             style = RealType.detailSnippetTitle,
-                            maxLines = 1,
+                            maxLines = if (open || inlineEditing) Int.MAX_VALUE else 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { reading = snippet }
+                                .clickable { toggle() }
                                 .padding(bottom = 5.dp)
                         )
                     }
-                    ClickableNoteText(
-                        text = snippet.text.orEmpty(),
-                        color = Color(0xFFBFC0C8),
-                        style = RealType.detailSnippetBody,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                        onNonLinkClick = { reading = snippet }
-                    )
-                    Text(
-                        "Metni aç",
-                        color = Color(0xFFCAD3D9),
-                        style = RealType.detailBlockMetaSecondary,
-                        modifier = Modifier.padding(top = 8.dp).clickable { reading = snippet }
-                    )
-                }
-            }
-        }
-    }
-
-    reading?.let { snippet ->
-        Dialog(onDismissRequest = { reading = null }) {
-            DesignPanel(backdrop, backdropPosition, Modifier.fillMaxWidth().heightIn(max = 560.dp), corners = 28.dp,
-                designStyle = designStyle, reduceDynamicBlur = true, liquidSheet = true) {
-                Column(Modifier.padding(20.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(snippet.source.label, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        if (allowSnippetEditing) Text(
-                            "Düzenle",
-                            color = Color(0xFFBFC9D2),
-                            style = RealType.detailBlockMeta,
+                    if (inlineEditing) {
+                        val focusRequester = remember(snippet.id) { FocusRequester() }
+                        val keyboard = LocalSoftwareKeyboardController.current
+                        var hadFocus by remember(snippet.id) { mutableStateOf(false) }
+                        LaunchedEffect(snippet.id) {
+                            kotlinx.coroutines.delay(60)
+                            runCatching { focusRequester.requestFocus() }
+                            keyboard?.show()
+                        }
+                        BasicTextField(
+                            value = editingSnippetText,
+                            onValueChange = { editingSnippetText = it },
+                            enabled = !snippetSaving,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    snippetError = null
-                                    editingSnippetText = snippet.text.orEmpty()
-                                    editingSnippet = snippet
-                                    reading = null
-                                }
-                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester)
+                                .onFocusChanged { state ->
+                                    if (state.isFocused) hadFocus = true
+                                    else if (hadFocus && editingSnippet?.id == snippet.id) saveInlineSnippet(snippet)
+                                },
+                            textStyle = RealType.detailSnippetBody.copy(color = Color(0xFFE6E6EC)),
+                            cursorBrush = SolidColor(Color(0xFF91B9FF))
                         )
-                    }
-                    snippet.sourceTitle?.let { Text(it, color = Color(0xFFD8D8E0), modifier = Modifier.padding(top = 8.dp)) }
-                    SelectionContainer(
-                        Modifier
-                            .weight(1f, fill = false)
-                            .heightIn(max = 410.dp)
-                            .padding(top = 16.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
+                        snippetError?.let {
+                            Text(it, color = Color(0xFFE19B9B), style = RealType.detailBlockMetaSecondary, modifier = Modifier.padding(top = 6.dp))
+                        }
+                    } else {
                         ClickableNoteText(
                             text = snippet.text.orEmpty(),
-                            color = Color(0xFFD3D3DB),
-                            style = RealType.detailSnippetReadingBody,
-                            onNonLinkClick = {}
+                            color = Color(0xFFBFC0C8),
+                            style = RealType.detailSnippetBody,
+                            maxLines = if (open) Int.MAX_VALUE else 4,
+                            overflow = TextOverflow.Ellipsis,
+                            onNonLinkClick = { startEditing() }
                         )
-                    }
-                    TextButton(onClick = { reading = null }, modifier = Modifier.align(Alignment.End)) { Text("Kapat", color = Color(0xFFD1DBE0)) }
-                }
-            }
-        }
-    }
-
-    editingSnippet?.let { snippet ->
-        val focusRequester = remember(snippet.id) { FocusRequester() }
-        val keyboard = LocalSoftwareKeyboardController.current
-        LaunchedEffect(snippet.id) {
-            kotlinx.coroutines.delay(80)
-            runCatching { focusRequester.requestFocus() }
-            keyboard?.show()
-        }
-        Dialog(onDismissRequest = {
-            if (!snippetSaving) {
-                editingSnippet = null
-                snippetError = null
-            }
-        }) {
-            DesignPanel(backdrop, backdropPosition, Modifier.fillMaxWidth().heightIn(max = 590.dp), corners = 28.dp,
-                designStyle = designStyle, reduceDynamicBlur = true, liquidSheet = true) {
-                Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                    Text("Notu düzenle", color = Color.White, style = RealType.detailDialogSubtitle)
-                    Text(snippet.source.label, color = Color(0xFF9FA0AA), style = RealType.detailBlockMetaSecondary, modifier = Modifier.padding(top = 3.dp))
-                    BasicTextField(
-                        value = editingSnippetText,
-                        onValueChange = { editingSnippetText = it },
-                        enabled = !snippetSaving,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 180.dp, max = 390.dp)
-                            .padding(top = 16.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xB3121215))
-                            .border(0.7.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
-                            .padding(14.dp)
-                            .focusRequester(focusRequester),
-                        textStyle = RealType.cardBodyProminent.copy(color = Color(0xFFE2E2E8)),
-                        cursorBrush = SolidColor(Color(0xFF91B9FF))
-                    )
-                    snippetError?.let {
-                        Text(it, color = Color(0xFFE19B9B), style = RealType.detailBlockMetaSecondary, modifier = Modifier.padding(top = 8.dp))
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 14.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = {
-                            editingSnippet = null
-                            snippetError = null
-                        }, enabled = !snippetSaving) { Text("Vazgeç", color = Color(0xFFB6B7BF)) }
-                        TextButton(
-                            enabled = !snippetSaving,
-                            onClick = {
-                                if (snippetSaving) return@TextButton
-                                snippetSaving = true
-                                snippetError = null
-                                snippetScope.launch {
-                                    val saved = runCatching { onUpdateSnippet(snippet, editingSnippetText) }.getOrDefault(false)
-                                    snippetSaving = false
-                                    if (saved) {
-                                        editingSnippet = null
-                                        snippetError = null
-                                    } else {
-                                        snippetError = "Not kaydedilemedi. Yeniden dene."
-                                    }
-                                }
-                            }
-                        ) { Text(if (snippetSaving) "Kaydediliyor…" else "Kaydet", color = Color(0xFF91B9FF)) }
+                        if (long) Text(
+                            if (open) "Daralt" else "Metni aç",
+                            color = Color(0xFFCAD3D9),
+                            style = RealType.detailBlockMetaSecondary,
+                            modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).clickable { toggle() }
+                        )
                     }
                 }
             }
@@ -302,7 +259,7 @@ private fun openExternalNoteUrl(context: android.content.Context, rawUrl: String
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(normalized)))
     } catch (_: Exception) {
-        Toast.makeText(context, "Bağlantı açılamadı", Toast.LENGTH_SHORT).show()
+        com.cagri.real.ui.components.RealToast.show(context, "Bağlantı açılamadı")
     }
 }
 

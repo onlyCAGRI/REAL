@@ -1,7 +1,6 @@
 package com.cagri.real.ui.subscription
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -74,7 +73,7 @@ internal fun RealProDialog(
     }
     LaunchedEffect(reduce) {
         if (reduce) reveal.snapTo(1f)
-        else reveal.animateTo(1f, tween(420, easing = CubicBezierEasing(.16f, 1f, .3f, 1f)))
+        else reveal.animateTo(1f, tween(420, easing = RealMotion.Emphasized))
     }
     val selected = state.offers.singleOrNull { it.key == selectedKey }
         ?: state.offers.firstOrNull { it.isComplete }

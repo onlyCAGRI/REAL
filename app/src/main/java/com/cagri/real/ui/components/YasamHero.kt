@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -143,7 +144,7 @@ internal fun YasamIconTabs(tab: Int, onTab: (Int) -> Unit, reduceAnimations: Boo
     val names = listOf("Hepsi", "Kayıtlar", "Keşfet")
     BoxWithConstraints(modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)) {
         val cell = maxWidth / 3
-        val indicatorX by animateDpAsState(
+        val indicatorX = animateDpAsState(
             cell * tab + (cell - 28.dp) / 2,
             if (reduceAnimations) snap() else spring(dampingRatio = 0.8f, stiffness = 400f),
             label = "yasamTabIndicator"
@@ -184,7 +185,7 @@ internal fun YasamIconTabs(tab: Int, onTab: (Int) -> Unit, reduceAnimations: Boo
             }
         }
         Box(
-            Modifier.align(Alignment.BottomStart).offset(x = indicatorX).width(28.dp).height(1.5.dp)
+            Modifier.align(Alignment.BottomStart).offset { IntOffset(indicatorX.value.roundToPx(), 0) }.width(28.dp).height(1.5.dp)
                 .background(Color.White)
         )
     }

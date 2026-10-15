@@ -117,8 +117,8 @@ fun BooksShelfScreen(
                 contentPadding = PaddingValues(bottom = 170.dp),
             ) {
                 item {
-                    // "Kitaplığım" yazısı kaldırıldı; KİTAPLAR biraz yukarı alındı.
-                    Column(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 34.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    // KİTAPLAR sits clear of the back / theme buttons (40 dp at 8 dp from the top).
+                    Column(Modifier.fillMaxWidth().padding(top = 64.dp, bottom = 34.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("KİTAPLAR", color = textColor, fontSize = 52.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Medium,
                             letterSpacing = (-1).sp, textAlign = TextAlign.Center)
                     }

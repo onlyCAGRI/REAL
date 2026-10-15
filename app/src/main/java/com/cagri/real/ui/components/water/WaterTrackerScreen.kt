@@ -18,7 +18,6 @@ import com.cagri.real.ui.DesignStyle
 import com.cagri.real.ui.components.*
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -94,7 +93,7 @@ internal fun WaterTrackerScreen(
         targetValue = if (visible) 1f else 0f,
         animationSpec = if (reduceAnimations) snap() else tween(
             durationMillis = 220,
-            easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
+            easing = RealMotion.Emphasized
         ),
         label = "drinksDestination"
     )

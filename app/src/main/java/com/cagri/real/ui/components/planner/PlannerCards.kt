@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -109,9 +110,17 @@ internal fun PlannerNext24Card(
     val durationMinutes = event.details?.durationMinutes
     val startTimeStr = if (event.isDateOnly24Hour) "All Day" else formatTimeAmPm(event.startMillis, zone)
     val endMillis = event.endMillis
-    val endTimeStr = if (event.isDateOnly24Hour || endMillis == null) "—" else formatTimeAmPm(endMillis, zone)
+    // Bitiş on a later day: the card keeps its own duration ("60 min") and names the last day under End.
+    val lastDay = event.lastDay(zone).takeIf { event.isMultiDay(zone) }
+    val endTimeStr = when {
+        !event.isDateOnly24Hour && endMillis != null -> formatTimeAmPm(endMillis, zone)
+        lastDay != null && !event.isDateOnly24Hour && event.spanEndMillis != null -> formatTimeAmPm(event.spanEndMillis, zone)
+        else -> "—"
+    }
+    val endLabel = lastDay?.let { "Son gün ${it.dayOfMonth} ${it.format(java.time.format.DateTimeFormatter.ofPattern("MMM", PlannerLocale))}" } ?: "End"
     val durationStr = if (event.isDateOnly24Hour) "24h" else durationMinutes?.let { "${it} min" } ?: "Süre ekle"
-    val surface = plannerSoftPastel(cardColor)
+    val surface = cardColor
+    val ink = if (cardColor.luminance() > 0.45f) PlannerInk else Color.White
 
     val span = if (!event.isDateOnly24Hour && endMillis != null && endMillis > event.startMillis) endMillis - event.startMillis else 0L
     val targetProgress = if (span > 0L && now != null) {
@@ -133,9 +142,9 @@ internal fun PlannerNext24Card(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             val reminderStyle = if (event.reminder.isCompleted) {
-                RealType.editorialItemCompleted.copy(color = Color(0xFF6F6F78))
+                RealType.editorialItemCompleted.copy(color = ink.copy(alpha = 0.5f))
             } else {
-                RealType.editorialItem.copy(color = PlannerInk)
+                RealType.editorialItem.copy(color = ink)
             }
             Text(
                 event.reminder.text,
@@ -158,14 +167,14 @@ internal fun PlannerNext24Card(
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                 Text(
                     startTimeStr,
-                    color = PlannerInk,
+                    color = ink,
                     fontSize = 22.sp,
                     letterSpacing = (-0.6).sp,
                     fontWeight = FontWeight.Normal,
                     maxLines = 1
                 )
                 Spacer(Modifier.height(2.dp))
-                Text("Start", color = PlannerInk.copy(alpha = 0.55f), fontSize = 12.sp)
+                Text("Start", color = ink.copy(alpha = 0.55f), fontSize = 12.sp)
             }
 
             val pillModifier = if (onToggleDuration != null) {
@@ -185,32 +194,32 @@ internal fun PlannerNext24Card(
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(16.dp))
-                        .background(PlannerInk.copy(alpha = 0.10f))
+                        .background(ink.copy(alpha = 0.10f))
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(durationStr, color = PlannerInk.copy(alpha = 0.78f), fontSize = 12.sp, maxLines = 1)
+                    Text(durationStr, color = ink.copy(alpha = 0.78f), fontSize = 12.sp, maxLines = 1)
                 }
             }
 
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 Text(
                     endTimeStr,
-                    color = PlannerInk,
+                    color = ink,
                     fontSize = 22.sp,
                     letterSpacing = (-0.6).sp,
                     fontWeight = FontWeight.Normal,
                     maxLines = 1
                 )
                 Spacer(Modifier.height(2.dp))
-                Text("End", color = PlannerInk.copy(alpha = 0.55f), fontSize = 12.sp)
+                Text(endLabel, color = ink.copy(alpha = 0.55f), fontSize = 12.sp, maxLines = 1)
             }
         }
 
         if (span > 0L && now != null) {
             Spacer(Modifier.height(18.dp))
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(PlannerInk.copy(alpha = 0.14f))) {
-                Box(Modifier.fillMaxHeight().fillMaxWidth(progress).clip(CircleShape).background(PlannerInk))
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(ink.copy(alpha = 0.14f))) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(progress).clip(CircleShape).background(ink))
             }
         }
     }

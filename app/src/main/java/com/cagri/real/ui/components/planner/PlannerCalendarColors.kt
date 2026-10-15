@@ -35,7 +35,9 @@ data class PlannerCategoryVisual(
     val name: String,
     val surfacePastel: Color,
     val capsuleColor: Color,
-    val dotColor: Color
+    val dotColor: Color,
+    /** The category's (or card's) own colour, unchanged: the monthly calendar and goal screen use it. */
+    val realColor: Color = surfacePastel
 ) {
     val pastelColor: Color get() = capsuleColor
 }
@@ -141,6 +143,10 @@ internal fun categoryToEventDotColor(rawColor: Color): Color {
 /** Backward compatibility alias */
 internal fun categoryToCalendarPastel(rawColor: Color): Color = categoryToDaySurfacePastel(rawColor)
 
+/** Uncategorized card without its own colour: a REAL palette colour picked from its id (stable, varied). */
+internal fun uncategorizedRealColor(id: Long): Color =
+    com.cagri.real.ui.components.ReminderColorDisplayOrder.filter { it != 1 }.let { order -> ReminderColorChoices[order[Math.floorMod(id.hashCode(), order.size)]].color }
+
 /** Deterministic decorative pastel from the fixed palette for uncategorized events. */
 internal fun uncategorizedDecorativePastel(id: Long): Color {
     val index = Math.floorMod(id.hashCode(), RealCalendarPastels.size)
@@ -218,7 +224,8 @@ internal fun plannerEventCategoryVisual(
                 name = cat.name,
                 surfacePastel = pastel,
                 capsuleColor = categoryToEventCapsuleColor(base),
-                dotColor = categoryToEventDotColor(base)
+                dotColor = categoryToEventDotColor(base),
+                realColor = base
             )
         }
     }
@@ -231,7 +238,8 @@ internal fun plannerEventCategoryVisual(
             name = "",
             surfacePastel = pastel,
             capsuleColor = categoryToEventCapsuleColor(base),
-            dotColor = categoryToEventDotColor(base)
+            dotColor = categoryToEventDotColor(base),
+            realColor = base
         )
     }
 
@@ -243,7 +251,8 @@ internal fun plannerEventCategoryVisual(
             name = "",
             surfacePastel = pastel,
             capsuleColor = categoryToEventCapsuleColor(base),
-            dotColor = categoryToEventDotColor(base)
+            dotColor = categoryToEventDotColor(base),
+            realColor = base
         )
     }
 
@@ -254,7 +263,8 @@ internal fun plannerEventCategoryVisual(
         name = "",
         surfacePastel = decPastel,
         capsuleColor = categoryToEventCapsuleColor(decPastel),
-        dotColor = categoryToEventDotColor(decPastel)
+        dotColor = categoryToEventDotColor(decPastel),
+        realColor = uncategorizedRealColor(event.id)
     )
 }
 
@@ -284,7 +294,9 @@ internal fun planCapsuleFamilyColor(dayCardSurface: Color): Color {
  */
 internal fun resolveDominantDayCategoryPastel(
     events: List<PlannerEvent>,
-    customCategories: List<CustomCategory> = emptyList()
+    customCategories: List<CustomCategory> = emptyList(),
+    /** Monthly calendar: the dominant category's own colour instead of its pastel. */
+    realColors: Boolean = false
 ): Color? {
     if (events.isEmpty()) return null
 
@@ -331,7 +343,7 @@ internal fun resolveDominantDayCategoryPastel(
             .thenBy { it.earliestStart }
     ).firstOrNull()
 
-    return dominant?.visual?.surfacePastel
+    return if (realColors) dominant?.visual?.realColor else dominant?.visual?.surfacePastel
 }
 
 /** 12-hour am/pm hour formatting: "5 pm", "12 pm", "9 am", "11 am" */
@@ -416,28 +428,8 @@ internal val UncategorizedCardPastels = RealCalendarPastels
 /** Deterministic pseudo-random mapping from card/reminder id to one of the uncategorized pastel colors. */
 internal fun uncategorizedCardPastel(id: Long): Color = uncategorizedDecorativePastel(id)
 
-/** Resolves the card color for the 24-hour upcoming tasks section. */
+/** The card colour for 24 hour and the month list: the category's own colour, else the card's, else a palette colour. */
 internal fun resolveNext24CardColor(
     event: PlannerEvent,
     customCategories: List<CustomCategory> = emptyList()
-): Color {
-    if (event.reminder.customCategoryId != null) {
-        val cat = customCategories.firstOrNull { it.id == event.reminder.customCategoryId }
-        if (cat != null && cat.name.isNotBlank()) {
-            val raw = cat.customSolidColorArgb?.let { Color(it) }
-                ?: ReminderColorChoices.getOrNull(cat.accentStart)?.color
-                ?: Color(0xFF4558C8)
-            return nearestCalendarPastel(raw)
-        }
-    }
-    if (event.reminder.customSolidColorArgb != null) {
-        return nearestCalendarPastel(Color(event.reminder.customSolidColorArgb))
-    }
-    if (event.reminder.accentStart != null) {
-        val raw = ReminderColorChoices.getOrNull(event.reminder.accentStart)
-        if (raw != null) {
-            return nearestCalendarPastel(raw.color)
-        }
-    }
-    return uncategorizedDecorativePastel(event.id)
-}
+): Color = plannerEventCategoryVisual(event, customCategories).realColor

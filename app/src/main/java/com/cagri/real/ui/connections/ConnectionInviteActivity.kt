@@ -119,7 +119,7 @@ private fun ConnectionInviteScreen(token: String, onSignIn: () -> Unit, onClose:
                 busy && name == null && !done -> {
                     InviteHero(false)
                     InviteHeading("Davet kontrol ediliyor…")
-                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(26.dp))
+                    com.cagri.real.ui.components.RealSpinner(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(26.dp))
                 }
                 done -> {
                     InviteHero(true)

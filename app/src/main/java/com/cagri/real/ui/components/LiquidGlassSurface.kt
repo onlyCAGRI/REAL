@@ -271,6 +271,9 @@ half4 main(float2 coord) {
     if (length(outside) > 0.001) normal = normalize(outside) * sign(p);
     else normal = q.x > q.y ? float2(sign(p.x), 0.0) : float2(0.0, sign(p.y));
     float edge = 1.0 - smoothstep(0.0, lensWidth, max(-distance, 0.0));
+    // Inside the lens band every tap below lands on the same pixel and the light term is ~0:
+    // one sample gives the identical result for most of the surface.
+    if (edge < 0.001) return half4(scene.eval(coord).rgb, 1.0);
     float2 shift = -normal * strength * edge * edge;
     float2 uv = coord + shift;
     // Slightly more diffusion toward the thick edge; color separation stays subpixel.

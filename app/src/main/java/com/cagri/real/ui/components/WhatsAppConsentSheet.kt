@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -71,14 +70,14 @@ fun WhatsAppConsentSheet(
                 else slideInVertically(
                     animationSpec = tween(
                         durationMillis = 300,
-                        easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                        easing = RealMotion.Emphasized
                     )
                 ) { fullHeight -> fullHeight },
                 exit = if (reduceAnimations) ExitTransition.None
                 else slideOutVertically(
                     animationSpec = tween(
                         durationMillis = 220,
-                        easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)
+                        easing = RealMotion.Exit
                     )
                 ) { fullHeight -> fullHeight },
                 modifier = Modifier.align(Alignment.BottomCenter)

@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.ui.components.RealMotion
 import androidx.compose.runtime.*
 import androidx.compose.animation.core.*
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -97,7 +98,7 @@ internal fun rememberReminderEntrance(
                 targetValue = 1f,
                 animationSpec = tween(
                     durationMillis = 400,
-                    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                    easing = RealMotion.Emphasized
                 )
             )
             isColdStarting = false

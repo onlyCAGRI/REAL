@@ -39,11 +39,19 @@ internal object SyncProjection {
         fun rows(file:String,key:String)=raw(file,key)?.let(::JSONArray)?.objects().orEmpty()
         fun add(kind:String,key:String,obj:JSONObject) { result+=Document(kind,key,canonical(obj)) }
         for(card in rows(CARDS,"reminders")) {
+            // Ortak kategori cards travel through the shared category store, never personal sync.
+            if(card.has("sharedCardId")) continue
             card.remove("notifiedAlertAt")
             transformBinaries(db,scope,card,true)
             add("CARD",card.getLong("id").toString(),card)
         }
-        rows(CATEGORIES,"categories_json").forEach { add("CATEGORY",it.getLong("id").toString(),it) }
+        rows(CATEGORIES,"categories_json").forEach {
+            // Someone else's shared category is a mirror on this phone; the owner's own one stays (minus the bookkeeping).
+            val role=it.optString("sharedRole","")
+            if(it.has("sharedId") && role!="owner") return@forEach
+            it.remove("sharedId");it.remove("sharedRole");it.remove("sharedOwnerName")
+            add("CATEGORY",it.getLong("id").toString(),it)
+        }
         rows(MOODS,"entries_v1").forEach { add("MOOD",it.getLong("id").toString(),it) }
         raw(PLANNER,"event_details")?.let(::JSONObject)?.optJSONArray("events")?.objects()?.forEach {
             add("PLANNER",it.getLong("reminderId").toString(),it)
@@ -107,7 +115,11 @@ internal object SyncProjection {
                 val old=string(CARDS,"reminders")?.let(::JSONArray)?.objects()?.find { row->row.getLong("id").toString()==key }
                 it.put("notifiedAlertAt",if(old?.optLong("alertAt")==it.optLong("alertAt")) old?.opt("notifiedAlertAt")?:JSONObject.NULL else JSONObject.NULL)
             }
-            "CATEGORY"->array(CATEGORIES,"categories_json","id")
+            "CATEGORY"->array(CATEGORIES,"categories_json","id") {
+                // Ortak kategori bookkeeping is device-local: keep it when the cloud copy comes back.
+                val old=string(CATEGORIES,"categories_json")?.let(::JSONArray)?.objects()?.find { row->row.get("id").toString()==key }
+                for(k in listOf("sharedId","sharedRole","sharedOwnerName")) old?.opt(k)?.takeIf { v->v!=JSONObject.NULL }?.let { v->it.put(k,v) }
+            }
             "MOOD"->array(MOODS,"entries_v1","id")
             "PLANNER"->{
                 val root=string(PLANNER,"event_details")?.let(::JSONObject)?:JSONObject().put("version",1).put("events",JSONArray())

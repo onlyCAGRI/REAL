@@ -34,11 +34,12 @@ private val EntryGlowSoft = Color(0xFFBFD0FF)    // ışığın parlak çekirde�
 /** Referanstaki gibi: üstte renkli bulanık ışık, alta doğru siyaha akıyor. Blur gerektirmez, her Android sürümünde çalışır. */
 @Composable
 internal fun EntryGlow(reduceAnimations: Boolean) {
-    val drift = if (reduceAnimations) 0f else {
-        val transition = rememberInfiniteTransition(label = "entry-glow")
-        transition.animateFloat(0f, 1f, infiniteRepeatable(tween(9000), RepeatMode.Reverse), label = "drift").value
-    }
+    // The drift is read in draw only: the glow repaints each frame without recomposing.
+    val driftState = if (reduceAnimations) null else
+        rememberInfiniteTransition(label = "entry-glow")
+            .animateFloat(0f, 1f, infiniteRepeatable(tween(9000), RepeatMode.Reverse), label = "drift")
     Box(Modifier.fillMaxSize().drawBehind {
+        val drift = driftState?.value ?: 0f
         val w = size.width; val h = size.height
         drawRect(Brush.radialGradient(listOf(EntryAccent, Color.Transparent),
             center = Offset(w * (.18f + .10f * drift), h * .10f), radius = w * 1.15f))

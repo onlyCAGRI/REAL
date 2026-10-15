@@ -153,7 +153,7 @@ fun MediaDiscoveryDetail(card: DiscoveryCard, repository: MediaDetailRepository,
                 when {
                     loading -> Row(Modifier.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CircularProgressIndicator(Modifier.size(18.dp), color = Color.White.copy(alpha = .65f), strokeWidth = 2.dp)
+                        com.cagri.real.ui.components.RealSpinner(Modifier.size(18.dp), color = Color.White.copy(alpha = .65f), strokeWidth = 2.dp)
                         Text("Oyuncular yükleniyor…", color = Color.White.copy(alpha = .55f), fontSize = 12.sp)
                     }
                     failed -> Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {

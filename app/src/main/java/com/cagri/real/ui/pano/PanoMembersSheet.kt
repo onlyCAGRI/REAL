@@ -97,7 +97,7 @@ fun PanoMembersSheet(board:PanoBoard,members:List<PanoMember>,controller:PanoCon
         }
     }
     if(confirmLeave)PanoLeaveDialog(board,controller,{confirmLeave=false},{confirmLeave=false;onDismiss();onDeleted()})
-    if(confirmDelete)AlertDialog(onDismissRequest={confirmDelete=false},containerColor=Color(0xFF161618),title={Text("Delete board?",color=Color.White)},text={Text("This removes cloud access for all members. Original REAL cards are kept.",color=Color.LightGray)},confirmButton={TextButton(onClick={controller.run{controller.repository.deleteBoard(board.id);
+    if(confirmDelete)com.cagri.real.ui.components.RealAlertDialog(onDismissRequest={confirmDelete=false},containerColor=Color(0xFF161618),title={Text("Delete board?",color=Color.White)},text={Text("This removes cloud access for all members. Original REAL cards are kept.",color=Color.LightGray)},confirmButton={TextButton(onClick={controller.run{controller.repository.deleteBoard(board.id);
                 onDismiss();
                 onDeleted()}}){Text("Delete")}},dismissButton={TextButton(onClick={confirmDelete=false}){Text("Cancel")}})
 }

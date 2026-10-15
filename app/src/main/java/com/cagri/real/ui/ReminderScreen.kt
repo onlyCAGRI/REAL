@@ -2,8 +2,6 @@
 
 package com.cagri.real.ui
 
-import com.cagri.real.ui.motion.rememberCategoryTitleMotion
-
 import com.cagri.real.contextcards.accent
 
 import com.cagri.real.ui.components.liquidChrome
@@ -55,9 +53,10 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -130,6 +129,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -219,6 +220,8 @@ import kotlinx.coroutines.withContext
 import com.cagri.real.ui.components.ReminderEntryTracker
 import com.cagri.real.ui.components.SelectionActionButtons
 import com.cagri.real.ui.components.TopGlassOverlay
+import com.cagri.real.ui.components.deferredBottomPadding
+import com.cagri.real.ui.components.deferredHeight
 import com.cagri.real.data.ReminderSortOrder
 import com.cagri.real.data.filterAndSortReminders
 import com.cagri.real.data.HOME_COMPLETED_PREVIEW_LIMIT
@@ -240,6 +243,26 @@ import kotlinx.coroutines.launch
 internal const val STANDALONE_JOURNAL_PREFIX = "Günlük · "
 
 /** Yalnız günlük olarak oluşturulmuş kart: Günlüklerim'de görünür, genel kart listelerinde görünmez. */
+/**
+ * The note after a category's card count: overdue cards first, then what is on today.
+ * Second = shown as a warning.
+ */
+private fun categoryHeaderDetail(items: List<ReminderItem>, today: LocalDate): Pair<String, Boolean>? {
+    val zone = java.time.ZoneId.systemDefault()
+    val now = System.currentTimeMillis()
+    val todayDay = today.toEpochDay()
+    val open = items.filter { !it.isCompleted }
+    val overdue = open.count { r ->
+        r.id >= 0 && ((r.alertAt != null && r.alertAt < now && r.notifiedAlertAt == r.alertAt) ||
+            (r.alertAt == null && r.plannedDateEpochDay != null && r.plannedDateEpochDay < todayDay && r.quick24HourUntilAt == null))
+    }
+    if (overdue > 0) return "$overdue gecikmiş" to true
+    fun day(r: ReminderItem): Long? = r.alertAt?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate().toEpochDay() }
+        ?: r.plannedDateEpochDay
+    val todayCount = open.count { day(it) == todayDay }
+    return if (todayCount > 0) "$todayCount tanesi bugün" to false else null
+}
+
 private fun ReminderItem.isStandaloneJournal(): Boolean =
     journal != null && text.startsWith(STANDALONE_JOURNAL_PREFIX)
 
@@ -258,6 +281,10 @@ fun ReminderScreen(
     onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>, List<ReminderVoiceRecording>, ReminderLocation?, Long?, Long?, List<MusicBlock>, List<MediaBlock>) -> Long?,
     onAddSuggestedReal: suspend (String, MusicBlock?, MediaBlock?, CardStackBlock?) -> Long? = { _, _, _, _ -> null },
     onUndoSuggestedReal: suspend (Long) -> Boolean = { false },
+    /** Oyun keşfi "REAL'e ekle": a card with the game block. */
+    onAddGame: suspend (com.cagri.real.data.CardGameBlock) -> Long? = { null },
+    onRemoveGameBlock: (Long, String) -> Unit = { _, _ -> },
+    onAddGameBlock: (Long, com.cagri.real.data.CardGameBlock) -> Unit = { _, _ -> },
     onToggleCompleted: (Long) -> Unit,
     onToggleImportant: (Long) -> Unit,
     onMoveTo24Hour: suspend (Long) -> Boolean = { false },
@@ -320,6 +347,7 @@ fun ReminderScreen(
 ) {
     val calendarConnection = com.cagri.real.calendar.rememberCalendarConnection(reminders)
     com.cagri.real.calendar.CalendarPublicationPrompt(calendarConnection, reminders, reduceDynamicBlur)
+    com.cagri.real.ui.auth.GoogleProfileNamePrompt(reduceDynamicBlur)
     fun calendarSyncStatus(card: ReminderItem): Boolean? {
         // revision observes association/publication receipts without putting calendar IDs into card JSON.
         val revision = calendarConnection.revision
@@ -464,24 +492,23 @@ fun ReminderScreen(
     val pullState = remember { DetailPullDismissState() }
     val pullDistancePx = with(pullDensity) { 320.dp.toPx() }
     val pullFlingPx = with(pullDensity) { 700.dp.toPx() }
-    val currentPullRoute by rememberUpdatedState(routeNow)
-    LaunchedEffect(pullState, routeSeekState, pullDistancePx) {
+    LaunchedEffect(pullState, routeSeekState) {
         snapshotFlow { pullState.active to pullState.distancePx }.collectLatest { (active, distance) ->
             if (active) {
                 routeSeekState.seekTo(
                     (distance / pullDistancePx).coerceIn(0f, 1f),
-                    currentPullRoute.copy(detailId = null)
+                    ReminderRoute(category, customCategoryId, null)
                 )
             }
         }
     }
-    val detailPullDismiss = remember(routeSeekState, category, customCategoryId, detailId, pullDistancePx, pullFlingPx) {
+    val detailPullDismiss = remember(routeSeekState) {
         DetailPullDismiss(
             onStart = { pullState.distancePx = 0f; pullState.active = true },
             onDrag = { distance -> pullState.distancePx = distance },
             onEnd = { distance, velocity ->
                 pullState.active = false
-                val commit = shouldCommitDetailPull(distance, velocity, pullDistancePx, pullFlingPx)
+                val commit = distance / pullDistancePx >= 0.33f || velocity >= pullFlingPx
                 if (commit) {
                     detailId = null
                 } else {
@@ -513,7 +540,7 @@ fun ReminderScreen(
     }
     BackHandler(
         enabled = !showSettings && (
-            (detailId == null && (category != null || customCategoryId != null)) || (detailId != null && reduceAnimations)
+            category != null || customCategoryId != null || (detailId != null && reduceAnimations)
         )
     ) {
         if (detailId != null) detailId = null
@@ -531,18 +558,18 @@ fun ReminderScreen(
                     EnterTransition.None togetherWith ExitTransition.None
                 } else {
                     val enterAnim = fadeIn(
-                        tween(220, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                        tween(220, easing = RealMotion.Standard)
                     ) + scaleIn(
-                        tween(260, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
+                        tween(260, easing = RealMotion.Standard),
                         initialScale = 0.98f
                     ) + slideInVertically(
-                        tween(260, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                        tween(260, easing = RealMotion.Standard)
                     ) { it / 32 }
 
                     val exitAnim = fadeOut(
-                        tween(180, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                        tween(180, easing = RealMotion.Exit)
                     ) + scaleOut(
-                        tween(200, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
+                        tween(200, easing = RealMotion.Exit),
                         targetScale = 0.98f
                     )
 
@@ -614,9 +641,9 @@ fun ReminderScreen(
                                 when {
                                     isOpeningDetail -> {
                                         fadeIn(
-                                            tween(260, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                            tween(260, easing = RealMotion.Standard)
                                         ) togetherWith fadeOut(
-                                            tween(180, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                            tween(180, easing = RealMotion.Exit)
                                         )
                                     }
                                     isClosingDetail && !hasReturnCard(targetState, initialState.detailId) -> {
@@ -624,40 +651,40 @@ fun ReminderScreen(
                                     }
                                     isClosingDetail -> {
                                         fadeIn(
-                                            tween(200, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                            tween(200, easing = RealMotion.Standard)
                                         ) togetherWith fadeOut(
-                                            tween(240, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                            tween(240, easing = RealMotion.Exit)
                                         )
                                     }
                                     isClosingCategoryToHome -> {
                                         val enter = fadeIn(
-                                            tween(220, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                            tween(220, easing = RealMotion.Standard)
                                         ) + scaleIn(
-                                            tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
+                                            tween(240, easing = RealMotion.Standard),
                                             initialScale = 0.98f
                                         )
                                         val exit = fadeOut(
-                                            tween(180, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                            tween(180, easing = RealMotion.Exit)
                                         ) + scaleOut(
-                                            tween(200, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
+                                            tween(200, easing = RealMotion.Exit),
                                             targetScale = 0.98f
                                         )
                                         enter togetherWith exit
                                     }
                                     else -> {
                                         val enter = fadeIn(
-                                            tween(220, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                            tween(220, easing = RealMotion.Standard)
                                         ) + scaleIn(
-                                            tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
+                                            tween(240, easing = RealMotion.Standard),
                                             initialScale = 0.98f
                                         ) + slideInVertically(
-                                            tween(240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+                                            tween(240, easing = RealMotion.Standard)
                                         ) { it / 36 }
 
                                         val exit = fadeOut(
-                                            tween(170, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))
+                                            tween(170, easing = RealMotion.Exit)
                                         ) + scaleOut(
-                                            tween(200, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)),
+                                            tween(200, easing = RealMotion.Exit),
                                             targetScale = 0.98f
                                         )
 
@@ -680,6 +707,8 @@ fun ReminderScreen(
                                     reminder = reminder,
                                     calendarSyncPublished = calendarSyncStatus(reminder),
                                     onCalendarSyncClick = { calendarConnection.offerPublication(reminder.id) },
+                                    onRemoveGameBlock = { blockId -> onRemoveGameBlock(reminder.id, blockId) },
+                                    onAddGameBlock = { block -> onAddGameBlock(reminder.id, block) },
                                     incomingLocation = pendingLocationShare?.takeIf { it.reminderId == reminder.id }?.location,
                                     onIncomingLocationHandled = onLocationShareHandled,
                                     onRequestLocationShare = { onRequestLocationShare(reminder.id) },
@@ -745,7 +774,10 @@ fun ReminderScreen(
                                     onUpdateBuiltInCategoryColor = onUpdateBuiltInCategoryColor,
                                     draft = draft,
                                     alertAt = draftAlertAt, repeatRule = draftRepeatRule,
-                                    onAlertChange = { at, rule -> draftAlertAt = at; draftRepeatRule = rule },
+                                    onAlertChange = { at, rule ->
+                                        draftAlertAt = at; draftRepeatRule = rule
+                                        if (at == null) ComposerTimingDraft.clear()
+                                    },
                                     exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
                                     notificationsAllowed = notificationsAllowed,
                                     onRequestNotificationPermission = onRequestNotificationPermission,
@@ -772,6 +804,8 @@ fun ReminderScreen(
                                                 reminder = plannerReminder,
                                                 calendarSyncPublished = calendarSyncStatus(plannerReminder),
                                                 onCalendarSyncClick = { calendarConnection.offerPublication(plannerReminder.id) },
+                                                onRemoveGameBlock = { blockId -> onRemoveGameBlock(plannerReminder.id, blockId) },
+                                                onAddGameBlock = { block -> onAddGameBlock(plannerReminder.id, block) },
                                                 incomingLocation = pendingLocationShare?.takeIf { it.reminderId == plannerReminder.id }?.location,
                                                 onIncomingLocationHandled = onLocationShareHandled,
                                                 onRequestLocationShare = { onRequestLocationShare(plannerReminder.id) },
@@ -846,6 +880,7 @@ fun ReminderScreen(
                                          if (journalId != null) { onSetJournal(journalId, null, journalText); true } else false
                                      },
                                      onAddSuggestedReal = onAddSuggestedReal,
+                                     onAddGame = onAddGame,
                                      onUndoSuggestedReal = onUndoSuggestedReal,
                                      onAddReminder = { text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments, voiceRecordings, location, plannedDateEpochDay, quick24HourUntilAt, musicBlocks, mediaBlocks ->
                                          val createdId = onAddReminder(text, at, rule, catId, isChecklist, checklistItems, sendImmediateNotification, refUrl, attachments, voiceRecordings, location, plannedDateEpochDay, quick24HourUntilAt, musicBlocks, mediaBlocks)
@@ -928,6 +963,7 @@ private fun ReminderListScreen(
     voiceCardCallbacks: VoiceCardCallbacks = VoiceCardCallbacks(),
     onAddSuggestedReal: suspend (String, MusicBlock?, MediaBlock?, CardStackBlock?) -> Long? = { _, _, _, _ -> null },
     onUndoSuggestedReal: suspend (Long) -> Boolean = { false },
+    onAddGame: suspend (com.cagri.real.data.CardGameBlock) -> Long? = { null },
     isShareDraft: Boolean = false,
     onShareDraftChange: (Boolean) -> Unit = {},
     draftReferenceUrl: String? = null,
@@ -964,6 +1000,8 @@ private fun ReminderListScreen(
     val composerState = rememberReminderComposerState(category)
     val voiceState = rememberReminderVoiceState()
     var editing by composerState.editing
+    val latestEditing = rememberUpdatedState(editing)
+    val plainHomeCards = category == null && customCategory == null && com.cagri.real.ui.components.HomeCardStyle.isPlain(LocalContext.current)
     var editingBuiltInCategory by rememberSaveable { mutableStateOf<ReminderCategory?>(null) }
     var isChecklistMode by composerState.isChecklistMode
     var isVoiceDraft by composerState.isVoiceDraft
@@ -984,8 +1022,6 @@ private fun ReminderListScreen(
     var pendingMicrophoneAction by rememberSaveable { mutableStateOf(false) }
     var showHomeMood by rememberSaveable { mutableStateOf(false) }
     var showMoodTrackerHistory by rememberSaveable { mutableStateOf(false) }
-    var panoOrigin by remember { mutableStateOf<Offset?>(null) }
-    var yasamOrigin by remember { mutableStateOf<Offset?>(null) }
     var showPano by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(pendingPanoBoardId) { if (pendingPanoBoardId != null) showPano = true }
     var showHomeWidgets by rememberSaveable { mutableStateOf(false) }
@@ -1003,20 +1039,22 @@ private fun ReminderListScreen(
     var returnToYasamJournals by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { if (returnToYasamJournals) showHomeWidgets = true }
     var showPlanner by rememberSaveable { mutableStateOf(false) }
+    /** Set when the planner is opened from a category's "Hedefler" button: it opens on that category's goals. */
+    var plannerGoalCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     LaunchedEffect(showPlanner) { if (showPlanner) onPlannerOpened() }
     val systemCategoryEnter: EnterTransition = if (reduceAnimations) {
         EnterTransition.None
     } else {
         fadeIn(tween(220)) +
-            slideInVertically(tween(260, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f))) { it / 14 } +
-            scaleIn(initialScale = 0.985f, animationSpec = tween(260, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+            slideInVertically(tween(260, easing = RealMotion.Emphasized)) { it / 14 } +
+            scaleIn(initialScale = 0.985f, animationSpec = tween(260, easing = RealMotion.Emphasized))
     }
     val systemCategoryExit: ExitTransition = if (reduceAnimations) {
         ExitTransition.None
     } else {
         fadeOut(tween(180)) +
-            slideOutVertically(tween(220, easing = CubicBezierEasing(0.4f, 0f, 1f, 1f))) { it / 14 } +
-            scaleOut(targetScale = 0.985f, animationSpec = tween(220, easing = CubicBezierEasing(0.4f, 0f, 1f, 1f)))
+            slideOutVertically(tween(220, easing = RealMotion.Exit)) { it / 14 } +
+            scaleOut(targetScale = 0.985f, animationSpec = tween(220, easing = RealMotion.Exit))
     }
     var showMoodSuggestions by remember { mutableStateOf(false) }
     var activeSuggestionMood by remember { mutableStateOf<JournalMood?>(null) }
@@ -1073,6 +1111,7 @@ private fun ReminderListScreen(
 
     var showCreateCategoryDialog by rememberSaveable { mutableStateOf(false) }
     var showEditCategoryDialog by rememberSaveable { mutableStateOf(false) }
+    var showPeopleSheet by rememberSaveable { mutableStateOf(false) }
     var isColorFilterExpanded by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val plannerRepository = remember(context) {
@@ -1085,8 +1124,11 @@ private fun ReminderListScreen(
     var sortOrder by rememberSaveable {
         val saved = uiPreferences.getString("sort_order", null)
         mutableStateOf(
-            if (saved == "reminder_time") ReminderSortOrder.REMINDER_TIME
-            else ReminderSortOrder.RECENTLY_ADDED
+            when (saved) {
+                "reminder_time" -> ReminderSortOrder.REMINDER_TIME
+                "oldest_first" -> ReminderSortOrder.OLDEST_FIRST
+                else -> ReminderSortOrder.RECENTLY_ADDED
+            }
         )
     }
     // Category screens have their own 3-way sort (newest on top / newest at the bottom / nearest date).
@@ -1103,7 +1145,11 @@ private fun ReminderListScreen(
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             when (key) {
                 "home_category_preview_count_v1" -> homeCategoryPreviewCount = uiPreferences.getInt(key, 4).coerceAtLeast(1)
-                "sort_order" -> sortOrder = if (uiPreferences.getString(key, null) == "reminder_time") ReminderSortOrder.REMINDER_TIME else ReminderSortOrder.RECENTLY_ADDED
+                "sort_order" -> sortOrder = when (uiPreferences.getString(key, null)) {
+                    "reminder_time" -> ReminderSortOrder.REMINDER_TIME
+                    "oldest_first" -> ReminderSortOrder.OLDEST_FIRST
+                    else -> ReminderSortOrder.RECENTLY_ADDED
+                }
                 "category_sort_order" -> categorySortOrder = when (uiPreferences.getString(key, null)) {
                     "oldest_first" -> ReminderSortOrder.OLDEST_FIRST
                     "nearest_date" -> ReminderSortOrder.NEAREST_DATE
@@ -1115,7 +1161,13 @@ private fun ReminderListScreen(
         onDispose { uiPreferences.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     val effectiveSortOrder = if (category != null || customCategory != null) categorySortOrder else sortOrder
+    var homeSortHint by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    LaunchedEffect(homeSortHint?.first) {
+        if (homeSortHint != null) { kotlinx.coroutines.delay(1600); homeSortHint = null }
+    }
     var showCategoryProgress by rememberSaveable(category?.name, customCategory?.id) { mutableStateOf(false) }
+    /** "Bu kategoride ara" in the category header: filters the category's cards while typing. */
+    var categoryQuery by rememberSaveable(category?.name, customCategory?.id) { mutableStateOf("") }
     var saving by composerState.saving
     val whatsAppConsentRepo = remember { WhatsAppConsentRepository(context) }
     val whatsAppRecipientRepo = remember { WhatsAppRecipientRepository(context) }
@@ -1169,9 +1221,6 @@ private fun ReminderListScreen(
         }
     }
     val listState = rememberLazyListState()
-    val categoryTitles = rememberCategoryTitleMotion(
-        listState, category != null || customCategory != null, reduceAnimations, reduceDynamicBlur
-    )
     val extendLiquidArea by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     val scene = rememberGraphicsLayer()
     var scenePosition by remember { mutableStateOf(Offset.Zero) }
@@ -1214,7 +1263,8 @@ private fun ReminderListScreen(
     val composerInput = ReminderComposerSnapshot(draft, alertAt, repeatRule, category, customCategory,
         customCategories, reminders, draftAttachments, draftReferenceUrl, reduceAnimations)
     val composerCallbacks = ReminderComposerCallbacks(onAddReminder, onDraftChange, onAlertChange,
-        onDraftAttachmentsChange, onDraftReferenceUrlChange, onShareDraftChange, onSetRepeatPattern)
+        onDraftAttachmentsChange, onDraftReferenceUrlChange, onShareDraftChange, onSetRepeatPattern,
+        com.cagri.real.ui.components.LocalSetReminderTiming.current)
     val latestVoiceReminders by rememberUpdatedState(reminders)
     val composerServices = ReminderComposerServices(context, view, focusManager, keyboard, scope,
         plannerRepository, entryTracker, whatsAppRecipientRepo, { latestVoiceReminders })
@@ -1244,7 +1294,8 @@ private fun ReminderListScreen(
         }
     }
     val expanded = editing || (voice.phase != VoicePhase.Idle && !voiceOnHome) || alertAt != null || requiresTimeSelection || (draftCategoryId != null && draftCategoryId != customCategory?.id) || isChecklistMode || isVoiceDraft || isShareDraft || sendImmediateNotification || pendingNotificationAction != PendingNotificationAction.NONE || draftAttachments.isNotEmpty()
-    val showComposer = category != ReminderCategory.JournalEntries
+    // A view-only shared category (Sınırlı) cannot get new cards.
+    val showComposer = category != ReminderCategory.JournalEntries && customCategory?.isReadOnlyShared != true
     LaunchedEffect(showDatePicker, showNotificationPermissionSheet, refocus) {
         if (!showDatePicker && !showNotificationPermissionSheet && refocus) { refocus = false; inputFocus.requestFocus(); keyboard?.show() }
     }
@@ -1297,22 +1348,29 @@ private fun ReminderListScreen(
         }
         else -> 54.dp
     }
-    val composerHeight by animateDpAsState(
+    // composerHeight / bottomGap animate on every composer open/close. They are kept as State and read
+    // only in layout lambdas (deferredHeight / deferredBottomPadding / graphicsLayer), so the animation
+    // relayouts the dock instead of recomposing this whole screen on every frame.
+    val composerHeightState = animateDpAsState(
         targetComposerHeight,
-        if (reduceAnimations) snap() else tween(280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+        if (reduceAnimations) snap() else tween(280, easing = RealMotion.Emphasized),
         label = "composerHeight"
     )
     val labsProgress by animateFloatAsState(
         targetValue = if (isLabsOpen && expanded) 1f else 0f,
-        animationSpec = if (reduceAnimations) snap() else tween(280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+        animationSpec = if (reduceAnimations) snap() else tween(280, easing = RealMotion.Emphasized),
         label = "labsProgress"
     )
-    val bottomGap by animateDpAsState(
+    val bottomGapState = animateDpAsState(
         if (expanded) 20.dp else 12.dp,
         if (reduceAnimations) snap() else tween(250),
         label = "bottomGap"
     )
-    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    // Only the open/closed flip matters; reading the raw IME height here recomposed the whole
+    // screen on every frame of the keyboard animation.
+    val imeInsets = WindowInsets.ime
+    val imeDensity = LocalDensity.current
+    val keyboardVisible by remember(imeInsets, imeDensity) { derivedStateOf { imeInsets.getBottom(imeDensity) > 0 } }
     var keyboardWasVisible by remember { mutableStateOf(false) }
     LaunchedEffect(keyboardVisible) {
         if (keyboardVisible) keyboardWasVisible = true
@@ -1432,8 +1490,53 @@ private fun ReminderListScreen(
     val customCategoriesById = lists.customCategoriesById
     val baseActive = lists.baseActive
     val baseCompleted = lists.baseCompleted
-    val active = lists.active
-    val completed = lists.completed
+    val categorySearch = categoryQuery.trim().lowercase(java.util.Locale.forLanguageTag("tr"))
+    val searchingCategory = categorySearch.isNotEmpty() && (category != null || customCategory != null)
+    fun matchesCategorySearch(r: ReminderItem): Boolean {
+        val tr = java.util.Locale.forLanguageTag("tr")
+        return r.text.lowercase(tr).contains(categorySearch) || r.checklistItems.any { it.text.lowercase(tr).contains(categorySearch) }
+    }
+    // Phone-calendar events filed under this category ("Kategorize et") join its cards, read-only (negative ids).
+    // Home reads them too, for the category counts.
+    val calendarCategoryCards = if (customCategory != null || category == null) com.cagri.real.calendar.rememberCategorizedCalendarCards(reminders)
+        else com.cagri.real.calendar.CategorizedCalendarCards()
+    val calendarCategoryCounts = remember(calendarCategoryCards) {
+        calendarCategoryCards.items.mapNotNull { it.customCategoryId }.groupingBy { it }.eachCount()
+    }
+    val allCategoryCalendarItems = remember(calendarCategoryCards, customCategory?.id) {
+        if (customCategory == null) emptyList() else calendarCategoryCards.items.filter { it.customCategoryId == customCategory.id }
+    }
+    // The coming year only, so endless calendars (birthdays…) stay bounded.
+    val categoryCalendarItems = allCategoryCalendarItems
+    var openedCalendarEvent by remember { mutableStateOf<com.cagri.real.calendar.CalendarOccurrence?>(null) }
+    openedCalendarEvent?.let { event ->
+        com.cagri.real.calendar.CalendarEventDetailHost(
+            event = event, reminders = reminders, customCategories = customCategories, reduceDynamicBlur = reduceDynamicBlur,
+            onCreateCalendarCard = { title, categoryId ->
+                onAddReminder(title, null, RecurrenceRule.NONE, categoryId, false,
+                    emptyList(), false, null, emptyList(), emptyList(), null, null, null, emptyList(), emptyList())
+            },
+            onCreateCategory = { name ->
+                val used = customCategories.mapTo(HashSet()) { it.accentStart }
+                val color = com.cagri.real.ui.components.ReminderColorDisplayOrder.drop(2).firstOrNull { it !in used } ?: 9
+                onCreateCategory(name, "NONE", color, null, false, false, null, null, null)
+            },
+            onOpenCard = { onOpenReminder(it) },
+            onDismiss = { openedCalendarEvent = null }
+        )
+    }
+    // Home: the phone calendar's next 7 / 14 days as cards too (Ayarlar → Ana ekranda takvim), categorized ones with
+    // their category stripe. Hidden-from-general-lists categories stay out, like REAL cards.
+    val homeCalendarDays = if (category == null && customCategory == null) com.cagri.real.calendar.CalendarHomeDays.get(context) else 0
+    val homeCalendarItems = remember(calendarCategoryCards, homeCalendarDays, customCategoriesById) {
+        calendarCategoryCards.within(homeCalendarDays).filter { item ->
+            item.customCategoryId?.let { customCategoriesById[it] }?.hideFromGeneralLists != true
+        }
+    }
+    val active = (if (searchingCategory) lists.active.filter(::matchesCategorySearch) else lists.active) +
+        (if (searchingCategory) categoryCalendarItems.filter(::matchesCategorySearch) else categoryCalendarItems) +
+        homeCalendarItems
+    val completed = if (searchingCategory) lists.completed.filter(::matchesCategorySearch) else lists.completed
     val journalGroups = lists.journalGroups
     val isHome = category == null && customCategory == null
     val realPetHomeSurfaceActive = isHome &&
@@ -1476,9 +1579,26 @@ private fun ReminderListScreen(
             }
         }
     }
-    val completedPreview = remember(completed, isHome) {
-        if (isHome) completed.take(HOME_COMPLETED_PREVIEW_LIMIT) else completed
+    // Home "Tamamlandı": 3 cards (the 3rd fades under glass) until "Daha fazla" opens 10, then 10 more each time.
+    // Leaving Home (category, planner, Pano, Yaşam) or the app brings it back to 3.
+    var homeCompletedShown by remember { mutableIntStateOf(4) }
+    // Category screens use the same 3 + "Daha fazla" list (not "Tamamlananlar" itself, where everything is completed).
+    val limitCompleted = category != ReminderCategory.Completed
+    LaunchedEffect(isHome, category, customCategory?.id, showPlanner, showPano, showHomeWidgets) {
+        homeCompletedShown = 4
     }
+    val homeLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(homeLifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) homeCompletedShown = 4
+        }
+        homeLifecycle.addObserver(observer)
+        onDispose { homeLifecycle.removeObserver(observer) }
+    }
+    val completedPreview = remember(completed, limitCompleted, homeCompletedShown) {
+        if (limitCompleted) completed.take(homeCompletedShown) else completed
+    }
+    val homeCompletedMore = limitCompleted && completed.size > homeCompletedShown
     val statusHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     DisposableEffect(category, customCategory, categoryColorFilter) {
@@ -1509,19 +1629,40 @@ private fun ReminderListScreen(
         com.cagri.real.contextcards.HomeContextCard(
                         moodEntries = allMoodTrackerEntries,
                         reduceAnimations = reduceAnimations,
-                        onOpenWater = { yasamOrigin = null; widgetDestination = "water"; showHomeWidgets = true },
+                        onOpenWater = { widgetDestination = "water"; showHomeWidgets = true },
                         onOpenMood = {
                             homeMoodSelection = JournalMood.NEUTRAL
                             moodOpenedFromContextCard = true
                             showHomeMood = true
                         },
-                        onOpenBooks = { yasamOrigin = null; widgetDestination = "books"; showHomeWidgets = true },
-                        onOpenMedia = { yasamOrigin = null; widgetDestination = "media"; showHomeWidgets = true },
+                        onOpenBooks = { widgetDestination = "books"; showHomeWidgets = true },
+                        onOpenMedia = { widgetDestination = "media"; showHomeWidgets = true },
                         active = isHome
                     ) { activeContextType, renderContextCard ->
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize()
+                // Keyboard open: a tap on the list only closes the keyboard; it does not open the category or card under
+                // the finger. Scrolling still works.
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial, requireUnconsumed = false)
+                        if (!latestEditing.value) return@awaitEachGesture
+                        var moved = false
+                        while (true) {
+                            val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                            if (!change.pressed) {
+                                if (!moved) {
+                                    change.consume()
+                                    focusManager.clearFocus(); keyboard?.hide()
+                                }
+                                break
+                            }
+                        }
+                    }
+                }
                 .onGloballyPositioned { scenePosition = it.positionInRoot() }
                 .drawWithContent {
                     if (com.cagri.real.ui.components.shouldCaptureBackdrop(designStyle, reduceDynamicBlur, Build.VERSION.SDK_INT)) {
@@ -1533,11 +1674,11 @@ private fun ReminderListScreen(
                         alpha = coldStartProgress.value
                     }
                 },
-            contentPadding = PaddingValues(
-                top = statusHeight,
-                bottom = if (showComposer) composerHeight + bottomGap + 24.dp +
+            contentPadding = com.cagri.real.ui.components.DeferredBottomPaddingValues(statusHeight) {
+                if (homeCompletedMore && completed.isNotEmpty() && category != ReminderCategory.JournalEntries) 0.dp
+                else if (showComposer) composerHeightState.value + bottomGapState.value + 24.dp +
                     (if (isHome) HomeDockExtraBottomSpace else 0.dp) else 24.dp
-            )
+            }
         ) {
             item(key = "header") {
                 val headerAlpha by animateFloatAsState(
@@ -1593,141 +1734,107 @@ private fun ReminderListScreen(
                         }
                     }
                 } else {
-                    AnimatedContent(
-                        targetState = isColorFilterExpanded,
-                        transitionSpec = {
-                            if (reduceAnimations) {
-                                EnterTransition.None togetherWith ExitTransition.None
-                            } else {
-                                (fadeIn(tween(200, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))) +
-                                    scaleIn(tween(200, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)), initialScale = 0.96f)) togetherWith
-                                (fadeOut(tween(160, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f))) +
-                                    scaleOut(tween(160, easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)), targetScale = 0.96f))
+                    // Category screen: the category colour as a full-width header (CategoryFullHero); the colour filter
+                    // opens under it.
+                    Column(Modifier.fillMaxWidth()) {
+                        // Pressing the sort arrow says what it now does, on the right under the header, then fades.
+                        var sortHint by remember { mutableStateOf<Pair<Int, String>?>(null) }
+                        LaunchedEffect(sortHint?.first) {
+                            if (sortHint != null) { delay(1600); sortHint = null }
+                        }
+                        val saveCategorySort: (ReminderSortOrder) -> Unit = { next ->
+                            sortHint = (sortHint?.first ?: 0) + 1 to when (next) {
+                                ReminderSortOrder.OLDEST_FIRST -> "Son eklenen altta"
+                                ReminderSortOrder.NEAREST_DATE, ReminderSortOrder.REMINDER_TIME -> "Tarihi en yakın üstte"
+                                else -> "Son eklenen üstte"
                             }
-                        },
-                        label = "categoryHeaderFilterTransition"
-                    ) { inFilterMode ->
-                        if (inFilterMode) {
-                            CategoryColorSelectorHeader(
-                                selectedColorFilter = categoryColorFilter,
-                                onSelectColor = { selected ->
-                                    onCategoryColorFilterChange(selected)
-                                    isColorFilterExpanded = false
-                                },
-                                onClose = { isColorFilterExpanded = false },
-                                reduceAnimations = reduceAnimations
+                            categorySortOrder = next
+                            uiPreferences.edit().putString(
+                                "category_sort_order",
+                                when (next) {
+                                    ReminderSortOrder.OLDEST_FIRST -> "oldest_first"
+                                    ReminderSortOrder.NEAREST_DATE -> "nearest_date"
+                                    else -> "recently_added"
+                                }
+                            ).let { com.cagri.real.platform.android.sync.SyncLocal.saveUiPreference(uiPreferences, it) }
+                        }
+                        com.cagri.real.ui.components.CategoryFullHero(
+                            category = category, customCategory = customCategory,
+                            override = category?.let { builtInCategoryColors[it] },
+                            count = baseActive.size + baseCompleted.size + allCategoryCalendarItems.size,
+                            todayCount = baseActive.count { r ->
+                                r.alertAt?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() == today } == true ||
+                                    r.plannedDateEpochDay == today.toEpochDay()
+                            },
+                            detail = remember(baseActive, allCategoryCalendarItems, today) {
+                                categoryHeaderDetail(baseActive + allCategoryCalendarItems, today)
+                            },
+                            statusTop = statusHeight,
+                            query = categoryQuery,
+                            onQueryChange = { categoryQuery = it },
+                            onBack = onBack,
+                            progress = categoryProgressStats,
+                            progressOpen = showCategoryProgress,
+                            reduceAnimations = reduceAnimations,
+                            hasFilter = categoryColorFilter != null,
+                            onFilter = { isColorFilterExpanded = true },
+                            onEdit = {
+                                if (customCategory?.isSharedMirror == true) com.cagri.real.ui.components.RealToast.show(context, "Bu kategoriyi sadece sahibi düzenleyebilir.")
+                                else if (customCategory != null) showEditCategoryDialog = true else editingBuiltInCategory = category
+                            },
+                            onPeople = customCategory?.let { { showPeopleSheet = true } },
+                            editLabel = if (customCategory != null) "Kategoriyi düzenle" else "Kategori rengini düzenle",
+                            onGoals = customCategory?.let { c -> { plannerGoalCategoryId = c.id; showPlanner = true } },
+                            sharedTransitionScope = if (categorySharedTransitionsEnabled) sharedTransitionScope else null,
+                            animatedVisibilityScope = if (categorySharedTransitionsEnabled) animatedVisibilityScope else null,
+                            actions = { foreground ->
+                                com.cagri.real.ui.components.CategoryHeroActions(
+                                    sortOrder = categorySortOrder,
+                                    onSortSelected = saveCategorySort,
+                                    progressFraction = categoryProgressStats?.fraction,
+                                    progressOpen = showCategoryProgress,
+                                    onProgressClick = { showCategoryProgress = !showCategoryProgress },
+                                    foreground = foreground,
+                                    reduceAnimations = reduceAnimations,
+                                    showSort = category != ReminderCategory.JournalEntries,
+                                    ringTint = foreground
+                                )
+                            }
+                        )
+                        AnimatedVisibility(
+                            visible = sortHint != null,
+                            enter = if (reduceAnimations) fadeIn(tween(0)) else fadeIn(tween(160)) + expandVertically(tween(200)),
+                            exit = if (reduceAnimations) fadeOut(tween(0)) else fadeOut(tween(260)) + shrinkVertically(tween(260))
+                        ) {
+                            var shown by remember { mutableStateOf("") }
+                            sortHint?.second?.let { shown = it }
+                            Text(
+                                shown, color = Color(0xFFB8B9C2), fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 24.dp, top = 10.dp)
                             )
-                        } else if (customCategory != null) {
-                            Row(
-                                Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val categoryHeaderSurface: @Composable (Modifier) -> Unit = { chromeModifier ->
-                                    com.cagri.real.ui.components.DesignPanel(
-                                        scene, { scenePosition }, chromeModifier, corners = 18.dp,
-                                        // Header is recorded inside scene: sampling scene here creates a self-reference.
-                                        // Use the existing safe glass fallback for every category header control.
-                                        designStyle = designStyle, reduceDynamicBlur = true,
-                                        liquidDynamic = true, liquidDock = true
-                                    ) {}
-                                }
-                                CategoryGlassBackButton(onBack, surface = categoryHeaderSurface)
-                                Spacer(Modifier.weight(1f))
-                                if (designStyle == DesignStyle.LiquidGlass) {
-                                    CategoryGlassActions(
-                                        surface = categoryHeaderSurface,
-                                        hasFilter = categoryColorFilter != null,
-                                        selectedColorIndex = categoryColorFilter,
-                                        onFilterClick = { isColorFilterExpanded = true },
-                                        onEditClick = { showEditCategoryDialog = true },
-                                        editContentDescription = "Kategoriyi düzenle",
-                                        sortOrder = categorySortOrder,
-                                        onSortSelected = { next ->
-                                            categorySortOrder = next
-                                            uiPreferences.edit().putString(
-                                                "category_sort_order",
-                                                when (next) {
-                                                    ReminderSortOrder.OLDEST_FIRST -> "oldest_first"
-                                                    ReminderSortOrder.NEAREST_DATE -> "nearest_date"
-                                                    else -> "recently_added"
-                                                }
-                                            ).let { com.cagri.real.platform.android.sync.SyncLocal.saveUiPreference(uiPreferences, it) }
-                                        },
-                                        showSort = categoryProgressStats == null && category != ReminderCategory.JournalEntries,
-                                        progressFraction = null,
-                                        progressOpen = showCategoryProgress,
-                                        onProgressClick = { showCategoryProgress = !showCategoryProgress }
-                                    )
-                                } else {
-                                    CategoryColorFilterButton(
-                                        hasFilter = categoryColorFilter != null,
-                                        selectedColorIndex = categoryColorFilter,
-                                        onClick = { isColorFilterExpanded = true }
-                                    )
-                                    CategoryEditButton(
-                                        onClick = { showEditCategoryDialog = true },
-                                        contentDescription = "Kategoriyi düzenle"
-                                    )
-                                }
-                            }
-                        } else if (category != null) {
-                            Row(
-                                Modifier.fillMaxWidth().padding(top = 10.dp, end = 16.dp, start = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val categoryHeaderSurface: @Composable (Modifier) -> Unit = { chromeModifier ->
-                                    com.cagri.real.ui.components.DesignPanel(
-                                        scene, { scenePosition }, chromeModifier, corners = 18.dp,
-                                        // Header is recorded inside scene: sampling scene here creates a self-reference.
-                                        // Use the existing safe glass fallback for every category header control.
-                                        designStyle = designStyle, reduceDynamicBlur = true,
-                                        liquidDynamic = true, liquidDock = true
-                                    ) {}
-                                }
-                                CategoryGlassBackButton(onBack, surface = categoryHeaderSurface)
-                                Spacer(Modifier.weight(1f))
-                                if (designStyle == DesignStyle.LiquidGlass) {
-                                    CategoryGlassActions(
-                                        surface = categoryHeaderSurface,
-                                        hasFilter = categoryColorFilter != null,
-                                        selectedColorIndex = categoryColorFilter,
-                                        onFilterClick = { isColorFilterExpanded = true },
-                                        onEditClick = { editingBuiltInCategory = category },
-                                        editContentDescription = "Kategori rengini düzenle",
-                                        sortOrder = categorySortOrder,
-                                        onSortSelected = { next ->
-                                            categorySortOrder = next
-                                            uiPreferences.edit().putString(
-                                                "category_sort_order",
-                                                when (next) {
-                                                    ReminderSortOrder.OLDEST_FIRST -> "oldest_first"
-                                                    ReminderSortOrder.NEAREST_DATE -> "nearest_date"
-                                                    else -> "recently_added"
-                                                }
-                                            ).let { com.cagri.real.platform.android.sync.SyncLocal.saveUiPreference(uiPreferences, it) }
-                                        },
-                                        showSort = categoryProgressStats == null && category != ReminderCategory.JournalEntries,
-                                        progressFraction = null,
-                                        progressOpen = showCategoryProgress,
-                                        onProgressClick = { showCategoryProgress = !showCategoryProgress }
-                                    )
-                                } else {
-                                    CategoryColorFilterButton(
-                                        hasFilter = categoryColorFilter != null,
-                                        selectedColorIndex = categoryColorFilter,
-                                        onClick = { isColorFilterExpanded = true }
-                                    )
-                                    CategoryEditButton(
-                                        onClick = { editingBuiltInCategory = category },
-                                        contentDescription = "Kategori rengini düzenle"
-                                    )
-                                }
+                        }
+                        AnimatedVisibility(
+                            visible = isColorFilterExpanded,
+                            enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(200)) + expandVertically(tween(240)),
+                            exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(160)) + shrinkVertically(tween(200))
+                        ) {
+                            Box(Modifier.padding(top = 12.dp)) {
+                                CategoryColorSelectorHeader(
+                                    selectedColorFilter = categoryColorFilter,
+                                    onSelectColor = { selected ->
+                                        onCategoryColorFilterChange(selected)
+                                        isColorFilterExpanded = false
+                                    },
+                                    onClose = { isColorFilterExpanded = false },
+                                    reduceAnimations = reduceAnimations
+                                )
                             }
                         }
                     }
                 }
                 }
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(if (category == null && customCategory == null) 22.dp else 18.dp))
             }
             if (category == null && customCategory == null) {
                 item(key = "categories") {
@@ -1736,6 +1843,7 @@ private fun ReminderListScreen(
                         animatedVisibilityScope = if (categorySharedTransitionsEnabled) animatedVisibilityScope else null,
                         listState = listState,
                         reminders = reminders,
+                        calendarCounts = calendarCategoryCounts,
                         today = today,
                         categoryOrderKeys = categoryOrderKeys,
                         previewCount = homeCategoryPreviewCount,
@@ -1788,84 +1896,46 @@ private fun ReminderListScreen(
                                 Box(Modifier.size(7.dp).background(type.accent(), CircleShape))
                             }
                         }
-                        HomeSortControl(
+                        // The category screen's sort arrow: newest on top → newest at the bottom → nearest date.
+                        com.cagri.real.ui.components.CategoryHeroActions(
                             sortOrder = sortOrder,
-                            onToggleSortOrder = {
-                                val next = if (sortOrder == ReminderSortOrder.RECENTLY_ADDED) {
-                                    ReminderSortOrder.REMINDER_TIME
-                                } else {
-                                    ReminderSortOrder.RECENTLY_ADDED
+                            onSortSelected = { picked ->
+                                val next = if (picked == ReminderSortOrder.NEAREST_DATE) ReminderSortOrder.REMINDER_TIME else picked
+                                homeSortHint = (homeSortHint?.first ?: 0) + 1 to when (next) {
+                                    ReminderSortOrder.OLDEST_FIRST -> "Son eklenen altta"
+                                    ReminderSortOrder.REMINDER_TIME -> "Tarihi en yakın üstte"
+                                    else -> "Son eklenen üstte"
                                 }
                                 sortOrder = next
                                 uiPreferences.edit().putString(
                                     "sort_order",
-                                    if (next == ReminderSortOrder.REMINDER_TIME) "reminder_time" else "recently_added"
+                                    when (next) {
+                                        ReminderSortOrder.REMINDER_TIME -> "reminder_time"
+                                        ReminderSortOrder.OLDEST_FIRST -> "oldest_first"
+                                        else -> "recently_added"
+                                    }
                                 ).let { com.cagri.real.platform.android.sync.SyncLocal.saveUiPreference(uiPreferences, it) }
                             },
+                            progressFraction = null,
+                            progressOpen = false,
+                            onProgressClick = {},
+                            foreground = Color(0xFFF2F2F4),
                             reduceAnimations = reduceAnimations
                         )
                     }
-                }
-            }
-            if (category != null || customCategory != null) {
-                item(key = "category_hero") {
-                    com.cagri.real.ui.components.CollectionCategoryCard(
-                        category = category, customCategory = customCategory,
-                        override = category?.let { builtInCategoryColors[it] },
-                        count = baseActive.size + baseCompleted.size,
-                        hero = true, reduceAnimations = reduceAnimations,
-                        heroActions = if (categoryProgressStats != null) { { foreground ->
-                            com.cagri.real.ui.components.CategoryHeroActions(
-                                sortOrder = categorySortOrder,
-                                onSortSelected = { next ->
-                                    categorySortOrder = next
-                                    uiPreferences.edit().putString(
-                                        "category_sort_order",
-                                        when (next) {
-                                            ReminderSortOrder.OLDEST_FIRST -> "oldest_first"
-                                            ReminderSortOrder.NEAREST_DATE -> "nearest_date"
-                                            else -> "recently_added"
-                                        }
-                                    ).let { com.cagri.real.platform.android.sync.SyncLocal.saveUiPreference(uiPreferences, it) }
-                                },
-                                progressFraction = categoryProgressStats.fraction,
-                                progressOpen = showCategoryProgress,
-                                onProgressClick = { showCategoryProgress = !showCategoryProgress },
-                                foreground = foreground,
-                                reduceAnimations = reduceAnimations
-                            )
-                        } } else null,
-                        sharedTransitionScope = if (categorySharedTransitionsEnabled) sharedTransitionScope else null,
-                        animatedVisibilityScope = if (categorySharedTransitionsEnabled) animatedVisibilityScope else null,
-                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 20.dp)
-                    )
-                }
-                if (categoryProgressStats != null) {
-                    item(key = "category_progress") {
-                        val resolvedCategoryColor = remember(category, customCategory, builtInCategoryColors) {
-                            val override = category?.let { builtInCategoryColors[it] }
-                            val solidArgb = customCategory?.customSolidColorArgb ?: override?.customSolidColorArgb
-                            if (solidArgb != null) {
-                                Color(solidArgb)
-                            } else {
-                                val startIndex = customCategory?.accentStart ?: override?.start
-                                startIndex?.let { ReminderColorChoices.getOrNull(it)?.color }
-                                    ?: (category ?: ReminderCategory.NoAlert).defaultStyle().upper
-                            }
-                        }
-                        AnimatedVisibility(
-                            visible = showCategoryProgress,
-                            enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(220)) + expandVertically(tween(280)),
-                            exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(160)) + shrinkVertically(tween(220))
-                        ) {
-                            CategoryProgressPanel(
-                                title = customCategory?.name ?: category?.title.orEmpty(),
-                                stats = categoryProgressStats,
-                                reduceAnimations = reduceAnimations,
-                                categoryColor = resolvedCategoryColor,
-                                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 20.dp)
-                            )
-                        }
+                    // What the arrow now does, on the right under it, then it fades.
+                    AnimatedVisibility(
+                        visible = homeSortHint != null,
+                        enter = if (reduceAnimations) fadeIn(tween(0)) else fadeIn(tween(160)) + expandVertically(tween(200)),
+                        exit = if (reduceAnimations) fadeOut(tween(0)) else fadeOut(tween(260)) + shrinkVertically(tween(260))
+                    ) {
+                        var shown by remember { mutableStateOf("") }
+                        homeSortHint?.second?.let { shown = it }
+                        Text(
+                            shown, color = Color(0xFFB8B9C2), fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 24.dp, bottom = 12.dp)
+                        )
                     }
                 }
             }
@@ -1905,7 +1975,6 @@ private fun ReminderListScreen(
                             reminder, onToggle = { onToggleCompleted(reminder.id) },
                             onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                             reduceAnimations = reduceAnimations,
-                            titleModifier = categoryTitles.title(reminder.id),
                             sharedTransitionScope = sharedTransitionScope,
                             animatedVisibilityScope = animatedVisibilityScope,
                             isSelectionMode = isSelectionMode,
@@ -1928,8 +1997,8 @@ private fun ReminderListScreen(
                             },
                             modifier = Modifier
                                 .then(if (reduceAnimations) Modifier else Modifier.animateItem(
-                                    placementSpec = RealMotion.smooth<IntOffset>(0.30f),
-                                    fadeInSpec = null,
+                                    placementSpec = RealMotion.smooth<IntOffset>(0.35f),
+                                    fadeInSpec = if (isNewlyCreated) null else tween(180),
                                     fadeOutSpec = tween(180)
                                 ))
                                 .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -1940,15 +2009,22 @@ private fun ReminderListScreen(
                 items(active, key = { it.id }, contentType = { "reminder" }) { reminder ->
                     val isSelected = reminder.id in selectedIds
                     val isNewlyCreated = entryTracker.isAnimating(reminder.id)
+                    // A phone-calendar event card: opens the event window; no completing, swiping or selecting.
+                    val fromCalendar = reminder.id < 0
                     val reminderCategory = remember(reminder.customCategoryId, customCategoriesById, customCategory) {
                         reminder.customCategoryId?.let { customCategoriesById[it] }
                             ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
                     }
+                    // Sınırlı access to a shared category: the card is only looked at.
+                    val viewOnly = fromCalendar || reminderCategory?.isReadOnlyShared == true
                     ReminderCard(
-                        reminder, onToggle = { onToggleCompleted(reminder.id) },
-                        onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
+                        reminder, onToggle = { if (!viewOnly) onToggleCompleted(reminder.id) },
+                        onOpen = {
+                            voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
+                            if (fromCalendar) openedCalendarEvent = calendarCategoryCards.occurrences[reminder.id]
+                            else onOpenReminder(reminder.id)
+                        },
                         reduceAnimations = reduceAnimations,
-                            titleModifier = categoryTitles.title(reminder.id),
                         sharedTransitionScope = sharedTransitionScope,
                         animatedVisibilityScope = animatedVisibilityScope,
                         isSelectionMode = isSelectionMode,
@@ -1959,47 +2035,60 @@ private fun ReminderListScreen(
                         showVoiceSummary = false,
                         showCategoryStripes = category == null && customCategory == null,
                         onLongClick = {
-                            if (!isCategorySelectionMode) {
+                            if (!isCategorySelectionMode && !viewOnly) {
                                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
                                 selectedCategoryIds = emptySet()
                                 selectedIds = selectedIds + reminder.id
                             }
                         },
                         onSelectToggle = {
-                            selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
+                            if (!viewOnly) selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
                         },
-                        onSwipeLeftTo24Hour = if (isHome) ({
-                            scope.launch { onMoveTo24Hour(reminder.id) }
-                        }) else null,
+                        onSwipeRightTo24Hour = when {
+                            viewOnly -> null
+                            plainHomeCards -> ({ RealHaptics.success(view); onToggleCompleted(reminder.id) })
+                            category != ReminderCategory.Today -> ({ scope.launch { onMoveTo24Hour(reminder.id) } })
+                            else -> null
+                        },
+                        swipeRightLabel = if (plainHomeCards) "Tamamla" else "Move 24 hour",
+                        // A completed card leaves the list; a repeating one stays (it moves to its next time).
+                        swipeRightKeepsCard = !plainHomeCards || reminder.hasRepeat,
+                        plainStyle = plainHomeCards,
+                        onSwipeLeftDelete = if (viewOnly) null else ({ onDeleteReminders(setOf(reminder.id)) }),
                         modifier = Modifier
                             .then(if (reduceAnimations) Modifier else Modifier.animateItem(
-                                placementSpec = RealMotion.smooth<IntOffset>(0.30f),
-                                fadeInSpec = null,
+                                placementSpec = RealMotion.smooth<IntOffset>(0.35f),
+                                fadeInSpec = if (isNewlyCreated) null else tween(180),
                                 fadeOutSpec = tween(180)
                             ))
                             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                     )
                 }
             }
+            if (isHome && homeCompletedMore) {
+                item(key = "context_card") {
+                    renderContextCard()
+                }
+            }
             if (completed.isNotEmpty() && category != ReminderCategory.JournalEntries) {
                 item(key = "completed_heading") {
                     Spacer(Modifier.height(18.dp)); SectionTitle("Tamamlandı")
                 }
-                if (isHome) {
+                if (limitCompleted) {
                     item(key = "home_completed_preview_container") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .then(if (reduceAnimations) Modifier else Modifier.animateItem(
-                                    placementSpec = RealMotion.smooth<IntOffset>(0.30f),
-                                    fadeInSpec = null,
+                                    placementSpec = RealMotion.smooth<IntOffset>(0.35f),
+                                    fadeInSpec = tween(180),
                                     fadeOutSpec = tween(180)
                                 ))
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .then(if (reduceAnimations) Modifier else Modifier.animateContentSize(tween(240, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))))
+                                    .then(if (reduceAnimations) Modifier else Modifier.animateContentSize(tween(240, easing = RealMotion.Emphasized)))
                             ) {
                                 completedPreview.forEachIndexed { index, reminder ->
                                     key(reminder.id) {
@@ -2008,18 +2097,26 @@ private fun ReminderListScreen(
                                             reminder.customCategoryId?.let { customCategoriesById[it] }
                                                 ?: if (reminder.customCategoryId == customCategory?.id) customCategory else null
                                         }
+                                        // The last card shown, while more remain, sits "under glass": blurred, faded, with "Daha fazla" on it.
+                                        val underGlass = homeCompletedMore && index == completedPreview.lastIndex
+                                        // The card under glass leaves room above it for "Daha fazla", just over the dock.
+                                        Box(Modifier.fillMaxWidth().then(if (underGlass) Modifier.padding(top = 4.dp) else Modifier)) {
                                         ReminderCard(
                                             reminder, onToggle = { onToggleCompleted(reminder.id) },
                                             onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                                             reduceAnimations = reduceAnimations,
-                            titleModifier = categoryTitles.title(reminder.id),
                                             sharedTransitionScope = sharedTransitionScope,
                                             animatedVisibilityScope = animatedVisibilityScope,
                                             isSelectionMode = isSelectionMode,
                                             isSelected = isSelected,
                                             customCategory = reminderCategory,
                                             showVoiceSummary = false,
-                                            showCategoryStripes = true,
+                                            showCategoryStripes = category == null && customCategory == null,
+                                            // Sade kartlar: no circle here either; a right swipe undoes the completion.
+                                            plainStyle = plainHomeCards,
+                                            onSwipeRightTo24Hour = if (plainHomeCards && !underGlass) ({ onToggleCompleted(reminder.id) }) else null,
+                                            swipeRightLabel = "Geri al",
+                                            swipeRightKeepsCard = false,
                                             onLongClick = {
                                                 if (!isCategorySelectionMode) {
                                                     voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
@@ -2031,7 +2128,27 @@ private fun ReminderListScreen(
                                                 selectedIds = if (isSelected) selectedIds - reminder.id else selectedIds + reminder.id
                                             },
                                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                                                .then(if (underGlass) Modifier
+                                                    .graphicsLayer { alpha = 0.5f }
+                                                    .blur(7.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded) else Modifier)
                                         )
+                                        if (underGlass) {
+                                            // Swallow taps on the faded card; only the pill acts.
+                                            Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { } })
+                                            Text(
+                                                "Daha fazla",
+                                                color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.align(Alignment.TopCenter)
+                                                    .clip(RoundedCornerShape(50))
+                                                    .background(Color(0xCC1C1D22))
+                                                    .border(0.7.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
+                                                    .clickable(role = Role.Button) {
+                                                        homeCompletedShown = if (homeCompletedShown < 11) 11 else homeCompletedShown + 10
+                                                    }
+                                                    .padding(horizontal = 18.dp, vertical = 9.dp)
+                                            )
+                                        }
+                                        }
                                     }
                                 }
                             }
@@ -2048,7 +2165,6 @@ private fun ReminderListScreen(
                             reminder, onToggle = { onToggleCompleted(reminder.id) },
                             onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
                             reduceAnimations = reduceAnimations,
-                            titleModifier = categoryTitles.title(reminder.id),
                             sharedTransitionScope = sharedTransitionScope,
                             animatedVisibilityScope = animatedVisibilityScope,
                             isSelectionMode = isSelectionMode,
@@ -2056,6 +2172,10 @@ private fun ReminderListScreen(
                             customCategory = reminderCategory,
                             showVoiceSummary = false,
                             showCategoryStripes = false,
+                            plainStyle = plainHomeCards,
+                            onSwipeRightTo24Hour = if (plainHomeCards) ({ onToggleCompleted(reminder.id) }) else null,
+                            swipeRightLabel = "Geri al",
+                            swipeRightKeepsCard = false,
                             onLongClick = {
                                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
                                 selectedCategoryIds = emptySet()
@@ -2066,8 +2186,8 @@ private fun ReminderListScreen(
                             },
                             modifier = Modifier
                                 .then(if (reduceAnimations) Modifier else Modifier.animateItem(
-                                    placementSpec = RealMotion.smooth<IntOffset>(0.30f),
-                                    fadeInSpec = null,
+                                    placementSpec = RealMotion.smooth<IntOffset>(0.35f),
+                                    fadeInSpec = tween(180),
                                     fadeOutSpec = tween(180)
                                 ))
                                 .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
@@ -2075,7 +2195,7 @@ private fun ReminderListScreen(
                     }
                 }
             }
-            if (isHome) {
+            if (isHome && !homeCompletedMore) {
                 item(key = "context_card") {
                     renderContextCard()
                 }
@@ -2089,6 +2209,46 @@ private fun ReminderListScreen(
             reduceDynamicBlur = reduceDynamicBlur,
             extendLiquidArea = extendLiquidArea
         )
+        if (category != null || customCategory != null) {
+            // Once the big header has scrolled away, a thin bar in the category colour keeps back, sort and add.
+            val heroGone by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 420 } }
+            AnimatedVisibility(
+                visible = heroGone && !isSelectionMode,
+                enter = if (reduceAnimations) EnterTransition.None else slideInVertically(tween(260, easing = RealMotion.Emphasized)) { -it },
+                exit = if (reduceAnimations) ExitTransition.None else slideOutVertically(tween(200)) { -it },
+                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth()
+            ) {
+                com.cagri.real.ui.components.CategoryCompactBar(
+                    category = category, customCategory = customCategory,
+                    override = category?.let { builtInCategoryColors[it] },
+                    statusTop = statusHeight,
+                    onBack = onBack,
+                    actions = { foreground ->
+                        com.cagri.real.ui.components.CategoryHeroActions(
+                            sortOrder = categorySortOrder,
+                            onSortSelected = { next ->
+                                categorySortOrder = next
+                                uiPreferences.edit().putString(
+                                    "category_sort_order",
+                                    when (next) {
+                                        ReminderSortOrder.OLDEST_FIRST -> "oldest_first"
+                                        ReminderSortOrder.NEAREST_DATE -> "nearest_date"
+                                        else -> "recently_added"
+                                    }
+                                ).let { com.cagri.real.platform.android.sync.SyncLocal.saveUiPreference(uiPreferences, it) }
+                            },
+                            progressFraction = null,
+                            progressOpen = showCategoryProgress,
+                            onProgressClick = {},
+                            foreground = foreground,
+                            reduceAnimations = reduceAnimations,
+                            showSort = category != ReminderCategory.JournalEntries,
+                            buttonSize = 40.dp
+                        )
+                    }
+                )
+            }
+        }
         AnimatedVisibility(
             visible = isSelectionMode,
             enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)) + slideInVertically(tween(220)) { -it / 2 },
@@ -2179,11 +2339,11 @@ private fun ReminderListScreen(
         }
         val selectionProgress by animateFloatAsState(
             targetValue = if (isSelectionMode || isCategorySelectionMode) 1f else 0f,
-            animationSpec = if (reduceAnimations) snap() else tween(270, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
+            animationSpec = if (reduceAnimations) snap() else tween(270, easing = RealMotion.Standard),
             label = "selectionBottomTransition"
         )
         val density = LocalDensity.current
-        val bottomSlideOffsetPx = with(density) { (composerHeight + bottomGap + 80.dp).toPx() }
+        fun bottomSlideOffsetPx() = with(density) { (composerHeightState.value + bottomGapState.value + 80.dp).toPx() }
 
         AnimatedVisibility(
             visible = showComposer && isChecklistMode && !voiceWindowVisible,
@@ -2206,13 +2366,13 @@ private fun ReminderListScreen(
         }
 
         if (showComposer) {
-            BottomFade(Modifier.align(Alignment.BottomCenter).height(composerHeight + bottomGap + 46.dp))
+            BottomFade(Modifier.align(Alignment.BottomCenter).deferredHeight { composerHeightState.value + bottomGapState.value + 46.dp })
             HomeLiquidDock(
                 enabled = isHome,
                 interactionEnabled = !anySelectionMode && !showPano && !showPlanner && !showHomeWidgets && !isSettingsOpen &&
                     !showAccountMenu && !showCategoryOrderEditor,
                 composerExpanded = expanded || voiceWindowVisible,
-                composerHeight = composerHeight,
+                composerHeight = { composerHeightState.value },
                 listState = listState,
                 onOpenPlanner = {
                     voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
@@ -2228,9 +2388,6 @@ private fun ReminderListScreen(
                     showHomeWidgets = false
                     showPano = true
                 },
-                onModuleOrigin = { module, origin ->
-                    if (module == "pano") panoOrigin = origin else yasamOrigin = origin
-                },
                 onMicClick = onComposerMicClick,
                 micEnabled = !saving && !copyingPhotos && !voiceAiParsing,
                 backdrop = scene, backdropPosition = { scenePosition },
@@ -2238,14 +2395,15 @@ private fun ReminderListScreen(
                 reduceDynamicBlur = reduceDynamicBlur,
                 reduceAnimations = reduceAnimations,
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = bottomGap)
+                    .padding(start = 16.dp, end = 16.dp)
+                    .deferredBottomPadding { bottomGapState.value }
                     .graphicsLayer {
                         translationY = if (isFirstHomeIntroPlaying) {
                             val progress = composerEntranceProgress.value
-                            val motionEase = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f).transform(progress)
+                            val motionEase = RealMotion.Emphasized.transform(progress)
                             with(density) { (32.dp * (1f - motionEase)).toPx() }
                         } else {
-                            selectionProgress * bottomSlideOffsetPx
+                            selectionProgress * bottomSlideOffsetPx()
                         }
                         alpha = if (isFirstHomeIntroPlaying) {
                             val progress = composerEntranceProgress.value
@@ -2281,7 +2439,7 @@ private fun ReminderListScreen(
                 },
                 onDismissFeedback = { voiceState.feedbackText.value = null; voiceState.requestTimeListening.value = false },
                 onLineCountChange = { voiceLineCount = it },
-                modifier = Modifier.fillMaxWidth().height(composerHeight)
+                modifier = Modifier.fillMaxWidth().deferredHeight { composerHeightState.value }
             )
             } else {
             GlassComposer(
@@ -2381,7 +2539,7 @@ private fun ReminderListScreen(
             onConfigureRecipient = { showWhatsAppRecipientSheet = true },
             onSwipeUp = { if (expanded && !isLabsOpen) isLabsOpen = true },
             onSwipeDown = { if (isLabsOpen) isLabsOpen = false },
-            modifier = Modifier.fillMaxWidth().height(composerHeight)
+            modifier = Modifier.fillMaxWidth().deferredHeight { composerHeightState.value }
             )
             }
             }
@@ -2397,7 +2555,7 @@ private fun ReminderListScreen(
                 onDismiss = { pendingBulkPlan = null },
                 onFeedback = { showVoiceFeedback(voiceState, it) },
                 modifier = Modifier.align(Alignment.BottomCenter).zIndex(25f)
-                    .padding(start = 16.dp, end = 16.dp, bottom = composerHeight + bottomGap + 16.dp)
+                    .padding(start = 16.dp, end = 16.dp).deferredBottomPadding { composerHeightState.value + bottomGapState.value + 16.dp }
             )
         }
         voiceState.pendingDeletePlan.value?.let { plan ->
@@ -2416,7 +2574,7 @@ private fun ReminderListScreen(
                 onRetry = retry,
                 onDismiss = { voiceState.retryVoiceCreation.value = null },
                 modifier = Modifier.align(Alignment.BottomCenter).zIndex(26f)
-                    .padding(start = 16.dp, end = 16.dp, bottom = composerHeight + bottomGap + 16.dp)
+                    .padding(start = 16.dp, end = 16.dp).deferredBottomPadding { composerHeightState.value + bottomGapState.value + 16.dp }
             )
         }
         CategorySelectionOverlay(
@@ -2477,9 +2635,9 @@ private fun ReminderListScreen(
                 reduceDynamicBlur = reduceDynamicBlur,
                 designStyle = designStyle,
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = bottomGap).height(58.dp)
+                    .padding(start = 16.dp, end = 16.dp).deferredBottomPadding { bottomGapState.value }.height(58.dp)
                     .graphicsLayer {
-                        translationY = (1f - selectionProgress) * bottomSlideOffsetPx
+                        translationY = (1f - selectionProgress) * bottomSlideOffsetPx()
                         alpha = selectionProgress
                     }
             )
@@ -2543,6 +2701,9 @@ private fun ReminderListScreen(
             initial = pickerInitialMillis,
             initialRepeatRule = repeatRule,
             initialTimeTab = (requiresTimeSelection && alertAt == null),
+            initialEarlyAlertMinutes = ComposerTimingDraft.earlyAlertMinutes,
+            initialEndAt = ComposerTimingDraft.endAt,
+            onConfirmTiming = { early, end -> ComposerTimingDraft.earlyAlertMinutes = early; ComposerTimingDraft.endAt = end },
             backdrop = scene, backdropPosition = { scenePosition },
             designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
@@ -2644,6 +2805,16 @@ private fun ReminderListScreen(
                 reduceAnimations = reduceAnimations
             )
         }
+        if (showPeopleSheet && customCategory != null) {
+            val peopleContext = LocalContext.current
+            com.cagri.real.ui.sharedcategories.SharedCategorySheet(
+                category = customCategory,
+                calendarLinked = remember(customCategory.id) {
+                    com.cagri.real.calendar.CalendarCategoryLinks(peopleContext).hasCategory(customCategory.id)
+                },
+                onDismiss = { showPeopleSheet = false }
+            )
+        }
         if (showEditCategoryDialog && customCategory != null) {
             CategoryEditor(
                 customCategory = customCategory,
@@ -2665,7 +2836,6 @@ private fun ReminderListScreen(
         }
         com.cagri.real.ui.motion.RealModuleTransition(
             visible = showPano,
-            originInRoot = panoOrigin,
             reduceMotion = reduceAnimations,
             modifier = Modifier.zIndex(80f)
         ) {
@@ -2674,7 +2844,6 @@ private fun ReminderListScreen(
         }
         com.cagri.real.ui.motion.RealModuleTransition(
             visible = showHomeWidgets,
-            originInRoot = yasamOrigin,
             reduceMotion = reduceAnimations,
             modifier = Modifier.zIndex(80f)
         ) {
@@ -2719,6 +2888,13 @@ private fun ReminderListScreen(
                         existing.type == media.type && existing.provider == media.provider &&
                             (if (media.providerId != null) existing.providerId == media.providerId else existing.providerUrl == media.providerUrl)
                     } }?.id ?: onAddSuggestedReal(media.title, null, media, null)
+                },
+                onAddGame = { game ->
+                    reminders.firstOrNull { reminder -> reminder.gameBlocks.any { it.providerId == game.providerId } }?.id ?: onAddGame(game)
+                },
+                onAddMusic = { music ->
+                    reminders.firstOrNull { reminder -> reminder.musicBlocks.any { it.providerUrl == music.providerUrl } }?.id
+                        ?: onAddSuggestedReal(listOf(music.title, music.artist).filter { it.isNotBlank() }.joinToString(" – "), music, null, null)
                 }
             )
         }
@@ -2743,7 +2919,14 @@ private fun ReminderListScreen(
                 reduceAnimations = reduceAnimations,
                 exactAlarmsAllowed = exactAlarmsAllowed,
                 onRequestExactAlarms = onRequestExactAlarms,
-                onDismiss = { showPlanner = false },
+                onDismiss = { showPlanner = false; plannerGoalCategoryId = null },
+                initialGoalCategoryId = plannerGoalCategoryId,
+                onCreateCalendarCategory = { name ->
+                    // First palette colour no category uses yet; the user can recolour it later.
+                    val used = customCategories.mapTo(HashSet()) { it.accentStart }
+                    val color = com.cagri.real.ui.components.ReminderColorDisplayOrder.drop(2).firstOrNull { it !in used } ?: 9
+                    onCreateCategory(name, "NONE", color, null, false, false, null, null, null)
+                },
                 onSetReminderAlert = onPlannerSetAlert,
                 onToggleReminder = onToggleCompleted,
                 // Pencil popup on the category screen: a picked pastel is saved as the category's solid color.
@@ -2755,7 +2938,11 @@ private fun ReminderListScreen(
                 },
                 onOpenCategory = { builtIn, customId ->
                     showPlanner = false
-                    if (customId != null) customCategories.firstOrNull { it.id == customId }?.let(onOpenCustomCategory)
+                    val fromCategory = plannerGoalCategoryId
+                    plannerGoalCategoryId = null
+                    // Opened from that category's own screen: going "to the category" is just closing the goals.
+                    if (fromCategory != null && fromCategory == customId) Unit
+                    else if (customId != null) customCategories.firstOrNull { it.id == customId }?.let(onOpenCustomCategory)
                     else if (builtIn != null) onOpenCategory(builtIn)
                 },
                 detailContent = plannerDetailContent,
@@ -2777,7 +2964,7 @@ private fun ReminderListScreen(
             visible = showMoodTrackerHistory,
             enter = systemCategoryEnter,
             exit = if (reduceAnimations) ExitTransition.None else slideOutHorizontally(
-                tween(280, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                tween(280, easing = RealMotion.StandardInOut)
             ) { it },
             modifier = Modifier.zIndex(80f)
         ) {
@@ -2843,8 +3030,15 @@ private fun ReminderListScreen(
             // do not construct the AI screen, request consent, or open an upgrade panel.
             var canSuggest by remember { mutableStateOf(false) }
             LaunchedEffect(activeSuggestionMood, activeSuggestionDetails) {
-                if (com.cagri.real.platform.android.access.ProAccess.allowed(
-                        com.cagri.real.access.RealFeature.MoodAi, showPrompt = false)) {
+                // Skip only when the account is known to be free. If the access check itself fails (network,
+                // App Check, timeout) the screen still opens: the server decides and any problem is shown there
+                // instead of the suggestions silently never appearing.
+                val uid = com.cagri.real.platform.android.auth.AndroidBackend.auth.currentUser()?.id
+                val access = if (uid == null) null else try {
+                    com.cagri.real.platform.android.access.RealAccessRepository.cached(uid)
+                        ?: com.cagri.real.platform.android.access.RealAccessRepository.refresh(uid)
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+                if (uid != null && (access == null || access.snapshot.allows(com.cagri.real.access.RealFeature.MoodAi))) {
                     canSuggest = true
                 } else finishMoodSuggestions()
             }

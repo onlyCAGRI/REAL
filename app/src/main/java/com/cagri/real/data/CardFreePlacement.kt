@@ -72,3 +72,29 @@ fun placeCardInFreeSpace(
         else if (old.top != null) old else old.copy(top = boxes.getValue(key).top.roundToInt().coerceIn(0, CARD_MAX_TOP_DP))
     }
 }
+
+/**
+ * Top-edge resize: the block's bottom edge stays where it is while its top moves (snapped to the 8dp grid).
+ * Like a free move, flowing neighbours are frozen at their current tops first, so nothing else shifts.
+ * Null when the new top would run into a neighbour or leave less than [minHeightDp].
+ */
+fun cardTopEdgeResize(
+    keys: List<String>, placements: Map<String, CardBlockPlacement>,
+    boxes: Map<String, CardMeasuredBox>, moving: String, requestedTopDp: Float, minHeightDp: Float
+): Map<String, CardBlockPlacement>? {
+    val box = boxes[moving] ?: return null
+    if (moving !in keys || keys.any { it !in boxes } || !requestedTopDp.isFinite()) return null
+    val bottom = box.top + box.height
+    val top = ((requestedTopDp / CARD_VERTICAL_GRID_DP).roundToInt() * CARD_VERTICAL_GRID_DP).toFloat()
+        .coerceIn(0f, (bottom - minHeightDp).coerceAtLeast(0f))
+    val candidate = box.copy(top = top, height = bottom - top)
+    if (!cardDetailBoxFits(moving, candidate, boxes)) return null
+    return keys.associateWith { key ->
+        val old = (placements[key] ?: CardBlockPlacement()).normalized()
+        when {
+            key == moving -> old.copy(top = top.roundToInt().coerceIn(0, CARD_MAX_TOP_DP), minHeight = (bottom - top).roundToInt())
+            old.top != null -> old
+            else -> old.copy(top = boxes.getValue(key).top.roundToInt().coerceIn(0, CARD_MAX_TOP_DP))
+        }
+    }
+}

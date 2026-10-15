@@ -21,7 +21,8 @@ internal object PageLayout {
     private fun checkActive() { analysisJob.get()?.let { job ->
         if (!job.isActive) throw kotlinx.coroutines.CancellationException("Page analysis cancelled")
     } }
-    private class Word(val text: String, val box: Rect, var italic: Boolean?, val lineIdx: Int, val trustedBox: Boolean = true)
+    private class Word(val text: String, val box: Rect, var italic: Boolean?, val lineIdx: Int, val trustedBox: Boolean = true,
+                       val bold: Boolean = false)
     private class Line(val words: List<Word>, val box: Rect, val block: Int, val forcedHeading: Boolean = false) {
         val text get() = words.joinToString(" ") { it.text }
     }
@@ -50,7 +51,10 @@ internal object PageLayout {
     }
 
     /** Metin katmanından alınan bir parça (satır ya da blok) ve sayfa görüntüsündeki (piksel) kutusu. */
-    class NativeRun(val text: String, val box: Rect)
+    class NativeRun(val text: String, val box: Rect, val words: List<StyledWord>? = null)
+
+    /** A word read from the PDF's text layer with its own box and the style of its font. */
+    class StyledWord(val text: String, val box: Rect, val italic: Boolean, val bold: Boolean)
 
     /**
      * Metin katmanlı PDF: METİN dosyadan olduğu gibi gelir (OCR yok); konum bilgisi yalnız paragraf aralıklarını
@@ -61,6 +65,19 @@ internal object PageLayout {
     fun paragraphsFromNative(bitmap: Bitmap, runs: List<NativeRun>, headers: List<PdfRunningHeaders.Snapshot> = emptyList()): List<String> {
         val usable = normalizedRuns(runs)
         if (usable.isEmpty()) return emptyList()
+        // Word boxes and font styles straight from the file: no slant guessing, bold and italic are known.
+        if (usable.all { it.words != null }) {
+            val medH = usable.map { it.box.height() }.sorted().let { it[it.size / 2] }.coerceAtLeast(8)
+            val lines = ArrayList<Line>()
+            usable.forEach { run ->
+                val idx = lines.size
+                val words = run.words!!.map { Word(it.text, it.box, it.italic, idx, trustedBox = true, bold = it.bold) }
+                // A short line set wholly in bold stands alone as a heading.
+                val boldTitle = words.all { it.bold } && run.text.length <= 60
+                if (words.isNotEmpty()) lines.add(Line(words, run.box, 0, forcedHeading = boldTitle))
+            }
+            return layout(bitmap, lines, medHOverride = medH, italics = false, headers = headers)
+        }
         val blockMode = usable.count { it.text.trim().contains('\n') } * 2 > usable.size
         val lineHeights = usable.map { r ->
             r.box.height() / (if (blockMode) r.text.trim().count { it == '\n' } + 1 else 1)
@@ -96,7 +113,7 @@ internal object PageLayout {
      * en az ~0,19 em ve çoğunlukla çok daha fazla; 0,33 x (ascender'lı harf yüksekliği) en az hata veriyor.
      */
     private fun regroupFragments(usable: List<NativeRun>): List<NativeRun> {
-        if (usable.size < 8) return usable
+        if (usable.size < 8 || usable.all { it.words != null }) return usable
         val medLen = usable.map { it.text.trim().length }.sorted().let { it[it.size / 2] }
         if (medLen > 8) return usable
         fun cy(r: NativeRun) = (r.box.top + r.box.bottom) / 2f
@@ -237,10 +254,13 @@ internal object PageLayout {
      */
     internal fun stripEdgeNumbers(paras: List<String>): List<String> = paras
 
-    /** Kelimeleri birleştirir: satır sonu tirelerini kaldırır, eğik aralıkları işaretler. */
+    /** Kelimeleri birleştirir: satır sonu tirelerini kaldırır, eğik ve kalın aralıkları işaretler. */
     private fun render(words: List<Word>): String {
         val sb = StringBuilder()
         var italic = false
+        var bold = false
+        // A paragraph set entirely in bold is a heading-like line; its weight is left to the heading style.
+        val allBold = words.isNotEmpty() && words.all { it.bold }
         words.forEachIndexed { i, w ->
             val t = w.text
             val prev = if (i > 0) words[i - 1] else null
@@ -258,8 +278,16 @@ internal object PageLayout {
                 else sb.append(ParagraphKind.ITALIC_OFF)
                 italic = false
             }
+            val wantBold = w.bold && !allBold
+            if (wantBold && !bold) { sb.append(BookInline.BOLD_ON); bold = true }
+            else if (!wantBold && bold) {
+                if (sb.isNotEmpty() && sb.last() == ' ') { sb.setLength(sb.length - 1); sb.append(BookInline.BOLD_OFF).append(' ') }
+                else sb.append(BookInline.BOLD_OFF)
+                bold = false
+            }
             sb.append(t)
         }
+        if (bold) sb.append(BookInline.BOLD_OFF)
         if (italic) sb.append(ParagraphKind.ITALIC_OFF)
         return sb.toString().trim()
     }

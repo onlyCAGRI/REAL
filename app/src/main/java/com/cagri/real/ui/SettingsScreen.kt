@@ -1,6 +1,7 @@
 package com.cagri.real.ui
 
 import com.cagri.real.BuildConfig
+import kotlinx.coroutines.launch
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -144,7 +145,7 @@ fun SettingsScreen(
     val isChannelVibrationEnabled = reminderChannel != null && !isChannelBlocked && reminderChannel.shouldVibrate()
 
     if (showDailyPlannerChoice) {
-        AlertDialog(
+        com.cagri.real.ui.components.RealAlertDialog(
             onDismissRequest = { showDailyPlannerChoice = false },
             title = { Text("Daily Planner View") },
             text = {
@@ -184,6 +185,7 @@ fun SettingsScreen(
         )
     }
     var contextCardsEnabled by remember { mutableStateOf(contextCardStore.load().enabled) }
+    var showWelcomePreview by remember { mutableStateOf(false) }
 
     BackHandler(enabled = showDeveloperTools && !showClearMoodConfirm && !showPetScenarios) { showDeveloperTools = false }
 
@@ -212,7 +214,7 @@ fun SettingsScreen(
                                 contextCardStore.setEnabled(true)
                                 contextCardsEnabled = true
                                 contextCardStore.force(type)
-                                android.widget.Toast.makeText(context, "Ana ekranın en altına bak", android.widget.Toast.LENGTH_SHORT).show()
+                                com.cagri.real.ui.components.RealToast.show(context, "Ana ekranın en altına bak")
                             }
                         )
                     }
@@ -223,9 +225,25 @@ fun SettingsScreen(
                         subtitle = "Günlük limit, bekleme ve sessize alma sayaçlarını temizler",
                         onClick = {
                             contextCardStore.resetHistory()
-                            android.widget.Toast.makeText(context, "Kart geçmişi sıfırlandı", android.widget.Toast.LENGTH_SHORT).show()
+                            com.cagri.real.ui.components.RealToast.show(context, "Kart geçmişi sıfırlandı")
                         }
                     )
+                    SettingsDivider()
+                    SettingsActionRow(
+                        icon = ActionGlyph.Theme,
+                        title = "Karşılama ekranını önizle",
+                        subtitle = "İlk açılış animasyonunu oynatır; hesabını ve ayarlarını değiştirmez",
+                        onClick = { showWelcomePreview = true }
+                    )
+                }
+                if (showWelcomePreview) {
+                    // Full-screen replay of the first-launch welcome; finishing or Back just closes it.
+                    androidx.compose.ui.window.Dialog(
+                        onDismissRequest = { showWelcomePreview = false },
+                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+                    ) {
+                        WelcomeScreen(reduceAnimations = false, onComplete = { showWelcomePreview = false })
+                    }
                 }
 
                 if (realPetEnabled) {
@@ -432,6 +450,7 @@ fun SettingsScreen(
                         onCheckedChange = onReduceDynamicBlurChange
                     )
 
+
                     SettingsDivider()
 
                     SettingsRow(
@@ -472,6 +491,59 @@ fun SettingsScreen(
                         title = "Takvim bağlantısı",
                         subtitle = "Google / Samsung takvimlerini göster ve planlarını gönder",
                         onClick = onOpenCalendarConnection
+                    )
+
+                    SettingsDivider()
+                    val settingsCardsContext = LocalContext.current
+
+                    var plainHomeCards by remember { mutableStateOf(com.cagri.real.ui.components.HomeCardStyle.isPlain(settingsCardsContext)) }
+                    SettingsRow(
+                        icon = ActionGlyph.Check,
+                        title = "Sade kartlar",
+                        subtitle = "Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır.",
+                        badge = "Deneysel",
+                        checked = plainHomeCards,
+                        onCheckedChange = {
+                            plainHomeCards = it
+                            com.cagri.real.ui.components.HomeCardStyle.setPlain(settingsCardsContext, it)
+                        }
+                    )
+
+                    SettingsDivider()
+
+                    ShareShortcutSettings()
+
+                    SettingsDivider()
+
+                    // Müzik uygulaması: where songs open (music discovery's up-swipe, music search default).
+                    val musicContext = LocalContext.current
+                    var musicSource by remember { mutableStateOf(com.cagri.real.ui.components.MusicSource.saved(musicContext)) }
+                    SettingsActionRow(
+                        icon = ActionGlyph.Music,
+                        title = "Müzik uygulaması",
+                        subtitle = musicSource.label + " · şarkılar burada açılır",
+                        onClick = {
+                            val next = if (musicSource == com.cagri.real.ui.components.MusicSource.Apple)
+                                com.cagri.real.ui.components.MusicSource.Spotify else com.cagri.real.ui.components.MusicSource.Apple
+                            com.cagri.real.ui.components.MusicSource.save(musicContext, next)
+                            musicSource = next
+                        }
+                    )
+
+                    SettingsDivider()
+
+                    // Kapalı → 7 gün → 14 gün, one tap each.
+                    val settingsContext = LocalContext.current
+                    val homeCalendarDays = com.cagri.real.calendar.CalendarHomeDays.get(settingsContext)
+                    SettingsActionRow(
+                        icon = ActionGlyph.Calendar,
+                        title = "Ana ekranda takvim",
+                        subtitle = com.cagri.real.calendar.CalendarHomeDays.label(homeCalendarDays),
+                        onClick = {
+                            val options = com.cagri.real.calendar.CalendarHomeDays.options
+                            com.cagri.real.calendar.CalendarHomeDays.set(settingsContext,
+                                options[(options.indexOf(homeCalendarDays) + 1) % options.size])
+                        }
                     )
                 }
 
@@ -555,7 +627,8 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = ActionGlyph.NowBar,
                         title = "Samsung Now Bar",
-                        subtitle = "Hatırlatıcıları Now Bar'da canlı takip et (Deneysel)",
+                        subtitle = "Geliştiriliyor. Açıkken kartın üstündeki Yapıştır butonunun yerinde Now Bar butonu olur.",
+                        badge = "Geliştiriliyor",
                         checked = nowBarEnabled,
                         onCheckedChange = {
                             nowBarEnabled = it
@@ -675,7 +748,7 @@ fun SettingsScreen(
     }
 
     if (showClearMoodConfirm) {
-        AlertDialog(
+        com.cagri.real.ui.components.RealAlertDialog(
             onDismissRequest = { showClearMoodConfirm = false },
             title = { Text("Tüm mood kayıtlarını sil?") },
             text = {
@@ -972,7 +1045,7 @@ private fun LicensesDialog(onDismiss: () -> Unit) {
         }.getOrDefault("Lisans metni okunamadı.")
     }
 
-    AlertDialog(
+    com.cagri.real.ui.components.RealAlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column {
@@ -1059,7 +1132,7 @@ private fun PetScenariosDialog(
         )
     }
 
-    AlertDialog(
+    com.cagri.real.ui.components.RealAlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
@@ -1185,5 +1258,72 @@ private fun CatalogSourcesSection() {
     }
     linkError?.let {
         Text(it, color = Color(0xFFFFC8B8), fontSize = 13.sp, modifier = Modifier.padding(16.dp))
+    }
+}
+
+/** Paylaş menüsü kısayolları: on/off, and which categories appear in Android's share menu (up to 4; none = most used). */
+@Composable
+private fun ShareShortcutSettings() {
+    val context = LocalContext.current
+    val shortcuts = com.cagri.real.platform.android.content.ShareShortcuts
+    var enabled by remember { mutableStateOf(shortcuts.isEnabled(context)) }
+    var selected by remember { mutableStateOf(shortcuts.selected(context)) }
+    var picking by remember { mutableStateOf(false) }
+    val categories = remember { com.cagri.real.data.CategoryRepository(context).load().filter { !it.isReadOnlyShared } }
+    val scope = rememberCoroutineScope()
+    fun republish() {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            shortcuts.publish(context, com.cagri.real.data.CategoryRepository(context).load(),
+                com.cagri.real.data.ReminderRepository(context).load())
+        }
+    }
+    SettingsRow(
+        icon = ActionGlyph.Share,
+        title = "Paylaş menüsü kısayolları",
+        subtitle = "Başka bir uygulamada Paylaş deyince REAL kategorilerin menünün üst sırasında çıkar.",
+        checked = enabled,
+        onCheckedChange = { enabled = it; shortcuts.setEnabled(context, it); republish() }
+    )
+    if (enabled) {
+        SettingsDivider()
+        val names = selected.mapNotNull { id -> categories.firstOrNull { it.id == id }?.name }
+        SettingsActionRow(
+            icon = ActionGlyph.Category,
+            title = "Kısayol kategorileri",
+            subtitle = if (names.isEmpty()) "Otomatik · en çok kullandığın kategoriler" else names.joinToString(", "),
+            onClick = { picking = true }
+        )
+    }
+    if (picking) {
+        com.cagri.real.ui.components.RealAlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("Kısayol kategorileri") },
+            text = {
+                Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
+                    Text("En fazla ${shortcuts.MAX} kategori seç. Hiçbirini seçmezsen en çok kullandıkların çıkar.",
+                        color = Color(0xFFA5A5AF), fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    if (categories.isEmpty()) Text("Henüz kategori yok.", color = Color(0xFFA5A5AF), fontSize = 14.sp)
+                    categories.forEach { c ->
+                        val on = c.id in selected
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                            .clickable(enabled = on || selected.size < shortcuts.MAX) {
+                                selected = if (on) selected - c.id else selected + c.id
+                            }.padding(vertical = 10.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(20.dp).clip(CircleShape).background(if (on) Color.White else Color.Transparent)
+                                .border(1.2.dp, if (on) Color.White else Color(0xFF77777F), CircleShape), contentAlignment = Alignment.Center) {
+                                if (on) ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color.Black)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text(c.name, color = if (on || selected.size < shortcuts.MAX) Color.White else Color(0xFF66666E), fontSize = 15.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { shortcuts.setSelected(context, selected); picking = false; republish() }) { Text("Kaydet") }
+            },
+            dismissButton = { TextButton(onClick = { selected = shortcuts.selected(context); picking = false }) { Text("Vazgeç") } }
+        )
     }
 }

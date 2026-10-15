@@ -11,8 +11,12 @@ enum class GameFilter(val key: String, val label: String, val genre: Boolean) {
     Sports("sports", "Spor", true), Simulation("simulation", "Simülasyon", true), Indie("indie", "Bağımsız", true),
     Roguelike("roguelike", "Roguelike", true), OpenWorld("open-world", "Açık dünya", true),
     Metroidvania("metroidvania", "Metroidvania", true), Tactics("tactics", "Taktik", true),
+    Horror("horror", "Korku", true), Survival("survival", "Hayatta kalma", true), SoulsLike("souls-like", "Souls-like", true),
+    Sandbox("sandbox", "Sandbox", true), Stealth("stealth", "Gizlilik", true), Card("card", "Kart / deste", true),
+    VisualNovel("visual-novel", "Görsel roman", true), Rhythm("rhythm", "Ritim / müzik", true),
+    Management("management", "Şehir kurma / yönetim", true), HackAndSlash("hack-and-slash", "Hack and slash", true),
     Relaxing("relaxing", "Rahatlatan", false), Challenging("challenging", "Zorlayan", false),
-    StoryDriven("story-driven", "Hikâyeye sürükleyen", false), Scary("scary", "Korkutan", false),
+    StoryDriven("story-driven", "Hikâyeye sürükleyen", false),
     Cozy("cozy", "Sıcacık", false), FastPaced("fast-paced", "Tempolu", false),
     Competitive("competitive", "Rekabetçi", false), Atmospheric("atmospheric", "Atmosferik", false),
     ThoughtProvoking("thought-provoking", "Düşündüren", false), Nostalgic("nostalgic", "Nostaljik", false),
@@ -39,7 +43,15 @@ object GameGenres {
 }
 
 enum class GamePlatformGroup(val key: String, val label: String) {
-    Pc("pc", "PC"), Current("current", "Güncel konsollar"), Retro("retro", "Retro cihazlar")
+    Pc("pc", "PC"), PlayStation("playstation", "PlayStation"), Xbox("xbox", "Xbox"), Switch("switch", "Switch"),
+    Mobile("mobile", "Mobil"), Retro("retro", "Retro");
+
+    companion object {
+        /** What a server from before the split understands: consoles as one group, no mobile. */
+        fun legacy(keys: Set<String>): Set<String> = keys.mapNotNull {
+            when (it) { "playstation", "xbox", "switch" -> "current"; "mobile" -> null; else -> it }
+        }.toSet()
+    }
 }
 
 data class GameRelease(val platform: String, val year: Int?)
@@ -56,8 +68,8 @@ data class GameCard(val game: GameBlock, val tags: Set<String>, val reason: Stri
 }
 
 object GameCodec {
-    fun encode(cards: List<GameCard>) = JSONArray().apply {
-        cards.take(40).forEach { c ->
+    fun encode(cards: List<GameCard>, limit: Int = 40) = JSONArray().apply {
+        cards.take(limit).forEach { c ->
             val g = c.game
             put(JSONObject().put("id", g.providerId).put("title", g.title).put("year", g.year ?: JSONObject.NULL).put("kind", g.kind)
                 .put("description", g.description ?: JSONObject.NULL).put("artworkUrl", g.artworkUrl ?: JSONObject.NULL)
@@ -99,8 +111,11 @@ object GameCodec {
     }
 }
 
-/** Kaydırma yalnızca desteyi ilerletir; ekleme/çıkarma yalnızca açık butonlarla olur (film ekranıyla aynı kural). */
-enum class GameAction { SKIP, ADD_TO_LIST, REMOVE_FROM_LIST, BROWSE_LIST }
+/**
+ * Sağa kaydır: oynanacak listeme (listede: sonraki) · sola: geç (listede: çıkar).
+ * "Oynadım": bir daha önerilmez, gelecekteki puan listesine gider.
+ */
+enum class GameAction { SKIP, ADD_TO_LIST, REMOVE_FROM_LIST, BROWSE_LIST, PLAYED }
 data class GameQueues(val cards: List<GameCard>, val list: List<GameCard>, val excluded: List<String>)
 object GameQueueTransitions {
     fun apply(s: GameQueues, card: GameCard, action: GameAction): GameQueues {
@@ -109,6 +124,7 @@ object GameQueueTransitions {
         return when (action) {
             GameAction.BROWSE_LIST -> s.copy(list = if (s.list.any { it.key == card.key }) s.list.filterNot { it.key == card.key } + card else s.list)
             GameAction.REMOVE_FROM_LIST -> s.copy(list = s.list.filterNot { it.key == card.key })
+            GameAction.PLAYED -> s.copy(cards = rest, list = s.list.filterNot { it.key == card.key }, excluded = excluded)
             GameAction.SKIP -> s.copy(cards = rest, excluded = excluded)
             GameAction.ADD_TO_LIST -> {
                 require(s.list.size < 40 || s.list.any { it.key == card.key }) { "Oynanacak listen dolu. Önce bir oyun çıkar." }

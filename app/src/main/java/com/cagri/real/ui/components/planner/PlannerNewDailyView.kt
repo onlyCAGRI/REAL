@@ -1,7 +1,5 @@
 package com.cagri.real.ui.components.planner
 
-import androidx.compose.runtime.saveable.rememberSaveable
-
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -86,6 +84,7 @@ internal fun PlannerNewDailyView(
     events: List<PlannerEvent>,
     zone: ZoneId,
     ownerName: String,
+    /** All categories: event colours and names are resolved from this list. */
     customCategories: List<CustomCategory>,
     topPadding: Dp,
     ready: Boolean,
@@ -97,7 +96,9 @@ internal fun PlannerNewDailyView(
     reminders: List<ReminderItem> = emptyList(),
     onOpenCategory: (ReminderCategory?, Long?) -> Unit = { _, _ -> },
     categoryShapes: Map<Long, PlannerCategoryCardShape> = emptyMap(),
-    revealOrigin: PlannerRevealOrigin? = null
+    revealOrigin: PlannerRevealOrigin? = null,
+    /** Categories whose card appears in the category carousel ("REAL takviminde göster"). */
+    categoryCardCategories: List<CustomCategory> = customCategories
 ) {
     val focus = remember(events, selectedDay, zone) { plannerFocusEvents(events, selectedDay, zone) }
     val dateOnly = remember(events, selectedDay, zone) {
@@ -107,20 +108,16 @@ internal fun PlannerNewDailyView(
             it.startMillis < dayEnd && it.externalEndMillis > dayStart else it.day(zone) == selectedDay }
     }
     val geometry = remember(events, selectedDay, zone) { plannerDailyGeometry(events, selectedDay, zone) }
-    val categoryCards = remember(reminders, customCategories, today, zone, categoryShapes) {
-        plannerCategoryCards(reminders, customCategories, today, zone, categoryShapes)
+    val categoryCards = remember(reminders, categoryCardCategories, today, zone, categoryShapes) {
+        plannerCategoryCards(reminders, categoryCardCategories, today, zone, categoryShapes)
     }
     val carousel = rememberLazyListState()
     // Entrance choreography (motion only): greeting -> heading -> cards from the right -> ruler -> schedule -> events pop in.
     val intro = rememberPlannerIntro(reduceAnimations)
-    // Return from a category keeps the underlying day's title, cards and scroll in place.
-    var carouselDay by rememberSaveable { mutableStateOf(selectedDay.toEpochDay()) }
-    LaunchedEffect(selectedDay) {
-        if (carouselDay != selectedDay.toEpochDay()) {
-            carouselDay = selectedDay.toEpochDay()
-            carousel.scrollToItem(0)
-        }
-    }
+    // Coming back from a category screen: title, cards, ruler and events animate in again (like the reference video).
+    val returnTick = revealOrigin?.returnTick ?: 0
+    LaunchedEffect(returnTick) { if (returnTick > 0 && !reduceAnimations) intro.restart(120L) }
+    LaunchedEffect(selectedDay) { carousel.scrollToItem(0) }
     LazyColumn(
         Modifier.fillMaxSize().background(Color.Black),
         contentPadding = PaddingValues(top = topPadding + 24.dp, bottom = 28.dp)
@@ -231,14 +228,17 @@ internal fun PlannerNewDailyView(
             }
         }
         if (dateOnly.isNotEmpty()) {
-            items(dateOnly, key = { "note:${it.occurrenceKey()}" }) { event ->
+            itemsIndexed(dateOnly, key = { _, it -> "note:${it.occurrenceKey()}" }) { index, event ->
                 val done = event.reminder.isCompleted
+                // All-day cards pop in like the timed events (small -> full size), just before the timeline.
+                val pop = Modifier.plannerIntro(intro, 400 + minOf(index, 5) * 70, 480,
+                    slideY = 12.dp, fromScale = 0.8f, easing = PlannerPopEase)
                 val surface = plannerSoftPastel(resolveNext24CardColor(event, customCategories))
                 if (done) {
                     val category = event.reminder.customCategoryId
                         ?.let { id -> customCategories.firstOrNull { it.id == id } }
                     Row(
-                        Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        pop.padding(horizontal = 6.dp, vertical = 3.dp)
                             .alpha(0.62f)
                             .plannerEventMotion(event, "new-day-note") { onOpen(event.id, event.startMillis) }
                             .clip(CircleShape).background(surface)
@@ -255,7 +255,7 @@ internal fun PlannerNewDailyView(
                     Text(
                         event.reminder.text, color = PlannerInk, fontSize = 17.sp, lineHeight = 21.sp,
                         letterSpacing = (-0.3).sp, maxLines = 3, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        modifier = pop.padding(horizontal = 6.dp, vertical = 3.dp)
                             .fillMaxWidth()
                             .plannerEventMotion(event, "new-day-note") { onOpen(event.id, event.startMillis) }
                             .clip(RoundedCornerShape(22.dp))

@@ -15,7 +15,7 @@ internal fun rememberComposerAiPulse(processing: Boolean, reduceAnimations: Bool
         aiPulse.snapTo(0f)
         if (processing && !reduceAnimations) {
             while (isActive) {
-                aiPulse.animateTo(1f, tween(560, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+                aiPulse.animateTo(1f, tween(560, easing = RealMotion.Emphasized))
                 aiPulse.animateTo(0f, tween(560, easing = CubicBezierEasing(0.4f, 0f, 0.6f, 1f)))
             }
         }
@@ -34,7 +34,7 @@ internal fun rememberComposerVoiceArrival(isVoiceDraft: Boolean, reduceAnimation
             voiceArrivalProgress.snapTo(0f)
             voiceArrivalProgress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(180, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                animationSpec = tween(180, easing = RealMotion.Emphasized)
             )
         }
     }

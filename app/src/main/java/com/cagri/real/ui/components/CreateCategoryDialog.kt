@@ -1,5 +1,7 @@
 package com.cagri.real.ui.components
 
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.unit.IntOffset
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateColorAsState
@@ -10,7 +12,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.draw.shadow
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -136,7 +137,7 @@ fun CategoryEditor(
                 targetValue = 1f,
                 animationSpec = tween(
                     durationMillis = 230,
-                    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                    easing = RealMotion.Emphasized
                 )
             )
         }
@@ -154,7 +155,7 @@ fun CategoryEditor(
                         targetValue = 0f,
                         animationSpec = tween(
                             durationMillis = 160,
-                            easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)
+                            easing = RealMotion.Exit
                         )
                     )
                     onDismiss()
@@ -174,7 +175,7 @@ fun CategoryEditor(
     var name by rememberSaveable(customCategory) { mutableStateOf(customCategory?.name ?: "") }
     var hideFromGeneralLists by rememberSaveable(customCategory) { mutableStateOf(customCategory?.hideFromGeneralLists ?: false) }
     var selectedIcon by rememberSaveable(customCategory) {
-        mutableStateOf(customCategory?.let { CategoryIcon.fromKey(it.iconKey) } ?: CategoryIcon.WORK)
+        mutableStateOf(customCategory?.let { CategoryIcon.fromKey(it.iconKey) } ?: CategoryIcon.NONE)
     }
     var selectedColor1 by rememberSaveable(builtInCategory, customCategory, builtInColorOverride) {
         mutableStateOf<Int?>(if (isBuiltIn) builtInColorOverride?.start else (customCategory?.accentStart ?: DEFAULT_NEW_CATEGORY_COLOR_INDEX))
@@ -264,28 +265,22 @@ fun CategoryEditor(
                 indication = null,
                 onClick = { requestDismiss() }
             ),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.BottomCenter
     ) {
-        DesignPanel(
-            backdrop = backdrop,
-            backdropPosition = backdropPosition,
-            corners = 32.dp,
-            designStyle = designStyle, liquidSheet = true,
-            reduceDynamicBlur = reduceDynamicBlur,
+        // A bottom sheet like the notification / SYNC question: it slides up from the bottom edge.
+        Box(
             modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .heightIn(max = 700.dp)
-                .graphicsLayer {
-                    this.alpha = panelAlpha
-                    this.scaleX = scale
-                    this.scaleY = scale
-                    this.translationY = translationY.toPx()
-                }
+                .fillMaxWidth()
+                .heightIn(max = 720.dp)
                 .imePadding()
+                .graphicsLayer { this.translationY = size.height * (1f - progress) }
+                .realSheetSurface()
+                .navigationBarsPadding()
                 .pointerInput(Unit) { detectTapGestures(onTap = {}) }
                 .semantics { paneTitle = title }
         ) {
             Column(Modifier.fillMaxWidth()) {
+                RealSheetHandle(Modifier.align(Alignment.CenterHorizontally))
                 EditorTopBar(
                     title = title,
                     saveLabel = if (isCustomEdit || isBuiltIn) "Kaydet" else "Oluştur",
@@ -538,7 +533,16 @@ fun CategoryEditor(
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            CategoryIconGlyph(
+                                            if (icon == CategoryIcon.NONE) {
+                                                // "No icon": an empty ring with a slash.
+                                                androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
+                                                    val c = if (isSelected) Color.White else Color(0xFFB0B0BA)
+                                                    val w = 1.8.dp.toPx()
+                                                    drawCircle(c, size.minDimension / 2f - w, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+                                                    drawLine(c, androidx.compose.ui.geometry.Offset(size.width * 0.25f, size.height * 0.75f),
+                                                        androidx.compose.ui.geometry.Offset(size.width * 0.75f, size.height * 0.25f), w)
+                                                }
+                                            } else CategoryIconGlyph(
                                                 icon = icon,
                                                 modifier = Modifier.size(22.dp),
                                                 color = if (isSelected) Color.White else Color(0xFFB0B0BA)
@@ -550,17 +554,11 @@ fun CategoryEditor(
                         }
                     }
 
-                    EditorSection(title = "GÖRÜNÜM") {
+                    // Text on the category colour is now black or white automatically (categoryPalette), so the
+                    // manual "Koyu renk metin" switch is gone.
+                    // "REAL takviminde göster" is gone: the category screen has its own goals / calendar button now.
+                    if (!isBuiltIn) EditorSection(title = "GÖRÜNÜM") {
                         EditorGroup {
-                            if (plannerKey != null) {
-                                EditorSwitchRow(
-                                    title = "REAL takviminde göster",
-                                    subtitle = "Bu kategorideki kartlar takvimde görünür.",
-                                    checked = visibleInCalendar,
-                                    onCheckedChange = { visibleInCalendar = it }
-                                )
-                                EditorDivider()
-                            }
                             if (!isBuiltIn) {
                                 EditorSwitchRow(
                                     title = "Yalnızca kategori içinde göster",
@@ -568,14 +566,7 @@ fun CategoryEditor(
                                     checked = hideFromGeneralLists,
                                     onCheckedChange = { hideFromGeneralLists = it }
                                 )
-                                EditorDivider()
                             }
-                            EditorSwitchRow(
-                                title = "Koyu renk metin",
-                                subtitle = "Açık renklerde okunurluğu artırır.",
-                                checked = useDarkText,
-                                onCheckedChange = { useDarkText = it }
-                            )
                         }
                     }
 
@@ -745,9 +736,9 @@ private fun RealSwitch(checked: Boolean, tint: Color = EditorGreen) {
         if (checked) tint else Color.White.copy(alpha = 0.16f),
         tween(180), label = "editorSwitchTrack"
     )
-    val knobOffset by animateDpAsState(if (checked) 20.dp else 0.dp, tween(180), label = "editorSwitchKnob")
+    val knobOffset = animateDpAsState(if (checked) 20.dp else 0.dp, tween(180), label = "editorSwitchKnob")
     Box(Modifier.size(width = 51.dp, height = 31.dp).clip(CircleShape).background(track).padding(2.dp)) {
-        Box(Modifier.offset(x = knobOffset).size(27.dp).shadow(2.dp, CircleShape).background(Color.White, CircleShape))
+        Box(Modifier.offset { IntOffset(knobOffset.value.roundToPx(), 0) }.size(27.dp).shadow(2.dp, CircleShape).background(Color.White, CircleShape))
     }
 }
 
@@ -846,7 +837,8 @@ private fun CategoryEditorColorRow(
                 }
             }
 
-            items(ReminderColorChoices.size, key = { "${label}_$it" }) { index ->
+            items(ReminderColorDisplayOrder.size, key = { "${label}_${ReminderColorDisplayOrder[it]}" }) { position ->
+                val index = ReminderColorDisplayOrder[position]
                 val choice = ReminderColorChoices[index]
                 val selected = index == selectedIndex
                 Box(

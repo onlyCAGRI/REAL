@@ -8,6 +8,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -93,12 +95,11 @@ internal fun CalendarConnectionScreen(
                 colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text("Vazgeç") }
         }
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            val body = Color(0xFFD6D7DE)
-            Text("Seçtiğin planların başlığı, günü ve saati takvime yazılır; kartın web bağlantısı da otomatik eklenir.", color = body, fontSize = 14.sp, lineHeight = 20.sp)
-            Text("Linki bilen herkes başlığı, checklist ve CardStack metinlerini, medya bilgilerini, fotoğraf ve dosyaları görebilir. Konum, ses kaydı ve günlük yayımlanmaz.", color = body, fontSize = 14.sp, lineHeight = 20.sp)
-            Text("Takvimi paylaşıyorsan üyeler bağlantıyı görür. Dosyalar kopyalanmaz; asıl dosyayı silersen linkte de açılmaz. Link 30 gün geçerlidir, eşitlemede yenilenir.", color = body, fontSize = 14.sp, lineHeight = 20.sp)
-            Text("Tekrarlıların gelecek 90 günü aktarılır. REAL'de sildiğin planların takvimdeki kopyaları (geçmiş olanlar dahil) da silinir; tamamlananların yalnız gelecek kopyaları kaldırılır. Takvimde sen değiştirdiysen kopyaya dokunulmaz.", color = body, fontSize = 14.sp, lineHeight = 20.sp)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Bullet("Başlık, gün, saat ve kartın linki takvime yazılır.")
+            Bullet("Linki bilen kartın içeriğini görebilir; konum, ses ve günlük görünmez. Link 30 gün geçerli.")
+            Bullet("Tekrarlı planlarda gelecek 90 gün gönderilir.")
+            Bullet("REAL'de sildiğin plan takvimden de silinir. Takvimde değiştirdiğin kopyaya dokunulmaz.")
         }
     }
 
@@ -108,19 +109,24 @@ internal fun CalendarConnectionScreen(
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(22.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Takvim bağlantısı", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Telefondaki Google, Samsung ve diğer takvimleri REAL'de göster; istersen REAL planlarını bir takvime gönder.",
+                    Text("Telefondaki takvimleri REAL'de gör, istersen planlarını takvime gönder.",
                         color = CalendarMuted, fontSize = 14.sp, lineHeight = 20.sp)
                 }
 
-                // Plain-language summary: what comes in, what goes out, when it runs.
-                CalendarSection("Nasıl çalışır?") {
-                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("REAL'e alınan: Seçtiğin takvimlerin etkinlikleri yalnızca gösterilir. REAL'e kopyalanmaz, onayın olmadan değiştirilmez.",
-                            color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
-                        Text("Takvime gönderilen: Yalnız 'Takvime gönder' açıksa, seçtiğin hedef takvime; başlık, gün, saat ve kartın web bağlantısı. REAL'de sildiğin plan takvimden de silinir.",
-                            color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
-                        Text("Ne zaman: Uygulamayı açınca, takvim ekranına girince, ayar kaydedince ve 'yenile'ye basınca. Arka planda sürekli çalışmaz.",
-                            color = CalendarMuted, fontSize = 13.sp, lineHeight = 19.sp)
+                // The details are one tap away instead of a wall of text.
+                var howOpen by remember { mutableStateOf(false) }
+                CalendarGlassPanel(Modifier.fillMaxWidth(), corners = 22.dp) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Row(Modifier.fillMaxWidth().clickable { howOpen = !howOpen }.padding(horizontal = 18.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("Nasıl çalışır?", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                            ActionIcon(ActionGlyph.ChevronRight, Modifier.size(16.dp).graphicsLayer { rotationZ = if (howOpen) 90f else 0f }, CalendarMuted)
+                        }
+                        if (howOpen) Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Bullet("Takvimden gelenler REAL'de yalnızca gösterilir, değiştirilmez.")
+                            Bullet("'Takvime gönder' açıksa başlık, gün, saat ve kartın linki seçtiğin takvime yazılır.")
+                            Bullet("Eşitleme uygulamayı açınca, ayar kaydedince ve yenile'ye basınca yapılır; arka planda sürekli çalışmaz.")
+                        }
                     }
                 }
 
@@ -129,32 +135,30 @@ internal fun CalendarConnectionScreen(
                     Row(Modifier.fillMaxWidth().padding(start = 18.dp, top = 14.dp, bottom = 14.dp, end = 10.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(if (state.busy) "Eşitleniyor…" else "Durum", color = CalendarMuted, fontSize = 12.sp)
-                            Text(state.status.ifBlank { "Takvim bağlantısı hazır." }, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+                            Text(if (state.busy) "Eşitleniyor…" else state.status.ifBlank { "Takvim bağlantısı hazır." },
+                                color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
                             if (state.publicationStatus.isNotBlank())
                                 Text(state.publicationStatus, color = Color(0xFFFFD79A), fontSize = 12.sp, lineHeight = 17.sp)
                             error?.let { Text(it, color = Color(0xFFFFB4AB), fontSize = 13.sp, lineHeight = 18.sp) }
                         }
                         if (readable) IconButton(onClick = { state.refresh() }, enabled = !state.busy) {
-                            if (state.busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = CalendarAccent)
+                            if (state.busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(20.dp), strokeWidth = 2.dp, color = CalendarAccent)
                             else ActionIcon(ActionGlyph.Repeat, Modifier.size(22.dp), Color.White)
                         }
                     }
                 }
 
                 if (!readable) {
-                    CalendarSection("Başlamak için",
-                        footer = "REAL, takvim etkinliklerini yalnızca bu izinle okuyabilir.") {
-                        ActionRow("Takvimleri görmeye izin ver", "Google hesabı cihazda ekli ve takvim senkronizasyonu açık olmalı.") {
+                    CalendarSection("Başlamak için") {
+                        ActionRow("Takvimleri görmeye izin ver", "Cihazda Google hesabı ve takvim eşitlemesi açık olmalı.") {
                             readPermission.launch(Manifest.permission.READ_CALENDAR)
                         }
                     }
                 } else {
                     // 1) READ
-                    CalendarSection("1 · REAL'de göster",
-                        footer = "Seçtiğin takvimlerin etkinlikleri Focus ve takvim ekranlarında görünür.") {
+                    CalendarSection("REAL'de göster") {
                         if (state.calendars.isEmpty()) {
-                            Text("Takvim bulunamadı. Google hesabını cihaz ayarlarından ekleyip takvim senkronizasyonunu aç.",
+                            Text("Takvim bulunamadı. Cihaz ayarlarından Google hesabını ekleyip takvim eşitlemesini aç.",
                                 color = CalendarMuted, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(18.dp))
                         }
                         state.calendars.forEachIndexed { index, calendar ->
@@ -162,7 +166,7 @@ internal fun CalendarConnectionScreen(
                             val checked = calendar.id in draft.readIds && draft.readIdentities[calendar.id] == calendar.identity
                             CheckRow(
                                 label = calendar.name,
-                                supporting = calendar.account + if (!calendar.syncEnabled) " · cihaz senkronizasyonu kapalı" else "",
+                                supporting = calendar.account + if (!calendar.syncEnabled) " · eşitleme kapalı" else "",
                                 checked = checked
                             ) {
                                 val identities = if (checked) draft.readIdentities - calendar.id
@@ -173,18 +177,18 @@ internal fun CalendarConnectionScreen(
                     }
 
                     // 2) SEND
-                    CalendarSection("2 · REAL planlarını takvime gönder",
-                        footer = "Kapatmak mevcut takvim kayıtlarını silmez; sonraki değişiklikleri göndermeyi durdurur.") {
-                        ToggleRow("Takvime gönder", "Kapalıyken REAL'den hiçbir şey takvime yazılmaz.", draft.exportEnabled) {
+                    CalendarSection("Takvime gönder",
+                        footer = if (draft.exportEnabled) null else "Kapatınca takvimdeki mevcut kayıtlar silinmez.") {
+                        ToggleRow("REAL planlarını takvime gönder", null, draft.exportEnabled) {
                             draft = draft.copy(exportEnabled = it)
                         }
                     }
 
                     if (draft.exportEnabled) {
-                        CalendarSection("Nereye gönderilsin?",
-                            footer = if (hasLinks) "Mevcut bağlantılar korunurken hedef takvim değiştirilemez." else null) {
+                        CalendarSection("Hangi takvime?",
+                            footer = if (hasLinks) "Gönderilmiş planlar varken hedef takvim değiştirilemez." else null) {
                             if (!writable) {
-                                ActionRow("Takvime yazmaya izin ver", "Gönderim için gerekli.") {
+                                ActionRow("Takvime yazmaya izin ver", null) {
                                     writePermission.launch(Manifest.permission.WRITE_CALENDAR)
                                 }
                                 if (writableCalendars.isNotEmpty()) RowDivider()
@@ -198,20 +202,20 @@ internal fun CalendarConnectionScreen(
                                 val enabled = !hasLinks || selected
                                 SelectRow(
                                     label = calendar.name,
-                                    supporting = calendar.account + if (calendar.isGoogle) " · Google" else " · cihaz/diğer hesap",
+                                    supporting = calendar.account,
                                     selected = selected, enabled = enabled
                                 ) { draft = draft.copy(targetId = calendar.id, targetIdentity = calendar.identity) }
                             }
                         }
 
                         CalendarSection("Hangi planlar?",
-                            footer = "Tekrarlı planlarda gelecek 90 gün gönderilir; REAL açıldığında uzatılır. Tarihsiz metin, Pano blokları ve geçici 24 hour kartları gönderilmez.") {
+                            footer = "Yalnızca tarihi olan kartlar gönderilir. Tekrarlılarda gelecek 90 gün.") {
                             Segmented(listOf("Tüm planlı kartlar", "Seçtiklerim"), if (draft.exportAll) 0 else 1) {
                                 draft = draft.copy(exportAll = it == 0)
                             }
                             if (draft.exportAll) {
                                 Text("Yeni planlar da otomatik gönderilir.", color = CalendarMuted, fontSize = 13.sp,
-                                    modifier = Modifier.padding(horizontal = 18.dp).padding(bottom = 14.dp))
+                                    modifier = Modifier.padding(horizontal = 18.dp).padding(bottom = 14.dp, top = 2.dp))
                             } else if (planned.isEmpty()) {
                                 Text("Tarihi veya saati olan plan yok.", color = CalendarMuted, fontSize = 13.sp,
                                     modifier = Modifier.padding(horizontal = 18.dp).padding(bottom = 14.dp))
@@ -229,8 +233,7 @@ internal fun CalendarConnectionScreen(
                 }
 
                 // 3) PERMISSIONS
-                CalendarSection("İzinler",
-                    footer = "Google/Samsung'da değiştirilen veya silinen kopyalar korunur, zorla geri yazılmaz. Harici etkinliğe dokunarak cihaz takviminde düzenleyebilirsin.") {
+                CalendarSection("İzinler") {
                     PermissionRow("Takvimi okuma", readable) { readPermission.launch(Manifest.permission.READ_CALENDAR) }
                     RowDivider()
                     PermissionRow("Takvime yazma", writable) { writePermission.launch(Manifest.permission.WRITE_CALENDAR) }
@@ -270,15 +273,20 @@ private fun RowDivider() = HorizontalDivider(Modifier.padding(start = 18.dp), co
 @Composable
 private fun RowText(label: String, supporting: String?, modifier: Modifier = Modifier, dim: Boolean = false) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, color = Color.White.copy(alpha = if (dim) 0.45f else 1f), fontSize = 16.sp, lineHeight = 21.sp)
-        supporting?.let { Text(it, color = CalendarMuted, fontSize = 12.sp, lineHeight = 16.sp) }
+        Text(label, color = Color.White.copy(alpha = if (dim) 0.45f else 1f), fontSize = 15.sp, lineHeight = 20.sp, maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        supporting?.takeIf { it.isNotBlank() }?.let {
+            Text(it, color = CalendarMuted, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
     }
 }
 
+private val RowPadding = Modifier.padding(horizontal = 18.dp, vertical = 13.dp)
+
 @Composable
 private fun ToggleRow(label: String, supporting: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 18.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.then(RowPadding), verticalAlignment = Alignment.CenterVertically) {
         RowText(label, supporting, Modifier.weight(1f).padding(end = 12.dp))
         Switch(checked = checked, onCheckedChange = null, colors = SwitchDefaults.colors(
             checkedTrackColor = CalendarAccent, checkedThumbColor = Color.White, checkedBorderColor = Color.Transparent,
@@ -287,30 +295,49 @@ private fun ToggleRow(label: String, supporting: String?, checked: Boolean, onCh
     }
 }
 
+/** Round mark on the right: filled with a check when on (multi-select), a ring with a dot for single-select. */
+@Composable
+private fun RoundMark(on: Boolean, single: Boolean, enabled: Boolean = true) {
+    val tint = if (enabled) 1f else 0.4f
+    Box(
+        Modifier.size(24.dp).clip(androidx.compose.foundation.shape.CircleShape)
+            .background(if (on && !single) CalendarAccent.copy(alpha = tint) else Color.Transparent)
+            .then(if (on && !single) Modifier else Modifier.border(1.6.dp, (if (on) CalendarAccent else Color.White.copy(alpha = 0.35f)).copy(alpha = tint),
+                androidx.compose.foundation.shape.CircleShape)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (on && !single) ActionIcon(ActionGlyph.Check, Modifier.size(14.dp), Color.Black)
+        if (on && single) Box(Modifier.size(10.dp).clip(androidx.compose.foundation.shape.CircleShape).background(CalendarAccent.copy(alpha = tint)))
+    }
+}
+
 @Composable
 private fun CheckRow(label: String, supporting: String?, checked: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = checked, onCheckedChange = null, colors = CheckboxDefaults.colors(
-            checkedColor = CalendarAccent, uncheckedColor = Color.White.copy(alpha = 0.5f), checkmarkColor = Color.Black))
-        RowText(label, supporting, Modifier.weight(1f).padding(start = 10.dp, end = 8.dp))
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).then(RowPadding), verticalAlignment = Alignment.CenterVertically) {
+        RowText(label, supporting, Modifier.weight(1f).padding(end = 12.dp))
+        RoundMark(checked, single = false)
     }
 }
 
 @Composable
 private fun SelectRow(label: String, supporting: String?, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = selected, onClick = null, enabled = enabled, colors = RadioButtonDefaults.colors(
-            selectedColor = CalendarAccent, unselectedColor = Color.White.copy(alpha = 0.5f),
-            disabledSelectedColor = CalendarAccent.copy(alpha = 0.5f), disabledUnselectedColor = Color.White.copy(alpha = 0.2f)))
-        RowText(label, supporting, Modifier.weight(1f).padding(start = 10.dp, end = 8.dp), dim = !enabled)
+    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).then(RowPadding), verticalAlignment = Alignment.CenterVertically) {
+        RowText(label, supporting, Modifier.weight(1f).padding(end = 12.dp), dim = !enabled)
+        RoundMark(selected, single = true, enabled = enabled)
+    }
+}
+
+@Composable
+private fun Bullet(text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.padding(top = 8.dp).size(5.dp).clip(androidx.compose.foundation.shape.CircleShape).background(CalendarAccent))
+        Text(text, color = Color(0xFFD6D7DE), fontSize = 14.sp, lineHeight = 20.sp)
     }
 }
 
 @Composable
 private fun ActionRow(label: String, supporting: String?, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 14.dp),
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).then(RowPadding),
         verticalAlignment = Alignment.CenterVertically) {
         RowText(label, supporting, Modifier.weight(1f).padding(end = 12.dp))
         ActionIcon(ActionGlyph.ChevronRight, Modifier.size(16.dp), CalendarMuted)
@@ -319,9 +346,9 @@ private fun ActionRow(label: String, supporting: String?, onClick: () -> Unit) {
 
 @Composable
 private fun PermissionRow(label: String, granted: Boolean, onRequest: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(enabled = !granted, onClick = onRequest).padding(horizontal = 18.dp, vertical = 14.dp),
+    Row(Modifier.fillMaxWidth().clickable(enabled = !granted, onClick = onRequest).then(RowPadding),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
+        Text(label, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
         Text(if (granted) "Verildi" else "İzin ver", fontSize = 14.sp, fontWeight = FontWeight.Medium,
             color = if (granted) CalendarAccent else Color(0xFFFFD79A))
     }

@@ -109,12 +109,12 @@ fun SharedCategoryBrowser(reduceAnimations: Boolean, onDismiss: () -> Unit) {
                 TextButton(onClick = { action { detail = checkNotNull(api).detail(current.item.id) } },
                     enabled = !busy, modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(16.dp)) { Text("Yenile", color = Color.White) }
             }
-            if (busy) CircularProgressIndicator(Modifier.align(androidx.compose.ui.Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
+            if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.align(androidx.compose.ui.Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
             error?.let { ConnectionNote(it, Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(16.dp)) }
         }
         if (showMembers && detail != null) {
             val current = detail!!
-            AlertDialog(onDismissRequest = { showMembers = false }, containerColor = Color(0xFF151519),
+            com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = { showMembers = false }, containerColor = Color(0xFF151519),
                 title = { Text("Members", color = Color.White) },
                 text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     current.members.forEach { Text(it.name + if (it.isOwner) " · Owner" else "", color = Color.White) }

@@ -5,7 +5,6 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.view.View
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.InteractionSource
@@ -28,7 +27,7 @@ fun Modifier.pressScale(
     val scale by animateFloatAsState(
         targetValue = if (isPressed) targetScale else 1.0f,
         animationSpec = if (isPressed) {
-            tween(durationMillis = 90, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
+            tween(durationMillis = 90, easing = RealMotion.Standard)
         } else {
             RealMotion.snappy<Float>()
         },

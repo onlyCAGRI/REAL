@@ -32,7 +32,7 @@ data class CardBlockPlacement(
     }
 }
 
-val CARD_CONTENT_TYPES = listOf("text", "card_stack", "mood", "checklist", "photos", "files", "voice", "music", "media", "location", "journal")
+val CARD_CONTENT_TYPES = listOf("text", "card_stack", "mood", "checklist", "photos", "files", "voice", "music", "media", "game", "location", "journal")
 
 fun isCardLayoutKey(key: String): Boolean = key.length <= 160 &&
     key.substringBefore(':') in CARD_CONTENT_TYPES &&
@@ -84,6 +84,7 @@ fun ReminderItem.cardContentKeys(includeEmptyChecklist: Boolean = false, include
     if (voiceRecordings.isNotEmpty() || includeVoiceRecorder) add("voice")
     musicBlocks.forEach { add("music:${it.id}") }
     mediaBlocks.forEach { add("media:${it.id}") }
+    gameBlocks.forEach { add("game:${it.id}") }
     if (location != null) add("location")
     if (journal != null || includeJournal) add("journal")
 }

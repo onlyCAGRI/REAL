@@ -41,7 +41,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         musicBlocks: List<MusicBlock> = emptyList(),
         mediaBlocks: List<MediaBlock> = emptyList(),
         cardStack: CardStackBlock? = null,
-        location: ReminderLocation? = null
+        location: ReminderLocation? = null,
+        gameBlocks: List<CardGameBlock> = emptyList()
     ): ReminderItem = synchronized(mutationLock) {
         val typedTitle = text.trim()
         val trimmedTitle = typedTitle.ifBlank {
@@ -80,12 +81,22 @@ class ReminderRepository(private val preferences: SharedPreferences) {
             voiceRecordings = voiceRecordings,
             musicBlocks = musicBlocks,
             mediaBlocks = mediaBlocks,
+            gameBlocks = gameBlocks,
             cardStack = cardStack,
             location = location
         )
         val updated = listOf(newItem) + previous
         save(updated)
         newItem
+    }
+
+    fun addGameBlock(reminderId: Long, block: CardGameBlock): List<ReminderItem> = update(reminderId) { reminder ->
+        if (reminder.gameBlocks.any { it.providerId == block.providerId }) reminder
+        else reminder.copy(gameBlocks = reminder.gameBlocks + block, updatedAt = System.currentTimeMillis())
+    }
+
+    fun removeGameBlock(reminderId: Long, blockId: String): List<ReminderItem> = update(reminderId) { reminder ->
+        reminder.copy(gameBlocks = reminder.gameBlocks.filterNot { it.id == blockId }, updatedAt = System.currentTimeMillis())
     }
 
     fun toggleChecklistItem(reminderId: Long, itemId: Long): List<ReminderItem> = update(reminderId) { reminder ->
@@ -280,7 +291,20 @@ class ReminderRepository(private val preferences: SharedPreferences) {
             repeatUntilEpochDay = null,
             repeatSkippedEpochDays = emptyList(),
             anchorAlertAt = null,
+            endAt = null,
+            earlyAlertMinutes = null,
             updatedAt = nowMillis
+        )
+    }
+
+    /** Early warning and end ("Bitiş"). The end is kept only when it is after the start. */
+    fun setTiming(id: Long, earlyAlertMinutes: Int?, endAt: Long?): List<ReminderItem> = update(id) { item ->
+        val start = item.alertAt
+            ?: item.plannedDateEpochDay?.let { java.time.LocalDate.ofEpochDay(it).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() }
+        item.copy(
+            earlyAlertMinutes = earlyAlertMinutes?.takeIf { it in 1..MAX_EARLY_ALERT_MINUTES && item.alertAt != null },
+            endAt = endAt?.takeIf { start != null && it > start },
+            updatedAt = System.currentTimeMillis()
         )
     }
 
@@ -300,6 +324,9 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                 repeatWeekdaysMask = if (alertAt != null && repeatRule == RecurrenceRule.WEEKLY) it.repeatWeekdaysMask else 0,
                 repeatUntilEpochDay = if (alertAt != null && repeatRule != RecurrenceRule.NONE) it.repeatUntilEpochDay else null,
                 anchorAlertAt = alertAt,
+                // Removing the date removes its end and early warning; a new start keeps an end that is still after it.
+                endAt = if (alertAt != null) it.endAt?.takeIf { end -> end > alertAt } else null,
+                earlyAlertMinutes = if (alertAt != null) it.earlyAlertMinutes else null,
                 updatedAt = System.currentTimeMillis()
             )
             // Deleted occurrences survive unless the set of occurrence days actually changed.
@@ -620,13 +647,20 @@ class ReminderRepository(private val preferences: SharedPreferences) {
     }
 
     
-    fun appendContent(id: Long, attachments: List<ReminderAttachment>, referenceUrl: String?): ReminderItem =
+    fun appendContent(
+        id: Long, attachments: List<ReminderAttachment>, referenceUrl: String?,
+        voiceRecordings: List<ReminderVoiceRecording> = emptyList(), musicBlocks: List<MusicBlock> = emptyList()
+    ): ReminderItem =
         synchronized(mutationLock) {
             val current = load().firstOrNull { it.id == id } ?: error("Hatırlatıcı artık mevcut değil")
-            val merged = (current.attachments + attachments).distinctBy { it.id }
+            val merged = (current.attachments + Companion.limitPhotos(attachments, current.attachments.count { it.type == AttachmentType.IMAGE }))
+                .distinctBy { it.id }
             require(merged.count { it.type == AttachmentType.IMAGE } <= 3) { "Bir hatırlatıcıya en fazla 3 fotoğraf eklenebilir" }
             val updated = current.copy(attachments = merged,
-                referenceUrl = referenceUrl ?: current.referenceUrl, updatedAt = System.currentTimeMillis())
+                referenceUrl = referenceUrl ?: current.referenceUrl,
+                voiceRecordings = (current.voiceRecordings + voiceRecordings).distinctBy { it.id },
+                musicBlocks = (current.musicBlocks + musicBlocks).distinctBy { it.id },
+                updatedAt = System.currentTimeMillis())
             save(load().map { if (it.id == id) updated else it })
             updated
         }
@@ -699,6 +733,16 @@ class ReminderRepository(private val preferences: SharedPreferences) {
     }
 
     companion object {
+    /** A card shows at most 3 photos; the rest of a shared batch is kept as files instead of failing the whole share. */
+    fun limitPhotos(attachments: List<ReminderAttachment>, existingPhotos: Int): List<ReminderAttachment> {
+        var room = (3 - existingPhotos).coerceAtLeast(0)
+        return attachments.map { item ->
+            if (item.type != AttachmentType.IMAGE) item
+            else if (room > 0) { room--; item }
+            else item.copy(type = AttachmentType.FILE)
+        }
+    }
+
         val mutationLock = com.cagri.real.platform.android.sync.SyncLocal.lock
         private const val PREFERENCES_NAME = "big_bos_cagri_reminders"
         private const val KEY_REMINDERS = "reminders"

@@ -57,7 +57,7 @@ internal fun BoardBackground(viewport: BoardViewport, look: BoardLook) {
 @Composable
 internal fun BoardBackgroundPicker(initial: BoardLook, onDismiss: () -> Unit, onSave: (BoardLook) -> Unit) {
     var look by remember(initial) { mutableStateOf(initial.supported()) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Board background") }, text = {
+    com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = onDismiss, title = { Text("Board background") }, text = {
         Column {
             Text("Color")
             listOf(BoardBackgroundColor.BLACK, BoardBackgroundColor.GRAY).forEach { color ->

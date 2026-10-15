@@ -173,7 +173,7 @@ private fun MoodTrackerAddCard(
             .clip(shape)
             .background(brush)
             .border(0.8.dp, accent.copy(alpha = 0.38f), shape)
-            .clickable(interactionSource = interaction, indication = androidx.compose.foundation.LocalIndication.current, onClick = onClick)
+            .clickable(interactionSource = interaction, indication = null /* pressScale already gives the press feedback */, onClick = onClick)
             .padding(horizontal = 22.dp, vertical = 20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

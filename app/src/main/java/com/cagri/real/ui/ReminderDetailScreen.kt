@@ -1,7 +1,6 @@
 package com.cagri.real.ui
 
-import androidx.compose.ui.layout.onSizeChanged
-
+import androidx.compose.runtime.mutableLongStateOf
 import com.cagri.real.ui.components.liquidDockChip
 
 import android.os.Build
@@ -19,6 +18,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.layout.layout
+import androidx.compose.runtime.SideEffect
+import com.cagri.real.data.isCounterBlock
+import com.cagri.real.data.isMarketBlock
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -71,7 +76,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -108,6 +112,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
@@ -124,6 +129,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.semantics.stateDescription
+import com.cagri.real.data.CARD_GRID_UNITS
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.rememberUpdatedState
@@ -263,6 +271,10 @@ internal fun ReminderDetailScreen(
     animatedVisibilityScope: AnimatedVisibilityScope? = null,
     calendarSyncPublished: Boolean? = null,
     onCalendarSyncClick: () -> Unit = {},
+    /** Oyun bloğu ✕ (saved right away; game blocks are not part of the edit draft). */
+    onRemoveGameBlock: (String) -> Unit = {},
+    /** Oyun search → a game block on this card (saved right away). */
+    onAddGameBlock: (com.cagri.real.data.CardGameBlock) -> Unit = {},
     pullDismiss: DetailPullDismiss? = null
 ) {
     var editing by rememberSaveable(reminder.id) { mutableStateOf(false) }
@@ -271,6 +283,9 @@ internal fun ReminderDetailScreen(
     var accentEnd by rememberSaveable(reminder.id) { mutableStateOf<Int?>(reminder.accentEnd) }
     var customSolidColorArgb by rememberSaveable(reminder.id) { mutableStateOf(reminder.customSolidColorArgb) }
     var useDarkText by rememberSaveable(reminder.id) { mutableStateOf(reminder.useDarkText) }
+    LaunchedEffect(accentStart, accentEnd, customSolidColorArgb) {
+        useDarkText = com.cagri.real.ui.components.autoCardDarkText(accentStart, accentEnd, customSolidColorArgb)
+    }
     var gradientBlendFraction by rememberSaveable(reminder.id) {
         mutableFloatStateOf(reminder.gradientBlendFraction ?: DEFAULT_GRADIENT_BLEND_FRACTION)
     }
@@ -284,6 +299,8 @@ internal fun ReminderDetailScreen(
     var editedContentBlockLayout by remember(reminder.id, editing) { mutableStateOf(reminder.contentBlockLayout) }
     var showTitleTools by remember(reminder.id, editing) { mutableStateOf(false) }
     var textToolsKey by remember(reminder.id, editing) { mutableStateOf("text") }
+    /** Attachment id of the counter / market block whose settings dialog is open. */
+    var widgetSettingsId by remember(reminder.id, editing) { mutableStateOf<String?>(null) }
     var selectedLayoutBlock by remember(reminder.id) { mutableStateOf<String?>(null) }
     var configuringLayoutBlock by remember(reminder.id) { mutableStateOf<String?>(null) }
     var isReorderingBlocks by rememberSaveable(reminder.id) { mutableStateOf(false) }
@@ -300,7 +317,6 @@ internal fun ReminderDetailScreen(
     val density = LocalDensity.current
     var rootBoxCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var bottomPanelCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var bottomPanelHeightPx by remember { mutableIntStateOf(0) }
     var footerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val contentBlockCoordinates = remember(reminder.id) { mutableMapOf<String, LayoutCoordinates>() }
     LaunchedEffect(editing) {
@@ -343,16 +359,65 @@ internal fun ReminderDetailScreen(
     val coroutineScope = rememberCoroutineScope()
     var musicSearchOpen by remember(reminder.id) { mutableStateOf(false) }
     var mediaSearchOpen by remember(reminder.id) { mutableStateOf(false) }
+    var gameSearchOpen by remember(reminder.id) { mutableStateOf(false) }
     var voiceRecorderOpen by remember(reminder.id) { mutableStateOf(false) }
     var voiceRecordingActive by remember(reminder.id) { mutableStateOf(false) }
     var editedReferenceUrl by remember(reminder.id, editing) { mutableStateOf(reminder.referenceUrl) }
     var attachmentBusy by remember { mutableStateOf(false) }
     var savingDetail by remember { mutableStateOf(false) }
+    val latestReminderForWidgets by rememberUpdatedState(reminder)
+    /**
+     * Counter / market blocks change outside edit mode too (tapping +1). Such a change waits for any
+     * running save, then stores the card with just that attachment replaced, so no tap is lost.
+     */
+    fun commitWidgetAttachment(updated: ReminderAttachment) {
+        if (editing) {
+            editedAttachments = editedAttachments.map { if (it.id == updated.id) updated else it }
+            return
+        }
+        coroutineScope.launch {
+            androidx.compose.runtime.snapshotFlow { savingDetail }.first { !it }
+            val r = latestReminderForWidgets
+            if (r.attachments.none { it.id == updated.id }) return@launch
+            savingDetail = true
+            try {
+                onSave(r.text, r.accentStart, r.accentEnd, r.customCategoryId, r.checklistItems, r.starBorderColorIndex,
+                    r.gradientBlendFraction, r.customSolidColorArgb, r.attachments.map { if (it.id == updated.id) updated else it },
+                    r.voiceRecordings, r.location, r.referenceUrl, r.musicBlocks, r.mediaBlocks, r.cardStack,
+                    r.contentBlockOrder, r.contentBlockLayout, r.useDarkText)
+            } finally {
+                savingDetail = false
+            }
+        }
+    }
     var attachmentError by remember { mutableStateOf<String?>(null) }
     var editGeneration by remember { mutableStateOf(0) }
     var screenAlive by remember(reminder.id) { mutableStateOf(true) }
     val attachmentScope = LocalLifecycleOwner.current.lifecycleScope
     var editedLocation by remember(reminder.id) { mutableStateOf(reminder.location) }
+    // Adding anything to the card (text, photo, location, checklist item, music…) lowers the edit dock
+    // and closes "Renk ve kategori", so the new block is visible instead of hidden behind the panels.
+    val addedContentCount = editedContentBlockOrder.size + (if (editedLocation != null) 1 else 0) +
+        editedChecklistItems.size + editedAttachments.size + editedMusicBlocks.size + editedMediaBlocks.size +
+        editedVoiceRecordings.size + (editedCardStack?.cards?.size ?: 0)
+    var lastAddedContentCount by remember(reminder.id, editing) { mutableIntStateOf(addedContentCount) }
+    // Opening the editor loads the card's content into the draft; that is not "adding", so the dock opens raised.
+    var editSettled by remember(reminder.id, editing) { mutableStateOf(false) }
+    val latestAddedContentCount by rememberUpdatedState(addedContentCount)
+    LaunchedEffect(reminder.id, editing) {
+        if (editing) {
+            delay(700)
+            lastAddedContentCount = latestAddedContentCount
+            editSettled = true
+        }
+    }
+    LaunchedEffect(addedContentCount) {
+        if (editing && editSettled && addedContentCount > lastAddedContentCount) {
+            secondaryPanelsExpanded = false
+            editDockCollapsed = true
+        }
+        lastAddedContentCount = addedContentCount
+    }
     var journalEditing by remember(reminder.id) { mutableStateOf(false) }
     var journalCreating by remember(reminder.id) { mutableStateOf(false) }
     // Journal and Mood V2 are separate systems. Existing journal moods remain readable
@@ -417,6 +482,7 @@ internal fun ReminderDetailScreen(
         detailDurationMinutes = plannerDetails?.durationMinutes
     }
     var showDetailEndPicker by rememberSaveable(reminder.id) { mutableStateOf(false) }
+    val setReminderTiming = com.cagri.real.ui.components.LocalSetReminderTiming.current
     var showLocationGuide by rememberSaveable(reminder.id) { mutableStateOf(false) }
     var locationJustShared by remember(reminder.id) { mutableStateOf(false) }
     LaunchedEffect(reminder.id, reminder.location?.mapsUrl, reminder.location?.latitude) {
@@ -437,6 +503,83 @@ internal fun ReminderDetailScreen(
     }
     val nowBarEnabled = NowBarReminderController.isEnabled(context)
     val nowBarAvailable = nowBarEnabled && !reminder.isCompleted
+    // Yapıştır (in Now Bar's place while Now Bar is off): what is on the clipboard, by type only.
+    var pasteKind by remember { mutableStateOf(ClipboardPaste.peek(context)) }
+    // Cam hap: only for something copied in the last 30 s, and only once per copy.
+    var consumedClip by rememberSaveable { mutableLongStateOf(0L) }
+    var freshClip by remember { mutableStateOf(ClipboardPaste.fresh(context)?.takeIf { it.second != consumedClip }) }
+    fun refreshClipboard() {
+        pasteKind = ClipboardPaste.peek(context)
+        freshClip = ClipboardPaste.fresh(context)?.takeIf { it.second != consumedClip }
+    }
+    LaunchedEffect(freshClip) {
+        val clip = freshClip ?: return@LaunchedEffect
+        delay((clip.second + ClipboardPaste.FRESH_WINDOW_MS - System.currentTimeMillis()).coerceAtLeast(0L))
+        freshClip = null
+    }
+    val pasteLifecycle = LocalLifecycleOwner.current
+    DisposableEffect(pasteLifecycle) {
+        val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+        val listener = android.content.ClipboardManager.OnPrimaryClipChangedListener { refreshClipboard() }
+        clipboard?.addPrimaryClipChangedListener(listener)
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) refreshClipboard()
+        }
+        pasteLifecycle.lifecycle.addObserver(observer)
+        onDispose { clipboard?.removePrimaryClipChangedListener(listener); pasteLifecycle.lifecycle.removeObserver(observer) }
+    }
+    var pasting by remember { mutableStateOf(false) }
+    /** Adds the clipboard's content to the card: into the draft while editing, otherwise saved right away. */
+    fun pasteIntoCard() {
+        if (pasting) return
+        pasting = true
+        coroutineScope.launch {
+            try {
+                val pasted = ClipboardPaste.read(context)
+                if (pasted == null || (pasted.content.isEmpty && pasted.location == null)) {
+                    com.cagri.real.ui.components.RealToast.show(context, "Yapıştırılacak bir şey bulunamadı")
+                    return@launch
+                }
+                val c = pasted.content
+                fun mergedAttachments(current: List<ReminderAttachment>, currentUrl: String?): Pair<List<ReminderAttachment>, String?> {
+                    var added = ReminderRepository.limitPhotos(c.attachments, current.count { it.type == AttachmentType.IMAGE })
+                    var url = currentUrl
+                    c.referenceUrl?.let { link ->
+                        // A card has one link; a second one is kept as a text block instead of replacing it.
+                        if (url == null || url == link) url = link
+                        else added = added + ReminderAttachment(java.util.UUID.randomUUID().toString(),
+                            type = AttachmentType.TEXT_SNIPPET, mimeType = "text/plain", text = link)
+                    }
+                    return (current + added) to url
+                }
+                if (editing) {
+                    val (attachments, url) = mergedAttachments(editedAttachments, editedReferenceUrl)
+                    editedAttachments = attachments
+                    editedReferenceUrl = url
+                    editedMusicBlocks = editedMusicBlocks + c.musicBlocks
+                    editedVoiceRecordings = editedVoiceRecordings + c.voiceRecordings
+                    if (pasted.location != null && editedLocation == null) editedLocation = pasted.location
+                } else {
+                    androidx.compose.runtime.snapshotFlow { savingDetail }.first { !it }
+                    val r = latestReminderForWidgets
+                    val (attachments, url) = mergedAttachments(r.attachments, r.referenceUrl)
+                    val location = r.location ?: pasted.location
+                    val updated = r.copy(attachments = attachments, referenceUrl = url, musicBlocks = r.musicBlocks + c.musicBlocks,
+                        voiceRecordings = r.voiceRecordings + c.voiceRecordings, location = location)
+                    savingDetail = true
+                    try {
+                        onSave(r.text, r.accentStart, r.accentEnd, r.customCategoryId, r.checklistItems, r.starBorderColorIndex,
+                            r.gradientBlendFraction, r.customSolidColorArgb, updated.attachments, updated.voiceRecordings,
+                            updated.location, updated.referenceUrl, updated.musicBlocks, r.mediaBlocks, r.cardStack,
+                            r.contentBlockOrder, cardLayoutForKeys(r.contentBlockLayout, updated.cardContentKeys()), r.useDarkText)
+                    } finally { savingDetail = false }
+                }
+                com.cagri.real.ui.components.RealToast.show(context, "Yapıştırıldı · ${pasted.label}")
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, "Yapıştırılamadı") }
+            finally { pasting = false }
+        }
+    }
     LaunchedEffect(reminder.id, reminder.isCompleted, nowBarEnabled) {
         nowBarPinned = nowBarEnabled && !reminder.isCompleted &&
             NowBarReminderController.isManuallyPinned(context, reminder.id)
@@ -616,7 +759,7 @@ internal fun ReminderDetailScreen(
         selectedCategoryId = reminder.customCategoryId
         editedChecklistItems = reminder.checklistItems
         editedContentBlockOrder = reminder.contentBlockOrder
-        editedContentBlockLayout = cardDetailReadablePlacements(reminder.contentBlockLayout, detailWidthDp)
+        editedContentBlockLayout = cardDetailReadablePlacements(reminder.contentBlockLayout, detailWidthDp, widgetBlockKeys(reminder.attachments))
         selectedLayoutBlock = null
         configuringLayoutBlock = null
         isReorderingBlocks = false
@@ -636,7 +779,7 @@ internal fun ReminderDetailScreen(
         selectedCategoryId = reminder.customCategoryId
         editedChecklistItems = reminder.checklistItems
         editedContentBlockOrder = reminder.contentBlockOrder
-        editedContentBlockLayout = cardDetailReadablePlacements(reminder.contentBlockLayout, detailWidthDp)
+        editedContentBlockLayout = cardDetailReadablePlacements(reminder.contentBlockLayout, detailWidthDp, widgetBlockKeys(reminder.attachments))
         selectedLayoutBlock = null
         configuringLayoutBlock = null
         isReorderingBlocks = false
@@ -735,7 +878,11 @@ internal fun ReminderDetailScreen(
     val chromeAlpha by if (animatedVisibilityScope != null && !reduceAnimations) {
         animatedVisibilityScope.transition.animateFloat(
             transitionSpec = {
-                RealMotion.smooth(0.32f)
+                if (EnterExitState.PreEnter isTransitioningTo EnterExitState.Visible) {
+                    tween(200, delayMillis = 80, easing = RealMotion.Standard)
+                } else {
+                    tween(120, easing = RealMotion.Exit)
+                }
             },
             label = "detailChromeAlpha"
         ) { state ->
@@ -781,35 +928,70 @@ internal fun ReminderDetailScreen(
                 )
                 if (calendarSyncPublished != null) {
                     // No glass pill behind SYNC: the capsule rendered dim on first frame and clipped the text.
-                    val syncColor = if (calendarSyncPublished) Color(0xFF78B9FF) else Color(0xFFF2F3F7)
+                    // Small and quiet: white when the calendar link is current, dim when the content is only in REAL.
+                    // A tap spins the arrows once.
+                    val syncColor = if (calendarSyncPublished) Color.White else Color.White.copy(alpha = 0.45f)
+                    val syncSpin = remember { Animatable(0f) }
+                    val syncScope = rememberCoroutineScope()
                     Row(
                         Modifier
                             .height(48.dp)
                             .clip(RoundedCornerShape(24.dp))
-                            .clickable(onClick = onCalendarSyncClick)
-                            .padding(horizontal = 14.dp)
+                            .clickable {
+                                if (!reduceAnimations) syncScope.launch { syncSpin.snapTo(0f); syncSpin.animateTo(360f, tween(650, easing = RealMotion.Emphasized)) }
+                                onCalendarSyncClick()
+                            }
+                            .padding(horizontal = 10.dp)
                             .semantics { contentDescription = if (calendarSyncPublished)
                                 "Takvim web bağlantısı güncel" else "İçerik yalnız REAL'de veya web bağlantısı güncel değil" },
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        ActionIcon(ActionGlyph.Repeat, Modifier.size(16.dp), syncColor)
+                        ActionIcon(ActionGlyph.Repeat, Modifier.size(11.dp).graphicsLayer { rotationZ = syncSpin.value }, syncColor)
                         Text(
-                            "SYNC", fontSize = 13.sp, lineHeight = 16.sp, letterSpacing = 1.2.sp,
+                            "SYNC", fontSize = 10.sp, lineHeight = 12.sp, letterSpacing = 2.2.sp,
                             fontWeight = FontWeight.SemiBold, color = syncColor, maxLines = 1
                         )
                     }
                 }
+                AnimatedVisibility(
+                    visible = freshClip != null && !pasting,
+                    enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(200)) + scaleIn(tween(220), initialScale = 0.85f),
+                    exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.85f)
+                ) {
+                    val shownKind = freshClip?.first ?: pasteKind
+                    DesignPanel(
+                        scene, { scenePosition }, Modifier.height(40.dp),
+                        corners = 20.dp, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
+                        liquidDynamic = true, liquidDock = true
+                    ) {
+                        Row(
+                            Modifier.fillMaxHeight().clip(RoundedCornerShape(20.dp))
+                                .clickable {
+                                    freshClip?.let { consumedClip = it.second }
+                                    freshClip = null
+                                    pasteIntoCard()
+                                }
+                                .padding(horizontal = 14.dp)
+                                .semantics { contentDescription = "Yapıştır: ${shownKind?.label.orEmpty()}" },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            ActionIcon(ActionGlyph.Paste, Modifier.size(16.dp), Color(0xFFE4E4EA))
+                            Text(shownKind?.label.orEmpty(), color = Color(0xFFF2F2F5), fontSize = 13.sp, maxLines = 1)
+                        }
+                    }
+                }
                 val starSettleScale = remember(reminder.id) { Animatable(1f) }
                 var hasRenderedInitialStar by remember(reminder.id) { mutableStateOf(false) }
-                LaunchedEffect(reminder.isImportant, reduceAnimations) {
+                LaunchedEffect(reminder.isImportant) {
                     if (!hasRenderedInitialStar) {
                         hasRenderedInitialStar = true
                         return@LaunchedEffect
                     }
                     if (reminder.isImportant && !reduceAnimations) {
-                        starSettleScale.animateTo(1.16f, tween(80))
-                        starSettleScale.animateTo(1.0f, RealMotion.snappy(0.24f))
+                        starSettleScale.snapTo(1.06f)
+                        starSettleScale.animateTo(1.0f, tween(160, easing = RealMotion.Emphasized))
                     } else {
                         starSettleScale.snapTo(1.0f)
                     }
@@ -834,7 +1016,21 @@ internal fun ReminderDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        IconButton(
+                        if (!nowBarEnabled) IconButton(
+                            onClick = { pasteIntoCard() },
+                            enabled = pasteKind != null && !pasting,
+                            interactionSource = nowBarInteractionSource,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .pressScale(nowBarInteractionSource, enabled = pasteKind != null, reduceAnimations = reduceAnimations, targetScale = 0.95f)
+                                .semantics {
+                                    contentDescription = pasteKind?.let { "Yapıştır: ${it.label}" } ?: "Panoda yapıştırılacak bir şey yok"
+                                }
+                        ) {
+                            if (pasting) com.cagri.real.ui.components.RealSpinner(Modifier.size(18.dp), color = Color.White, strokeWidth = 1.5.dp)
+                            else ActionIcon(ActionGlyph.Paste, Modifier.size(20.dp),
+                                if (pasteKind != null) Color(0xFFC9CBD3) else Color(0xFF55555E))
+                        } else IconButton(
                             onClick = {
                                 if (nowBarAvailable) {
                                     val pinned = NowBarReminderController.toggleManualPin(context, reminder.id)
@@ -894,16 +1090,22 @@ internal fun ReminderDetailScreen(
         }
     }
 
+    // Set while the full-bleed hero is on screen; the top glass strip then fades in only as the page scrolls.
+    var detailHeroActive by remember(reminder.id) { mutableStateOf(false) }
+
     val headerSpacerHeight by animateDpAsState(
         targetValue = if (editing) 0.dp else 48.dp,
-        animationSpec = if (reduceAnimations) snap() else tween(180, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+        animationSpec = if (reduceAnimations) snap() else tween(180, easing = RealMotion.Emphasized),
         label = "detailHeaderSpacerHeight"
     )
 
-    // The panel already animates its measured height; applying another animation here lags behind it.
-    val detailBottomPadding = with(LocalDensity.current) {
-        if (bottomPanelHeightPx > 0) bottomPanelHeightPx.toDp() + 16.dp else 114.dp
-    }
+    val detailBottomPadding by animateDpAsState(
+        targetValue = if (editing) {
+            if (editDockCollapsed) 132.dp else if (secondaryPanelsExpanded) 440.dp else 290.dp
+        } else if (inlineCardStackEditing) 180.dp else 114.dp,
+        animationSpec = if (reduceAnimations) snap() else tween(220, easing = RealMotion.Emphasized),
+        label = "detailDockContentInset"
+    )
 
     DetailLayoutBox(
         Modifier
@@ -1047,6 +1249,12 @@ internal fun ReminderDetailScreen(
                     subtitle = "${(if (editing) editedMediaBlocks else reminder.mediaBlocks).size} içerik",
                     glyph = ActionGlyph.Video
                 ),
+                "game" to ContentBlockDescriptor(
+                    key = "game",
+                    title = "Oyun",
+                    subtitle = "${reminder.gameBlocks.size} oyun",
+                    glyph = ActionGlyph.Play
+                ),
                 "location" to ContentBlockDescriptor(
                     key = "location",
                     title = "Konum",
@@ -1075,6 +1283,7 @@ internal fun ReminderDetailScreen(
                 when (key.substringBefore(':')) {
                     "music" -> section.copy(key = key, title = music?.title ?: section.title, subtitle = music?.artist ?: "")
                     "media" -> section.copy(key = key, title = media?.title ?: section.title, subtitle = media?.type?.name ?: "")
+                    "game" -> section.copy(key = key, title = reminder.gameBlocks.firstOrNull { it.id == id }?.title ?: "Oyun", subtitle = "Oyun")
                     "photos" -> section.copy(key = key, title = "Fotoğraf", subtitle = attachment?.displayName.orEmpty())
                     "files" -> section.copy(key = key, title = if (key == "files:reference") "Bağlantı" else attachment?.displayName ?: section.title)
                     else -> section.copy(key = key)
@@ -1112,7 +1321,6 @@ internal fun ReminderDetailScreen(
                         Text("İçerik Sıralaması", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
-                Spacer(Modifier.height(10.dp))
 
                 val reorderListState = rememberLazyListState()
                 val density = LocalDensity.current
@@ -1132,6 +1340,57 @@ internal fun ReminderDetailScreen(
                         addAll(resolveBlockOrder(editedContentBlockOrder, activeBlockKeys))
                     }
                 }
+
+                // "En üstteki içeriği büyüt": the top block becomes a full-width hero, like a cover photo.
+                // Stored with the existing layout fields (span 6 + tall minHeight), so no new sync field.
+                fun isHero(key: String?) = key != null && editedContentBlockLayout[key]?.let {
+                    it.span == CARD_GRID_UNITS && it.minHeight >= DETAIL_HERO_MIN_HEIGHT_DP
+                } == true
+                fun withHero(layout: Map<String, CardBlockPlacement>, key: String, on: Boolean): Map<String, CardBlockPlacement> {
+                    val p = (layout[key] ?: CardBlockPlacement()).normalized()
+                    return layout + (key to if (on) p.copy(span = CARD_GRID_UNITS, column = 0,
+                        minHeight = maxOf(p.minHeight, DETAIL_HERO_MIN_HEIGHT_DP)).normalized() else p.copy(minHeight = 0).normalized())
+                }
+                val topKey = reorderKeys.firstOrNull()
+                var heroOwner by remember { mutableStateOf(reorderKeys.firstOrNull { isHero(it) }) }
+                // The hero belongs to whatever is on top: moving another block up hands the size over to it.
+                LaunchedEffect(topKey) {
+                    val owner = heroOwner
+                    if (owner != null && topKey != null && owner != topKey) {
+                        editedContentBlockLayout = withHero(withHero(editedContentBlockLayout, owner, false), topKey, true)
+                        heroOwner = topKey
+                    }
+                }
+                val heroOn = isHero(topKey)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(enabled = topKey != null, role = Role.Checkbox) {
+                            val key = topKey ?: return@clickable
+                            editedContentBlockLayout = withHero(editedContentBlockLayout, key, !heroOn)
+                            heroOwner = if (heroOn) null else key
+                        }
+                        .semantics { stateDescription = if (heroOn) "Açık" else "Kapalı" }
+                        .padding(horizontal = 6.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val tick by animateFloatAsState(if (heroOn) 1f else 0f, if (reduceAnimations) snap() else RealMotion.snappy(), label = "heroTick")
+                    Box(
+                        Modifier.size(22.dp).clip(CircleShape)
+                            .background(Color(0xFF91B9FF).copy(alpha = tick))
+                            .border(1.5.dp, lerp(Color(0xFF6E6E78), Color(0xFF91B9FF), tick), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ActionIcon(ActionGlyph.Check, Modifier.size(13.dp).graphicsLayer { alpha = tick; scaleX = 0.6f + 0.4f * tick; scaleY = 0.6f + 0.4f * tick }, Color(0xFF0B0B0D))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("En üstteki içeriği büyüt", color = Color(0xFFE8E8EE), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text("Listenin başındaki içerik kartın tepesinde tam genişlikte, büyük görünür.",
+                            color = Color(0xFF8E8E98), fontSize = 12.sp, lineHeight = 16.sp)
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
 
                 val settleDrag: () -> Unit = {
                     val key = draggedKey
@@ -1318,16 +1577,20 @@ internal fun ReminderDetailScreen(
                     .padding(start = 16.dp, end = 16.dp, top = statusHeight + 10.dp,
                         bottom = detailBottomPadding)
             ) {
+                // "En üstteki içeriği büyüt" while reading (Liquid Glass): the top block leaves the grid and sits at
+                // the very top, right under the status bar with the usual side margins, the back / star buttons
+                // floating over it like a cover (same place it has while editing).
+                val heroCandidate = currentOrder.firstOrNull()
+                val heroKey = heroCandidate?.takeIf {
+                    designStyle == DesignStyle.LiquidGlass && !editing && !inlineCardStackEditing &&
+                        reminder.contentBlockLayout[it]?.let { p -> p.span == CARD_GRID_UNITS && p.minHeight >= DETAIL_HERO_MIN_HEIGHT_DP } == true
+                }
+                SideEffect { detailHeroActive = heroKey != null }
                 if (designStyle == DesignStyle.LiquidGlass) {
-                    if (headerSpacerHeight > 0.dp) Spacer(Modifier.height(headerSpacerHeight))
+                    if (heroKey == null && headerSpacerHeight > 0.dp) Spacer(Modifier.height(headerSpacerHeight))
                 } else detailHeader()
 
-                val corner = if (!reduceAnimations && animatedVisibilityScope != null) {
-                    animatedVisibilityScope.transition.animateFloat(
-                        transitionSpec = { RealMotion.smooth(0.32f) }, label = "detailCardCorner"
-                    ) { if (it == EnterExitState.Visible) 28f else 22f }.value
-                } else 28f
-                val cardShape = RoundedCornerShape(corner.dp)
+                val cardShape = RoundedCornerShape(28.dp)
                 val shownAccentStart = if (editing) accentStart else reminder.accentStart
                 val shownAccentEnd = if (editing) accentEnd else reminder.accentEnd
                 val shownBlendFraction = if (editing) gradientBlendFraction else reminder.gradientBlendFraction
@@ -1346,7 +1609,7 @@ internal fun ReminderDetailScreen(
                         Modifier.sharedBounds(
                             rememberSharedContentState(key = "reminder-card-${reminder.id}"),
                             animatedVisibilityScope = animatedVisibilityScope,
-                            boundsTransform = { _, _ -> RealMotion.smooth(0.32f) },
+                            boundsTransform = { _, _ -> tween(320, easing = RealMotion.Standard) },
                             clipInOverlayDuringTransition = OverlayClip(cardShape),
                             renderInOverlayDuringTransition = !hasActiveFullscreenOverlay
                         )
@@ -1360,26 +1623,29 @@ internal fun ReminderDetailScreen(
                     Modifier.border(1.25.dp, cardBorderColor, cardShape)
                 } else Modifier
 
-                val visibleBlocks = currentOrder
-                val displayedLayout = cardDetailReadablePlacements(cardLayoutForKeys(
+                val visibleBlocks = if (heroKey != null) currentOrder.drop(1) else currentOrder
+                val widgetKeys = widgetBlockKeys(if (editing) editedAttachments else reminder.attachments)
+                val baseDisplayedLayout = cardDetailReadablePlacements(cardLayoutForKeys(
                     if (editing || inlineCardStackEditing) editedContentBlockLayout else reminder.contentBlockLayout,
                     activeBlockKeys
-                ), detailWidthDp)
-                Spacer(Modifier.height(12.dp))
-
-                CardCompositionGrid(
-                    keys = visibleBlocks, placements = displayedLayout,
-                    editing = editing && !savingDetail && !voiceRecordingActive,
-                    reduceAnimations = reduceAnimations, selected = selectedLayoutBlock,
-                    dragState = cardBlockDrag, scrollState = detailContentScroll,
-                    onSelect = { selectedLayoutBlock = it },
-                    onFreeDrop = { layout -> editedContentBlockLayout = layout },
-                    onPlacementChange = { key, placement -> editedContentBlockLayout = displayedLayout + (key to placement.normalized()) },
-                    onBlockCoordinates = { key, coords ->
-                        if (coords != null) contentBlockCoordinates[key] = coords
-                        else contentBlockCoordinates.remove(key)
+                ), detailWidthDp, widgetKeys)
+                val displayedLayout = if (heroKey == null) baseDisplayedLayout else {
+                    // Blocks placed freely below the hero kept tops that counted the hero's slot in the grid.
+                    // With the hero drawn above the grid, lift them by that slot so no empty band opens up.
+                    val hero = (baseDisplayedLayout[heroKey] ?: CardBlockPlacement()).normalized()
+                    val heroSlot = (hero.top ?: 0) + hero.minHeight + hero.gapBefore
+                    baseDisplayedLayout.mapValues { (key, p) ->
+                        when {
+                            key == heroKey -> p.copy(span = CARD_GRID_UNITS, column = 0)
+                            p.top != null -> p.copy(top = (p.top - heroSlot).coerceAtLeast(0))
+                            else -> p
+                        }
                     }
-                ) { blockKey, blockIndex ->
+                }
+                if (heroKey == null) Spacer(Modifier.height(12.dp))
+
+                // Block renderer shared by the grid and the full-bleed hero at the top of the detail.
+                val detailBlockContent: @Composable (String, Int) -> Unit = { blockKey, blockIndex ->
                     BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1398,7 +1664,9 @@ internal fun ReminderDetailScreen(
                                 ((titleHeight - (if (compactTitle) 16 else 50) -
                                     (if (!editing && !compactTitle) 120 else 0)) / 31).coerceAtLeast(1)
                                 else Int.MAX_VALUE
-                            val titleAlignment = when (titlePlacement.textAlignment) {
+                            // As the cover the text sits centred in the block, below the status bar.
+                            val heroInset = LocalDetailHeroInset.current
+                            val titleAlignment = if (heroInset > 0.dp) TextAlign.Center else when (titlePlacement.textAlignment) {
                                 "center" -> TextAlign.Center
                                 "end" -> TextAlign.End
                                 else -> TextAlign.Start
@@ -1408,11 +1676,7 @@ internal fun ReminderDetailScreen(
                                 Modifier
                                     .then(sharedCardModifier)
                                     .fillMaxWidth()
-                                    .pullDownToDismiss(
-                                        if (!editing && !inlineCardStackEditing && !deleting && !hasActiveFullscreenOverlay) pullDismiss else null,
-                                        detailContentScroll
-                                    )
-                                    .then(if (titleHeight > 0) Modifier.height(titleHeight.dp) else Modifier)
+                                    .then(if (titleHeight > 0) Modifier.height(titleHeight.dp + heroInset) else Modifier)
                                     .cardBlockSurface()
                                     .clip(cardShape)
                                     .then(
@@ -1422,7 +1686,8 @@ internal fun ReminderDetailScreen(
                                         ) else Modifier.background(accentBrush)
                                     )
                                     .then(cardBorderModifier)
-                                    .padding(horizontal = 22.dp, vertical = titlePadding)
+                                    .padding(start = 22.dp, end = 22.dp, top = titlePadding + heroInset, bottom = titlePadding),
+                                verticalArrangement = if (heroInset > 0.dp) Arrangement.Center else Arrangement.Top
                             ) {
                                 val shownUseDarkText = if (editing) useDarkText else reminder.useDarkText
                                 if (editing) {
@@ -1684,7 +1949,36 @@ internal fun ReminderDetailScreen(
                                 it.id == blockKey.substringAfter(':') && it.type == AttachmentType.TEXT_SNIPPET &&
                                     it.sourceTitle == "REAL_TEXT_BLOCK"
                             }
-                            if (inlineText != null) {
+                            val widget = displayedAttachments.firstOrNull {
+                                it.id == blockKey.substringAfter(':') && (it.isCounterBlock() || it.isMarketBlock())
+                            }
+                            if (widget != null && widget.isCounterBlock()) {
+                                com.cagri.real.ui.components.CounterBlockView(
+                                    attachment = widget,
+                                    editing = editing && !savingDetail,
+                                    enabled = !reminder.isCompleted || editing,
+                                    reduceAnimations = reduceAnimations,
+                                    showSettings = editing && selectedLayoutBlock == blockKey,
+                                    onSettings = { widgetSettingsId = widget.id },
+                                    onChange = ::commitWidgetAttachment,
+                                    onRemove = {
+                                        editedAttachments = editedAttachments.filterNot { it.id == widget.id }
+                                        selectedLayoutBlock = null
+                                    }
+                                )
+                            } else if (widget != null) {
+                                com.cagri.real.ui.components.MarketBlockView(
+                                    attachment = widget,
+                                    editing = editing && !savingDetail,
+                                    reduceAnimations = reduceAnimations,
+                                    showSettings = editing && selectedLayoutBlock == blockKey,
+                                    onSettings = { widgetSettingsId = widget.id },
+                                    onRemove = {
+                                        editedAttachments = editedAttachments.filterNot { it.id == widget.id }
+                                        selectedLayoutBlock = null
+                                    }
+                                )
+                            } else if (inlineText != null) {
                                 com.cagri.real.ui.components.CardStandaloneTextBox(
                                     text = inlineText.text.orEmpty(),
                                     editing = editing && !savingDetail,
@@ -1797,6 +2091,15 @@ internal fun ReminderDetailScreen(
                                 onRemove = { id -> editedMediaBlocks = editedMediaBlocks.filterNot { it.id == id } }
                             )
                         }
+                        "game" -> {
+                            com.cagri.real.ui.components.GameContentSection(
+                                blocks = reminder.gameBlocks.filter { it.id == blockKey.substringAfter(':') },
+                                display = com.cagri.real.data.catalogCardDisplay(displayedLayout[blockKey]?.span ?: com.cagri.real.data.CARD_GRID_UNITS),
+                                showActions = displayedLayout[blockKey]?.hideActions != true,
+                                designStyle = designStyle, editing = editing && !savingDetail,
+                                onRemove = { id -> onRemoveGameBlock(id) }
+                            )
+                        }
                         "card_stack" -> {
                             val allStacks = if (editing || inlineCardStackEditing) editedCardStack else reminder.cardStack
                             val stack = allStacks?.layoutStacks()?.firstOrNull { it.first == blockKey }?.second
@@ -1862,9 +2165,76 @@ internal fun ReminderDetailScreen(
                                             .clip(locCardShape)
                                             .background(if (designStyle == DesignStyle.LiquidGlass) LiquidGlassTokens.contentColor else Color(0xFF131820))
                                     ) {
-                                        ReminderLocationMap(place, Modifier.fillMaxSize()) {
-                                            if (!openReminderLocationInMaps(context, place))
-                                                Toast.makeText(context, "Harita uygulaması açılamadı", Toast.LENGTH_SHORT).show()
+                                        // Zoom chosen while editing is stored on the location; pinch previews it live.
+                                        val baseZoom = place.mapZoom ?: if (place.approximateCoordinates) 15.10 else 15.35
+                                        var pinchScale by remember(blockKey) { mutableFloatStateOf(1f) }
+                                        var awaitingSnapshot by remember(blockKey) { mutableStateOf(false) }
+                                        fun commitZoom(zoom: Double) {
+                                            val next = zoom.coerceIn(3.0, 19.0)
+                                            if (kotlin.math.abs(next - baseZoom) < 0.01) { pinchScale = 1f; return }
+                                            awaitingSnapshot = true
+                                            editedLocation = editedLocation?.copy(mapZoom = next)
+                                        }
+                                        ReminderLocationMap(
+                                            place,
+                                            Modifier.fillMaxSize().then(if (!editing) Modifier else Modifier.pointerInput(blockKey) {
+                                                awaitEachGesture {
+                                                    awaitFirstDown(requireUnconsumed = false)
+                                                    var scale = 1f
+                                                    var pinched = false
+                                                    do {
+                                                        val event = awaitPointerEvent()
+                                                        if (event.changes.count { it.pressed } >= 2) {
+                                                            scale = (scale * event.calculateZoom()).coerceIn(0.125f, 16f)
+                                                            pinchScale = scale
+                                                            pinched = true
+                                                            event.changes.forEach { it.consume() }
+                                                        }
+                                                    } while (event.changes.any { it.pressed })
+                                                    if (pinched) commitZoom(baseZoom + kotlin.math.ln(scale.toDouble()) / kotlin.math.ln(2.0))
+                                                }
+                                            }),
+                                            cameraZoom = place.mapZoom,
+                                            onOpen = {
+                                                if (!openReminderLocationInMaps(context, place))
+                                                    com.cagri.real.ui.components.RealToast.show(context, "Harita uygulaması açılamadı")
+                                            },
+                                            previewScale = { pinchScale },
+                                            onSnapshotShown = { if (awaitingSnapshot) { awaitingSnapshot = false; pinchScale = 1f } }
+                                        )
+                                        // The picked place in small type at the bottom right (its name, or the street).
+                                        com.cagri.real.ui.components.reminderLocationLabel(place)?.let { label ->
+                                            Text(
+                                                label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium,
+                                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                                                    .then(Modifier.sizeIn(maxWidth = 200.dp))
+                                                    .background(Color(0xB3101012), RoundedCornerShape(10.dp))
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                        if (editing) {
+                                            Row(
+                                                Modifier.align(Alignment.BottomStart).padding(8.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                listOf(ActionGlyph.Add to 1.0, ActionGlyph.Minus to -1.0).forEach { (glyph, step) ->
+                                                    Box(
+                                                        Modifier.size(32.dp).clip(CircleShape)
+                                                            .background(Color(0xD918181B))
+                                                            .border(0.5.dp, Color(0x4DFFFFFF), CircleShape)
+                                                            .clickable(role = Role.Button) {
+                                                                // Button zoom: grow/shrink the current snapshot at once, sharpen when the new one lands.
+                                                                pinchScale = if (step > 0) 2f else 0.5f
+                                                                commitZoom(baseZoom + step)
+                                                            }
+                                                            .semantics { contentDescription = if (step > 0) "Haritayı yakınlaştır" else "Haritayı uzaklaştır" },
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        ActionIcon(glyph, Modifier.size(15.dp), Color(0xFFF1F1F4))
+                                                    }
+                                                }
+                                            }
                                         }
                                         if (editing) {
                                             IconButton(
@@ -1898,7 +2268,7 @@ internal fun ReminderDetailScreen(
                                                     .weight(1f)
                                                     .clickable {
                                                         if (!openReminderLocationInMaps(context, place)) {
-                                                            Toast.makeText(context, "Harita uygulaması açılamadı", Toast.LENGTH_SHORT).show()
+                                                            com.cagri.real.ui.components.RealToast.show(context, "Harita uygulaması açılamadı")
                                                         }
                                                     },
                                                 verticalAlignment = Alignment.CenterVertically,
@@ -2042,6 +2412,48 @@ internal fun ReminderDetailScreen(
                     }
                     }
                 }
+                if (heroKey != null) {
+                    // The cover reaches the screen edges and up under the status bar, like a category's header:
+                    // the column's side margins and top inset are undone here, the block keeps its rounded bottom.
+                    val heroBleedTop = statusHeight + 10.dp
+                    Box(
+                        Modifier.layout { measurable, constraints ->
+                            val extraWidth = 32.dp.roundToPx()
+                            val up = heroBleedTop.roundToPx()
+                            val width = constraints.maxWidth + extraWidth
+                            val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+                            layout(constraints.maxWidth, (placeable.height - up).coerceAtLeast(0)) {
+                                placeable.place(-extraWidth / 2, -up)
+                            }
+                        },
+                        propagateMinConstraints = true
+                    ) {
+                        CompositionLocalProvider(
+                            // Same contract as inside the grid: blocks fill the given width/height (a photo crops to fill).
+                            LocalCardContentComposition provides true,
+                            LocalCardBlockHeight provides displayedLayout.getValue(heroKey).minHeight.dp + heroBleedTop,
+                            LocalDetailHeroInset provides heroBleedTop
+                        ) {
+                            detailBlockContent(heroKey, 0)
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                }
+                CardCompositionGrid(
+                    keys = visibleBlocks, placements = displayedLayout,
+                    editing = editing && !savingDetail && !voiceRecordingActive,
+                    reduceAnimations = reduceAnimations, selected = selectedLayoutBlock,
+                    dragState = cardBlockDrag, scrollState = detailContentScroll,
+                    onSelect = { selectedLayoutBlock = it },
+                    onFreeDrop = { layout -> editedContentBlockLayout = layout },
+                    onPlacementChange = { key, placement -> editedContentBlockLayout = displayedLayout + (key to placement.normalized()) },
+                    onBlockCoordinates = { key, coords ->
+                        if (coords != null) contentBlockCoordinates[key] = coords
+                        else contentBlockCoordinates.remove(key)
+                    },
+                    compactKeys = widgetKeys,
+                    content = detailBlockContent
+                )
 
                 if (musicSearchOpen && editing) {
                     MusicSearchSheet(designStyle = designStyle,
@@ -2050,6 +2462,12 @@ internal fun ReminderDetailScreen(
                             editedMusicBlocks = editedMusicBlocks + track
                             musicSearchOpen = false
                         })
+                }
+
+                if (gameSearchOpen) {
+                    com.cagri.real.ui.components.GameSearchSheet(designStyle = designStyle,
+                        onDismiss = { gameSearchOpen = false },
+                        onSelect = { game -> onAddGameBlock(game); gameSearchOpen = false })
                 }
 
                 if (mediaSearchOpen && editing) {
@@ -2107,7 +2525,10 @@ internal fun ReminderDetailScreen(
                 }
             }
         }
-        TopGlassOverlay(scene, { scenePosition }, Modifier.align(Alignment.TopCenter), reduceDynamicBlur)
+        TopGlassOverlay(scene, { scenePosition }, Modifier.align(Alignment.TopCenter).graphicsLayer {
+            // Over a hero cover the dark strip would shade the photo: it fades in as the page scrolls past it.
+            alpha = if (detailHeroActive) (detailContentScroll.value / 280.dp.toPx()).coerceIn(0f, 1f) else 1f
+        }, reduceDynamicBlur)
         if (designStyle == DesignStyle.LiquidGlass) {
             Box(Modifier.align(Alignment.TopCenter).then(if (deleting) Modifier.clearAndSetSemantics { } else Modifier).padding(start = 16.dp, end = 16.dp, top = statusHeight + 10.dp)) {
                 detailHeader()
@@ -2123,7 +2544,6 @@ internal fun ReminderDetailScreen(
             Modifier
                 .align(Alignment.BottomCenter)
                 .onGloballyPositioned { bottomPanelCoordinates = it }
-                .onSizeChanged { bottomPanelHeightPx = it.height }
                 .fillMaxWidth()
                 .graphicsLayer { alpha = chromeAlpha }
                 .padding(horizontal = 24.dp, vertical = 18.dp)
@@ -2136,8 +2556,17 @@ internal fun ReminderDetailScreen(
                         focusManager.clearFocus()
                         keyboard?.hide()
                         editDockCollapsed = collapsed
+                    },
+                    collapsedBar = { handle ->
+                        // Lowered dock: a slim glass bar that still holds the handle.
+                        DesignPanel(backdrop = scene, backdropPosition = { scenePosition },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).isolateFloatingPanelGestures(),
+                            corners = 26.dp, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
+                            liquidDynamic = true) {
+                            Box(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) { handle() }
+                        }
                     }
-                ) {
+                ) { handle ->
                     AnimatedVisibility(
                         visible = editing && secondaryPanelsExpanded,
                         enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)) + slideInVertically(tween(240)) { it / 8 } + scaleIn(tween(240), initialScale = 0.97f),
@@ -2179,7 +2608,7 @@ internal fun ReminderDetailScreen(
                                 starBorderIndex = starBorderColorIndex,
                                 onStarBorderChange = { if (it != null) starBorderColorIndex = it },
                                 useDarkText = useDarkText,
-                                onUseDarkTextChange = { useDarkText = it },
+                                onUseDarkTextChange = null,
                                 backdrop = scene,
                                 backdropPosition = { scenePosition },
                                 designStyle = designStyle,
@@ -2242,7 +2671,9 @@ internal fun ReminderDetailScreen(
                             corners = 26.dp,
                             designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
                             liquidDynamic = true) {
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 10.dp)) {
+                                // The dock's grab handle sits inside the panel, above "Renk ve kategori".
+                                handle()
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
@@ -2287,7 +2718,7 @@ internal fun ReminderDetailScreen(
                                             .clip(CircleShape)
                                             .clickable(
                                                 interactionSource = sortInteractionSource,
-                                                indication = LocalIndication.current
+                                                indication = null /* pressScale already gives the press feedback */
                                             ) {
                                                 focusManager.clearFocus()
                                                 keyboard?.hide()
@@ -2318,24 +2749,7 @@ internal fun ReminderDetailScreen(
                                 val voiceCount = editedVoiceRecordings.size
                                 val checklistCount = editedChecklistItems.size
 
-                                DetailQuickActionButton(
-                                    designStyle = designStyle, reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.Note, description = "Metin kutusu ekle",
-                                    enabled = !savingDetail && !voiceRecordingActive,
-                                    active = editedAttachments.any { it.sourceTitle == "REAL_TEXT_BLOCK" },
-                                    onClick = {
-                                        focusManager.clearFocus()
-                                        val id = java.util.UUID.randomUUID().toString()
-                                        editedAttachments = editedAttachments + com.cagri.real.data.ReminderAttachment(
-                                            id = id, type = AttachmentType.TEXT_SNIPPET, mimeType = "text/plain",
-                                            displayName = "Metin", text = "", sourceTitle = "REAL_TEXT_BLOCK"
-                                        )
-                                        val key = "files:$id"
-                                        editedContentBlockOrder = (editedContentBlockOrder + key).distinct()
-                                        editedContentBlockLayout = editedContentBlockLayout + (key to CardBlockPlacement())
-                                        selectedLayoutBlock = key
-                                    }
-                                )
+                                // Most used first, least used last (counter and market tiles at the end).
                                 DetailQuickActionButton(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
@@ -2348,31 +2762,6 @@ internal fun ReminderDetailScreen(
                                 DetailQuickActionButton(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.Pin,
-                                    description = "Konum",
-                                    enabled = !savingDetail,
-                                    active = editedLocation != null,
-                                    onClick = { showLocationGuide = true }
-                                )
-                                DetailQuickActionButton(
-                                    designStyle = designStyle,
-                                    reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.Checklist,
-                                    description = "Checklist",
-                                    enabled = !savingDetail,
-                                    active = checklistCount > 0,
-                                    count = if (checklistCount > 0) checklistCount else null,
-                                    onClick = {
-                                        checklistBlockOpen = true
-                                        if (editedChecklistItems.isEmpty()) {
-                                            editedChecklistItems = listOf(ChecklistItem(id = System.currentTimeMillis(), text = ""))
-                                        }
-                                        shouldFocusFirstItem = true
-                                    }
-                                )
-                                DetailQuickActionButton(
-                                    designStyle = designStyle,
-                                    reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Photo,
                                     description = "Fotoğraf ekle",
                                     enabled = !savingDetail && !attachmentBusy,
@@ -2381,7 +2770,7 @@ internal fun ReminderDetailScreen(
                                     isFull = photoCount >= 3,
                                     onClick = {
                                         if (photoCount >= 3) {
-                                            Toast.makeText(context, "En fazla 3 fotoğraf eklenebilir", Toast.LENGTH_SHORT).show()
+                                            com.cagri.real.ui.components.RealToast.show(context, "En fazla 3 fotoğraf eklenebilir")
                                         } else {
                                             detailPhotoPickerLauncher.launch(
                                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -2398,7 +2787,7 @@ internal fun ReminderDetailScreen(
                                     active = showCamera,
                                     isFull = photoCount >= 3,
                                     onClick = {
-                                        if (photoCount >= 3) Toast.makeText(context, "En fazla 3 fotoğraf eklenebilir", Toast.LENGTH_SHORT).show()
+                                        if (photoCount >= 3) com.cagri.real.ui.components.RealToast.show(context, "En fazla 3 fotoğraf eklenebilir")
                                         else {
                                             focusManager.clearFocus()
                                             keyboard?.hide()
@@ -2409,49 +2798,18 @@ internal fun ReminderDetailScreen(
                                 DetailQuickActionButton(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.File,
-                                    description = "Dosya ekle",
-                                    enabled = !savingDetail && !attachmentBusy,
-                                    active = fileCount > 0,
-                                    count = if (fileCount > 0) fileCount else null,
+                                    glyph = ActionGlyph.Checklist,
+                                    description = "Checklist",
+                                    enabled = !savingDetail,
+                                    active = checklistCount > 0,
+                                    count = if (checklistCount > 0) checklistCount else null,
                                     onClick = {
-                                        detailFilePickerLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                                            addCategory(Intent.CATEGORY_OPENABLE)
-                                            type = "*/*"
-                                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-                                        })
+                                        checklistBlockOpen = true
+                                        if (editedChecklistItems.isEmpty()) {
+                                            editedChecklistItems = listOf(ChecklistItem(id = System.currentTimeMillis(), text = ""))
+                                        }
+                                        shouldFocusFirstItem = true
                                     }
-                                )
-                                DetailQuickActionButton(
-                                    designStyle = designStyle,
-                                    reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.Music,
-                                    description = "Müzik",
-                                    enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
-                                    active = musicCount > 0,
-                                    count = if (musicCount > 0) musicCount else null,
-                                    onClick = { focusManager.clearFocus(); keyboard?.hide(); musicSearchOpen = true }
-                                )
-                                DetailQuickActionButton(
-                                    designStyle = designStyle,
-                                    reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.Video,
-                                    description = "Film & Dizi",
-                                    enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
-                                    active = mediaCount > 0,
-                                    count = if (mediaCount > 0) mediaCount else null,
-                                    onClick = { focusManager.clearFocus(); keyboard?.hide(); mediaSearchOpen = true }
-                                )
-                                DetailQuickActionButton(
-                                    designStyle = designStyle,
-                                    reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.AudioWave,
-                                    description = "Ses",
-                                    enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
-                                    active = voiceCount > 0,
-                                    count = if (voiceCount > 0) voiceCount else null,
-                                    onClick = { focusManager.clearFocus(); keyboard?.hide(); voiceRecorderOpen = true }
                                 )
                                 DetailQuickActionButton(
                                     designStyle = designStyle,
@@ -2481,6 +2839,90 @@ internal fun ReminderDetailScreen(
                                     }
                                 )
                                 DetailQuickActionButton(
+                                    designStyle = designStyle, reduceAnimations = reduceAnimations,
+                                    glyph = ActionGlyph.Note, description = "Metin kutusu ekle",
+                                    enabled = !savingDetail && !voiceRecordingActive,
+                                    active = editedAttachments.any { it.sourceTitle == "REAL_TEXT_BLOCK" },
+                                    onClick = {
+                                        focusManager.clearFocus()
+                                        val id = java.util.UUID.randomUUID().toString()
+                                        editedAttachments = editedAttachments + com.cagri.real.data.ReminderAttachment(
+                                            id = id, type = AttachmentType.TEXT_SNIPPET, mimeType = "text/plain",
+                                            displayName = "Metin", text = "", sourceTitle = "REAL_TEXT_BLOCK"
+                                        )
+                                        val key = "files:$id"
+                                        editedContentBlockOrder = (editedContentBlockOrder + key).distinct()
+                                        editedContentBlockLayout = editedContentBlockLayout + (key to CardBlockPlacement())
+                                        selectedLayoutBlock = key
+                                    }
+                                )
+                                DetailQuickActionButton(
+                                    designStyle = designStyle,
+                                    reduceAnimations = reduceAnimations,
+                                    glyph = ActionGlyph.Pin,
+                                    description = "Konum",
+                                    enabled = !savingDetail,
+                                    active = editedLocation != null,
+                                    onClick = { showLocationGuide = true }
+                                )
+                                DetailQuickActionButton(
+                                    designStyle = designStyle,
+                                    reduceAnimations = reduceAnimations,
+                                    glyph = ActionGlyph.AudioWave,
+                                    description = "Ses",
+                                    enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
+                                    active = voiceCount > 0,
+                                    count = if (voiceCount > 0) voiceCount else null,
+                                    onClick = { focusManager.clearFocus(); keyboard?.hide(); voiceRecorderOpen = true }
+                                )
+                                DetailQuickActionButton(
+                                    designStyle = designStyle,
+                                    reduceAnimations = reduceAnimations,
+                                    glyph = ActionGlyph.Music,
+                                    description = "Müzik",
+                                    enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
+                                    active = musicCount > 0,
+                                    count = if (musicCount > 0) musicCount else null,
+                                    onClick = { focusManager.clearFocus(); keyboard?.hide(); musicSearchOpen = true }
+                                )
+                                DetailQuickActionButton(
+                                    designStyle = designStyle,
+                                    reduceAnimations = reduceAnimations,
+                                    glyph = ActionGlyph.Video,
+                                    description = "Film & Dizi",
+                                    enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
+                                    active = mediaCount > 0,
+                                    count = if (mediaCount > 0) mediaCount else null,
+                                    onClick = { focusManager.clearFocus(); keyboard?.hide(); mediaSearchOpen = true }
+                                )
+                                DetailQuickActionButton(
+                                    designStyle = designStyle,
+                                    reduceAnimations = reduceAnimations,
+                                    glyph = ActionGlyph.Play,
+                                    description = "Oyun",
+                                    enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
+                                    active = reminder.gameBlocks.isNotEmpty(),
+                                    count = reminder.gameBlocks.size.takeIf { it > 0 },
+                                    onClick = { focusManager.clearFocus(); keyboard?.hide(); gameSearchOpen = true }
+                                )
+                                DetailQuickActionButton(
+                                    designStyle = designStyle,
+                                    reduceAnimations = reduceAnimations,
+                                    glyph = ActionGlyph.File,
+                                    description = "Dosya ekle",
+                                    enabled = !savingDetail && !attachmentBusy,
+                                    active = fileCount > 0,
+                                    count = if (fileCount > 0) fileCount else null,
+                                    onClick = {
+                                        detailFilePickerLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                            addCategory(Intent.CATEGORY_OPENABLE)
+                                            type = "*/*"
+                                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                                        })
+                                    }
+                                )
+                                DetailQuickActionButton(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.MoodVeryGood,
@@ -2494,6 +2936,27 @@ internal fun ReminderDetailScreen(
                                         showMoodFullscreen = true
                                     }
                                 )
+                                // Counter (value box + step buttons) and market tile (Bitcoin, gram altın, Euro, Dolar).
+                                listOf(
+                                    Triple(ActionGlyph.Add, "Sayaç ekle") { com.cagri.real.data.newCounterAttachment() },
+                                    Triple(ActionGlyph.AudioWave, "Piyasa ekle") { com.cagri.real.data.newMarketAttachment() }
+                                ).forEach { (glyph, label, create) ->
+                                    DetailQuickActionButton(
+                                        designStyle = designStyle, reduceAnimations = reduceAnimations,
+                                        glyph = glyph, description = label,
+                                        enabled = !savingDetail && !voiceRecordingActive,
+                                        active = editedAttachments.any { if (glyph == ActionGlyph.Add) it.isCounterBlock() else it.isMarketBlock() },
+                                        onClick = {
+                                            focusManager.clearFocus()
+                                            val block = create()
+                                            editedAttachments = editedAttachments + block
+                                            val key = "files:${block.id}"
+                                            editedContentBlockOrder = (editedContentBlockOrder + key).distinct()
+                                            editedContentBlockLayout = editedContentBlockLayout + (key to CardBlockPlacement())
+                                            selectedLayoutBlock = key
+                                        }
+                                    )
+                                }
                             }
                         if (editing && !reminder.isCompleted) {
                             if (reminder.alertAt != null) {
@@ -2540,8 +3003,27 @@ internal fun ReminderDetailScreen(
                                                 Text(repeatLabel, color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
                                             }
                                         }
-                                        val currentEndAt = detailDurationMinutes?.let { reminder.alertAt + it * 60_000L }
-                                        val currentEndTimeStr = if (currentEndAt != null) com.cagri.real.ui.components.planner.formatTimeAmPm(currentEndAt, ZoneId.systemDefault()) else "—"
+                                        reminder.earlyAlertMinutes?.let { early ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .clip(scheduleShape)
+                                                    .then(
+                                                        if (designStyle == DesignStyle.LiquidGlass) Modifier.liquidChrome(12.dp)
+                                                        else Modifier.background(Color.White.copy(alpha = 0.07f)).border(0.7.dp, Color.White.copy(alpha = 0.12f), scheduleShape)
+                                                    )
+                                                    .clickable(onClick = requestPermissionForDatePicker)
+                                                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                            ) {
+                                                ActionIcon(ActionGlyph.Bell, Modifier.size(14.dp), Color(0xFF91B9FF))
+                                                Text(com.cagri.real.ui.components.earlyAlertLabel(early) + " önce", color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
+                                            }
+                                        }
+                                        val currentEndTimeStr = reminder.endAt?.let { end ->
+                                            java.time.Instant.ofEpochMilli(end).atZone(ZoneId.systemDefault())
+                                                .format(java.time.format.DateTimeFormatter.ofPattern("d MMM HH:mm", java.util.Locale.forLanguageTag("tr-TR")))
+                                        }
 
                                         Row(
                                             modifier = Modifier
@@ -2587,12 +3069,48 @@ internal fun ReminderDetailScreen(
                                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                                         ) {
                                             ActionIcon(ActionGlyph.Calendar, Modifier.size(14.dp), Color(0xFF91B9FF))
-                                            Text("Bitiş: $currentEndTimeStr", color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
+                                            Text(currentEndTimeStr?.let { "Bitiş: $it" } ?: "+ Bitiş", color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
+                                            if (currentEndTimeStr != null) {
+                                                ActionIcon(ActionGlyph.Close, Modifier.size(12.dp).clip(CircleShape)
+                                                    .clickable { setReminderTiming(reminder.id, reminder.earlyAlertMinutes, null) }
+                                                    .semantics { contentDescription = "Bitişi kaldır" }, Color(0xFFA7A7AF))
+                                            }
                                         }
                                     }
                                     IconButton(
                                         onClick = { onSetAlert(null, RecurrenceRule.NONE) },
                                         modifier = Modifier.semantics { contentDescription = "Tarih ve saati kaldır" }
+                                    ) {
+                                        ActionIcon(ActionGlyph.Close, Modifier.size(18.dp))
+                                    }
+                                }
+                            } else if (reminder.plannedDateEpochDay != null) {
+                                // A day without a time (e.g. moved to 24 hour): its date can be removed too.
+                                Row(
+                                    Modifier.fillMaxWidth().padding(top = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val scheduleShape = RoundedCornerShape(12.dp)
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f, fill = false)
+                                            .clip(scheduleShape)
+                                            .then(
+                                                if (designStyle == DesignStyle.LiquidGlass) Modifier.liquidChrome(12.dp, selected = true)
+                                                else Modifier.background(Color(0xFF263247)).border(0.7.dp, Color(0xFF41516A), scheduleShape)
+                                            )
+                                            .clickable(onClick = requestPermissionForDatePicker)
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        ActionIcon(ActionGlyph.Calendar, Modifier.size(16.dp), Color(0xFF91B9FF))
+                                        Text(detailPlannedDate(reminder.plannedDateEpochDay), color = Color(0xFFE2E8F0), style = RealType.composerScheduleChip)
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                    IconButton(
+                                        onClick = { onSetAlert(null, RecurrenceRule.NONE) },
+                                        modifier = Modifier.semantics { contentDescription = "Tarihi kaldır" }
                                     ) {
                                         ActionIcon(ActionGlyph.Close, Modifier.size(18.dp))
                                     }
@@ -2769,6 +3287,14 @@ internal fun ReminderDetailScreen(
                 }
             }
         }
+        val settingsWidget = widgetSettingsId?.let { id -> editedAttachments.firstOrNull { it.id == id } }
+        if (editing && settingsWidget != null) {
+            com.cagri.real.ui.components.WidgetSettingsDialog(
+                attachment = settingsWidget,
+                onChange = ::commitWidgetAttachment,
+                onDismiss = { widgetSettingsId = null }
+            )
+        }
         if (editing && showTitleTools) {
             com.cagri.real.ui.components.CardTitleTools(
                 placement = editedContentBlockLayout[textToolsKey] ?: CardBlockPlacement(),
@@ -2818,15 +3344,17 @@ internal fun ReminderDetailScreen(
             backdrop = scene, backdropPosition = { scenePosition },
             designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
+            initialEarlyAlertMinutes = reminder.earlyAlertMinutes,
+            initialEndAt = reminder.endAt,
+            onConfirmTiming = { early, end -> setReminderTiming(reminder.id, early, end) },
             onConfirm = { at, rule -> onSetAlert(at, rule); showDatePicker = false },
             exactAlarmsAllowed = exactAlarmsAllowed,
             onRequestExactAlarms = onRequestExactAlarms)
 
         AnimatedDateTimePickerOverlay(
             visible = showDetailEndPicker,
-            initial = (reminder.alertAt ?: System.currentTimeMillis()) + (detailDurationMinutes ?: 60) * 60_000L,
+            initial = reminder.endAt ?: ((reminder.alertAt ?: System.currentTimeMillis()) + (detailDurationMinutes ?: 60) * 60_000L),
             initialRepeatRule = RecurrenceRule.NONE,
-            initialTimeTab = true,
             onDismiss = { showDetailEndPicker = false },
             backdrop = scene,
             backdropPosition = { scenePosition },
@@ -2834,15 +3362,9 @@ internal fun ReminderDetailScreen(
             reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
             onConfirm = { at, _ ->
-                val base = reminder.alertAt ?: System.currentTimeMillis()
-                val diff = maxOf(1, ((at - base) / 60_000L).toInt())
-                detailDurationMinutes = diff
-                val repo = plannerRepo
-                val id = reminder.id
-                val prev = plannerDetails
-                coroutineScope.launch(Dispatchers.IO) {
-                    repo.put(id, (prev ?: com.cagri.real.ui.components.planner.PlannerEventDetails()).copy(durationMinutes = diff))
-                }
+                // Bitiş is its own day and time; the duration chip stays as it is ("4 gün, her gün 60 dk").
+                if (at > (reminder.alertAt ?: 0L)) setReminderTiming(reminder.id, reminder.earlyAlertMinutes, at)
+                else com.cagri.real.ui.components.RealToast.show(context, "Bitiş, başlangıçtan sonra olmalı.")
                 showDetailEndPicker = false
             },
             exactAlarmsAllowed = exactAlarmsAllowed,
@@ -2856,11 +3378,17 @@ internal fun ReminderDetailScreen(
                 showCamera = false
             }
         )
-        LocationGuideSheet(
+        com.cagri.real.ui.components.LocationPickerSheet(
             visible = showLocationGuide,
-            onOpenMaps = { showLocationGuide = false; onRequestLocationShare() },
-            onCancel = { showLocationGuide = false },
-            reduceAnimations = reduceAnimations
+            initial = editedLocation,
+            onSave = { place ->
+                showLocationGuide = false
+                editing = true
+                editedLocation = place
+                locationJustShared = true
+            },
+            onShareFromGoogleMaps = { showLocationGuide = false; onRequestLocationShare() },
+            onCancel = { showLocationGuide = false }
         )
         NotificationPermissionSheet(
             visible = showNotificationPermissionSheet,
@@ -2889,8 +3417,8 @@ internal fun ReminderDetailScreen(
         }
         AnimatedVisibility(
             visible = showMoodFullscreen,
-            enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(220, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))) + scaleIn(RealMotion.snappy(0.32f), initialScale = 0.96f),
-            exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(160, easing = CubicBezierEasing(0.4f, 0f, 1f, 1f))) + scaleOut(tween(160), targetScale = 0.96f),
+            enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(220, easing = RealMotion.Standard)) + scaleIn(RealMotion.snappy(0.32f), initialScale = 0.96f),
+            exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(160, easing = RealMotion.Exit)) + scaleOut(tween(160), targetScale = 0.96f),
             modifier = Modifier.fillMaxSize().zIndex(100f)
         ) {
             MoodV2FullScreen(
@@ -3020,7 +3548,7 @@ private fun DetailQuickActionButton(
                 .clickable(
                     enabled = enabled,
                     interactionSource = interactionSource,
-                    indication = LocalIndication.current,
+                    indication = null /* pressScale already gives the press feedback */,
                     onClick = onClick
                 )
                 .semantics { contentDescription = description },
@@ -3066,7 +3594,7 @@ private fun DetailAction(
                 enabled = enabled,
                 role = Role.Button,
                 interactionSource = interactionSource,
-                indication = LocalIndication.current,
+                indication = null /* pressScale already gives the press feedback */,
                 onClick = onClick
             )
             .heightIn(min = 56.dp).padding(vertical = 4.dp),
@@ -3104,8 +3632,8 @@ fun reminderDetailStatusText(
 ): String? = when {
     reminder.isCompleted -> "Tamamlandı"
     reminder.isQuick24HourActive() -> "24 hour"
-    reminder.alertAt == null && reminder.plannedDateEpochDay == null -> if (!hasCategory) "Uyarı yok" else null
-    else -> "Planlı"
+    reminder.alertAt == null && reminder.plannedDateEpochDay == null -> if (!hasCategory) "No alert" else null
+    else -> "Planned"
 }
 
 fun formatDisplayUrl(url: String): String {
@@ -3116,3 +3644,13 @@ fun formatDisplayUrl(url: String): String {
         url
     }
 }
+
+/** Height a block gets when "En üstteki içeriği büyüt" is on (within the 800dp layout limit). */
+internal const val DETAIL_HERO_MIN_HEIGHT_DP = 360
+
+/** Extra height the cover block reaches up under the status bar; 0 for every other block. */
+internal val LocalDetailHeroInset = androidx.compose.runtime.compositionLocalOf { 0.dp }
+
+/** Grid keys of counter / market blocks: they may shrink to half width, unlike other attachments. */
+private fun widgetBlockKeys(attachments: List<ReminderAttachment>): Set<String> =
+    attachments.filter { it.isCounterBlock() || it.isMarketBlock() }.mapTo(HashSet()) { "files:${it.id}" }

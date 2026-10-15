@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.Dp
 
-enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Music, AudioWave, Play, Pause, Video, Cards, Close, Note, Category, Photo, Camera, File, Person, Cat, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, DragHandle, Sort, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry, MoodFuckOff, Board }
+enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Music, AudioWave, Play, Pause, Video, Cards, Close, Note, Category, Photo, Camera, File, Person, Cat, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, DragHandle, Sort, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry, MoodFuckOff, Board, Paste }
 
 fun journalMoodLabel(mood: JournalMood): String = mood.label
 
@@ -415,6 +415,13 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                     line(5f, 7.5f, 19f, 7.5f)
                     line(5f, 12f, 19f, 12f)
                     line(5f, 16.5f, 19f, 16.5f)
+                }
+                ActionGlyph.Paste -> {
+                    // Tabler Icons: clipboard (24x24, outline).
+                    val tablerStroke = Stroke(width = 2f, cap = StrokeCap.Round)
+                    drawRoundRect(color, Offset(5f, 5f), Size(14f, 16f), CornerRadius(2f, 2f), style = tablerStroke)
+                    drawRoundRect(color, Offset(9f, 3f), Size(6f, 4f), CornerRadius(1.5f, 1.5f), style = tablerStroke)
+                    line(9f, 12f, 15f, 12f); line(9f, 16f, 13f, 16f)
                 }
                 ActionGlyph.Board -> {
                     drawRoundRect(color, Offset(3f, 3f), Size(18f, 18f), CornerRadius(3f, 3f), style = stroke)

@@ -123,7 +123,7 @@ fun ConnectionPeoplePicker(enabled: Boolean = true, actionLabel: String, onSelec
                     Text(if (snapshot.people.isEmpty()) "Henüz kimse yok" else "${snapshot.people.size} kişi",
                         color = ConnectionPalette.Muted, fontSize = 13.sp)
                 }
-                if (busy) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 0.dp), color = Color.White, strokeWidth = 2.dp)
+                if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(20.dp).padding(end = 0.dp), color = Color.White, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 ConnectionPill("Yenile", { runAction { repository.refresh() } }, enabled = canAct, small = true)
                 Spacer(Modifier.width(6.dp))
@@ -259,7 +259,7 @@ fun ConnectionPeoplePicker(enabled: Boolean = true, actionLabel: String, onSelec
             message?.let { ConnectionNote(it) }
         }
         confirm?.let { (person, block) ->
-            AlertDialog(onDismissRequest = { confirm = null },
+            com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = { confirm = null },
                 title = { Text(if (block) "${person.name} engellensin mi?" else "${person.name} kaldırılsın mı?") },
                 text = { Text("Yeni doğrudan kart gönderimleri ve bağlantı üzerinden Pano davetleri durur. Mevcut kartlar ve üyelikler korunur.") },
                 confirmButton = { TextButton(onClick = { confirm = null; runAction { if (block) repository.block(person) else repository.remove(person) } }) { Text("Onayla") } },

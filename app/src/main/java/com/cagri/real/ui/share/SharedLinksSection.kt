@@ -36,7 +36,7 @@ internal fun SharedLinksSection(client: CardShareClient, currentId: String?) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Aktif paylaşım linkleri", Modifier.weight(1f), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+            if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
         }
         visible.forEach { link ->
             ConnectionCard {

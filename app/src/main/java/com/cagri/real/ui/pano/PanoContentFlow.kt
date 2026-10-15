@@ -103,6 +103,6 @@ internal fun PanoContentFlow(request: ContentRequest, style: DesignStyle, onDism
         }
         else -> kotlin.error("Unsupported content picker")
     }
-    error?.let { message -> AlertDialog(onDismissRequest = { error = null }, text = { Text(message) },
+    error?.let { message -> com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = { error = null }, text = { Text(message) },
         confirmButton = { TextButton(onClick = { error = null }) { Text("OK") } }) }
 }

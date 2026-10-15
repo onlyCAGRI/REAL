@@ -1,15 +1,11 @@
 package com.cagri.real.ui.components
 
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.EnterExitState
-
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalView
@@ -130,17 +127,19 @@ fun ReminderCard(
     onEntryAnimationFinished: (() -> Unit)? = null,
     journalListMode: Boolean = false,
     showVoiceSummary: Boolean = true,
-    onSwipeLeftTo24Hour: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
-    titleModifier: Modifier = Modifier
+    /** Swipe right: move the card into 24 hour (or complete it, see [swipeRightLabel]). */
+    onSwipeRightTo24Hour: (() -> Unit)? = null,
+    swipeRightLabel: String = "Move 24 hour",
+    /** True when the card stays in the list after the right swipe, so it slides back into place. */
+    swipeRightKeepsCard: Boolean = true,
+    /** Sade kartlar (Ayarlar, deneysel): no completion circle; the text moves left. */
+    plainStyle: Boolean = false,
+    /** Swipe left: delete (the caller shows "Geri al"). */
+    onSwipeLeftDelete: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
-    val corner = if (!reduceAnimations && animatedVisibilityScope != null) {
-        animatedVisibilityScope.transition.animateFloat(
-            transitionSpec = { RealMotion.smooth(0.32f) }, label = "listCardCorner"
-        ) { if (it == EnterExitState.Visible) 22f else 28f }.value
-    } else 22f
-    val shape = RoundedCornerShape(corner.dp)
+    val shape = ReminderCardShape
     val arrivalProgress = remember(reminder.id) {
         Animatable(if (isNewlyCreated && !reduceAnimations) 0f else 1f)
     }
@@ -150,7 +149,7 @@ fun ReminderCard(
                 targetValue = 1f,
                 animationSpec = tween(
                     durationMillis = 320,
-                    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                    easing = RealMotion.Emphasized
                 )
             )
             onEntryAnimationFinished?.invoke()
@@ -207,7 +206,7 @@ fun ReminderCard(
         }
         if (reminder.isCompleted && !reduceAnimations) {
             circlePulse.animateTo(1.05f, tween(100))
-            circlePulse.animateTo(1.0f, tween(120, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)))
+            circlePulse.animateTo(1.0f, tween(120, easing = RealMotion.Standard))
         } else {
             circlePulse.snapTo(1.0f)
         }
@@ -219,7 +218,7 @@ fun ReminderCard(
             try {
                 launch {
                     circlePulse.animateTo(1.05f, tween(80))
-                    circlePulse.animateTo(1.0f, tween(100, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)))
+                    circlePulse.animateTo(1.0f, tween(100, easing = RealMotion.Standard))
                 }
                 recurringAckAlpha.animateTo(1f, tween(60))
                 recurringAckAlpha.animateTo(0f, tween(140))
@@ -238,7 +237,7 @@ fun ReminderCard(
         if (!reduceAnimations) {
             strikethroughProgress.animateTo(
                 targetValue = if (shouldStrikeThrough) 1f else 0f,
-                animationSpec = tween(180, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                animationSpec = tween(180, easing = RealMotion.Emphasized)
             )
         } else {
             strikethroughProgress.snapTo(if (shouldStrikeThrough) 1f else 0f)
@@ -251,7 +250,7 @@ fun ReminderCard(
             Modifier.sharedBounds(
                 rememberSharedContentState(key = "reminder-card-${reminder.id}"),
                 animatedVisibilityScope = animatedVisibilityScope,
-                boundsTransform = { _, _ -> RealMotion.smooth(0.32f) },
+                boundsTransform = { _, _ -> tween(320, easing = RealMotion.Standard) },
                 clipInOverlayDuringTransition = OverlayClip(shape)
             )
         }
@@ -272,7 +271,10 @@ fun ReminderCard(
     val cardInteractionSource = remember(reminder.id) { MutableInteractionSource() }
     val circleInteractionSource = remember(reminder.id) { MutableInteractionSource() }
     val view = LocalView.current
-    val swipeEnabled = onSwipeLeftTo24Hour != null && !isSelectionMode && !reminder.isCompleted && !journalListMode
+    // Sade kartlar: a completed card swipes right to undo ("Geri al").
+    val swipeRightOn = onSwipeRightTo24Hour != null && (!reminder.isCompleted || plainStyle)
+    val swipeLeftOn = onSwipeLeftDelete != null
+    val swipeEnabled = (swipeRightOn || swipeLeftOn) && !isSelectionMode && !journalListMode
     val swipeScope = rememberCoroutineScope()
     val swipeThresholdPx = with(density) { 82.dp.toPx() }
     val swipeExitPx = with(density) { 900.dp.toPx() }
@@ -283,12 +285,13 @@ fun ReminderCard(
     val swipeVelocityTracker = remember(reminder.id) { VelocityTracker() }
     val swipeFlingVelocityPx = with(density) { 520.dp.toPx() }
     val swipeFlingMinDistancePx = with(density) { 28.dp.toPx() }
-    val renderedSwipeX = if (swipeDragging) swipeDragX else swipeAnim.value
+    // Read only inside graphicsLayer lambdas so a swipe redraws the card instead of recomposing it every frame.
+    fun renderedSwipeX(): Float = if (swipeDragging) swipeDragX else swipeAnim.value
     suspend fun settleSwipe(startX: Float, commit: Boolean, velocityX: Float) {
         swipeAnim.snapTo(startX)
         swipeDragging = false
         swipeDragX = 0f
-        val target = if (commit) -swipeExitPx else 0f
+        val target = if (commit) (if (startX < 0f) -swipeExitPx else swipeExitPx) else 0f
         if (reduceAnimations) {
             swipeAnim.snapTo(target)
         } else {
@@ -296,7 +299,7 @@ fun ReminderCard(
         }
     }
     val swipeGestureModifier = if (swipeEnabled) {
-        Modifier.pointerInput(reminder.id, onSwipeLeftTo24Hour, reduceAnimations) {
+        Modifier.pointerInput(reminder.id, onSwipeRightTo24Hour, onSwipeLeftDelete, swipeRightOn, swipeLeftOn, reduceAnimations) {
             detectHorizontalDragGestures(
                 onDragStart = {
                     swipeDragging = true
@@ -305,11 +308,13 @@ fun ReminderCard(
                     swipeVelocityTracker.resetTracking()
                 },
                 onHorizontalDrag = { change, dragAmount ->
-                    if (dragAmount < 0f || swipeDragX < 0f) {
+                    val next = (swipeDragX + dragAmount)
+                        .coerceIn(if (swipeLeftOn) -swipeExitPx else 0f, if (swipeRightOn) swipeExitPx else 0f)
+                    if (next != swipeDragX || swipeDragX != 0f) {
                         change.consume()
-                        swipeDragX = (swipeDragX + dragAmount).coerceIn(-swipeExitPx, 0f)
+                        swipeDragX = next
                         swipeVelocityTracker.addPosition(change.uptimeMillis, Offset(swipeDragX, 0f))
-                        val armed = swipeDragX <= -swipeThresholdPx
+                        val armed = kotlin.math.abs(swipeDragX) >= swipeThresholdPx
                         if (armed && !swipeArmed) RealHaptics.tick(view)
                         swipeArmed = armed
                     }
@@ -322,14 +327,26 @@ fun ReminderCard(
                 onDragEnd = {
                     val startX = swipeDragX
                     val vx = swipeVelocityTracker.calculateVelocity().x
-                    val commit = startX <= -swipeThresholdPx ||
-                        (vx <= -swipeFlingVelocityPx && startX <= -swipeFlingMinDistancePx)
+                    val left = startX < 0f
+                    val commit = kotlin.math.abs(startX) >= swipeThresholdPx ||
+                        (kotlin.math.abs(vx) >= swipeFlingVelocityPx && (vx < 0f) == left &&
+                            kotlin.math.abs(startX) >= swipeFlingMinDistancePx)
                     swipeArmed = false
-                    swipeScope.launch { settleSwipe(startX, commit, vx) }
-                    if (commit) {
+                    if (commit && !left && swipeRightKeepsCard) {
+                        // Move to 24 hour keeps the card here: act, then it slides back in (no bounce).
+                        swipeScope.launch {
+                            swipeAnim.snapTo(startX)
+                            swipeDragging = false
+                            swipeDragX = 0f
+                            onSwipeRightTo24Hour?.invoke()
+                            if (reduceAnimations) swipeAnim.snapTo(0f)
+                            else swipeAnim.animateTo(0f, tween(320, easing = RealMotion.Emphasized))
+                        }
+                    } else swipeScope.launch { settleSwipe(startX, commit, vx) }
+                    if (commit && (left || !swipeRightKeepsCard)) {
                         swipeScope.launch {
                             if (!reduceAnimations) delay(140)
-                            onSwipeLeftTo24Hour?.invoke()
+                            if (left) onSwipeLeftDelete?.invoke() else onSwipeRightTo24Hour?.invoke()
                         }
                     }
                 }
@@ -338,16 +355,26 @@ fun ReminderCard(
     } else Modifier
 
     Box(modifier.fillMaxWidth()) {
-        if (swipeEnabled) {
-            val revealAlpha = (-renderedSwipeX / swipeThresholdPx).coerceIn(0f, 1f)
+        if (swipeRightOn && swipeEnabled) {
             Text(
-                text = "Move 24 hour",
+                text = swipeRightLabel,
                 color = Color(0xFF91B9FF),
+                style = RealType.cardSwipeAction,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 18.dp)
+                    .graphicsLayer { alpha = (renderedSwipeX() / swipeThresholdPx).coerceIn(0f, 1f) }
+            )
+        }
+        if (swipeLeftOn && swipeEnabled) {
+            Text(
+                text = "Sil",
+                color = Color(0xFFFF8A80),
                 style = RealType.cardSwipeAction,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 18.dp)
-                    .graphicsLayer { alpha = revealAlpha }
+                    .graphicsLayer { alpha = (-renderedSwipeX() / swipeThresholdPx).coerceIn(0f, 1f) }
             )
         }
         Box(
@@ -355,7 +382,7 @@ fun ReminderCard(
             .then(sharedBoundsModifier)
             .then(arrivalModifier)
             .then(swipeGestureModifier)
-            .graphicsLayer { translationX = renderedSwipeX }
+            .graphicsLayer { translationX = renderedSwipeX() }
             .fillMaxWidth()
             .realPetPerch(realPetReminderPerchId(reminder.id))
             .pressScale(cardInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.985f)
@@ -374,7 +401,7 @@ fun ReminderCard(
             .border(borderWidth, borderColor, shape)
             .combinedClickable(
                 interactionSource = cardInteractionSource,
-                indication = LocalIndication.current,
+                indication = null /* pressScale already gives the press feedback */,
                 role = Role.Button,
                 onClickLabel = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç") else "Hatırlatıcıyı aç",
                 onLongClickLabel = if (!isSelectionMode) "Çoklu seçim" else null,
@@ -415,18 +442,30 @@ fun ReminderCard(
                 }
             }
         }
+        val plain = plainStyle && !isSelectionMode
+        // Ortak kategori: a card someone else added carries just their name, bottom right.
+        val myUid = remember { com.cagri.real.platform.android.auth.AndroidBackend.auth.currentUser()?.id }
+        val author = reminder.sharedAuthorName?.trim()?.takeIf { it.isNotEmpty() && reminder.sharedAuthorUid != null && reminder.sharedAuthorUid != myUid }
+        if (author != null) {
+            Text(
+                author, color = textColor.copy(alpha = 0.55f), fontSize = 11.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.BottomEnd).widthIn(max = 140.dp)
+                    .padding(end = if (categoryStripeColors != null) 32.dp else 16.dp, bottom = 8.dp)
+            )
+        }
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(
-                    start = if (journalListMode && !isSelectionMode) 18.dp else 4.dp,
+                    start = if ((journalListMode || plain) && !isSelectionMode) 18.dp else 4.dp,
                     end = if (categoryStripeColors != null) 32.dp else 16.dp,
                     top = 8.dp,
                     bottom = 8.dp
                 ),
             verticalAlignment = Alignment.Top
         ) {
-            if (!journalListMode || isSelectionMode) {
+            if ((!journalListMode && !plain) || isSelectionMode) {
                 Box(
                     Modifier.size(48.dp).clip(CircleShape)
                     .then(
@@ -516,7 +555,7 @@ fun ReminderCard(
                     }
                 }
             }
-            Column(Modifier.weight(1f).padding(top = 11.dp, bottom = 10.dp, start = if (journalListMode && !isSelectionMode) 0.dp else 2.dp)) {
+            Column(Modifier.weight(1f).padding(top = 11.dp, bottom = 10.dp, start = if ((journalListMode || plain) && !isSelectionMode) 0.dp else 2.dp)) {
                 Text(
                 text = reminder.text,
                 color = textColor,
@@ -525,7 +564,7 @@ fun ReminderCard(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
                 onTextLayout = { textLayoutResult = it },
-                modifier = titleModifier.drawWithContent {
+                modifier = Modifier.drawWithContent {
                     drawContent()
                     val progress = strikethroughProgress.value
                     if (progress > 0.001f && !reduceAnimations) {

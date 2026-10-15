@@ -13,10 +13,21 @@ import androidx.core.content.ContextCompat
 import java.security.MessageDigest
 
 internal data class DeviceEvent(val id: Long, val calendarId: Long, val fields: List<String?>) {
-    val fingerprint: String get() = MessageDigest.getInstance("SHA-256")
-        .digest(fields.joinToString("\u0000") { it ?: "\u0001" }.toByteArray())
-        .joinToString("") { "%02x".format(it) }
+    val fingerprint: String get() = hash(fields)
+    /**
+     * What a person changes in a calendar app: title, time, all-day, repeat, place, and the description apart from REAL's
+     * own block (REAL rewrites it when it adds a web link). Google's housekeeping — time zone normalising, default
+     * alarms, status, availability, access — is not an edit, so it no longer blocks REAL from updating or removing
+     * its own copy.
+     */
+    val userFingerprint: String get() = hash(listOf(fields[0], fields[1], fields[2], fields[3],
+        fields[5]?.let { d -> if (d.startsWith("REAL planı") && d.contains("\n[REAL:")) "REAL" else d },
+        fields[6], fields[7], fields[8]))
     val description get() = fields[5]
+
+    private fun hash(values: List<String?>) = MessageDigest.getInstance("SHA-256")
+        .digest(values.joinToString("\u0000") { it ?: "\u0001" }.toByteArray())
+        .joinToString("") { "%02x".format(it) }
 }
 
 internal interface CalendarGateway {

@@ -46,7 +46,8 @@ object ReminderJson {
                             latitude = if (hasCoordinates) latitude else null,
                             longitude = if (hasCoordinates) longitude else null,
                             mapsUrl = mapsUrl,
-                            approximateCoordinates = place.optBoolean("approximateCoordinates", false)
+                            approximateCoordinates = place.optBoolean("approximateCoordinates", false),
+                            mapZoom = place.optDouble("mapZoom", Double.NaN).takeIf { it.isFinite() }?.coerceIn(1.0, 19.0)
                         ) else null
                     }
                     val standaloneMood = if (item.has("mood") && !item.isNull("mood")) {
@@ -98,6 +99,11 @@ object ReminderJson {
                             repeatWeekdaysMask = item.optInt("repeatWeekdaysMask", 0) and 0x7F,
                             repeatUntilEpochDay = item.optionalEpochDay("repeatUntilEpochDay"),
                             repeatSkippedEpochDays = item.optionalEpochDays("repeatSkippedEpochDays"),
+                            endAt = item.optionalTimestamp("endAt"),
+                            sharedCardId = item.optString("sharedCardId", "").takeIf { it.isNotBlank() && it != "null" },
+                            sharedAuthorUid = item.optString("sharedAuthorUid", "").takeIf { it.isNotBlank() && it != "null" },
+                            sharedAuthorName = item.optString("sharedAuthorName", "").takeIf { it.isNotBlank() && it != "null" },
+                            earlyAlertMinutes = item.optInt("earlyAlertMinutes", 0).takeIf { it in 1..MAX_EARLY_ALERT_MINUTES },
                             customCategoryId = item.optionalTimestamp("customCategoryId"),
                             isChecklist = isChecklist,
                             checklistItems = checklistItems,
@@ -112,6 +118,7 @@ object ReminderJson {
                             voiceRecordings = voiceRecordings,
                             musicBlocks = MusicBlock.decodeArray(item.optJSONArray("musicBlocks")),
                             mediaBlocks = MediaBlock.decodeArray(item.optJSONArray("mediaBlocks")),
+                            gameBlocks = CardGameBlock.decodeArray(item.optJSONArray("gameBlocks")),
                             cardStack = CardStackBlock.decode(item.optJSONObject("cardStack")) ?: CardStackBlock.decodeArray(item.optJSONArray("cardStackBlocks")).firstOrNull(),
                             sentBy = item.optString("sentBy", "").takeIf { it.isNotBlank() && it != "null" },
                             shareOrigin = item.optString("shareOrigin", "").takeIf { it.isNotBlank() && it != "null" },
@@ -164,6 +171,12 @@ object ReminderJson {
                         if (reminder.repeatSkippedEpochDays.isNotEmpty()) {
                             obj.put("repeatSkippedEpochDays", JSONArray().also { arr -> reminder.repeatSkippedEpochDays.distinct().sorted().forEach { arr.put(it) } })
                         }
+                        reminder.endAt?.let { obj.put("endAt", it) }
+                        reminder.earlyAlertMinutes?.let { obj.put("earlyAlertMinutes", it) }
+                        // Ortak kategori (device-local bookkeeping; stripped before personal sync).
+                        reminder.sharedCardId?.let { obj.put("sharedCardId", it) }
+                        reminder.sharedAuthorUid?.let { obj.put("sharedAuthorUid", it) }
+                        reminder.sharedAuthorName?.let { obj.put("sharedAuthorName", it) }
                     }
                     .put("customCategoryId", reminder.customCategoryId ?: JSONObject.NULL)
                     .put("isChecklist", reminder.isChecklist)
@@ -178,6 +191,7 @@ object ReminderJson {
                             .put("longitude", place.longitude ?: JSONObject.NULL)
                             .put("mapsUrl", place.mapsUrl ?: JSONObject.NULL)
                             .put("approximateCoordinates", place.approximateCoordinates)
+                            .put("mapZoom", place.mapZoom ?: JSONObject.NULL)
                     } ?: JSONObject.NULL)
                     .put("checklistItems", JSONArray().apply {
                         reminder.checklistItems.forEach { checkItem ->
@@ -193,6 +207,8 @@ object ReminderJson {
                     .put("voiceRecordings", VoiceRecordingJson.encodeArray(reminder.voiceRecordings))
                     .put("musicBlocks", MusicBlock.encodeArray(reminder.musicBlocks))
                     .put("mediaBlocks", MediaBlock.encodeArray(reminder.mediaBlocks))
+                    // Only when present: a server without gameBlocks support rejects the field.
+                    .apply { if (reminder.gameBlocks.isNotEmpty()) put("gameBlocks", CardGameBlock.encodeArray(reminder.gameBlocks)) }
                     .put("cardStack", reminder.cardStack?.let { CardStackBlock.encode(it) } ?: JSONObject.NULL)
                     .put("mood", reminder.mood?.persistKey ?: JSONObject.NULL)
                     .put("moodDetails", reminder.moodDetails?.let { details ->

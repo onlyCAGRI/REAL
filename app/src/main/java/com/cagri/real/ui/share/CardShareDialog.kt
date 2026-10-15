@@ -75,7 +75,7 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                     content: ShareContent? = null, onDismiss: () -> Unit) {
     val user = com.cagri.real.ui.connections.currentConnectionsUser()
     if (user != null && user.displayName.isNullOrBlank()) {
-        AlertDialog(onDismissRequest = onDismiss,
+        com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = onDismiss,
             title = { Text("Gönderen bilgisi") },
             text = { com.cagri.real.ui.auth.ProfileNameForm(user, onSaved = {}) },
             confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } })
@@ -309,7 +309,7 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
             if (state.busy) {
                 Spacer(Modifier.height(14.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                    CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                    com.cagri.real.ui.components.RealSpinner(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
                 }
             }
             (state.message ?: contactError)?.let { ConnectionNote(it, Modifier.padding(top = 12.dp)) }

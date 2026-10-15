@@ -128,8 +128,9 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet,
         containerColor = Color.Black, contentColor = Color.White,
-        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)) {
-        BoxWithConstraints(Modifier.fillMaxWidth().fillMaxHeight(0.60f)) {
+        scrimColor = RealSheetDefaults.Scrim, shape = RealSheetDefaults.Shape,
+        dragHandle = { RealSheetDefaults.DragHandle() }) {
+        BoxWithConstraints(Modifier.fillMaxWidth().fillMaxHeight(0.72f)) {
             Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)
                 .realEntrance(entrance, durationMs = 400, slideY = 16.dp)) {
                 Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -150,7 +151,7 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
                             else { requested = true; permissionLauncher.launch(Manifest.permission.CAMERA) }
                         }) { Text("İzni aç", color = Color.White) }
                     }
-                    if (permission && !cameraReady && shown == null && error == null) CircularProgressIndicator(color = Color.White)
+                    if (permission && !cameraReady && shown == null && error == null) com.cagri.real.ui.components.RealSpinner(color = Color.White)
                     Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 16.dp).height(68.dp), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
@@ -191,7 +192,7 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
                                         error = "Fotoğraf çekilemedi. Tekrar deneyebilirsin."
                                     }
                                 }.semanticsCameraCapture(), contentAlignment = Alignment.Center) {
-                                if (busy) CircularProgressIndicator(Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
+                                if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
                             }
                             Spacer(Modifier.size(48.dp))
                         }

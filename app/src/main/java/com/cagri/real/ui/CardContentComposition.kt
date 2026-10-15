@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -83,6 +84,8 @@ internal fun CardCompositionGrid(
     onPlacementChange: (String, CardBlockPlacement) -> Unit,
     onConfigure: (String) -> Unit = {},
     onBlockCoordinates: ((String, LayoutCoordinates?) -> Unit)? = null,
+    /** Widget blocks (counter, market) allowed down to half width. */
+    compactKeys: Set<String> = emptySet(),
     content: @Composable (String, Int) -> Unit
 ) {
     // Bounds are gesture bookkeeping, not state. Removing a block cannot leave a stale drop target.
@@ -144,7 +147,7 @@ internal fun CardCompositionGrid(
                     key(blockKey) {
                         val active = dragging == blockKey
                         val animateInsertion = remember(dragState) { editing && blockKey !in mountedBlocks }
-                        val insertion = if (animateInsertion) rememberRealEntrance(reduceAnimations, identity = dragState, totalMs = 420) else null
+                        val insertion = if (animateInsertion) rememberRealEntrance(reduceAnimations, identity = dragState, totalMs = 700) else null
                         var blockCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
                         var placedPosition by remember { mutableStateOf<IntOffset?>(null) }
                         var positionReady by remember { mutableStateOf(false) }
@@ -177,8 +180,8 @@ internal fun CardCompositionGrid(
                                 // Grow: pill gibi açılıp büyür + kenarda kısa ışık halkası (sürükleme sırasında durur).
                                 .then(insertion?.let {
                                     Modifier
-                                        .realGrowGlow(it, durationMs = 420, paused = active || dragState.active)
-                                        .realGrow(it, durationMs = 420, paused = active || dragState.active)
+                                        .realGrowGlow(it, durationMs = 640, paused = active || dragState.active)
+                                        .realGrow(it, durationMs = 640, paused = active || dragState.active)
                                 } ?: Modifier)
                                 .onGloballyPositioned {
                                     blockCoordinates = it
@@ -257,11 +260,21 @@ internal fun CardCompositionGrid(
                                         }
                                     }
                                 }
+                                // Tap a block while editing to select it (shows its settings chip / handles). The tap is
+                                // only observed on the Initial pass, never consumed, so buttons and text inside still work.
+                                .pointerInput(blockKey) {
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                        val up = waitForUpOrCancellation(PointerEventPass.Initial)
+                                        if (up != null && currentEditing && (up.position - down.position).getDistance() < viewConfiguration.touchSlop)
+                                            currentSelect(blockKey)
+                                    }
+                                }
                                 .then(if (editing && selected == blockKey) Modifier.border(1.dp, Color.White.copy(alpha = 0.42f), RoundedCornerShape(22.dp)) else Modifier)
                         ) {
                             CompositionLocalProvider(LocalCardBlockHeight provides
                                 ((placements[blockKey]?.minHeight ?: 0).takeUnless {
-                                    blockKey.substringBefore(':') in listOf("music", "media")
+                                    blockKey.substringBefore(':') in listOf("music", "media", "game")
                                 } ?: 0).dp) {
                                 content(blockKey, index)
                             }
@@ -274,10 +287,10 @@ internal fun CardCompositionGrid(
                                     onStart = { currentSelect(blockKey) },
                                     onDelta = { startPlacement, dx, _, _ ->
                                         val unitPx = ((gridWidthPx + gutter) / CARD_GRID_UNITS.toFloat()).coerceAtLeast(1f)
-                                        val minSpan = cardDetailMinimumSpan(blockKey, gridWidthPx / density)
+                                        val minSpan = cardDetailMinimumSpan(blockKey, gridWidthPx / density, compactKeys)
                                         val end = (startPlacement.column + startPlacement.span + dx / unitPx).roundToInt()
                                             .coerceIn(startPlacement.column + minOf(minSpan, CARD_GRID_UNITS - startPlacement.column), CARD_GRID_UNITS)
-                                        val catalog = blockKey.substringBefore(':') in listOf("music", "media")
+                                        val catalog = blockKey.substringBefore(':') in listOf("music", "media", "game")
                                         val requestedSpan = end - startPlacement.column
                                         val span = if (catalog) catalogCardWidthStep(requestedSpan).coerceAtMost(CARD_GRID_UNITS - startPlacement.column) else requestedSpan
                                         val next = startPlacement.copy(span = span).normalized()
@@ -298,9 +311,9 @@ internal fun CardCompositionGrid(
                                     onDelta = { startPlacement, _, dy, startHeight ->
                                         val h = (startHeight + dy / density).coerceIn(80f, 800f).roundToInt()
                                         val now = currentPlacements[blockKey]?.normalized() ?: CardBlockPlacement()
-                                        val hidden = if (blockKey.substringBefore(':') in listOf("music", "media"))
+                                        val hidden = if (blockKey.substringBefore(':') in listOf("music", "media", "game"))
                                             catalogActionsHiddenAfterResize(startPlacement.hideActions, dy / density) else now.hideActions
-                                        val catalog = blockKey.substringBefore(':') in listOf("music", "media")
+                                        val catalog = blockKey.substringBefore(':') in listOf("music", "media", "game")
                                         val nextHeight = if (catalog) 0 else h
                                         if ((nextHeight != now.minHeight || hidden != now.hideActions) &&
                                             (catalog || cardDetailResizeFits(blockKey, now.span, h.toFloat(),
@@ -313,6 +326,55 @@ internal fun CardCompositionGrid(
                                         (bounds[blockKey]?.height ?: 0f) / density
                                     }
                                 )
+                                // Music / film cards keep their fixed catalog sizing: right/bottom handles only.
+                                if (blockKey.substringBefore(':') !in listOf("music", "media", "game")) {
+                                    // Sol kenar: sağ kenar sabit kalır, blok sola doğru genişler / daralır.
+                                    CardResizeHandle(
+                                        modifier = Modifier.align(Alignment.CenterStart).height(96.dp).width(26.dp),
+                                        horizontal = true, highlighted = isSelected, pillAlignment = Alignment.CenterStart,
+                                        onStart = { currentSelect(blockKey) },
+                                        onDelta = { startPlacement, dx, _, _ ->
+                                            val unitPx = ((gridWidthPx + gutter) / CARD_GRID_UNITS.toFloat()).coerceAtLeast(1f)
+                                            val end = startPlacement.column + startPlacement.span
+                                            val minSpan = cardDetailMinimumSpan(blockKey, gridWidthPx / density, compactKeys)
+                                            val column = (startPlacement.column + dx / unitPx).roundToInt()
+                                                .coerceIn(0, (end - minSpan).coerceAtLeast(0))
+                                            val now = currentPlacements[blockKey]?.normalized() ?: CardBlockPlacement()
+                                            val box = bounds[blockKey]
+                                            if (box != null && (column != now.column || end - column != now.span)) {
+                                                val unitDp = unitPx / density
+                                                val candidate = CardMeasuredBox(column * unitDp, box.top / density,
+                                                    ((end - column) * unitDp - gutter / density).coerceAtLeast(1f), box.height / density)
+                                                if (cardDetailBoxFits(blockKey, candidate,
+                                                        bounds.mapValues { (_, b) -> CardMeasuredBox(b.left / density, b.top / density, b.width / density, b.height / density) }))
+                                                    currentPlacementChange(blockKey, now.copy(column = column, span = end - column).normalized())
+                                            }
+                                        },
+                                        startPlacement = { currentPlacements[blockKey]?.normalized() ?: CardBlockPlacement() },
+                                        startHeightDp = { 0f }
+                                    )
+                                    // Üst kenar: alt kenar sabit kalır, blok yukarı doğru uzar / kısalır.
+                                    var topResizeStart by remember(blockKey) { mutableStateOf<Triple<List<String>, Map<String, CardBlockPlacement>, Map<String, CardMeasuredBox>>?>(null) }
+                                    CardResizeHandle(
+                                        modifier = Modifier.align(Alignment.TopCenter).width(120.dp).height(26.dp),
+                                        horizontal = false, highlighted = isSelected, pillAlignment = Alignment.TopCenter,
+                                        onStart = {
+                                            currentSelect(blockKey)
+                                            topResizeStart = Triple(currentKeys, currentPlacements,
+                                                bounds.mapValues { (_, b) -> CardMeasuredBox(b.left / density, b.top / density, b.width / density, b.height / density) })
+                                        },
+                                        onDelta = { _, _, dy, _ ->
+                                            val (startKeys, startLayout, startBoxes) = topResizeStart ?: return@CardResizeHandle
+                                            val startBox = startBoxes[blockKey] ?: return@CardResizeHandle
+                                            cardTopEdgeResize(startKeys, startLayout, startBoxes, blockKey,
+                                                startBox.top + dy / density, minHeightDp = 80f)
+                                                ?.takeIf { it != currentPlacements }
+                                                ?.let(currentFreeDrop)
+                                        },
+                                        startPlacement = { currentPlacements[blockKey]?.normalized() ?: CardBlockPlacement() },
+                                        startHeightDp = { 0f }
+                                    )
+                                }
                             }
                         }
                     }
@@ -359,6 +421,7 @@ internal fun CardCompositionGrid(
 @Composable
 private fun CardResizeHandle(
     modifier: Modifier, horizontal: Boolean, highlighted: Boolean,
+    pillAlignment: Alignment = if (horizontal) Alignment.CenterEnd else Alignment.BottomCenter,
     onStart: () -> Unit,
     onDelta: (startPlacement: CardBlockPlacement, dx: Float, dy: Float, startHeightDp: Float) -> Unit,
     startPlacement: () -> CardBlockPlacement,
@@ -377,7 +440,7 @@ private fun CardResizeHandle(
                 }
             )
         },
-        contentAlignment = if (horizontal) Alignment.CenterEnd else Alignment.BottomCenter
+        contentAlignment = pillAlignment
     ) {
         Box(
             Modifier.padding(if (horizontal) 5.dp else 4.dp)
@@ -429,6 +492,6 @@ internal fun applyCardDrop(
 
 internal fun cardContentLabel(key: String): String = when (key.substringBefore(':')) {
     "text" -> "Metin"; "photos" -> "Fotoğraf"; "files" -> "Ek"; "voice" -> "Ses"
-    "music" -> "Müzik"; "media" -> "Film / Dizi"; "location" -> "Konum"
+    "music" -> "Müzik"; "media" -> "Film / Dizi"; "game" -> "Oyun"; "location" -> "Konum"
     "checklist" -> "Checklist"; "mood" -> "Mood"; "journal" -> "Günlük"; else -> "Kart destesi"
 }

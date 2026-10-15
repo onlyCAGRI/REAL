@@ -24,7 +24,9 @@ import kotlinx.coroutines.withContext
 
 /** Six radial lights from the actual left/right poster regions; no rectangular blurred image. */
 @Composable
-internal fun PosterEdgeGlow(url: String?, reduceAnimations: Boolean, modifier: Modifier) {
+internal fun PosterEdgeGlow(url: String?, reduceAnimations: Boolean, modifier: Modifier,
+                            /** Music deck: 0..1 sound pulse; the cover's own colours behind it grow and fade with it. */
+                            pulse: (() -> Float)? = null) {
     val context = LocalContext.current
     var palette by remember { mutableStateOf(List(6) { Color.Transparent }) }
     LaunchedEffect(url, context) {
@@ -55,13 +57,15 @@ internal fun PosterEdgeGlow(url: String?, reduceAnimations: Boolean, modifier: M
     val colors = palette.map { target -> animateColorAsState(target,
         animationSpec = tween(if (reduceAnimations) 0 else 380), label = "poster-edge") }
     Canvas(modifier) {
-        val radius = size.width * .47f
+        val beat = pulse?.invoke()?.coerceIn(0f, 1f) ?: 0f
+        val radius = size.width * (.47f + .14f * beat)
+        val boost = 1f + 1.3f * beat
         for (region in 0 until 6) {
             val color = colors[region].value
             if (color.alpha == 0f) continue
             val center = Offset(size.width * (if (region % 2 == 0) .15f else .85f),
                 size.height * (.16f + (region / 2) * .34f))
-            drawCircle(Brush.radialGradient(listOf(color.copy(alpha = .32f), color.copy(alpha = .12f), Color.Transparent),
+            drawCircle(Brush.radialGradient(listOf(color.copy(alpha = (.32f * boost).coerceAtMost(.8f)), color.copy(alpha = (.12f * boost).coerceAtMost(.4f)), Color.Transparent),
                 center = center, radius = radius), radius = radius, center = center)
         }
     }

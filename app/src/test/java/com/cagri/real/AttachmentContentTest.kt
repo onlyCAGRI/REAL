@@ -70,14 +70,15 @@ class AttachmentContentTest {
         assertEquals(original.text, updated.text)
     }
 
-    @Test fun fileDoesNotConsumePhotoSlotsAndFourthPhotoIsRejectedAtomically() {
+    @Test fun fileDoesNotConsumePhotoSlotsAndFourthPhotoBecomesAFile() {
         val repo = ReminderRepository(FakeSharedPreferences())
         val photos = (1..3).map { ReminderAttachment("$it", "/private/$it.jpg") }
         val item = repo.add("Medya", attachments = photos)
         val file = ReminderAttachment("pdf", type = AttachmentType.FILE, uri = "content://documents/1")
         repo.appendContent(item.id, listOf(file), null)
-        assertThrows(IllegalArgumentException::class.java) { repo.appendContent(item.id, listOf(ReminderAttachment("4", "/private/4.jpg")), null) }
-        assertEquals(photos + file, repo.load().single().attachments)
+        // Share → REAL: a 4th photo is kept as a file instead of failing the whole share.
+        repo.appendContent(item.id, listOf(ReminderAttachment("4", "/private/4.jpg")), null)
+        assertEquals(photos + file + ReminderAttachment("4", "/private/4.jpg", AttachmentType.FILE), repo.load().single().attachments)
     }
 
     @Test fun linkRemovalIsExplicitAndDoesNotRemoveReminderOrOtherAttachments() {

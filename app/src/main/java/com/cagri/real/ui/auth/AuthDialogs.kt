@@ -102,7 +102,7 @@ fun AuthChoiceDialog(
                 }
                 error?.let { AuthMessage(it, ConnectionPalette.Danger) }
                 if (busy) Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
-                    CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                    com.cagri.real.ui.components.RealSpinner(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
                 }
                 Spacer(Modifier.height(4.dp))
                 ConnectionPill("Vazgeç", { if (!busy) onDismiss() }, Modifier.fillMaxWidth(), enabled = !busy, small = true)
@@ -424,5 +424,82 @@ fun ProfileNameForm(user: AuthUser, onSaved: (AuthUser) -> Unit) {
             }
         }
         error?.let { AuthErrorText(it) }
+    }
+}
+
+/**
+ * Google gives REAL the full name ("Ad Soyad"), which then shows in shared categories and on shared cards. Once per
+ * Google account REAL asks which name to use, prefilled with the first name only.
+ */
+object ProfileNamePrompt {
+    /** Hesap menüsü → Adın: opens the same window for any signed-in account. */
+    val forced = mutableStateOf(false)
+}
+
+@Composable
+fun GoogleProfileNamePrompt(reduceAnimations: Boolean = false) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("real_profile_name", android.content.Context.MODE_PRIVATE) }
+    val auth = com.cagri.real.platform.android.auth.AndroidBackend.auth
+    var user by remember { mutableStateOf(auth.currentUser()) }
+    DisposableEffect(auth) {
+        val subscription = auth.observeUser { user = it }
+        onDispose { subscription.cancel() }
+    }
+    val current = user
+    var confirmedRevision by remember { mutableIntStateOf(0) }
+    val forced by ProfileNamePrompt.forced
+    val needed = remember(current?.id, confirmedRevision, forced) {
+        current != null && !current.isAnonymous && (forced || ("google.com" in current.providerIds &&
+            !prefs.getBoolean("confirmed_${current.id}", false)))
+    }
+    if (current == null || !needed) return
+    val scope = rememberCoroutineScope()
+    var name by remember(current.id, forced) {
+        mutableStateOf(current.displayName.orEmpty().trim().let { if (forced) it else it.substringBefore(' ') })
+    }
+    var busy by remember(current.id) { mutableStateOf(false) }
+    var error by remember(current.id) { mutableStateOf<String?>(null) }
+    fun confirm() {
+        prefs.edit().putBoolean("confirmed_${current.id}", true).apply(); confirmedRevision++
+        ProfileNamePrompt.forced.value = false
+    }
+    fun save() {
+        if (busy) return
+        busy = true; error = null
+        scope.launch {
+            try {
+                auth.updateProfileName(current.id, name, "")
+                    .onSuccess { confirm() }
+                    .onFailure { error = it.message ?: "Ad kaydedilemedi." }
+            } finally { busy = false }
+        }
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = {}, properties = androidx.compose.ui.window.DialogProperties(
+        usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnClickOutside = false
+    )) {
+        val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        SideEffect { window?.setDimAmount(0f) }
+        var shown by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { shown = true }
+        com.cagri.real.ui.components.PermissionSheet(
+            visible = shown,
+            title = "REAL'de adın ne olsun?",
+            description = "Ortak kategorilerde ve paylaştığın kartlarda bu ad görünür.",
+            onAllow = ::save,
+            onLater = { if (!busy) confirm() },
+            reduceAnimations = reduceAnimations,
+            modifier = Modifier.imePadding(),
+            primaryLabel = if (busy) "Kaydediliyor…" else "Kaydet",
+            secondaryLabel = if (forced) "Vazgeç" else "Google adım kalsın",
+            glyph = null,
+            primaryEnabled = !busy && name.isNotBlank(),
+            extraContent = {
+                Spacer(Modifier.height(14.dp))
+                AuthTextField(name, { if (!busy) { name = it.take(80); error = null } }, "Adın", KeyboardType.Text,
+                    imeAction = ImeAction.Done, onDone = ::save)
+                error?.let { AuthErrorText(it) }
+            }
+        )
     }
 }

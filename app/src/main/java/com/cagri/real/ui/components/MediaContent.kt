@@ -34,6 +34,7 @@ import com.cagri.real.data.MediaType
 import com.cagri.real.ui.DesignStyle
 import com.cagri.real.ui.theme.RealType
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,16 +45,17 @@ fun MediaSearchSheet(
     onSelect: (MediaBlock) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(MediaType.MOVIE) }
     var results by remember { mutableStateOf<List<MediaBlock>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF101012),
+        containerColor = RealSheetDefaults.Ink,
         contentColor = Color.White,
+        scrimColor = RealSheetDefaults.Scrim,
+        shape = RealSheetDefaults.Shape,
+        dragHandle = { RealSheetDefaults.DragHandle() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         val panel = if (designStyle == DesignStyle.LiquidGlass) Modifier.liquidChrome(corners = 24.dp) else Modifier
@@ -65,50 +67,7 @@ fun MediaSearchSheet(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Film & Dizi", style = RealType.detailDialogTitle)
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val typeOptions = listOf(MediaType.MOVIE to "Film", MediaType.TV to "Dizi")
-                    for ((type, label) in typeOptions) {
-                        val selected = selectedType == type
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(if (selected) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.05f))
-                                .border(
-                                    0.8.dp,
-                                    if (selected) Color.White.copy(alpha = 0.40f) else Color.Transparent,
-                                    RoundedCornerShape(16.dp)
-                                )
-                                .clickable {
-                                    if (selectedType != type) {
-                                        selectedType = type
-                                        results = emptyList()
-                                        message = null
-                                    }
-                                }
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = label,
-                                color = if (selected) Color.White else Color(0xFF9898A2),
-                                style = RealType.detailBlockMeta.copy(
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                                )
-                            )
-                        }
-                    }
-                }
-            }
+            Text("Film & Dizi", style = RealType.detailDialogTitle)
 
             OutlinedTextField(
                 value = query,
@@ -126,34 +85,36 @@ fun MediaSearchSheet(
                 )
             )
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Kapat", color = Color(0xFFBCBCC5)) }
-                TextButton(
-                    enabled = query.trim().isNotEmpty() && !searching,
-                    onClick = {
-                        searching = true
-                        message = null
-                        results = emptyList()
-                        scope.launch {
-                            try {
-                                val searchResults = MediaCatalog.search(query, selectedType)
-                                results = searchResults
-                                if (searchResults.isEmpty()) {
-                                    message = "Sonuç bulunamadı."
-                                }
-                            } catch (cancelled: CancellationException) {
-                                throw cancelled
-                            } catch (_: Exception) {
-                                results = emptyList()
-                                message = "İçerik kataloğuna şu anda ulaşılamadı."
-                            } finally {
-                                searching = false
-                            }
-                        }
+            // Searches while typing (short pause after the last keystroke): films (TheTVDB) and series (TVmaze) together,
+            // closest title matches first, then the rest alternating film / series.
+            LaunchedEffect(query) {
+                val q = query.trim()
+                if (q.length < 2) { results = emptyList(); message = null; searching = false; return@LaunchedEffect }
+                kotlinx.coroutines.delay(350)
+                searching = true
+                message = null
+                try {
+                    val (movies, series) = kotlinx.coroutines.coroutineScope {
+                        val m = async { runCatching { MediaCatalog.search(q, MediaType.MOVIE) } }
+                        val t = async { runCatching { MediaCatalog.search(q, MediaType.TV) } }
+                        m.await() to t.await()
                     }
-                ) {
-                    Text(if (searching) "Aranıyor…" else "Ara", color = Color.White)
+                    if (movies.isFailure && series.isFailure) {
+                        results = emptyList()
+                        message = "İçerik kataloğuna şu anda ulaşılamadı."
+                    } else {
+                        results = mergeMediaResults(q, movies.getOrDefault(emptyList()), series.getOrDefault(emptyList()))
+                        if (results.isEmpty()) message = "Sonuç bulunamadı."
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } finally {
+                    searching = false
                 }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(if (searching) "Aranıyor…" else "", style = RealType.detailBlockMeta, color = Color(0xFFA5A5B0))
+                TextButton(onClick = onDismiss) { Text("Kapat", color = Color(0xFFBCBCC5)) }
             }
 
             message?.let { Text(it, style = RealType.detailBlockMeta, color = Color(0xFFBCBCC5)) }
@@ -191,11 +152,23 @@ fun MediaSearchSheet(
                 }
             }
 
-            val attribution = if (selectedType == MediaType.MOVIE) "TheTVDB" else "TVmaze"
-            Text(attribution, style = RealType.detailAttribution, color = Color(0xFF95959F))
+            Text("Filmler TheTVDB • Diziler TVmaze", style = RealType.detailAttribution, color = Color(0xFF95959F))
             Spacer(Modifier.height(12.dp))
         }
     }
+}
+
+/** Films and series in one list: titles that start with the query first, then the rest alternating film / series. */
+private fun mergeMediaResults(query: String, movies: List<MediaBlock>, series: List<MediaBlock>): List<MediaBlock> {
+    val q = query.lowercase()
+    val alternating = buildList {
+        for (i in 0 until maxOf(movies.size, series.size)) {
+            movies.getOrNull(i)?.let(::add)
+            series.getOrNull(i)?.let(::add)
+        }
+    }
+    val (close, rest) = alternating.partition { it.title.lowercase().startsWith(q) }
+    return (close + rest).distinctBy { it.id }.take(30)
 }
 
 private fun strongerMediaAmbience(type: MediaType, sampled: Color): Color {
@@ -397,10 +370,10 @@ fun MediaTrackCard(
                     val uri = runCatching { Uri.parse(block.providerUrl) }.getOrNull()
                     if (uri?.scheme in listOf("http", "https")) {
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }.onFailure {
-                            Toast.makeText(context, "Bağlantı açılamadı", Toast.LENGTH_SHORT).show()
+                            com.cagri.real.ui.components.RealToast.show(context, "Bağlantı açılamadı")
                         }
                     } else {
-                        Toast.makeText(context, "Bağlantı kullanılamıyor", Toast.LENGTH_SHORT).show()
+                        com.cagri.real.ui.components.RealToast.show(context, "Bağlantı kullanılamıyor")
                     }
                 }
             ) {

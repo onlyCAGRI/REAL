@@ -80,7 +80,9 @@ fun TopGlassOverlay(
                 )
             }
     ) {
-        if (dynamic) BlurredBackdrop(backdrop, { position - backdropPosition() }, if (liquid) LiquidGlassTokens.topBlur else 14.dp, Modifier.matchParentSize())
+        // Full-width heavy blur: a quarter-resolution sample is visually identical and 4x cheaper on the GPU.
+        if (dynamic) BlurredBackdrop(backdrop, { position - backdropPosition() }, if (liquid) LiquidGlassTokens.topBlur else 14.dp,
+            Modifier.matchParentSize(), sampleScale = 0.25f)
         if (liquid) {
             
             Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(

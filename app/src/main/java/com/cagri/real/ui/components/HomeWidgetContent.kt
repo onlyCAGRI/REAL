@@ -106,6 +106,8 @@ fun HomeWidgetScreen(
     reduceDynamicBlur: Boolean = false,
     onToggleReminder: ((Long) -> Unit)? = null,
     onAddMedia: suspend (com.cagri.real.data.MediaBlock) -> Long? = { null },
+    onAddMusic: suspend (com.cagri.real.data.MusicBlock) -> Long? = { null },
+    onAddGame: suspend (com.cagri.real.data.CardGameBlock) -> Long? = { null },
     onBooksOpenChange: (Boolean) -> Unit = {},
     /** Deep link from the Home context card: "books", "media" or "water". Opens that module directly. */
     initialDestination: String? = null,
@@ -140,7 +142,6 @@ fun HomeWidgetScreen(
     var opened by rememberSaveable { mutableStateOf(startInJournals) }
     var widgetContentGeneration by remember { mutableIntStateOf(0) }
     val holder = rememberYasamHolder()
-    val homeState = rememberSaveableStateHolder()
     LaunchedEffect(Unit) { onInitialDestinationConsumed(); onStartInJournalsConsumed() }
     // Üst ekran, kitap açıkken navigation bar boşluğunu bırakır (kitap alta kadar çizilsin diye).
     LaunchedEffect(showBooks) { onBooksOpenChange(showBooks) }
@@ -167,9 +168,8 @@ fun HomeWidgetScreen(
     val open = rememberRealEntrance(reduceAnimations, totalMs = 900, play = playOpen)
     LaunchedEffect(Unit) { delay(1000); opened = true }
     // İlk açılışta içerik, daire ekranı açarken hazır beklesin diye 250 ms gecikir.
-    val baseMs = if (playOpen && widgetContentGeneration == 0) 100 else 0
-    val entrance = rememberRealEntrance(reduceAnimations, totalMs = 1800,
-        play = playOpen && widgetContentGeneration == 0)
+    val baseMs = if (playOpen && widgetContentGeneration == 0) 250 else 0
+    val entrance = rememberRealEntrance(reduceAnimations, identity = widgetContentGeneration, totalMs = 1800)
     // Cümle konusu her açılışta (ve modül dönüşünde) değişir.
     val appContext = LocalContext.current.applicationContext
     // rememberSaveable: dönme/süreç yeniden kurulmasında cümle konusu değişmesin; son konu ayrıca kalıcı tutulur.
@@ -207,6 +207,8 @@ fun HomeWidgetScreen(
         openGame = { if (pendingDiscovery == null) pendingDiscovery = YasamDiscoveryTarget.Game },
         openFilmList = { discovery = YasamDiscoveryTarget.FilmList },
         openGameList = { discovery = YasamDiscoveryTarget.GameList },
+        openMusic = { if (pendingDiscovery == null) pendingDiscovery = YasamDiscoveryTarget.Music },
+        openMusicList = { discovery = YasamDiscoveryTarget.MusicList },
         openJournals = { section = YasamSection.Journals },
         newJournal = onNewJournal ?: { section = YasamSection.Journals }
     )
@@ -217,13 +219,15 @@ fun HomeWidgetScreen(
     var lastDiscovery by rememberSaveable { mutableStateOf(YasamDiscoveryTarget.Film) }
     LaunchedEffect(discovery) { discovery?.let { lastDiscovery = it } }
     val discoveryTarget = discovery ?: lastDiscovery
-    val journalMotion = discoveryTarget == YasamDiscoveryTarget.Film || discoveryTarget == YasamDiscoveryTarget.Game
+    val journalMotion = discoveryTarget == YasamDiscoveryTarget.Film || discoveryTarget == YasamDiscoveryTarget.Game ||
+        discoveryTarget == YasamDiscoveryTarget.Music
     var homeWidth by remember { mutableIntStateOf(0) }
     val discoverySlide = animateFloatAsState(
         if (discovery != null && !journalMotion) 1f else 0f,
         if (reduceAnimations) snap() else tween(420, easing = RealEntranceEase),
         label = "yasamDiscoverySlide"
     )
+    val homeState = rememberSaveableStateHolder()
     val homeOnscreen by remember(journalMotion, discovery) {
         derivedStateOf { if (journalMotion) discovery == null else discoverySlide.value < 1f }
     }
@@ -237,7 +241,7 @@ fun HomeWidgetScreen(
                     while (true) awaitPointerEvent(PointerEventPass.Final)
                 }
             }
-            .semantics { paneTitle = if (section == YasamSection.Journals) "Günlüklerim" else "Yaşam" }
+            .semantics { paneTitle = if (section == YasamSection.Journals) "Journal" else "Yaşam" }
     ) {
         if (homeOnscreen) homeState.SaveableStateProvider("yasam-home") {
         Box(Modifier.fillMaxSize().onSizeChanged { homeWidth = it.width }
@@ -262,7 +266,7 @@ fun HomeWidgetScreen(
                 .background(Color.Black)
         ) {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-                key(Unit) {
+                key(widgetContentGeneration) {
                     YasamScrollContent(
                         modifier = Modifier.weight(1f),
                         entrance = entrance,
@@ -322,26 +326,32 @@ fun HomeWidgetScreen(
             key(discoveryTarget) {
                 val closeDiscovery = { discovery = null; if (directKind == "media") onDismiss() }
                 val film = discoveryTarget == YasamDiscoveryTarget.Film || discoveryTarget == YasamDiscoveryTarget.FilmList
+                val music = discoveryTarget == YasamDiscoveryTarget.Music || discoveryTarget == YasamDiscoveryTarget.MusicList
                 val filterEntrance = rememberRealEntrance(reduceAnimations, totalMs = 1800)
                 val filterBodyModifier = if (journalMotion) Modifier.realEntrance(
                     filterEntrance, startMs = 300, durationMs = 500, slideY = 16.dp
                 ) else Modifier
                 val filterHeader: @Composable () -> Unit = {
                     YasamDiscoveryHero(
-                        title = if (film) "Ne izlesek" else "Ne oynasak",
-                        tone = if (film) Color(0xFF2F6BFF) else Color(0xFFF26A1B),
+                        title = if (music) "Ne dinlesek" else if (film) "Ne izlesek" else "Ne oynasak",
+                        tone = if (music) MusicTone else if (film) Color(0xFF2F6BFF) else Color(0xFFF26A1B),
                         reduceAnimations = reduceAnimations,
                         onBack = closeDiscovery
                     )
                 }
-                if (film) MediaDiscoveryScreen(
+                if (music) MusicDiscoveryScreen(
+                    reduceAnimations, onDismiss = closeDiscovery, onAddMusic = onAddMusic,
+                    reduceDynamicBlur = reduceDynamicBlur,
+                    startInList = discoveryTarget == YasamDiscoveryTarget.MusicList,
+                    filterHeader = filterHeader, filterBodyModifier = filterBodyModifier
+                ) else if (film) MediaDiscoveryScreen(
                     reduceAnimations, onDismiss = closeDiscovery, onAddMedia = onAddMedia,
                     reduceDynamicBlur = reduceDynamicBlur,
                     startInWatchlist = discoveryTarget == YasamDiscoveryTarget.FilmList,
                     startInFilters = discoveryTarget == YasamDiscoveryTarget.Film,
                     filterHeader = filterHeader, filterBodyModifier = filterBodyModifier
                 ) else GameDiscoveryScreen(
-                    reduceAnimations, onDismiss = closeDiscovery,
+                    reduceAnimations, onDismiss = closeDiscovery, onAddGame = onAddGame,
                     reduceDynamicBlur = reduceDynamicBlur,
                     startInList = discoveryTarget == YasamDiscoveryTarget.GameList,
                     startInFilters = discoveryTarget == YasamDiscoveryTarget.Game,
@@ -390,7 +400,7 @@ private fun yasamMoodView(entries: List<MoodTrackerEntry>) = YasamMoodView(
 internal enum class YasamSection { Home, Journals }
 
 /** "Öneri al" hedefleri: film tür seçimi, kayıtlı izlenecek listesi, oyun tür seçimi, kayıtlı oynanacak listesi. */
-internal enum class YasamDiscoveryTarget { Film, FilmList, Game, GameList }
+internal enum class YasamDiscoveryTarget { Film, FilmList, Game, GameList, Music, MusicList }
 
 @Composable
 private fun YasamScrollContent(
@@ -458,7 +468,7 @@ private fun YasamScrollContent(
     val bodyBase = if (switched) 0 else baseMs
     val rowDeparture = externalLeave ?: leave
     val journalsMode = shown == YasamSection.Journals
-    val sentence = if (journalsMode) "Günlüklerim" else homeSentence
+    val sentence = if (journalsMode) "Journal" else homeSentence
     val label = if (journalsMode) "${journalReminders.size} GİRİŞ" else YasamSentence.greeting(hour)
 
     Column(modifier.fillMaxWidth().verticalScroll(scroll)) {
@@ -493,7 +503,7 @@ private fun YasamScrollContent(
                 mediaPrompt = mediaPrompt,
                 reduceAnimations = reduceAnimations, actions = actions,
                 moodEntries = moodEntries,
-                watchlistCount = holder.watchlistCount, playlistCount = holder.playlistCount,
+                watchlistCount = holder.watchlistCount, playlistCount = holder.playlistCount, musicCount = holder.musicCount,
                 leave = rowDeparture
             )
 

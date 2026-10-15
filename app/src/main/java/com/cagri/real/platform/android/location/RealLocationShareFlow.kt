@@ -18,7 +18,7 @@ object RealLocationShareFlow {
         val request = com.cagri.real.content.ContentRequest(destination,
             AndroidBackend.auth.currentUser()?.id ?: "guest", "LOCATION", System.currentTimeMillis())
         if (!com.cagri.real.platform.android.content.PendingContentDestination.begin(context, request)) {
-            Toast.makeText(context, "Konum seçimi başlatılamadı", Toast.LENGTH_SHORT).show()
+            com.cagri.real.ui.components.RealToast.show(context, "Konum seçimi başlatılamadı")
             return
         }
         try {
@@ -26,7 +26,7 @@ object RealLocationShareFlow {
                 .setPackage("com.google.android.apps.maps"))
         } catch (_: Exception) {
             com.cagri.real.platform.android.content.PendingContentDestination.cancel(context, request.token)
-            Toast.makeText(context, "Google Haritalar açılamadı", Toast.LENGTH_SHORT).show()
+            com.cagri.real.ui.components.RealToast.show(context, "Google Haritalar açılamadı")
         }
     }
 }

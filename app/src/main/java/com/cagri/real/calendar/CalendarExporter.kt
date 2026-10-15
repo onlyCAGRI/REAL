@@ -29,6 +29,12 @@ internal class CalendarExporter(private val gateway: CalendarGateway, private va
         val indices = HashMap<String, Int>().apply { links.forEachIndexed { i, link -> putIfAbsent(link.key, i) } }
         var inserted = 0; var updated = 0; var removed = 0; var conflicts = 0
         fun persist() { check(store.isCurrent() && shouldContinue()); store.saveLinks(links) }
+        // Receipts store userFingerprint now; older ones the full row hash. An older receipt also counts as untouched
+        // when the event still starts where REAL put it and got no repeat or place (Google's own changes broke the old hash).
+        fun untouched(event: DeviceEvent, link: CalendarLink) = link.fingerprint == event.userFingerprint ||
+            link.fingerprint == event.fingerprint ||
+            (event.fields[1] == link.start.toString() && event.fields[6].isNullOrEmpty() &&
+                event.fields[7].isNullOrEmpty() && event.fields[8].isNullOrEmpty())
         val desired = plans.associateBy { it.key }
         for (plan in plans) {
             check(store.isCurrent() && shouldContinue())
@@ -60,7 +66,7 @@ internal class CalendarExporter(private val gateway: CalendarGateway, private va
             if (existing == null) {
                 check(store.isCurrent() && shouldContinue())
                 val created = gateway.insert(target.id, plan, link.marker)
-                links[index] = link.copy(eventId = created.id, fingerprint = created.fingerprint, start = plan.start)
+                links[index] = link.copy(eventId = created.id, fingerprint = created.userFingerprint, start = plan.start)
                 persist(); inserted++; continue
             }
             if (link.fingerprint == null) {
@@ -70,10 +76,10 @@ internal class CalendarExporter(private val gateway: CalendarGateway, private va
                     !existing.fields[8].isNullOrEmpty() || existing.fields[9] !in listOf(null, "0") || existing.fields[10] !in listOf(null, "0")) {
                     conflicts++; continue
                 }
-                links[index] = link.copy(eventId = existing.id, fingerprint = existing.fingerprint); persist()
+                links[index] = link.copy(eventId = existing.id, fingerprint = existing.userFingerprint); persist()
                 continue
             }
-            if (existing.fingerprint != link.fingerprint) {
+            if (!untouched(existing, link)) {
                 // A guarded description-only URL refresh may proceed without authorizing title/date overwrites.
                 // Keep the old fingerprint: an external edit must remain a conflict on subsequent reconciles.
                 if (existing.description != DeviceCalendarProvider.description(link.marker, plan.publicUrl)) {
@@ -86,7 +92,7 @@ internal class CalendarExporter(private val gateway: CalendarGateway, private va
                 check(store.isCurrent() && shouldContinue())
                 val changed = gateway.update(existing, plan, link.marker)
                 if (changed == null) { conflicts++; continue }
-                links[index] = link.copy(eventId = changed.id, fingerprint = changed.fingerprint, start = plan.start)
+                links[index] = link.copy(eventId = changed.id, fingerprint = changed.userFingerprint, start = plan.start)
                 persist(); updated++
             }
         }
@@ -108,7 +114,7 @@ internal class CalendarExporter(private val gateway: CalendarGateway, private va
             val matches = gateway.find(link.calendarId, link.marker)
             if (matches.isEmpty()) { links.remove(link); persist(); continue }
             val existing = matches.singleOrNull()
-            if (existing == null || link.fingerprint == null || existing.fingerprint != link.fingerprint) {
+            if (existing == null || link.fingerprint == null || !untouched(existing, link)) {
                 conflicts++; continue
             }
             check(store.isCurrent() && shouldContinue())

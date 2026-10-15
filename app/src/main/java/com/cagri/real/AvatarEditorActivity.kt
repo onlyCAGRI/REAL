@@ -127,12 +127,12 @@ class AvatarEditorActivity : ComponentActivity() {
                 com.cagri.real.profile.ProfileAccountStore.save(this@AvatarEditorActivity,
                     profileOwner, "avatar", "png", stateJson) { file -> file.writeBytes(bytes) }
                 runOnUiThread {
-                    Toast.makeText(this@AvatarEditorActivity, "Avatar kaydedildi", Toast.LENGTH_SHORT).show()
+                    com.cagri.real.ui.components.RealToast.show(this@AvatarEditorActivity, "Avatar kaydedildi")
                     finish()
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
-                    Toast.makeText(this@AvatarEditorActivity, "Avatar kaydedilemedi", Toast.LENGTH_SHORT).show()
+                    com.cagri.real.ui.components.RealToast.show(this@AvatarEditorActivity, "Avatar kaydedilemedi")
                 }
             }
         }

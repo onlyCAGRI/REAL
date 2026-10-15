@@ -1,5 +1,8 @@
 package com.cagri.real.ui.sharedcategories
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.clickable
+import com.cagri.real.ui.components.realSheetSurface
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -65,12 +68,26 @@ fun SharedCategoryMembersDialog(
         catch (failure: Exception) { error = failure.message }
         finally { busy = false }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        val sheetShape = RoundedCornerShape(32.dp)
-        Column(
-            Modifier.fillMaxWidth(0.94f).heightIn(max = 660.dp).clip(sheetShape)
-                .background(Color(0xFF111115)).border(1.dp, ConnectionPalette.Stroke, sheetShape)
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        // A bottom sheet like the notification / SYNC question.
+        val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        SideEffect { window?.setDimAmount(0f) }
+        val sheetIn = remember { androidx.compose.animation.core.Animatable(0f) }
+        LaunchedEffect(Unit) { sheetIn.animateTo(1f, androidx.compose.animation.core.tween(420, easing = com.cagri.real.ui.components.RealMotion.Emphasized)) }
+        Box(
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f * sheetIn.value))
+                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onDismiss),
+            contentAlignment = Alignment.BottomCenter
         ) {
+        Column(
+            Modifier.fillMaxWidth().heightIn(max = 680.dp)
+                .graphicsLayer { translationY = size.height * (1f - sheetIn.value) }
+                .realSheetSurface()
+                .navigationBarsPadding().imePadding()
+                .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = {}),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            com.cagri.real.ui.components.RealSheetHandle()
             Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 16.dp, top = 20.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(category.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -125,14 +142,15 @@ fun SharedCategoryMembersDialog(
                         color = ConnectionPalette.Muted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(horizontal = 6.dp))
                 }
                 if (busy) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                    com.cagri.real.ui.components.RealSpinner(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
                 }
                 error?.let { ConnectionNote(it); ConnectionPill("Yeniden dene", { action { refresh() } }, enabled = !busy) }
             }
         }
+        }
     }
     removing?.let { member ->
-        AlertDialog(onDismissRequest = { removing = null }, containerColor = Color(0xFF17171B), shape = RoundedCornerShape(28.dp),
+        com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = { removing = null }, containerColor = Color(0xFF17171B), shape = RoundedCornerShape(28.dp),
             title = { Text("${member.name} kaldırılsın mı?", color = Color.White) },
             text = { Text("Bu kategorinin çevrimiçi erişimi kesilir. Kişilerim bağlantınız korunur.", color = Color.Gray) },
             confirmButton = { TextButton(onClick = { removing = null; action {

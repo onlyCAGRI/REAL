@@ -40,6 +40,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.Locale
 
+private const val UNDO_WINDOW_MS = 5_000L
+
 class MainActivity : ComponentActivity() {
     // Temporary visual preview requested for skeleton testing. Set to 0L to disable.
     private val startupSkeletonPreviewMs = 500L
@@ -65,6 +67,10 @@ class MainActivity : ComponentActivity() {
     private var refreshedPreferenceRevision = -1L
     private var refreshedPermissionState: Pair<Boolean, Boolean>? = null
     private val waiting = mutableSetOf<Long>() 
+    // Deleted cards leave the screen at once but are only removed (files included) after the
+    // "Geri al" window, so an undo restores them untouched.
+    private var pendingDeleteIds by mutableStateOf<Set<Long>>(emptySet())
+    private var pendingDeleteJob: kotlinx.coroutines.Job? = null
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         notificationsAllowed = NotificationManagerCompat.from(this).areNotificationsEnabled()
         if (granted) lifecycleScope.launch {
@@ -139,10 +145,24 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             ReminderRepository.updates.collect {
                 perform(reloadRelated = true)
+                // A change to a shared category's card goes up shortly (the engine's own writes are skipped).
+                com.cagri.real.sharedcategories.SharedCategorySync.request(this@MainActivity)
             }
         }
+        // Compose always paints a full-screen black Surface from here on, so the window's own black
+        // background is a hidden extra full-screen fill on every frame (GPU overdraw). The starting
+        // window has already used it.
+        window.setBackgroundDrawable(null)
         setContent {
             RealTheme {
+                val pendingDeletes = pendingDeleteIds
+                val visibleReminders = remember(reminders, pendingDeletes) {
+                    (if (pendingDeletes.isEmpty()) reminders else reminders.filterNot { it.id in pendingDeletes }).map { r ->
+                        // Black or white text follows the card's colour automatically (no manual switch any more).
+                        val dark = com.cagri.real.ui.components.autoCardDarkText(r.accentStart, r.accentEnd, r.customSolidColorArgb)
+                        if (r.useDarkText == dark) r else r.copy(useDarkText = dark)
+                    }
+                }
                 val authController = remember {
                     AndroidAuthUiController(
                         activity = this@MainActivity,
@@ -193,7 +213,11 @@ class MainActivity : ComponentActivity() {
                 androidx.compose.runtime.CompositionLocalProvider(
                     LocalAuthUiController provides authController,
                     com.cagri.real.ui.components.LocalDesignStyle provides style,
-                    com.cagri.real.ui.components.LocalLiquidReduceMotion provides reduceAnimations
+                    com.cagri.real.ui.components.LocalLiquidReduceMotion provides reduceAnimations,
+                    com.cagri.real.ui.components.LocalSetReminderTiming provides { id, early, end -> mutate {
+                        repository.setTiming(id, early, end).firstOrNull { it.id == id }
+                            ?.let { runCatching { ReminderNotifications.refreshEdited(this@MainActivity, it) } }
+                    } }
                 ) {
                 Box(Modifier.fillMaxSize()) {
                     Crossfade(
@@ -239,12 +263,12 @@ class MainActivity : ComponentActivity() {
                                     if (perform(reloadRelated = true)) loadedStartupRevision = startup.revision
                                 } }) {
                                     Text("Notlar açılamadı. Yeniden dene")
-                                } else CircularProgressIndicator()
+                                } else com.cagri.real.ui.components.RealSpinner()
                             }
                         }
                     } else {
                         ReminderScreen(
-                            reminders = reminders,
+                            reminders = visibleReminders,
                             onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl, attachments, voiceRecordings, location, plannedDateEpochDay, quick24HourUntilAt, musicBlocks, mediaBlocks ->
                                 var createdId: Long? = null
                                 val success = perform(warnIfBlocked = true) {
@@ -292,6 +316,20 @@ class MainActivity : ComponentActivity() {
                                     createdId = newest.id
                                 }
                                 if (success) createdId else null
+                            },
+                            onAddGame = { game ->
+                                var createdId: Long? = null
+                                val success = perform(warnIfBlocked = true) {
+                                    createdId = repository.add(text = game.title, sendImmediateNotification = false,
+                                        gameBlocks = listOf(game)).id
+                                }
+                                if (success) createdId else null
+                            },
+                            onAddGameBlock = { reminderId, block ->
+                                mutate { repository.addGameBlock(reminderId, block) }
+                            },
+                            onRemoveGameBlock = { reminderId, blockId ->
+                                mutate { repository.removeGameBlock(reminderId, blockId) }
                             },
                             onUndoSuggestedReal = { id ->
                                 perform {
@@ -417,14 +455,7 @@ class MainActivity : ComponentActivity() {
                                     if (success) moodTrackerEntries = emptyList()
                                 }
                             },
-                            onDeleteReminder = { id -> mutate {
-                                val paths = repository.getAttachmentPathsForReminders(setOf(id))
-                                val voicePaths = repository.getVoiceRecordingPathsForReminders(setOf(id))
-                                repository.delete(id)
-                                AttachmentStorage.deleteAttachmentFilePaths(this@MainActivity, paths.filterNot { it in repository.getAllAttachmentPaths() })
-                                VoiceRecordingStorage.deleteRecordingPaths(this@MainActivity, voicePaths.filterNot { it in repository.getAllVoiceRecordingPaths() })
-                                ReminderNotifications.cancel(this@MainActivity, id); waiting.remove(id)
-                            } },
+                            onDeleteReminder = { id -> requestDelete(setOf(id)) },
                             onDeleteReminderOccurrence = { id, occurrenceMillis, scope -> mutate {
                                 val before = repository.load().firstOrNull { it.id == id }
                                 val result = repository.deleteRepeatOccurrence(id, occurrenceMillis, scope)
@@ -464,17 +495,7 @@ class MainActivity : ComponentActivity() {
                                     RepeatDeleteStatus.NOT_FOUND -> Unit
                                 }
                             } },
-                            onDeleteReminders = { ids -> mutate {
-                                val paths = repository.getAttachmentPathsForReminders(ids)
-                                val voicePaths = repository.getVoiceRecordingPathsForReminders(ids)
-                                ids.forEach { id ->
-                                    ReminderNotifications.cancel(this@MainActivity, id)
-                                    waiting.remove(id)
-                                }
-                                repository.deleteAll(ids)
-                                AttachmentStorage.deleteAttachmentFilePaths(this@MainActivity, paths.filterNot { it in repository.getAllAttachmentPaths() })
-                                VoiceRecordingStorage.deleteRecordingPaths(this@MainActivity, voicePaths.filterNot { it in repository.getAllVoiceRecordingPaths() })
-                            } },
+                            onDeleteReminders = { ids -> requestDelete(ids) },
                             onBulkSetCategory = { ids, catId -> mutate {
                                 repository.setCustomCategoryForReminders(ids, catId)
                             } },
@@ -580,14 +601,66 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             },
-                            reminders = reminders,
+                            reminders = visibleReminders,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
+
+                    // Topmost: REAL's own toast replaces the system Toast while this screen is resumed.
+                    com.cagri.real.ui.components.RealToastHost()
                 }
                 }
             }
         }
+    }
+
+    override fun onStop() {
+        // Leaving REAL ends the undo window: make the pending delete final now.
+        commitPendingDeletes()
+        super.onStop()
+    }
+
+    private fun requestDelete(ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        // Only one undo at a time: an earlier pending batch becomes final first.
+        commitPendingDeletes()
+        pendingDeleteIds = pendingDeleteIds + ids
+        val label = if (ids.size == 1) "Kart silindi" else "${ids.size} kart silindi"
+        val undoable = com.cagri.real.ui.components.RealToast.showAction(this, label, "Geri al", UNDO_WINDOW_MS) {
+            if (pendingDeleteIds.containsAll(ids)) {
+                pendingDeleteJob?.cancel(); pendingDeleteJob = null
+                pendingDeleteIds = pendingDeleteIds - ids
+            }
+        }
+        if (!undoable) { commitPendingDeletes(); return }
+        pendingDeleteJob = lifecycleScope.launch {
+            delay(UNDO_WINDOW_MS + 150)
+            commitPendingDeletes()
+        }
+    }
+
+    private fun commitPendingDeletes() {
+        val ids = pendingDeleteIds
+        if (ids.isEmpty()) return
+        pendingDeleteJob?.cancel(); pendingDeleteJob = null
+        lifecycleScope.launch {
+            perform { deleteRemindersNow(ids) }
+            // Unhide only after the reload, so the cards never flash back.
+            pendingDeleteIds = pendingDeleteIds - ids
+        }
+    }
+
+    /** The original delete: cards, then attachment/voice files no other card uses, then notifications. */
+    private fun deleteRemindersNow(ids: Set<Long>) {
+        val paths = repository.getAttachmentPathsForReminders(ids)
+        val voicePaths = repository.getVoiceRecordingPathsForReminders(ids)
+        ids.forEach { id ->
+            ReminderNotifications.cancel(this@MainActivity, id)
+            waiting.remove(id)
+        }
+        repository.deleteAll(ids)
+        AttachmentStorage.deleteAttachmentFilePaths(this@MainActivity, paths.filterNot { it in repository.getAllAttachmentPaths() })
+        VoiceRecordingStorage.deleteRecordingPaths(this@MainActivity, voicePaths.filterNot { it in repository.getAllVoiceRecordingPaths() })
     }
 
     override fun onResume() {
@@ -597,6 +670,14 @@ class MainActivity : ComponentActivity() {
         exactAllowed = ReminderScheduler.canScheduleExact(this)
         notificationsAllowed = NotificationManagerCompat.from(this).areNotificationsEnabled()
         if (::repository.isInitialized) lifecycleScope.launch { perform(reloadRelated = true) }
+        com.cagri.real.sharedcategories.SharedCategorySync.request(this, 300)
+        // Direct Share: category shortcuts in the share menu (Ayarlar → Paylaş menüsü kısayolları).
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching {
+                com.cagri.real.platform.android.content.ShareShortcuts.publish(this@MainActivity,
+                    CategoryRepository(this@MainActivity).load(), ReminderRepository(this@MainActivity).load())
+            }
+        }
     }
 
     private fun openNotificationSettings() {
@@ -692,7 +773,7 @@ class MainActivity : ComponentActivity() {
             intent?.removeExtra(Intent.EXTRA_TITLE)
             intent?.action = null
             if (route !is com.cagri.real.content.ContentRouteResult.Deliver) {
-                Toast.makeText(this, "Konum hedefi artık geçerli değil. REAL’den yeniden konum seç.", Toast.LENGTH_LONG).show()
+                com.cagri.real.ui.components.RealToast.show(this, "Konum hedefi artık geçerli değil. REAL’den yeniden konum seç.", long = true)
                 return
             }
             val request = route.request
@@ -722,7 +803,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 } catch (c: kotlinx.coroutines.CancellationException) { throw c }
-                catch (e: Exception) { Toast.makeText(this@MainActivity, e.message ?: "Konum eklenemedi", Toast.LENGTH_LONG).show() }
+                catch (e: Exception) { com.cagri.real.ui.components.RealToast.show(this@MainActivity, e.message ?: "Konum eklenemedi", long = true) }
             }
             return
         }
@@ -760,7 +841,7 @@ class MainActivity : ComponentActivity() {
             throw e
         } catch (e: Exception) {
             android.util.Log.e("Real", "Voice category creation failed", e)
-            Toast.makeText(this@MainActivity, "Kategori oluşturulamadı.", Toast.LENGTH_LONG).show()
+            com.cagri.real.ui.components.RealToast.show(this@MainActivity, "Kategori oluşturulamadı.", long = true)
             null
         }
     }
@@ -823,7 +904,7 @@ class MainActivity : ComponentActivity() {
                             customCategories = recoveredCategories
                         } catch (_: Exception) { }
                     }
-                    Toast.makeText(this@MainActivity, errorMessage, Toast.LENGTH_LONG).show()
+                    com.cagri.real.ui.components.RealToast.show(this@MainActivity, errorMessage, long = true)
                 }
             }
         }
@@ -852,6 +933,7 @@ class MainActivity : ComponentActivity() {
                     if (com.cagri.real.platform.android.sync.SyncLocal.workspaceToken() != localWorkspaceToken)
                         throw CancellationException("Workspace changed")
                     action?.invoke()
+                    if (action != null) com.cagri.real.sharedcategories.SharedCategorySync.request(this@MainActivity)
                     ReminderScheduler.reconcile(this@MainActivity, repository)
                     val all = repository.load()
                     ReminderNotifications.restorePinned(this@MainActivity, all)
@@ -873,7 +955,7 @@ class MainActivity : ComponentActivity() {
                 refreshedPermissionState = permissionState
             }
             if (warnIfBlocked && result.waiting) {
-                Toast.makeText(this, "Not kaydedildi. Bildirimleri uygulama ayarlarından açın.", Toast.LENGTH_LONG).show()
+                com.cagri.real.ui.components.RealToast.show(this, "Not kaydedildi. Bildirimleri uygulama ayarlarından açın.", long = true)
                 requestNotificationPermission()
             }
             true
@@ -881,7 +963,7 @@ class MainActivity : ComponentActivity() {
         catch (e: Exception) {
             android.util.Log.e("Real", "Reminder operation failed", e)
             if (!ready) loadFailed = true
-            Toast.makeText(this, "İşlem tamamlanamadı. Notlarını silmeden yeniden deneyebilirsin.", Toast.LENGTH_LONG).show()
+            com.cagri.real.ui.components.RealToast.show(this, "İşlem tamamlanamadı. Notlarını silmeden yeniden deneyebilirsin.", long = true)
             false
         }
     }

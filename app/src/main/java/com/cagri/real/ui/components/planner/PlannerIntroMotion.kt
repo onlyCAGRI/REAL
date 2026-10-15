@@ -1,10 +1,8 @@
 package com.cagri.real.ui.components.planner
 
-import androidx.compose.runtime.saveable.rememberSaveable
-
+import com.cagri.real.ui.components.RealMotion
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -34,9 +32,9 @@ import kotlinx.coroutines.delay
  * Motion only (no layout/design): one 0..1500 ms clock per screen, every element reads its own slice of it
  * inside graphicsLayer, so the whole entrance costs no recomposition.
  */
-internal val PlannerEaseOut = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+internal val PlannerEaseOut = RealMotion.Standard
 /** Slight overshoot, used for tiles/event cards that "pop" in. */
-internal val PlannerPopEase = CubicBezierEasing(0.2f, 1.2f, 0.35f, 1f)
+internal val PlannerPopEase = RealMotion.Pop
 internal const val PlannerIntroTotalMs = 1500f
 internal const val PlannerRevealOpenMs = 380
 internal const val PlannerRevealCloseMs = 300
@@ -64,12 +62,9 @@ internal class PlannerIntro(private val driver: Animatable<Float, AnimationVecto
 
 @Composable
 internal fun rememberPlannerIntro(reduce: Boolean, delayMs: Long = 0L): PlannerIntro {
-    var played by rememberSaveable { mutableStateOf(false) }
-    val playThisEntry = remember { !played }
-    val driver = remember { Animatable(if (reduce || !playThisEntry) PlannerIntroTotalMs else 0f) }
+    val driver = remember { Animatable(if (reduce) PlannerIntroTotalMs else 0f) }
     LaunchedEffect(reduce) {
-        played = true
-        if (reduce || !playThisEntry) {
+        if (reduce) {
             driver.snapTo(PlannerIntroTotalMs)
         } else if (driver.value < PlannerIntroTotalMs) {
             if (delayMs > 0L) delay(delayMs)

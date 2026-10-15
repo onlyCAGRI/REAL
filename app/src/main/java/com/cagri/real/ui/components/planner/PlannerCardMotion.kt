@@ -1,10 +1,8 @@
 package com.cagri.real.ui.components.planner
 
 import com.cagri.real.ui.components.RealMotion
-
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,7 +30,7 @@ internal fun Modifier.plannerEventMotion(event: PlannerEvent, surface: String, o
             Modifier.sharedElementWithCallerManagedVisibility(
                 rememberSharedContentState(key),
                 visible = motion.selectedKey != key || motion.openedId == null,
-                boundsTransform = { _, _ -> RealMotion.smooth(0.32f) },
+                boundsTransform = { _, _ -> tween(320, easing = RealMotion.Standard) },
                 clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp)),
                 renderInOverlayDuringTransition = isTransitionActive
             )
@@ -57,7 +55,7 @@ internal fun plannerDetailMotion(
         Modifier.sharedElementWithCallerManagedVisibility(
             rememberSharedContentState(key),
             visible = motion.openedId == reminderId,
-            boundsTransform = { _, _ -> RealMotion.smooth(0.32f) },
+            boundsTransform = { _, _ -> tween(320, easing = RealMotion.Standard) },
             clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(28.dp)),
             renderInOverlayDuringTransition = isTransitionActive && renderInOverlay
         )

@@ -65,7 +65,9 @@ fun CategoryCollections(
     categoryOrderKeys: List<String> = emptyList(),
     previewCount: Int = 4,
     sharedTransitionScope: SharedTransitionScope? = null,
-    animatedVisibilityScope: AnimatedVisibilityScope? = null
+    animatedVisibilityScope: AnimatedVisibilityScope? = null,
+    /** Upcoming phone-calendar events filed under each category ("Kategorize et"), counted with its cards. */
+    calendarCounts: Map<Long, Int> = emptyMap()
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     var showAllPetOverride by remember { mutableStateOf<String?>(null) }
@@ -100,7 +102,10 @@ fun CategoryCollections(
             source.inCategory(category, today, nowMillis = rolling24Now).size
         }
     }
-    val customCounts = remember(reminders) { reminders.groupingBy { it.customCategoryId }.eachCount() }
+    val customCounts = remember(reminders, calendarCounts) {
+        val own = reminders.groupingBy { it.customCategoryId }.eachCount()
+        own + calendarCounts.mapValues { (id, n) -> (own[id] ?: 0) + n }
+    }
     val showAllControlVisible = CATEGORY_SHOW_ALL_KEY !in hiddenCategoryKeys(categoryOrderKeys)
     val showAll = (expanded && showAllControlVisible) || selectionMode
     Column(modifier.then(if (reduceAnimations) Modifier else Modifier.animateContentSize(spring(dampingRatio = 1f, stiffness = 400f)))) {
@@ -288,7 +293,7 @@ internal fun MoodTrackerCategoryCard(
             .then(
                 if (enabled) Modifier.clickable(
                     interactionSource = interaction,
-                    indication = LocalIndication.current,
+                    indication = null /* pressScale already gives the press feedback */,
                     role = Role.Button,
                     onClick = onClick
                 ) else Modifier
@@ -372,6 +377,23 @@ fun CategoryPill(
         petTextOverride = null
     }
 
+    val pillModifier = modifier
+        .then(if (petPerchId != null) Modifier.realPetPerch(petPerchId) else Modifier)
+        .clip(RoundedCornerShape(50))
+        .border(1.dp, pillBorder, RoundedCornerShape(50))
+        .padding(horizontal = 10.dp, vertical = 4.dp)
+    // "33 kart": the count rolls when it changes; any other text (or the pet's joke) is shown as-is.
+    val counted = if (petTextOverride == null) CountedPillText.matchEntire(text) else null
+    if (counted != null) {
+        Row(pillModifier, verticalAlignment = Alignment.CenterVertically) {
+            RollingNumberText(counted.groupValues[1].toInt(), foreground, RealType.categoryPill, reduceAnimations = reduceAnimations)
+            Text(
+                counted.groupValues[2], color = foreground, style = RealType.categoryPill,
+                softWrap = false, maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        return
+    }
     Text(
         text = petTextOverride ?: text,
         color = foreground,
@@ -379,13 +401,11 @@ fun CategoryPill(
         softWrap = false,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = modifier
-            .then(if (petPerchId != null) Modifier.realPetPerch(petPerchId) else Modifier)
-            .clip(RoundedCornerShape(50))
-            .border(1.dp, pillBorder, RoundedCornerShape(50))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+        modifier = pillModifier
     )
 }
+
+private val CountedPillText = Regex("""(\d{1,6})( .+)""")
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
@@ -436,8 +456,8 @@ fun CollectionCategoryCard(
         }
     }
         
-    val useDarkForeground = customCategory?.useDarkText ?: override?.useDarkText ?: defaults.useDarkText
-    val foreground = if (useDarkForeground) Color(0xFF101010) else Color.White
+    // Black or white text chosen from how light the category colour is (same rule as the category header).
+    val foreground = remember(category, customCategory, override) { categoryPalette(category, customCategory, override).foreground }
     
     // We update these variables when onPlaced is called
     var localY by remember { mutableFloatStateOf(0f) }
@@ -528,7 +548,7 @@ fun CollectionCategoryCard(
             shape
         )
         .then(if (onClick != null) Modifier.combinedClickable(interactionSource = interaction,
-            indication = LocalIndication.current, role = Role.Button, onClick = onClick,
+            indication = null /* pressScale already gives the press feedback */, role = Role.Button, onClick = onClick,
             onLongClick = onLongClick, onLongClickLabel = if (customCategory != null) "Kategorileri seç" else "Kategori rengini düzenle") else Modifier)
         .then(if (selectionMode) Modifier.semantics { selected = isSelected } else Modifier)
         .heightIn(min = if (hero) 156.dp else 108.dp)

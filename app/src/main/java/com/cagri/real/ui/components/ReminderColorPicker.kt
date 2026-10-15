@@ -29,9 +29,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -46,9 +48,6 @@ import com.cagri.real.data.resolveGradientBlendFraction
 import com.cagri.real.ui.DesignStyle
 
 data class ReminderColorChoice(val label: String, val color: Color)
-
-
-
 
 val ReminderColorChoices = listOf(
     // REAL 2026 palette — rebuilt from the approved visual references.
@@ -77,8 +76,50 @@ val ReminderColorChoices = listOf(
     ReminderColorChoice("Koleksiyon Lavanta", Color(0xFFDAB7F3)),
     ReminderColorChoice("Koleksiyon Lime", Color(0xFFE0F37D)),
     ReminderColorChoice("Koleksiyon Mavi", Color(0xFF4658C8)),
-    ReminderColorChoice("Koleksiyon Turuncu", Color(0xFFEE5E36))
+    ReminderColorChoice("Koleksiyon Turuncu", Color(0xFFEE5E36)),
+    // Vivid companions (from the analytics references), each shown next to the colour it echoes. Index 24 + (k - 2)
+    // is the companion of colour k; append only, since saved choices use list indices.
+    ReminderColorChoice("Elektrik Mavisi", Color(0xFF2F5BEA)),
+    ReminderColorChoice("Lacivert", Color(0xFF1B2A6B)),
+    ReminderColorChoice("Periwinkle", Color(0xFF8FA8E6)),
+    ReminderColorChoice("Adaçayı Koyu", Color(0xFF3E6E62)),
+    ReminderColorChoice("Aqua", Color(0xFF2ED3A2)),
+    ReminderColorChoice("Adaçayı", Color(0xFF8FB5A2)),
+    ReminderColorChoice("Yaprak", Color(0xFF6BB300)),
+    ReminderColorChoice("Neon Sarı", Color(0xFFE8F24A)),
+    ReminderColorChoice("Zeytin", Color(0xFFB6B12E)),
+    ReminderColorChoice("Bakır", Color(0xFFA0603C)),
+    ReminderColorChoice("Yanık Turuncu", Color(0xFFD9622B)),
+    ReminderColorChoice("Somon", Color(0xFFE6806D)),
+    ReminderColorChoice("Şeker Pembe", Color(0xFFE58BC6)),
+    ReminderColorChoice("Şarap", Color(0xFFA3123F)),
+    ReminderColorChoice("Magenta", Color(0xFFE0136C)),
+    ReminderColorChoice("Leylak", Color(0xFFC9A6E8)),
+    ReminderColorChoice("Mor", Color(0xFF8D6BE0)),
+    ReminderColorChoice("Mürdüm", Color(0xFF5A2440))
 )
+
+/**
+ * Card text colour chosen automatically, as for categories: dark on light card colours, white on dark ones. Cards
+ * draw their colour at 76% over the dark card surface, so that blend is what is measured. No colour: white text.
+ */
+/**
+ * The colours as pickers show them, REAL-style: the two signature neutrals, then round the colour wheel —
+ * yellow, orange, pink-red, purple, blue, teal, green — each colour followed by its vivid companion. Values are indices into
+ * [ReminderColorChoices] (cards store the index, so the order changes nothing saved). The four "Koleksiyon"
+ * entries duplicate other colours and are not offered; cards that already use them keep showing them.
+ */
+val ReminderColorDisplayOrder = listOf(0, 1, 9, 31, 10, 32, 11, 33, 13, 35, 12, 34, 14, 36, 16, 38, 15, 37, 17, 39, 18, 40, 19, 41, 4, 26, 2, 24, 3, 25, 5, 27, 6, 28, 7, 29, 8, 30)
+
+fun autoCardDarkText(accentStart: Int?, accentEnd: Int?, customSolidColorArgb: Int?): Boolean {
+    val colors = if (customSolidColorArgb != null) listOf(Color(customSolidColorArgb))
+        else listOfNotNull(accentStart?.let { ReminderColorChoices.getOrNull(it)?.color },
+            accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color })
+    if (colors.isEmpty()) return false
+    val surface = Color(0xFF151517)
+    val light = colors.map { androidx.compose.ui.graphics.lerp(surface, it, 0.76f).luminance().toDouble() }.average()
+    return light > 0.35
+}
 
 fun reminderAccentBrush(
     startIndex: Int?,
@@ -326,7 +367,8 @@ private fun ColorChoiceRow(
                     }
                 }
             }
-            items(ReminderColorChoices.size, key = { it }) { index ->
+            items(ReminderColorDisplayOrder.size, key = { ReminderColorDisplayOrder[it] }) { position ->
+                val index = ReminderColorDisplayOrder[position]
                 val choice = ReminderColorChoices[index]
                 val selected = index == selectedIndex
                 Box(

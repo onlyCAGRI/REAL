@@ -18,3 +18,9 @@
 # Keep source/line information for retrace with the matching per-build mapping.
 # Do not rename all source files to one token or disable obfuscation/optimization.
 -keepattributes SourceFile,LineNumberTable
+
+# PdfBox-Android: optional JPEG2000 decoder is not bundled; text extraction uses reflection-free paths.
+-dontwarn com.gemalto.jp2.**
+-dontwarn org.bouncycastle.**
+-keep class com.tom_roush.pdfbox.** { *; }
+-keep class com.tom_roush.fontbox.** { *; }

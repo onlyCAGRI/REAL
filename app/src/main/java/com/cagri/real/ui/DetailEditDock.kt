@@ -1,9 +1,7 @@
 package com.cagri.real.ui
 
 import com.cagri.real.ui.components.RealMotion
-
 import androidx.compose.animation.*
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,23 +29,29 @@ internal fun detailDockCollapsedAfterDrag(collapsed: Boolean, deltaDp: Float): B
     else -> collapsed
 }
 
-/** Only the handle owns the drag; color controls, icon scroll and Save retain their gestures. */
+/**
+ * The edit dock. Its grab handle lives inside the dock: [content] places it at the top of the main
+ * panel, and when the dock is lowered [collapsedBar] shows it in a slim glass bar. Only the handle
+ * owns the drag (down = lower, up = raise, tap = toggle); colour controls, icon scroll and Save keep
+ * their own gestures.
+ */
 @Composable
 internal fun DetailEditDock(
     collapsed: Boolean, enabled: Boolean, reduceAnimations: Boolean,
     onCollapsedChange: (Boolean) -> Unit,
-    content: @Composable ColumnScope.() -> Unit
+    collapsedBar: @Composable (handle: @Composable () -> Unit) -> Unit,
+    content: @Composable ColumnScope.(handle: @Composable () -> Unit) -> Unit
 ) {
     val density = LocalDensity.current.density
     val currentCollapsed by rememberUpdatedState(collapsed)
     val currentChange by rememberUpdatedState(onCollapsedChange)
     val interaction = remember { MutableInteractionSource() }
-    Column(Modifier.fillMaxWidth()) {
+    val handle: @Composable () -> Unit = {
         Box(
-            Modifier.fillMaxWidth().height(28.dp)
+            Modifier.fillMaxWidth().height(20.dp)
                 .semantics {
                     contentDescription = "Düzenleme dock'u"
-                    stateDescription = if (collapsed) "Küçültülmüş" else "Açık"
+                    stateDescription = if (currentCollapsed) "Küçültülmüş" else "Açık"
                 }
                 .pointerInput(enabled, density) {
                     if (!enabled) return@pointerInput
@@ -64,19 +68,28 @@ internal fun DetailEditDock(
                     )
                 }
                 .clickable(interactionSource = interaction, indication = null, enabled = enabled,
-                    role = Role.Button, onClickLabel = if (collapsed) "Dock'u aç" else "Dock'u küçült") {
+                    role = Role.Button, onClickLabel = if (currentCollapsed) "Dock'u aç" else "Dock'u küçült") {
                     currentChange(!currentCollapsed)
                 }, contentAlignment = Alignment.Center
         ) {
-            Box(Modifier.width(40.dp).height(4.dp).clip(CircleShape)
-                .background(Color.White.copy(alpha = if (enabled) 0.55f else 0.25f)))
+            Box(Modifier.width(36.dp).height(4.dp).clip(CircleShape)
+                .background(Color.White.copy(alpha = if (enabled) 0.42f else 0.2f)))
+        }
+    }
+    Column(Modifier.fillMaxWidth()) {
+        AnimatedVisibility(
+            visible = collapsed,
+            enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180, delayMillis = 60)),
+            exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(100))
+        ) {
+            collapsedBar(handle)
         }
         AnimatedVisibility(
             visible = !collapsed,
-            enter = if (reduceAnimations) EnterTransition.None else expandVertically(RealMotion.smooth(0.28f), expandFrom = Alignment.Bottom) + fadeIn(tween(160)),
-            exit = if (reduceAnimations) ExitTransition.None else shrinkVertically(RealMotion.smooth(0.28f), shrinkTowards = Alignment.Bottom) + fadeOut(tween(120))
+            enter = if (reduceAnimations) EnterTransition.None else expandVertically(tween(220, easing = RealMotion.Emphasized), expandFrom = Alignment.Bottom) + fadeIn(tween(160)),
+            exit = if (reduceAnimations) ExitTransition.None else shrinkVertically(tween(180), shrinkTowards = Alignment.Bottom) + fadeOut(tween(120))
         ) {
-            Column(Modifier.fillMaxWidth(), content = content)
+            Column(Modifier.fillMaxWidth()) { content(handle) }
         }
     }
 }

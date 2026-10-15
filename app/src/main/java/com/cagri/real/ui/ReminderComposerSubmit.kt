@@ -50,18 +50,18 @@ internal fun reminderSubmitAction(
         } else if (alertAt != null && pendingVoiceRepeatUntil != null &&
             java.time.Instant.ofEpochMilli(alertAt).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() > pendingVoiceRepeatUntil!!) {
             if (isVoiceDraft) showVoiceFeedback(voiceState, "Seçilen gün tekrarın bitiş tarihinden sonra. Tarihi düzelt.")
-            else Toast.makeText(context, "Seçilen gün tekrarın bitiş tarihinden sonra. Tarihi düzelt.", Toast.LENGTH_LONG).show()
+            else com.cagri.real.ui.components.RealToast.show(context, "Seçilen gün tekrarın bitiş tarihinden sonra. Tarihi düzelt.", long = true)
             requestPermissionForAction(PendingNotificationAction.OPEN_DATE_PICKER)
         } else if (requiresTimeSelection && alertAt == null) {
             if (isVoiceDraft) showVoiceFeedback(voiceState, "Saat kaçta olsun?")
-            else Toast.makeText(context, "Lütfen bir saat seç.", Toast.LENGTH_SHORT).show()
+            else com.cagri.real.ui.components.RealToast.show(context, "Lütfen bir saat seç.")
             requestPermissionForAction(PendingNotificationAction.OPEN_DATE_PICKER)
         } else if (isChecklistMode) {
             val validItems = checklistDraftItems.map { it.trim() }.filter { it.isNotEmpty() }
             if (text.isNotBlank() && validItems.isNotEmpty() && !saving && !copyingPhotos) {
                 if (alertAt != null && alertAt <= System.currentTimeMillis()) {
                     if (isVoiceDraft) showVoiceFeedback(voiceState, "Gelecekte bir tarih ve saat seç.")
-                    else Toast.makeText(context, "Gelecekte bir tarih ve saat seç.", Toast.LENGTH_LONG).show()
+                    else com.cagri.real.ui.components.RealToast.show(context, "Gelecekte bir tarih ve saat seç.", long = true)
                     showDatePicker = true
                 } else {
                     if (voiceAiParsing) {
@@ -116,6 +116,10 @@ internal fun reminderSubmitAction(
                                         )
                                     }
                                 }
+                                if (alertAt != null && (ComposerTimingDraft.earlyAlertMinutes != null || ComposerTimingDraft.endAt != null)) {
+                                    onSetTiming(createdId, ComposerTimingDraft.earlyAlertMinutes, ComposerTimingDraft.endAt)
+                                }
+                                ComposerTimingDraft.clear()
                                 composerDurationMinutes = null
                                 pendingVoiceDurationMinutes = null
                                 pendingVoicePeople = emptyList()
@@ -156,11 +160,7 @@ internal fun reminderSubmitAction(
                                             recipient = recipientPhone
                                         )
                                         withContext(Dispatchers.Main) {
-                                            Toast.makeText(
-                                                context,
-                                                if (sendSuccess) "WhatsApp'a gönderildi" else "WhatsApp gönderilemedi",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            com.cagri.real.ui.components.RealToast.show(context, if (sendSuccess) "WhatsApp'a gönderildi" else "WhatsApp gönderilemedi")
                                         }
                                     }
                                 }
@@ -173,7 +173,7 @@ internal fun reminderSubmitAction(
             if (text.isNotBlank() && !saving && !copyingPhotos) {
                 if (alertAt != null && alertAt <= System.currentTimeMillis()) {
                     if (isVoiceDraft) showVoiceFeedback(voiceState, "Gelecekte bir tarih ve saat seç.")
-                    else Toast.makeText(context, "Gelecekte bir tarih ve saat seç.", Toast.LENGTH_LONG).show()
+                    else com.cagri.real.ui.components.RealToast.show(context, "Gelecekte bir tarih ve saat seç.", long = true)
                     showDatePicker = true
                 } else {
                     if (voiceAiParsing) {
@@ -227,6 +227,10 @@ internal fun reminderSubmitAction(
                                         )
                                     }
                                 }
+                                if (alertAt != null && (ComposerTimingDraft.earlyAlertMinutes != null || ComposerTimingDraft.endAt != null)) {
+                                    onSetTiming(createdId, ComposerTimingDraft.earlyAlertMinutes, ComposerTimingDraft.endAt)
+                                }
+                                ComposerTimingDraft.clear()
                                 composerDurationMinutes = null
                                 pendingVoiceDurationMinutes = null
                                 pendingVoicePeople = emptyList()
@@ -265,11 +269,7 @@ internal fun reminderSubmitAction(
                                             recipient = recipientPhone
                                         )
                                         withContext(Dispatchers.Main) {
-                                            Toast.makeText(
-                                                context,
-                                                if (sendSuccess) "WhatsApp'a gönderildi" else "WhatsApp gönderilemedi",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            com.cagri.real.ui.components.RealToast.show(context, if (sendSuccess) "WhatsApp'a gönderildi" else "WhatsApp gönderilemedi")
                                         }
                                     }
                                 }

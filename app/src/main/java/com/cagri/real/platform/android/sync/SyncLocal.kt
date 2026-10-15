@@ -96,7 +96,7 @@ object SyncLocal {
                     }
                 }
             } catch (_: Exception) {
-                main.post { android.widget.Toast.makeText(application, "Ayar kaydedilemedi. Yeniden dene.", android.widget.Toast.LENGTH_SHORT).show() }
+                main.post { com.cagri.real.ui.components.RealToast.show(application, "Ayar kaydedilemedi. Yeniden dene.") }
             } finally { write.wrapper?.endUiWrite() }
         }
     }
@@ -214,6 +214,8 @@ object SyncLocal {
             scheduler.schedule(JobInfo.Builder(8102,ComponentName(application,RealSyncJobService::class.java))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(true).setPeriodic(15*60*1000L).build())
             if (initialized.isCompleted) requestSync()
+            // Every signed-in device gets a push token so card shares arrive immediately (not only Pano opt-ins).
+            com.cagri.real.platform.android.boards.PanoPush.registerToken(application)
         }
     }
     fun preferences(context:Context,name:String,mode:Int=Context.MODE_PRIVATE):SharedPreferences {

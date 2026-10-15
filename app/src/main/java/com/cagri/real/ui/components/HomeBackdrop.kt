@@ -96,7 +96,7 @@ fun HomeBackdropDialog(
     onDismiss: () -> Unit
 ) {
     var draft by remember(initial) { mutableStateOf(initial) }
-    AlertDialog(
+    com.cagri.real.ui.components.RealAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color(0xFF101014),
         titleContentColor = Color.White,

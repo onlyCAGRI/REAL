@@ -1,8 +1,5 @@
 package com.cagri.real.ui.components.planner
 
-import com.cagri.real.ui.motion.rememberCategoryTitleMotion
-import com.cagri.real.ui.components.RealMotion
-
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -297,13 +294,11 @@ object PlannerWeekHistoryStore {
     }
 }
 
-/** Same pastel the category card on the daily view uses, so the detail screen matches the card you tapped. */
-fun plannerCategoryDetailAccent(category: CustomCategory): Color {
-    val raw = category.customSolidColorArgb?.let { Color(it) }
+/** The category's own colour (as on its home card and in the monthly calendar). */
+fun plannerCategoryDetailAccent(category: CustomCategory): Color =
+    category.customSolidColorArgb?.let { Color(it) }
         ?: ReminderColorChoices.getOrNull(category.accentStart)?.color
         ?: Color(0xFF4558C8)
-    return plannerSoftPastel(nearestCalendarPastel(raw))
-}
 
 
 /**
@@ -481,8 +476,7 @@ fun PlannerCategoryDetailScreen(
     cardShape: PlannerCategoryCardShape? = null,
     onCardShapeChange: ((PlannerCategoryCardShape) -> Unit)? = null,
     /** True while the screen is being dismissed: the entrance plays backwards. */
-    closing: Boolean = false,
-    reduceDynamicBlur: Boolean = false
+    closing: Boolean = false
 ) {
     val contextForLink = androidx.compose.ui.platform.LocalContext.current
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
@@ -514,7 +508,7 @@ fun PlannerCategoryDetailScreen(
                             val clipboard = contextForLink.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                             val value = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(contextForLink)?.toString().orEmpty()
                             val link = com.cagri.real.ui.components.validPlannerLink(value)
-                            if (link == null) android.widget.Toast.makeText(contextForLink, "Geçerli bir web bağlantısı kopyala.", android.widget.Toast.LENGTH_SHORT).show()
+                            if (link == null) com.cagri.real.ui.components.RealToast.show(contextForLink, "Geçerli bir web bağlantısı kopyala.")
                             else { onPasteLink(link); showPasteLink = false }
                         },
                     contentAlignment = Alignment.Center
@@ -535,7 +529,9 @@ fun PlannerCategoryDetailScreen(
     val headerLine = if (categoryColorBackground) headerInk.copy(alpha = 0.25f) else DetailLine
     val headerAccent = if (categoryColorBackground) headerInk else accent
     val tileBackground = if (categoryColorBackground) DetailBlack else accent
-    val tileInk = if (categoryColorBackground) Color.White else PlannerInk
+    // On the category colour (real colour now, not a pastel): dark ink on light colours, white on dark ones.
+    val onAccent = if (accent.luminance() > 0.45f) PlannerInk else Color.White
+    val tileInk = if (categoryColorBackground) Color.White else onAccent
     val view = androidx.compose.ui.platform.LocalView.current
     DisposableEffect(view, categoryColorBackground, accent) {
         val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
@@ -548,7 +544,6 @@ fun PlannerCategoryDetailScreen(
     }
     val haptic = LocalHapticFeedback.current
     val listState = rememberLazyListState()
-    val categoryTitles = rememberCategoryTitleMotion(listState, true, reduceAnimations, reduceDynamicBlur, delayMs = 600L)
     // While a drag is running the order lives here; null = show ui.goals as given.
     var dragOrder by remember { mutableStateOf<List<Long>?>(null) }
     // Reordering only works while this mode is on (pencil on the progress tile -> check to finish).
@@ -686,8 +681,9 @@ fun PlannerCategoryDetailScreen(
                         .background(tileBackground, NotchedTileShape)) {
                         Box(
                             Modifier.align(Alignment.TopEnd).padding(5.dp).size(30.dp).clip(CircleShape)
-                                .border(1.dp, (if (categoryColorBackground) headerInk else PlannerInk).copy(alpha = 0.45f), CircleShape)
-                                .background(if (reorderMode) PlannerInk else Color.Transparent, CircleShape)
+                                // The badge sits in the tile's notch, on the screen background.
+                                .border(1.dp, (if (categoryColorBackground) headerInk else Color.White).copy(alpha = 0.45f), CircleShape)
+                                .background(if (reorderMode) (if (categoryColorBackground) PlannerInk else Color.White) else Color.Transparent, CircleShape)
                                 .clickable(enabled = !readOnly, role = Role.Button) {
                                     // While reordering, the badge is the "done" check; otherwise it opens the style popup.
                                     if (reorderMode) reorderMode = false else stylePopupOpen = true
@@ -698,7 +694,7 @@ fun PlannerCategoryDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             if (reorderMode) CheckMark(accent, Modifier.size(18.dp))
-                            else PencilMark(if (categoryColorBackground) headerInk else PlannerInk, Modifier.size(13.dp))
+                            else PencilMark(if (categoryColorBackground) headerInk else Color.White, Modifier.size(13.dp))
                             if (stylePopupOpen) CategoryStylePopup(
                                 selectedPastel = selectedPastel, onPickPastel = onPickPastel,
                                 cardShape = cardShape, onCardShapeChange = onCardShapeChange,
@@ -734,7 +730,7 @@ fun PlannerCategoryDetailScreen(
                         onShareLink = {
                             val link = com.cagri.real.ui.components.validPlannerLink(ui.linkText)
                             if (link != null) runCatching { uriHandler.openUri(link) }
-                                .onFailure { android.widget.Toast.makeText(contextForLink, "Bağlantı açılamadı.", android.widget.Toast.LENGTH_SHORT).show() }
+                                .onFailure { com.cagri.real.ui.components.RealToast.show(contextForLink, "Bağlantı açılamadı.") }
                             else if (onPasteLink != null) showPasteLink = true else onShareLink()
                         },
                         onEditLink = if (onPasteLink != null) ({ showPasteLink = true }) else null,
@@ -858,12 +854,10 @@ fun PlannerCategoryDetailScreen(
                 val dragging = dragId == goal.id
                 PlannerGoalRow(
                     number = index + 1, goal = goal, active = index == activeIndex,
-                    titleModifier = categoryTitles.title(goal.id),
                     isLast = index == goals.lastIndex, accent = accent, reduce = reduceAnimations,
                     dragging = dragging, dragOffset = { if (dragging) dragDelta else 0f },
                     reorderMode = reorderMode,
-                    modifier = (if (dragging || reduceAnimations) Modifier else Modifier.animateItem(
-                        placementSpec = RealMotion.smooth(0.30f), fadeInSpec = null, fadeOutSpec = tween(140)))
+                    modifier = (if (dragging || reduceAnimations) Modifier else Modifier.animateItem())
                         .plannerIntro(intro, 200, 600, slideY = 140.dp, fade = false)
                         .plannerIntro(intro, 520 + minOf(index, 6) * 55, 380, slideY = 10.dp),
                     readOnly = readOnly,
@@ -1159,7 +1153,6 @@ private fun PlannerGoalRow(
     number: Int, goal: PlannerGoalUi, active: Boolean, isLast: Boolean, accent: Color, reduce: Boolean,
     dragging: Boolean, dragOffset: () -> Float, reorderMode: Boolean, modifier: Modifier = Modifier,
     readOnly: Boolean = false,
-    titleModifier: Modifier = Modifier,
     onToggle: () -> Unit, onEdit: () -> Unit, onOpen: () -> Unit,
     onDragStart: () -> Unit, onDrag: (Float) -> Unit, onDragEnd: () -> Unit
 ) {
@@ -1228,7 +1221,7 @@ private fun PlannerGoalRow(
                     contentAlignment = Alignment.Center
                 ) {
                     if (state == GoalState.Done) {
-                        CheckMark(PlannerInk, Modifier.size(18.dp))
+                        CheckMark(if (accent.luminance() > 0.45f) PlannerInk else Color.White, Modifier.size(18.dp))
                     } else {
                         Text(
                             number.toString(), fontSize = 16.sp,
@@ -1273,7 +1266,7 @@ private fun PlannerGoalRow(
             Text(
                 goal.title,
                 style = titleStyle,
-                modifier = titleModifier.padding(top = 4.dp).clickable(role = Role.Button, onClick = onOpen)
+                modifier = Modifier.padding(top = 4.dp).clickable(role = Role.Button, onClick = onOpen)
             )
             goal.progress?.takeIf { !goal.done }?.let { p ->
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {

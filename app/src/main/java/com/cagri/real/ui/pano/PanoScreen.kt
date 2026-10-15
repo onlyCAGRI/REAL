@@ -1,7 +1,5 @@
 package com.cagri.real.ui.pano
 
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-
 import androidx.activity.compose.BackHandler
 import com.cagri.real.ui.motion.RealEntrancePop
 import com.cagri.real.ui.motion.realEntrance
@@ -52,7 +50,6 @@ fun PanoScreen(reminders:List<ReminderItem>,designStyle:DesignStyle,onDismiss:()
         DisposableEffect(controller){onDispose{controller.imageLoader.shutdown()}}
         val state by repository.state.collectAsState();
         val message by controller.message.collectAsState()
-        val galleryState = rememberSaveableStateHolder()
         var selectedBoard by rememberSaveable(uid){mutableStateOf<String?>(null)}
         LaunchedEffect(repository,requestedBoard,state.loaded) {
             if (state.loaded && requestedBoard != null) {
@@ -78,12 +75,10 @@ fun PanoScreen(reminders:List<ReminderItem>,designStyle:DesignStyle,onDismiss:()
         BackHandler {if(previewPhoto!=null)previewPhoto=null else if(previewCard!=null)previewCard=null else if(selectedBoard!=null)selectedBoard=null else onDismiss()}
         Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(Color.Black).pointerInput(Unit){awaitPointerEventScope{while(true)awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Final)}}.statusBarsPadding().navigationBarsPadding().imePadding()) {
-            if(!state.loaded){Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=androidx.compose.ui.Alignment.Center){CircularProgressIndicator(color=Color.White)}}
+            if(!state.loaded){Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=androidx.compose.ui.Alignment.Center){com.cagri.real.ui.components.RealSpinner(color=Color.White)}}
             else {
                 val board=state.boards.firstOrNull { it.id==selectedBoard }
-                if(board==null) galleryState.SaveableStateProvider("gallery") {
-                    PanoGallery(state,controller,onDismiss,selfUid=uid,onOpen={selectedBoard=it})
-                }
+                if(board==null)PanoGallery(state,controller,onDismiss,selfUid=uid,onOpen={selectedBoard=it})
                 else CompositionLocalProvider(LocalBoardRealPresentation provides BoardRealPresentation(reminders,categories,uid,onPreviewPhoto={previewPhoto=it},onPreviewCard={stackEditing=false;previewCard=it},onEditStack={stackEditing=true;previewCard=it})) {
                     PanoBoardScreen(board,state,controller,reminders,designStyle,onBack={selectedBoard=null})
                 }
@@ -112,7 +107,7 @@ fun PanoScreen(reminders:List<ReminderItem>,designStyle:DesignStyle,onDismiss:()
         val focus=androidx.compose.ui.platform.LocalFocusManager.current
         LaunchedEffect(state.conflict?.mutationId){if(state.conflict!=null)focus.clearFocus()}
         state.conflict?.let {
-            AlertDialog(onDismissRequest={},containerColor=Color(0xFF171719),title={Text("Block changed",color=Color.White)},text={Text("Another device edited this block. Keep your queued edit or use the server version. Other blocks are unaffected.",color=Color.LightGray)},
+            com.cagri.real.ui.components.RealAlertDialog(onDismissRequest={},containerColor=Color(0xFF171719),title={Text("Block changed",color=Color.White)},text={Text("Another device edited this block. Keep your queued edit or use the server version. Other blocks are unaffected.",color=Color.LightGray)},
                 confirmButton={TextButton(onClick={controller.run {repository.resolveConflict(true);
                         repository.sync(selectedBoard)}}){Text("Keep mine")}},
                 dismissButton={TextButton(onClick={controller.run {repository.resolveConflict(false);
@@ -166,7 +161,7 @@ private fun ColumnScope.PanoGallery(state:PanoState,controller:PanoController,on
         PanoMembersSheet(b,membersOf(b).ifEmpty{listOf(PanoMember(b.ownerUid,b.ownerName,"OWNER"))},controller,onDismiss={peopleOf=null},onDeleted={peopleOf=null})
     }
     deleting?.let { b->
-        AlertDialog(onDismissRequest={deleting=null},containerColor=Color(0xFF161618),title={Text("Delete board?",color=Color.White)},text={Text("This removes cloud access for all members. Original REAL cards are kept.",color=Color.LightGray)},
+        com.cagri.real.ui.components.RealAlertDialog(onDismissRequest={deleting=null},containerColor=Color(0xFF161618),title={Text("Delete board?",color=Color.White)},text={Text("This removes cloud access for all members. Original REAL cards are kept.",color=Color.LightGray)},
             confirmButton={TextButton(onClick={deleting=null;controller.run{controller.repository.deleteBoard(b.id)}}){Text("Delete")}},
             dismissButton={TextButton(onClick={deleting=null}){Text("Cancel")}})
     }

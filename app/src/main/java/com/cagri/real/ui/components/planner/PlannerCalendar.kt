@@ -1,8 +1,8 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.ui.components.RealMotion
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,8 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -56,7 +58,9 @@ internal enum class PlannerViewMode(val preference: String) {
 
     companion object {
         fun fromPreference(value: String?): PlannerViewMode =
-            entries.firstOrNull { it.preference == value || it.name.equals(value, ignoreCase = true) || (value == "24_hours" && it == Hours24) } ?: Hours24
+            (entries.firstOrNull { it.preference == value || it.name.equals(value, ignoreCase = true) || (value == "24_hours" && it == Hours24) } ?: Hours24)
+                // The daily focus view is gone: Takvim is the month view only.
+                .let { if (it == Daily) Monthly else it }
     }
 }
 internal fun PlannerEvent.occurrenceKey(): String = "$id:$startMillis"
@@ -73,23 +77,28 @@ internal fun plannerMonthDays(month: YearMonth): List<LocalDate> {
 private fun CalendarDots(
     colors: List<Color>,
     modifier: Modifier = Modifier,
-    onLight: Boolean = false
+    onLight: Boolean = false,
+    /** Contrast ring for dots on a coloured tile; null = none. */
+    ring: Color? = if (onLight) PlannerInk.copy(alpha = 0.20f) else null,
+    /** Fixed slot (0 top, 1 middle, 2 bottom) per dot, so a several-day event keeps one height day to day. */
+    slots: List<Int>? = null
 ) {
     val visible = colors.take(3)
     if (visible.isEmpty()) return
     val dotDiameter = 4.8.dp
     val dotSpacing = 3.5.dp
-    val totalHeight = dotDiameter * visible.size + dotSpacing * (visible.size - 1)
+    val rows = if (slots != null) 3 else visible.size
+    val totalHeight = dotDiameter * rows + dotSpacing * (rows - 1)
     Canvas(modifier.size(width = dotDiameter, height = totalHeight)) {
         val rPx = (dotDiameter / 2).toPx()
         val stepPx = (dotDiameter + dotSpacing).toPx()
         visible.forEachIndexed { index, color ->
-            val centerY = rPx + index * stepPx
+            val centerY = rPx + (slots?.getOrNull(index) ?: index) * stepPx
             val center = Offset(size.width / 2f, centerY)
-            if (onLight) {
-                // Subtle contrast ring on light pastel tiles
+            if (ring != null) {
+                // Subtle contrast ring so a dot stays visible on a coloured tile
                 drawCircle(
-                    color = PlannerInk.copy(alpha = 0.20f),
+                    color = ring,
                     radius = rPx + 0.6.dp.toPx(),
                     center = center
                 )
@@ -507,7 +516,12 @@ internal fun PlannerMonthOverview(
     onOpenDay: (LocalDate) -> Unit,
     onOpenEvent: (Long, Long) -> Unit,
     dayModifier: @Composable (LocalDate) -> Modifier,
-    topPadding: androidx.compose.ui.unit.Dp = 4.dp
+    topPadding: androidx.compose.ui.unit.Dp = 4.dp,
+    ownerName: String = "",
+    /** "Süre ekle" on a card opens the same start / end / duration editor as 24 hour, instead of the card. */
+    durationEditorId: Long? = null,
+    onToggleDuration: ((PlannerEvent) -> Unit)? = null,
+    durationEditor: @Composable (PlannerEvent, Boolean) -> Unit = { _, _ -> }
 ) {
     val effectiveActiveDays = remember(activeDays, selectedDay, today) {
         if (activeDays.isNotEmpty()) {
@@ -614,7 +628,7 @@ internal fun PlannerMonthOverview(
                 } else {
                     val direction = if (targetState > initialState) 1 else -1
                     val movement = tween<androidx.compose.ui.unit.IntOffset>(
-                        280, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+                        280, easing = RealMotion.Standard
                     )
                     ((slideInHorizontally(movement) { it * direction } + fadeIn(tween(200))) togetherWith
                         (slideOutHorizontally(movement) { -it * direction } + fadeOut(tween(180))))
@@ -624,9 +638,80 @@ internal fun PlannerMonthOverview(
             label = "monthGridSlide"
         ) { displayedMonth ->
         // 6. Month Grid (Date tiles represent schedule load / busyness)
+        val zone = remember { ZoneId.systemDefault() }
+        // Up to three dots a day; events lasting several days come first so their dots line up day to day.
+        fun dotEvents(day: LocalDate): List<PlannerEvent> = eventsByDay[day].orEmpty()
+            .filterNot { it.reminder.isCompleted }
+            .sortedWith(compareBy<PlannerEvent>({ if (it.isMultiDay(zone)) 0 else 1 }, { it.startMillis }, { it.id }))
+            .take(3)
+        val spanMeasurer = rememberTextMeasurer()
         Column(Modifier.fillMaxWidth().padding(horizontal = 2.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             plannerMonthDays(displayedMonth).chunked(7).forEach { week ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                val weekDots = remember(week, eventsByDay, displayedMonth) {
+                    week.map { day -> if (YearMonth.from(day) == displayedMonth) dotEvents(day) else emptyList() }
+                }
+                val spanColors = remember(weekDots, customCategories) {
+                    weekDots.map { list -> list.map { plannerEventCategoryVisual(it, customCategories).realColor } }
+                }
+                // Several-day events keep one dot height all week (first one in the middle, then top, then bottom), so
+                // their line runs straight; a day holding one lays its other dots in the free slots.
+                val weekSlots = remember(weekDots) {
+                    val spanSlot = weekDots.flatten().filter { it.isMultiDay(zone) }.map { it.occurrenceKey() }.distinct()
+                        .take(3).mapIndexed { i, key -> key to listOf(1, 0, 2)[i] }.toMap()
+                    weekDots.map { list ->
+                        if (list.none { it.occurrenceKey() in spanSlot }) null else {
+                            val used = list.mapNotNull { spanSlot[it.occurrenceKey()] }.toSet()
+                            val free = (0..2).filter { it !in used }.toMutableList()
+                            list.map { spanSlot[it.occurrenceKey()] ?: free.removeAt(0) }
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().drawWithContent {
+                    drawContent()
+                    // Several-day events: a thin line joins their dots across the days (and on to the next week).
+                    val gap = 4.dp.toPx()
+                    val tileW = (size.width - gap * 6) / 7
+                    val d = 4.8.dp.toPx()
+                    val s = 3.5.dp.toPx()
+                    fun dotCenter(i: Int, k: Int): Offset {
+                        val x = i * (tileW + gap) + tileW - 7.dp.toPx() - d / 2
+                        val slot = weekSlots[i]?.getOrNull(k)
+                        if (slot != null) return Offset(x, size.height / 2 + (slot - 1) * (d + s))
+                        val n = weekDots[i].size
+                        val total = d * n + s * (n - 1)
+                        return Offset(x, (size.height - total) / 2 + d / 2 + k * (d + s))
+                    }
+                    fun numberGap(i: Int): ClosedFloatingPointRange<Float> {
+                        val w = spanMeasurer.measure(week[i].dayOfMonth.toString(), TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)).size.width
+                        val left = i * (tileW + gap) + 9.dp.toPx()
+                        return (left - 3.dp.toPx())..(left + w + 3.dp.toPx())
+                    }
+                    val stroke = 1.6.dp.toPx()
+                    fun segment(a: Offset, b: Offset, color: Color, skip: ClosedFloatingPointRange<Float>?) {
+                        val c = color.copy(alpha = 0.9f)
+                        if (skip == null || b.x <= skip.start || a.x >= skip.endInclusive) {
+                            drawLine(c, a, b, stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round); return
+                        }
+                        fun at(x: Float) = Offset(x, a.y + (b.y - a.y) * ((x - a.x) / (b.x - a.x)))
+                        if (skip.start > a.x) drawLine(c, a, at(skip.start), stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                        if (skip.endInclusive < b.x) drawLine(c, at(skip.endInclusive), b, stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    }
+                    weekDots.forEachIndexed { i, list ->
+                        list.forEachIndexed { k, ev ->
+                            if (!ev.isMultiDay(zone)) return@forEachIndexed
+                            val key = ev.occurrenceKey()
+                            val color = spanColors[i][k]
+                            val here = dotCenter(i, k)
+                            val day = week[i]
+                            val next = weekDots.getOrNull(i + 1)?.indexOfFirst { it.occurrenceKey() == key } ?: -1
+                            if (next >= 0) segment(here, dotCenter(i + 1, next), color, numberGap(i + 1))
+                            else if (i == 6 && ev.lastDay(zone) > day && YearMonth.from(day.plusDays(1)) == displayedMonth)
+                                segment(here, Offset(size.width, here.y), color, null)
+                            if (i == 0 && ev.day(zone) < day && YearMonth.from(day.minusDays(1)) == displayedMonth)
+                                segment(Offset(0f, here.y), here, color, numberGap(0))
+                        }
+                    }
+                }, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     week.forEach { day ->
                         val inMonth = YearMonth.from(day) == displayedMonth
                         val isToday = day == today
@@ -634,35 +719,29 @@ internal fun PlannerMonthOverview(
                         val dayEvents = eventsByDay[day].orEmpty().sortedWith(compareBy<PlannerEvent> { it.startMillis }.thenBy { it.id })
                         // Completed tasks do not pass their colour to the monthly tile or its dots.
                         val colorEvents = dayEvents.filterNot { it.reminder.isCompleted }
-                        val dominantCategoryPastel = remember(colorEvents, customCategories) {
-                            if (inMonth && colorEvents.isNotEmpty()) {
-                                resolveDominantDayCategoryPastel(colorEvents, customCategories)
-                            } else {
-                                null
-                            }
-                        }
-
-                        val hasPastelBg = inMonth && dominantCategoryPastel != null
-
+                        // Days are not tinted by category any more: neutral tiles, the coloured dots carry the categories.
+                        // Days before today are faded, today has a white frame, later days are normal.
+                        val isPast = day.isBefore(today)
+                        val hasPastelBg = false
+                        val tileInk = Color.White
                         val tileBackground = when {
                             !inMonth -> Color(0xFF141517)
-                            dominantCategoryPastel != null -> dominantCategoryPastel
-                            else -> Color(0xFF1B1C1E)
+                            isPast -> Color(0xFF151618)
+                            else -> Color(0xFF222326)
                         }
 
                         val textColor = when {
                             !inMonth -> Color.White.copy(alpha = 0.20f)
-                            hasPastelBg -> if (isSelected) PlannerInk else PlannerInk.copy(alpha = 0.88f)
-                            isSelected -> Color.White
-                            isToday -> Color.White
-                            else -> Color.White.copy(alpha = 0.88f)
+                            isSelected || isToday -> Color.White
+                            isPast -> Color.White.copy(alpha = 0.38f)
+                            else -> Color.White.copy(alpha = 0.92f)
                         }
 
                         val borderModifier = when {
                             !inMonth -> Modifier
-                            isSelected -> Modifier.border(2.dp, if (hasPastelBg) PlannerInk else Color.White, RoundedCornerShape(13.dp))
-                            isToday -> Modifier.border(1.2.dp, if (hasPastelBg) PlannerInk.copy(alpha = 0.70f) else Color.White.copy(alpha = 0.80f), RoundedCornerShape(13.dp))
-                            else -> Modifier.border(0.5.dp, if (hasPastelBg) PlannerInk.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.06f), RoundedCornerShape(13.dp))
+                            isToday -> Modifier.border(2.dp, Color.White, RoundedCornerShape(13.dp))
+                            isSelected -> Modifier.border(1.5.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(13.dp))
+                            else -> Modifier.border(0.5.dp, Color.White.copy(alpha = if (isPast) 0.04f else 0.07f), RoundedCornerShape(13.dp))
                         }
 
                         Box(
@@ -697,14 +776,13 @@ internal fun PlannerMonthOverview(
                             )
                             // 7. Monthly event indicators (deterministic 0..3 markers)
                             if (inMonth) {
-                                val indicatorColors = remember(colorEvents, customCategories) {
-                                    resolveDayIndicatorColors(colorEvents, customCategories)
-                                }
+                                val indicatorColors = spanColors[week.indexOf(day)]
                                 if (indicatorColors.isNotEmpty()) {
                                     CalendarDots(
                                         colors = indicatorColors,
+                                        slots = weekSlots[week.indexOf(day)],
                                         modifier = Modifier.align(Alignment.CenterEnd).padding(end = 7.dp),
-                                        onLight = hasPastelBg
+                                        ring = if (hasPastelBg) tileInk.copy(alpha = 0.55f) else null
                                     )
                                 }
                             }
@@ -718,81 +796,38 @@ internal fun PlannerMonthOverview(
 
         Spacer(Modifier.height(18.dp))
 
-        // 13. Selected Day Details Header
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        // Selected day (as on iOS): the date, how many plans, then the same cards as 24 hour.
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
             Text(
                 "${selectedDay.dayOfMonth} ${selectedDay.format(DateTimeFormatter.ofPattern("MMMM", PlannerLocale))} · ${plannerDayLabel(selectedDay)}",
                 color = Color.White,
-                style = PlannerType.selectedDayHeader,
-                modifier = Modifier.weight(1f)
+                style = PlannerType.selectedDayHeader
             )
             Text(
-                "${selectedDayEvents.size} etkinlik",
-                color = Color(0xFF909396),
-                fontSize = 13.sp
+                if (selectedDayEvents.isEmpty()) "Bu gün için plan yok" else "${selectedDayEvents.size} plan",
+                color = Color(0xFF8C8C95),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp)
             )
         }
-
-        // Selected Day Event List
         if (selectedDayEvents.isNotEmpty()) {
             Column(
-                Modifier.fillMaxWidth().padding(horizontal = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                selectedDayEvents.forEach { event ->
-                    val visual = plannerEventCategoryVisual(event, customCategories)
-                    val endMillis = event.endMillis
-                    val timeRange = when {
-                        event.isDateOnly24Hour -> "24 hour"
-                        endMillis != null -> formatTimeRangeAmPm(
-                            event.startMillis,
-                            minOf(endMillis, selectedDay.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()),
-                            ZoneId.systemDefault()
-                        )
-                        else -> formatTimeAmPm(event.startMillis, ZoneId.systemDefault())
-                    }
-
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .plannerEventMotion(event, "month:$selectedDay") { onOpenEvent(event.id, event.startMillis) }
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF1B1C1E))
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(visual.dotColor)
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            event.reminder.text,
-                            color = Color.White,
-                            style = PlannerType.eventListTitle,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            timeRange,
-                            color = Color(0xFF8E9094),
-                            style = PlannerType.eventListTime
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "›",
-                            color = Color(0xFF6E7175),
-                            fontSize = 18.sp
-                        )
+                selectedDayEvents.sortedWith(compareBy<PlannerEvent>({ if (it.isDateOnly24Hour) 0 else 1 }, { it.startMillis })).forEach { event ->
+                    Column(Modifier.fillMaxWidth()) {
+                        Box(Modifier.plannerEventMotion(event, "month:$selectedDay") { onOpenEvent(event.id, event.startMillis) }) {
+                            PlannerNext24Card(
+                                event = event,
+                                cardColor = resolveNext24CardColor(event, customCategories),
+                                zone = ZoneId.systemDefault(),
+                                ownerName = event.externalCalendarName ?: ownerName,
+                                onClick = { onOpenEvent(event.id, event.startMillis) },
+                                onToggleDuration = if (event.id < 0 || onToggleDuration == null) null else ({ onToggleDuration(event) })
+                            )
+                        }
+                        durationEditor(event, durationEditorId == event.id)
                     }
                 }
             }
@@ -846,7 +881,7 @@ internal fun PlannerMonthOverview(
                                 Modifier
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(cat.dotColor)
+                                    .background(cat.realColor)
                             )
                             Text(
                                 cat.name,

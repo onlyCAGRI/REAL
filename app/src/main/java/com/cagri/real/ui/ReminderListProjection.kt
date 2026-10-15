@@ -54,7 +54,7 @@ internal fun rememberReminderListProjection(
             }.sortedByDescending { it.createdAt }
             else -> reminders.filter {
                 if (it.isCompleted) return@filter false
-                if (it.isQuick24HourActive(rolling24Now)) return@filter false
+                // Cards moved into 24 hour stay on Home too (they also show in 24 hour / Planlı).
                 val cat = it.customCategoryId?.let { id -> customCategoriesById[id] }
                 cat?.hideFromGeneralLists != true
             }

@@ -922,7 +922,7 @@ fun RealPetLayer(
                 } else {
                     feedingProgress.animateTo(
                         1f,
-                        tween(900, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f))
+                        tween(900, easing = RealMotion.Emphasized)
                     )
                 }
                 feedingCardTitle = null

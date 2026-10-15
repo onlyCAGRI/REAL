@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import com.cagri.real.data.ReminderRepository
+import com.cagri.real.data.earlyAlertAt
 import com.cagri.real.data.nextAlertAfter
 
 
@@ -20,6 +21,7 @@ object ReminderScheduler {
         repository.deliverDue(now) { item ->
             ReminderNotifications.show(context, item, alerting = true)
         }
+        deliverEarlyAlerts(context, repository.load(), now)
         val manager = context.getSystemService(AlarmManager::class.java)
         val pending = PendingIntent.getBroadcast(context, 0,
             Intent(context, ReminderAlarmReceiver::class.java).apply {
@@ -34,5 +36,19 @@ object ReminderScheduler {
         } catch (_: SecurityException) {
             manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, pending)
         }
+    }
+
+    /** "Erken uyarı": shows the heads-up once per alert time, between the warning time and the alert itself. */
+    private fun deliverEarlyAlerts(context: Context, reminders: List<com.cagri.real.data.ReminderItem>, now: Long) {
+        val prefs = com.cagri.real.platform.android.sync.SyncLocal.preferences(context.applicationContext, "real_early_alerts", Context.MODE_PRIVATE)
+        val edit = prefs.edit()
+        var changed = false
+        reminders.forEach { item ->
+            val early = item.earlyAlertAt() ?: return@forEach
+            val at = item.alertAt ?: return@forEach
+            if (item.isCompleted || early > now || at <= now || prefs.getLong("r_${item.id}", 0L) == at) return@forEach
+            if (ReminderNotifications.showEarly(context, item)) { edit.putLong("r_${item.id}", at); changed = true }
+        }
+        if (changed) edit.apply()
     }
 }

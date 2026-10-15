@@ -75,6 +75,8 @@ private fun bigCover(url: String?) = url?.replace("t_cover_big", "t_cover_big_2x
 fun GameDiscoveryScreen(
     reduceAnimations: Boolean,
     onDismiss: () -> Unit,
+    /** "REAL'e ekle": a card with the game block. */
+    onAddGame: suspend (com.cagri.real.data.CardGameBlock) -> Long? = { null },
     onAtEntry: (Boolean) -> Unit = {},
     reduceDynamicBlur: Boolean = false,
     /** Yaşam "OYNANACAK LİSTEM": giriş ekranı atlanır, doğrudan oynanacak listesi açılır; geri Yaşam'a döner. */
@@ -157,7 +159,6 @@ fun GameDiscoveryScreen(
                                 GameChip(g.label, on, !loading) { platforms = ArrayList(if (on) platforms - g.key else platforms + g.key) }
                             }
                         }
-                        Text(if (filterHeader == null) "Seçmezsen tüm platformlar · En fazla 3 seçim · Birlikte uyanlar önce gelir." else "Seçmezsen tüm platformlar · Her bölümde en fazla 3 seçim", color = Color(0xFF9A9A9F), fontSize = 13.sp)
                         @Composable fun chips(options: List<GameFilter>) {
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 options.forEach { f ->
@@ -185,7 +186,8 @@ fun GameDiscoveryScreen(
                         ) { index, _ ->
                             chips(feelingPages[index])
                         }
-                        Text("Öneriler AI ile seçilir; kapak, çıkış yılı ve platformlar IGDB'den doğrulanır. İnternet gerekir.", color = Color(0xFF85858E), fontSize = 12.sp, lineHeight = 18.sp)
+                        // Catalog credit only (IGDB attribution), small and quiet.
+                        Text("IGDB", color = Color(0xFF5E5E66), fontSize = 11.sp)
                     }
                     }
                     DiscoveryLoadingButton("Oyunları getir", loading, ready && repo != null, GameAccent, reduceAnimations,
@@ -196,7 +198,7 @@ fun GameDiscoveryScreen(
                     if (cards.isNotEmpty()) {
                         com.cagri.real.ui.ai.AiReportButton(com.cagri.real.platform.android.ai.AiReportFeature.GAME,
                             cards.first().game.title, cards.first().reason, Modifier.align(Alignment.CenterHorizontally))
-                        GameDeck(cards, snapshot?.filters.orEmpty(), reduceAnimations, listMode, Modifier.weight(1f).padding(horizontal = 14.dp),
+                        GameDeck(cards, snapshot?.filters.orEmpty(), reduceAnimations, listMode, Modifier.weight(1f).padding(horizontal = 14.dp), onAddGame,
                             onOpen = { detail = it; detailOpen = true }) { card, action ->
                             error = null
                             try { snapshot = repo?.act(card, action); true }
@@ -225,9 +227,11 @@ fun GameDiscoveryScreen(
 /** Referanstaki sağ ekran: üstte sarı-turuncu, ortada kırmızı bulanık ışık, alta doğru siyaha akar. */
 @Composable
 private fun GameGlow(reduceAnimations: Boolean) {
-    val drift = if (reduceAnimations) 0f else rememberInfiniteTransition(label = "game-glow")
-        .animateFloat(0f, 1f, infiniteRepeatable(tween(9000), RepeatMode.Reverse), label = "drift").value
+    // The drift is read in draw only: the glow repaints each frame without recomposing.
+    val driftState = if (reduceAnimations) null else rememberInfiniteTransition(label = "game-glow")
+        .animateFloat(0f, 1f, infiniteRepeatable(tween(9000), RepeatMode.Reverse), label = "drift")
     Box(Modifier.fillMaxSize().drawBehind {
+        val drift = driftState?.value ?: 0f
         val w = size.width; val h = size.height
         drawRect(Brush.radialGradient(listOf(GameGlowTop, Color.Transparent), center = Offset(w * (.50f + .08f * drift), h * .06f), radius = w * 1.0f))
         drawRect(Brush.radialGradient(listOf(GameGlowCore, Color.Transparent), center = Offset(w * (.52f - .06f * drift), h * (.30f + .03f * drift)), radius = w * .68f))
@@ -324,6 +328,7 @@ private fun kindLabel(kind: String) = when (kind) { "remake" -> "Remake"; "remas
 
 @Composable
 private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimations: Boolean, listMode: Boolean, modifier: Modifier,
+                     onAddGame: suspend (com.cagri.real.data.CardGameBlock) -> Long?,
                      onOpen: (GameCard) -> Unit, onDecision: suspend (GameCard, GameAction) -> Boolean) {
     val card = cards.first()
     val scope = rememberCoroutineScope()
@@ -331,6 +336,8 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
     var busy by remember { mutableStateOf(false) }
     var settling by remember { mutableStateOf<Job?>(null) }
     val latestOpen by rememberUpdatedState(onOpen)
+    val latestAddGame by rememberUpdatedState(onAddGame)
+    val context = androidx.compose.ui.platform.LocalContext.current
     val latestDecision by rememberUpdatedState(onDecision)
     val currentBusy by rememberUpdatedState(busy)
     val threshold = with(LocalDensity.current) { 85.dp.toPx() }
@@ -350,12 +357,12 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
             } finally { busy = false }
         }
     }
-    val swipeAction = if (listMode) GameAction.BROWSE_LIST else GameAction.SKIP
     BoxWithConstraints(modifier.fillMaxWidth().padding(top = 34.dp, bottom = 8.dp), contentAlignment = Alignment.TopCenter) {
         val width = min(maxWidth.value * .96f, (maxHeight.value - 76f).coerceAtLeast(1f) * CoverAspect).dp
         val coverHeight = width / CoverAspect
         val visible = cards.take(4)
         PosterEdgeGlow(card.game.artworkUrl, reduceAnimations, Modifier.fillMaxWidth().height(coverHeight))
+        SwipeEdgeGlow({ offset }, threshold, listMode)
         for (depth in visible.indices.reversed()) {
             val item = visible[depth]
             key(item.key) {
@@ -367,10 +374,11 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
                     .pointerInput(card.key, listMode) {
                         detectDragGestures(onDragStart = { if (!currentBusy) settling?.cancel() }, onDragCancel = { if (!currentBusy) settle() },
                             onDragEnd = {
+                                // Right = save to the list (list: keep, next) · left = pass (list: remove) · up/down: nothing yet.
                                 if (!currentBusy) when {
-                                    offset.y > threshold && offset.y > abs(offset.x) -> decide(swipeAction, Offset(0f, threshold * 9))
-                                    offset.x > threshold -> decide(swipeAction, Offset(threshold * 6, 0f))
-                                    offset.x < -threshold -> decide(swipeAction, Offset(-threshold * 6, 0f))
+                                    abs(offset.y) > abs(offset.x) -> settle()
+                                    offset.x > threshold -> decide(if (listMode) GameAction.BROWSE_LIST else GameAction.ADD_TO_LIST, Offset(threshold * 6, 0f))
+                                    offset.x < -threshold -> decide(if (listMode) GameAction.REMOVE_FROM_LIST else GameAction.SKIP, Offset(-threshold * 6, 0f))
                                     else -> settle()
                                 }
                             }) { change, delta -> change.consume(); if (!currentBusy) offset += delta }
@@ -402,26 +410,27 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
                             GameLabel("Oyun")
                             if (filters.isNotEmpty()) GameLabel("${filters.count { it in item.tags }}/${filters.size} · AI")
                         }
-                        if (busy) CircularProgressIndicator(Modifier.size(32.dp).align(Alignment.Center), color = Color.White, strokeWidth = 2.dp)
+                        if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(32.dp).align(Alignment.Center), color = Color.White, strokeWidth = 2.dp)
                     }
                 }
             }
         }
-        Row(Modifier.align(Alignment.TopCenter).offset(y = coverHeight + 12.dp).background(Color.Black.copy(alpha = .55f), RoundedCornerShape(32.dp))
-            .liquidChrome(corners = 32.dp, selected = false).padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (listMode) GameBarButton(ActionGlyph.Close, "Oynanacak listemden çıkar", !busy) { decide(GameAction.REMOVE_FROM_LIST, Offset(-threshold * 6, 0f)) }
-            else {
-                GameBarButton(ActionGlyph.Close, "Geç", !busy) { decide(GameAction.SKIP, Offset(-threshold * 6, 0f)) }
-                Row(Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(GameAccent.copy(alpha = .9f))
-                    .clickable(enabled = !busy, role = Role.Button) { decide(GameAction.ADD_TO_LIST, Offset(0f, threshold * 9)) }.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    ActionIcon(ActionGlyph.Add, Modifier.size(20.dp), Color.White)
-                    Spacer(Modifier.width(7.dp))
-                    Text("Oynanacak listeme ekle", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        DiscoveryActionBar("Oynadım", busy, onDone = { decide(GameAction.PLAYED, Offset(0f, -threshold * 9)) },
+            onSave = {
+                if (!busy) scope.launch {
+                    busy = true
+                    try {
+                        val g = card.game
+                        val block = com.cagri.real.data.CardGameBlock(providerId = g.providerId, title = g.title, year = g.year,
+                            genres = g.genres, platforms = g.platforms, artworkUrl = g.artworkUrl, description = g.description,
+                            providerUrl = g.providerUrl)
+                        if (latestAddGame(block) != null) RealToast.show(context, "REAL'e eklendi")
+                        else RealToast.show(context, "Kart eklenemedi. Tekrar deneyebilirsin.")
+                    } finally { busy = false }
                 }
-            }
-        }
+            },
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = coverHeight + 12.dp), accent = GameAccent)
+        SwipeTutorial("game", "Kaydet", "Geç")
     }
 }
 

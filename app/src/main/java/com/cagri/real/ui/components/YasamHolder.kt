@@ -57,6 +57,7 @@ internal class YasamHolder(context: Context, uid: String, private val scope: Cor
     // Yalnız okunur: kayıtlı izlenecek / oynanacak liste sayıları (repository'lere yazılmaz). Misafirde yok.
     private val mediaRepository = if (uid == "guest") null else MediaDiscoveryRepository(context, uid)
     private val gameRepository = if (uid == "guest") null else GameDiscoveryRepository(context, uid)
+    private val musicRepository = com.cagri.real.discovery.MusicDiscoveryRepository(context, uid)
     private var adding = false
 
     var water by mutableStateOf<YasamWater?>(null)
@@ -68,6 +69,8 @@ internal class YasamHolder(context: Context, uid: String, private val scope: Cor
         private set
     var playlistCount by mutableStateOf<Int?>(null)
         private set
+    var musicCount by mutableStateOf<Int?>(null)
+        private set
 
     suspend fun load() {
         loadWater()
@@ -78,6 +81,13 @@ internal class YasamHolder(context: Context, uid: String, private val scope: Cor
     private suspend fun loadDiscoveryCounts() {
         watchlistCount = try {
             mediaRepository?.load()?.later?.size
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        musicCount = try {
+            musicRepository.load().list.size
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {

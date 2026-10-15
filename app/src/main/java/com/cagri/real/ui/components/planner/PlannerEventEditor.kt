@@ -87,6 +87,10 @@ internal fun PlannerEventEditor(
     var showEndPicker by rememberSaveable { mutableStateOf(false) }
     var calendarConfigured by rememberSaveable { mutableStateOf(false) }
     var duration by rememberSaveable { mutableStateOf("") }
+    // Bitiş: its own day and time (may be days later); the duration stays per day ("4 gün, her gün 60 dk").
+    var endAt by rememberSaveable { mutableStateOf<Long?>(null) }
+    var earlyAlertMinutes by rememberSaveable { mutableStateOf<Int?>(null) }
+    val setReminderTiming = com.cagri.real.ui.components.LocalSetReminderTiming.current
     var people by rememberSaveable { mutableStateOf("") }
     var colorIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -105,9 +109,7 @@ internal fun PlannerEventEditor(
     val startMillis = remember(day, time) {
         day.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
-    val endMillis = remember(startMillis, durationMinutes) {
-        durationMinutes?.let { startMillis + it * 60_000L }
-    }
+    val endMillis = endAt?.takeIf { it > startMillis }
     val valid = title.isNotBlank() && (duration.isEmpty() || (durationMinutes != null && durationMinutes in 1..1440))
     val canEditReminder = !saving && savedReminderId == null
     val selectedCategory = remember(customCategories, selectedCategoryId) {
@@ -138,6 +140,8 @@ internal fun PlannerEventEditor(
                     selectedCategoryId
                 )
                 savedReminderId = result.id
+                val savedId = result.id
+                if (savedId != null && (earlyAlertMinutes != null || endMillis != null)) setReminderTiming(savedId, earlyAlertMinutes, endMillis)
                 if (result.complete) onDismiss() else error = result.error
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -292,7 +296,10 @@ internal fun PlannerEventEditor(
                     Column(Modifier.weight(1f)) {
                         Text("Bitiş", color = Color.White.copy(alpha = 0.50f), fontSize = 9.sp)
                         Text(
-                            if (endMillis != null) formatTimeAmPm(endMillis, ZoneId.systemDefault()) else "—",
+                            if (endMillis != null) {
+                                val endDay = java.time.Instant.ofEpochMilli(endMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                                "${endDay.dayOfMonth} ${plannerMonthLabel(endDay)} · ${formatTimeAmPm(endMillis, ZoneId.systemDefault())}"
+                            } else "—",
                             color = Color.White,
                             style = PlannerType.pickerValue
                         )
@@ -460,6 +467,9 @@ internal fun PlannerEventEditor(
             initial = startMillis,
             initialRepeatRule = repeatRule,
             allowYearSelection = false,
+            initialEarlyAlertMinutes = earlyAlertMinutes,
+            initialEndAt = endMillis,
+            onConfirmTiming = { early, end -> earlyAlertMinutes = early; endAt = end },
             backdrop = scene,
             backdropPosition = { scenePosition },
             designStyle = designStyle,
@@ -480,10 +490,8 @@ internal fun PlannerEventEditor(
 
         AnimatedDateTimePickerOverlay(
             visible = showEndPicker,
-            initial = endMillis ?: (startMillis + 60 * 60_000L),
+            initial = endMillis ?: (startMillis + (durationMinutes ?: 60) * 60_000L),
             initialRepeatRule = RecurrenceRule.NONE,
-            initialTimeTab = true,
-            allowYearSelection = false,
             backdrop = scene,
             backdropPosition = { scenePosition },
             designStyle = designStyle,
@@ -493,8 +501,7 @@ internal fun PlannerEventEditor(
             onRequestExactAlarms = onRequestExactAlarms,
             onDismiss = { showEndPicker = false },
             onConfirm = { at, _ ->
-                val diff = maxOf(1, ((at - startMillis) / 60_000L).toInt())
-                duration = diff.toString()
+                if (at > startMillis) { endAt = at; error = null } else error = "Bitiş, başlangıçtan sonra olmalı."
                 showEndPicker = false
             }
         )

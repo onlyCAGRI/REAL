@@ -1,8 +1,5 @@
 package com.cagri.real.ui.components
 
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
-
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -51,7 +48,8 @@ fun HomeLiquidDock(
     enabled: Boolean,
     interactionEnabled: Boolean,
     composerExpanded: Boolean,
-    composerHeight: Dp,
+    /** Read during measure only: the composer height animates every frame while it opens. */
+    composerHeight: () -> Dp,
     listState: LazyListState,
     onOpenPlanner: () -> Unit,
     onOpenWidget: () -> Unit,
@@ -64,7 +62,6 @@ fun HomeLiquidDock(
     reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean,
     modifier: Modifier = Modifier,
-    onModuleOrigin: (String, Offset) -> Unit = { _, _ -> },
     composer: @Composable () -> Unit
 ) {
     var navigationExpanded by rememberSaveable { mutableStateOf(false) }
@@ -161,7 +158,6 @@ fun HomeLiquidDock(
                         HomeDockExpandedNavigation(
                             onOpenPlanner = openPlanner,
                             onOpenWidget = openWidget,
-                            onModuleOrigin = onModuleOrigin,
                             onOpenPano = openPano,
                             enabled = interactionEnabled,
                             selectedPill = designStyle == DesignStyle.LiquidGlass,
@@ -193,7 +189,7 @@ fun HomeLiquidDock(
         }
     ) { measurables, constraints ->
         val width = constraints.maxWidth
-        val composerPx = composerHeight.roundToPx().coerceAtMost(constraints.maxHeight)
+        val composerPx = composerHeight().roundToPx().coerceAtMost(constraints.maxHeight)
         val p = if (showChrome) progress.coerceIn(0f, 1f) else 0f
         val extra = (HomeDockExtraBottomSpace.toPx() * p).roundToInt()
         val height = constraints.constrainHeight(composerPx + extra)
@@ -223,7 +219,6 @@ private fun HomeDockExpandedNavigation(
     onOpenPano: () -> Unit,
     enabled: Boolean,
     selectedPill: Boolean,
-    onModuleOrigin: (String, Offset) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(modifier.padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -233,7 +228,6 @@ private fun HomeDockExpandedNavigation(
             enabled = enabled,
             selected = false,
             onClick = onOpenWidget,
-            onOrigin = { onModuleOrigin("yasam", it) },
             pill = selectedPill,
             modifier = Modifier.weight(1f)
         )
@@ -243,7 +237,6 @@ private fun HomeDockExpandedNavigation(
             enabled = enabled,
             selected = false,
             onClick = onOpenPano,
-            onOrigin = { onModuleOrigin("pano", it) },
             pill = selectedPill,
             modifier = Modifier.weight(1f)
         )
@@ -267,12 +260,10 @@ private fun HomeDockNavigationItem(
     selected: Boolean,
     onClick: () -> Unit,
     pill: Boolean,
-    onOrigin: (Offset) -> Unit = {},
     modifier: Modifier
 ) {
     // Selected tab: a dark inner capsule inside the glass bar (iOS-26 tab bar look).
     val pillShape = RoundedCornerShape(28.dp)
-    var iconCenter by remember { mutableStateOf(Offset.Zero) }
     Column(
         modifier
             .fillMaxHeight()
@@ -283,7 +274,7 @@ private fun HomeDockNavigationItem(
                         .background(LiquidGlassTokens.dockSelectedPill)
                 } else Modifier.clip(pillShape)
             )
-            .clickable(enabled = enabled, role = Role.Button) { onOrigin(iconCenter); onClick() }
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics {
                 stateDescription = when {
                     selected -> "Seçili"
@@ -299,9 +290,7 @@ private fun HomeDockNavigationItem(
             enabled -> Color(0xFFB8B8BE)
             else -> Color(0xFF929298)
         }
-        ActionIcon(glyph, Modifier.size(22.dp).onGloballyPositioned {
-            iconCenter = it.positionInRoot() + Offset(it.size.width / 2f, it.size.height / 2f)
-        }, tint)
+        ActionIcon(glyph, Modifier.size(22.dp), tint)
         Text(
             label, color = tint, fontSize = 12.sp, lineHeight = 14.sp,
             modifier = Modifier.offset(y = (-3).dp),

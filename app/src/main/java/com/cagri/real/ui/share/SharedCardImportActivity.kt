@@ -53,7 +53,7 @@ private fun SharedCardImportScreen(id: String, onSignIn: () -> Unit, onDone: () 
         Text("Add shared card", color = Color.White)
         Text("Save an independent copy to your home screen.", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))
         when {
-            startup.phase == StartupPhase.UNKNOWN || busy -> CircularProgressIndicator(color = Color.White)
+            startup.phase == StartupPhase.UNKNOWN || busy -> com.cagri.real.ui.components.RealSpinner(color = Color.White)
             startup.uid == null -> Button(onClick = onSignIn) { Text("Sign in to REAL") }
             else -> Button(onClick = {
                 busy = true; error = null

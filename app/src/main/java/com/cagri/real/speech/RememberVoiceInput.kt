@@ -55,7 +55,7 @@ fun rememberVoiceInput(draft: String, onText: (String) -> Unit, onSubmit: (Strin
             onSubmit = { latestOnSubmit(it) },
             onDirectSubmit = { latestOnDirectSubmit(it) },
             onSpeechState = { isSpeaking = it },
-            onErrorMessage = { Toast.makeText(context, it, Toast.LENGTH_LONG).show() },
+            onErrorMessage = { com.cagri.real.ui.components.RealToast.show(context, it, long = true) },
             onDraftChange = { committed, partial ->
                 committedText = committed
                 partialText = partial
@@ -67,7 +67,7 @@ fun rememberVoiceInput(draft: String, onText: (String) -> Unit, onSubmit: (Strin
         if (granted && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
             controller.start(latestDraft)
         } else if (!granted) {
-            Toast.makeText(context, "Sesle yazmak için uygulama ayarlarından mikrofon iznini açabilirsin.", Toast.LENGTH_LONG).show()
+            com.cagri.real.ui.components.RealToast.show(context, "Sesle yazmak için uygulama ayarlarından mikrofon iznini açabilirsin.", long = true)
         }
     }
     DisposableEffect(controller, lifecycle) {

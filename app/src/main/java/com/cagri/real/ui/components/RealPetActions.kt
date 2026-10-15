@@ -614,7 +614,7 @@ internal class RealPetActionScope(
                 1f,
                 animationSpec = tween(
                     durationMillis = random.nextInt(520, 681),
-                    easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+                    easing = RealMotion.Standard
                 )
             )
         } finally {
@@ -710,7 +710,7 @@ internal class RealPetActionScope(
                     1f,
                     tween(
                         durationMillis = (420 + (distanceDp * 2.2f).toInt()).coerceIn(460, 1_050),
-                        easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+                        easing = RealMotion.Standard
                     )
                 )
                 motionProgress.snapTo(0f)
@@ -941,7 +941,7 @@ internal class RealPetActionScope(
             x.snapTo(almostHiddenX)
             state = RealPetState.Peeking
             delay(260L)
-            x.animateTo(peekX, tween(300, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+            x.animateTo(peekX, tween(300, easing = RealMotion.Emphasized))
 
             peekFleeRequested = false
             peekActive = true
@@ -958,7 +958,7 @@ internal class RealPetActionScope(
                 almostHiddenX,
                 tween(
                     durationMillis = if (peekFleeRequested) 190 else 300,
-                    easing = if (peekFleeRequested) LinearEasing else CubicBezierEasing(0.4f, 0f, 1f, 1f)
+                    easing = if (peekFleeRequested) LinearEasing else RealMotion.Exit
                 )
             )
 

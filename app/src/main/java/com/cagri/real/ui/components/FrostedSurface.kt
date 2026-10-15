@@ -24,22 +24,23 @@ import kotlin.math.ceil
 
 
 @Composable
-fun BlurredBackdrop(backdrop: GraphicsLayer, offset: () -> Offset, radius: Dp, modifier: Modifier) {
+fun BlurredBackdrop(backdrop: GraphicsLayer, offset: () -> Offset, radius: Dp, modifier: Modifier, sampleScale: Float = 0.5f) {
     if (Build.VERSION.SDK_INT < 31) return
-    val px = with(LocalDensity.current) { radius.toPx() * 0.5f }
+    // The blur radius is expressed in the downsampled layer, so the visible blur stays the same at any scale.
+    val px = with(LocalDensity.current) { radius.toPx() * sampleScale }
     val effect = remember(px) {
         android.graphics.RenderEffect.createBlurEffect(px, px, android.graphics.Shader.TileMode.CLAMP).asComposeRenderEffect()
     }
     val sample = rememberGraphicsLayer()
     Canvas(modifier) {
         val position = offset()
-        sample.record(size = IntSize(ceil(size.width * 0.5f).toInt().coerceAtLeast(1), ceil(size.height * 0.5f).toInt().coerceAtLeast(1))) {
+        sample.record(size = IntSize(ceil(size.width * sampleScale).toInt().coerceAtLeast(1), ceil(size.height * sampleScale).toInt().coerceAtLeast(1))) {
             drawRect(Color.Black)
-            scale(0.5f, 0.5f, Offset.Zero) { translate(-position.x, -position.y) { drawLayer(backdrop) } }
+            scale(sampleScale, sampleScale, Offset.Zero) { translate(-position.x, -position.y) { drawLayer(backdrop) } }
         }
         sample.renderEffect = effect
         sample.clip = true
-        scale(2f, 2f, Offset.Zero) { drawLayer(sample) }
+        scale(1f / sampleScale, 1f / sampleScale, Offset.Zero) { drawLayer(sample) }
     }
 }
 

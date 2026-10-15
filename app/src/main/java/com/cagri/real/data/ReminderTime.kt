@@ -8,11 +8,21 @@ fun ReminderItem.isAlertDue(now: Long): Boolean =
 
 fun List<ReminderItem>.nextAlertAfter(now: Long): Long? =
     asSequence().filter { !it.isCompleted }
-        .mapNotNull { item ->
+        .flatMap { item ->
             if (item.alertAt != null && item.alertAt != item.notifiedAlertAt && item.alertAt > now) {
-                item.alertAt
-            } else null
-        }.minOrNull()
+                sequenceOf(item.alertAt, item.earlyAlertAt()?.takeIf { it > now })
+            } else emptySequence()
+        }.filterNotNull().minOrNull()
+
+/** Longest early warning: 30 days ("30 gün önce"). */
+const val MAX_EARLY_ALERT_MINUTES = 30 * 24 * 60
+
+/** When the early warning for the current [ReminderItem.alertAt] fires, or null without one. */
+fun ReminderItem.earlyAlertAt(): Long? {
+    val at = alertAt ?: return null
+    val minutes = earlyAlertMinutes?.takeIf { it in 1..MAX_EARLY_ALERT_MINUTES } ?: return null
+    return at - minutes * 60_000L
+}
 
 fun clampedDate(year: Int, month: Int, day: Int): LocalDate {
     val first = LocalDate.of(year, month, 1)

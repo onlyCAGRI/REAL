@@ -39,6 +39,22 @@ class BoardAssets(private val context:Context,private val store:BoardStore,priva
         }catch(e:Exception){target.delete();
             throw e}finally{com.cagri.real.data.AttachmentStorage.deleteAttachmentFile(context,attachment.localPath)}
     }
+    /** Share → Pano: a photo REAL already copied (share import); the source file is left for its owner to clean up. */
+    suspend fun importLocalImage(path:String):JSONObject=withContext(Dispatchers.IO) {
+        val source=File(path)
+        require(source.isFile&&source.length() in 1..MAX_BYTES.toLong()){"Photo is missing or exceeds the 10 MB board transfer limit."}
+        val id=UUID.randomUUID().toString()
+        val target=file(id)
+        try {
+            source.copyTo(target,overwrite=false)
+            val header=target.inputStream().use { input -> val bytes=ByteArray(12); var n=0; while(n<bytes.size){val count=input.read(bytes,n,bytes.size-n);if(count<=0)break;n+=count};bytes.copyOf(n) }
+            val mime=com.cagri.real.boards.boardImageMime(header) ?: error("Choose a supported photo or GIF.")
+            val options=BitmapFactory.Options().apply { inJustDecodeBounds=true }
+            BitmapFactory.decodeFile(target.path,options)
+            require(options.outWidth in 1..8192&&options.outHeight in 1..8192&&options.outWidth.toLong()*options.outHeight<=20000000){"Image dimensions are too large."}
+            JSONObject().put("assetId",id).put("mime",mime).put("aspect",options.outWidth.toDouble()/options.outHeight)
+        }catch(e:Exception){target.delete();throw e}
+    }
     /** Transport an existing REAL attachment/voice without changing its native model. */
     suspend fun stageContent(type:com.cagri.real.boards.BoardBlockType,payload:JSONObject):JSONObject = withContext(Dispatchers.IO) {
         val result=JSONObject(payload.toString())

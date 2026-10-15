@@ -158,6 +158,20 @@ fun ProgressRingIcon(fraction: Float, active: Boolean, modifier: Modifier = Modi
     }
 }
 
+/** The hero's progress button: a plain ring in the header's text colour, like the sort arrow beside it. */
+@Composable
+fun CategoryProgressDisc(fraction: Float, active: Boolean, tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(24.dp)) {
+        val stroke = 2.6.dp.toPx()
+        val inset = stroke / 2f + 1.dp.toPx()
+        val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
+        drawArc(tint.copy(alpha = if (active) 0.34f else 0.24f), 0f, 360f, false, topLeft = Offset(inset, inset), size = arcSize, style = Stroke(stroke))
+        val sweep = 360f * fraction.coerceIn(0f, 1f)
+        if (sweep > 0.5f) drawArc(tint, -90f, sweep, false, topLeft = Offset(inset, inset), size = arcSize,
+            style = Stroke(stroke, cap = StrokeCap.Round))
+    }
+}
+
 @Composable
 private fun SortLinesGlyph(longestFirst: Boolean, color: Color, modifier: Modifier = Modifier) {
     Canvas(modifier.size(20.dp)) {
@@ -391,11 +405,15 @@ internal fun CategoryProgressPanel(
 internal fun CategoryHeroActions(
     sortOrder: ReminderSortOrder,
     onSortSelected: (ReminderSortOrder) -> Unit,
-    progressFraction: Float,
+    progressFraction: Float?,
     progressOpen: Boolean,
     onProgressClick: () -> Unit,
     foreground: Color,
-    reduceAnimations: Boolean
+    reduceAnimations: Boolean,
+    showSort: Boolean = true,
+    buttonSize: Dp = 48.dp,
+    /** The category colour: the ring sits on a disc of its deep shade and fills with its light shade. */
+    ringTint: Color? = null
 ) {
     val angle = when (sortOrder) {
         ReminderSortOrder.OLDEST_FIRST -> 180f
@@ -418,15 +436,18 @@ internal fun CategoryHeroActions(
         else -> ReminderSortOrder.RECENTLY_ADDED
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(
+        if (progressFraction != null) IconButton(
             onClick = onProgressClick,
-            modifier = Modifier.size(48.dp).semantics {
+            modifier = Modifier.size(buttonSize).semantics {
                 contentDescription = if (progressOpen) "İlerlemeyi gizle" else "Kategori ilerlemesini göster"
             }
-        ) { ProgressRingIcon(progressFraction, progressOpen, Modifier.size(22.dp)) }
-        IconButton(
+        ) {
+            if (ringTint != null) CategoryProgressDisc(progressFraction, progressOpen, ringTint)
+            else ProgressRingIcon(progressFraction, progressOpen, Modifier.size(22.dp))
+        }
+        if (showSort) IconButton(
             onClick = { onSortSelected(next) },
-            modifier = Modifier.size(48.dp).semantics {
+            modifier = Modifier.size(buttonSize).semantics {
                 contentDescription = "Sıralamayı değiştir"
                 stateDescription = currentLabel
             }

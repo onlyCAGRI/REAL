@@ -183,6 +183,7 @@ object ReminderNotifications {
                 manager.cancel(id.hashCode())
             }
             manager.notify(id.hashCode(), notification)
+            if (alerting) manager.cancel(earlyNotificationId(id))
             true
         } catch (_: SecurityException) {
             false 
@@ -190,7 +191,47 @@ object ReminderNotifications {
     }
 
     fun cancel(context: Context, id: Long) {
-        context.getSystemService(NotificationManager::class.java).cancel(id.hashCode())
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.cancel(id.hashCode())
+        manager.cancel(earlyNotificationId(id))
+    }
+
+    private fun earlyNotificationId(id: Long) = id.hashCode() * 31 + 7
+
+    /** "Erken uyarı": a heads-up before the alert ("15 dk sonra"); the alert itself replaces it. */
+    fun showEarly(context: Context, reminder: ReminderItem): Boolean {
+        val at = reminder.alertAt ?: return false
+        ensureChannel(context)
+        if (!canNotify(context, CHANNEL_ID)) return false
+        val id = reminder.id
+        val pendingIntent = PendingIntent.getActivity(context, id.hashCode(),
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                data = Uri.parse("real://reminder/$id")
+                putExtra(EXTRA_REMINDER_ID, id)
+            }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val minutes = ((at - System.currentTimeMillis() + 30_000L) / 60_000L).coerceAtLeast(1L)
+        val lead = when {
+            minutes >= 24 * 60 && minutes % (24 * 60) == 0L -> "${minutes / (24 * 60)} gün sonra"
+            minutes >= 60 && minutes % 60 == 0L -> "${minutes / 60} saat sonra"
+            else -> "$minutes dk sonra"
+        }
+        val metadata = resolveNotificationMetadata(reminder, CategoryRepository(context), context.getString(R.string.app_name))
+        val builder = android.app.Notification.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_r)
+            .setContentTitle(metadata.title)
+            .setContentText("$lead · ${metadata.text}")
+            .setContentIntent(pendingIntent)
+            .setCategory(android.app.Notification.CATEGORY_REMINDER)
+            .setSubText("Erken uyarı")
+            .setAutoCancel(true)
+            .setShowWhen(true)
+            .setWhen(at)
+        metadata.accentColor?.let { builder.setColor(it) }
+        return try {
+            context.getSystemService(NotificationManager::class.java).notify(earlyNotificationId(id), builder.build())
+            true
+        } catch (_: SecurityException) { false }
     }
 
     fun refreshEdited(context: Context, reminder: ReminderItem) {
@@ -352,6 +393,12 @@ private fun drawCategoryGlyphOnAndroidCanvas(
         canvas.drawLine(x1, y1, x2, y2, strokePaint)
     }
     when (icon) {
+        CategoryIcon.NONE -> Unit
+        // SVG-path icons (CategoryIconPaths).
+        CategoryIcon.BIRTHDAY, CategoryIcon.RACING, CategoryIcon.RACING_SIDE, CategoryIcon.VEHICLE, CategoryIcon.BALL, CategoryIcon.MUSIC, CategoryIcon.MOVIE, CategoryIcon.GAMING, CategoryIcon.BOOK, CategoryIcon.MEDICINE, CategoryIcon.PLANT, CategoryIcon.CODE, CategoryIcon.CAMERA, CategoryIcon.EVENT, CategoryIcon.FRIENDS -> canvas.drawPath(
+            androidx.core.graphics.PathParser.createPathFromPathData(com.cagri.real.ui.components.CategoryIconPaths.getValue(icon)),
+            strokePaint
+        )
         CategoryIcon.WORK -> {
             canvas.drawRoundRect(3.5f, 7.5f, 20.5f, 20f, 2.5f, 2.5f, strokePaint)
             canvas.drawRoundRect(8.5f, 4f, 15.5f, 7.5f, 1.5f, 1.5f, strokePaint)

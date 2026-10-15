@@ -18,21 +18,16 @@ internal class CategoryPlannerPreferences(context: Context, val workspace: Strin
     private val identity = workspace.removePrefix("u:")
     private val hash = java.security.MessageDigest.getInstance("SHA-256").digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }
     val prefs = context.applicationContext.getSharedPreferences("real_category_planner_$hash", Context.MODE_PRIVATE)
-    fun visible(key: String?): Boolean = key != null && prefs.getBoolean("calendar_$key", false)
+    // Every category is in REAL's calendar unless the user switched it off. With the old opt-in default
+    // (false) cards with a date/time silently never reached the calendar or "Next 24 hours".
+    // An explicit choice stored earlier, on or off, is kept as it is.
+    fun visible(key: String?): Boolean = key != null && prefs.getBoolean("calendar_$key", true)
     fun setVisible(key: String, visible: Boolean) {
         check(SyncLocal.workspaceToken() == workspace) { "Hesap değişti." }
         if (this.visible(key) != visible) prefs.edit().putBoolean("calendar_$key", visible).apply()
     }
     fun link(key: String): String = prefs.getString("link_$key", "").orEmpty()
     fun setLink(key: String, value: String) { check(SyncLocal.workspaceToken() == workspace) { "Hesap değişti." }; prefs.edit().putString("link_$key", value).apply() }
-    fun includes(card: ReminderItem, categories: List<CustomCategory>): Boolean {
-        val custom = card.customCategoryId?.let { id -> categories.firstOrNull { it.id == id } }
-        if (card.customCategoryId != null && custom == null) return false
-        if (custom != null) return visible(categoryPlannerKey(null, custom))
-        return ReminderCategory.entries.any { category ->
-            visible(categoryPlannerKey(category, null)) && listOf(card).inCategory(category).isNotEmpty()
-        }
-    }
 }
 
 @Composable

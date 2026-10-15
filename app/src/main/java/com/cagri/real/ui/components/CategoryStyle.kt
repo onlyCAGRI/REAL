@@ -38,11 +38,11 @@ fun ReminderCategory.glyph(): Glyph = when (this) {
 
 fun ReminderCategory.defaultStyle(): CategoryStyle = when (this) {
     ReminderCategory.Today -> CategoryStyle("24 hour", Glyph.Calendar, Color(0xFF141E4E), Color(0xFF23457D), Color(0xFF863D59))
-    ReminderCategory.Planned -> CategoryStyle("Planlı", Glyph.Clock, Color(0xFFE0F37D), Color(0xFFE0F37D), Color(0xFFE0F37D), useDarkText = true)
-    ReminderCategory.Important -> CategoryStyle("Önemli", Glyph.Star, Color(0xFF4658C8), Color(0xFF4658C8), Color(0xFF4658C8), useDarkText = false)
-    ReminderCategory.NoAlert -> CategoryStyle("Uyarı yok", Glyph.Note, Color(0xFFDAB7F3), Color(0xFFDAB7F3), Color(0xFFDAB7F3), useDarkText = true)
-    ReminderCategory.Completed -> CategoryStyle("Tamamlananlar", Glyph.Completed, Color(0xFFEE5E36), Color(0xFFEE5E36), Color(0xFFEE5E36), useDarkText = false)
-    ReminderCategory.JournalEntries -> CategoryStyle("Günlüklerim", Glyph.Journal, Color(0xFF1B2439), Color(0xFF4E648D), Color(0xFF7E5B6D))
+    ReminderCategory.Planned -> CategoryStyle("Planned", Glyph.Clock, Color(0xFFE0F37D), Color(0xFFE0F37D), Color(0xFFE0F37D), useDarkText = true)
+    ReminderCategory.Important -> CategoryStyle("Important", Glyph.Star, Color(0xFF4658C8), Color(0xFF4658C8), Color(0xFF4658C8), useDarkText = false)
+    ReminderCategory.NoAlert -> CategoryStyle("No alert", Glyph.Note, Color(0xFFDAB7F3), Color(0xFFDAB7F3), Color(0xFFDAB7F3), useDarkText = true)
+    ReminderCategory.Completed -> CategoryStyle("Completed", Glyph.Completed, Color(0xFFEE5E36), Color(0xFFEE5E36), Color(0xFFEE5E36), useDarkText = false)
+    ReminderCategory.JournalEntries -> CategoryStyle("Journal", Glyph.Journal, Color(0xFF1B2439), Color(0xFF4E648D), Color(0xFF7E5B6D))
 }
 
 fun ReminderCategory.resolveStyle(override: CategoryColorOverride?): CategoryStyle {

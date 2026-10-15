@@ -1,6 +1,7 @@
 package com.cagri.real.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -60,8 +61,11 @@ internal fun DetailChecklistBox(
             )
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
+        // Items present when the card opens are shown as-is; only ones added afterwards animate in.
+        val initialItemIds = remember { items.map { it.id }.toSet() }
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
+                .then(if (reduceAnimations) Modifier else Modifier.animateContentSize(RealMotion.smooth(0.3f))),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Row(
@@ -103,6 +107,7 @@ internal fun DetailChecklistBox(
             if (editing) {
                 items.forEachIndexed { index, item ->
                     key(item.id) {
+                        ChecklistRowAppear(item.id in initialItemIds, reduceAnimations) {
                         EditableChecklistItemRow(
                             item = item,
                             onTextChange = { newText -> onItemTextChange(item.id, newText) },
@@ -112,6 +117,7 @@ internal fun DetailChecklistBox(
                             reduceAnimations = reduceAnimations,
                             customFocusRequester = if (index == 0) firstItemFocusRequester else null
                         )
+                        }
                     }
                 }
                 AddChecklistItemRow(
@@ -123,11 +129,13 @@ internal fun DetailChecklistBox(
             } else {
                 items.forEach { item ->
                     key(item.id) {
-                        ChecklistItemRow(
-                            item = item,
-                            reduceAnimations = reduceAnimations,
-                            onToggle = { onToggleItem(item.id) }
-                        )
+                        ChecklistRowAppear(item.id in initialItemIds, reduceAnimations) {
+                            ChecklistItemRow(
+                                item = item,
+                                reduceAnimations = reduceAnimations,
+                                onToggle = { onToggleItem(item.id) }
+                            )
+                        }
                     }
                 }
             }
@@ -172,7 +180,7 @@ private fun ChecklistItemRow(
         }
         if (item.isCompleted && !reduceAnimations) {
             checkSettle.snapTo(1.05f)
-            checkSettle.animateTo(1.0f, tween(140, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)))
+            checkSettle.animateTo(1.0f, tween(140, easing = RealMotion.Emphasized))
         } else {
             checkSettle.snapTo(1.0f)
         }
@@ -184,7 +192,7 @@ private fun ChecklistItemRow(
             .pressScale(checkItemInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.98f)
             .clickable(
                 interactionSource = checkItemInteractionSource,
-                indication = LocalIndication.current,
+                indication = null /* pressScale already gives the press feedback */,
                 onClick = {
                     if (!item.isCompleted) {
                         RealHaptics.toggle(view, on = true)
@@ -398,3 +406,14 @@ private fun AddChecklistItemRow(
     }
 }
 
+/** A newly added checklist row unfolds and fades in; rows that were already there appear immediately. */
+@Composable
+private fun ChecklistRowAppear(alreadyPresent: Boolean, reduceAnimations: Boolean, content: @Composable () -> Unit) {
+    if (alreadyPresent || reduceAnimations) { content(); return }
+    val state = remember { androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true } }
+    androidx.compose.animation.AnimatedVisibility(
+        visibleState = state,
+        enter = androidx.compose.animation.expandVertically(RealMotion.smooth(0.3f), expandFrom = Alignment.Top) +
+            androidx.compose.animation.fadeIn(tween(200, delayMillis = 60))
+    ) { content() }
+}

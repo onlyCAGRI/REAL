@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -153,24 +154,23 @@ private fun Modifier.refRiseIn(progress: State<Float>, rise: Dp = 22.dp): Modifi
 private fun refNumber(n: Int): String = String.format(Locale.getDefault(), "%,d", n)
 
 @Composable
-private fun rememberRefPulse(reduce: Boolean, low: Float, durationMillis: Int, label: String): Float {
-    if (reduce) return 0.9f
+// Ambient loops return State: read .value only in draw/graphicsLayer so the card is redrawn, not recomposed.
+private fun rememberRefPulse(reduce: Boolean, low: Float, durationMillis: Int, label: String): State<Float> {
+    if (reduce) return remember { mutableFloatStateOf(0.9f) }
     val transition = rememberInfiniteTransition(label = label)
-    val pulse by transition.animateFloat(
+    return transition.animateFloat(
         low, 1f, infiniteRepeatable(tween(durationMillis, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "$label-pulse"
     )
-    return pulse
 }
 
 @Composable
-private fun rememberRefClockAngle(reduce: Boolean): Float {
-    if (reduce) return 0f
+private fun rememberRefClockAngle(reduce: Boolean): State<Float> {
+    if (reduce) return remember { mutableFloatStateOf(0f) }
     val transition = rememberInfiniteTransition(label = "task-clock")
-    val angle by transition.animateFloat(
+    return transition.animateFloat(
         0f, 360f, infiniteRepeatable(tween(14_000, easing = LinearEasing)), label = "task-clock-angle"
     )
-    return angle
 }
 
 @Composable
@@ -192,7 +192,7 @@ private fun rememberRefClock(): State<WidgetReferenceClock> {
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun RefClockGlyph(modifier: Modifier, face: Color, hands: Color, minuteAngle: Float) = Canvas(modifier) {
+private fun RefClockGlyph(modifier: Modifier, face: Color, hands: Color, minuteAngle: () -> Float) = Canvas(modifier) {
     val r = size.minDimension / 2f
     drawCircle(face, r)
     val sw = r * 0.17f
@@ -204,8 +204,9 @@ private fun RefClockGlyph(modifier: Modifier, face: Color, hands: Color, minuteA
             sw, StrokeCap.Round
         )
     }
-    hand(minuteAngle, 0.62f)
-    hand(minuteAngle / 12f + 120f, 0.42f)
+    val angle = minuteAngle()
+    hand(angle, 0.62f)
+    hand(angle / 12f + 120f, 0.42f)
 }
 
 @Composable
@@ -323,8 +324,8 @@ private fun RefTaskGlowCard(
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(
-                                    accentLight.copy(alpha = 0.95f * breathe),
-                                    accent.copy(alpha = 0.72f * breathe),
+                                    accentLight.copy(alpha = 0.95f * breathe.value),
+                                    accent.copy(alpha = 0.72f * breathe.value),
                                     accent.copy(alpha = 0f)
                                 ),
                                 center = Offset(cx, cy), radius = radius
@@ -341,7 +342,7 @@ private fun RefTaskGlowCard(
             Box(
                 Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 16.dp).size(52.dp)
                     .graphicsLayer {
-                        val s = 0.97f + 0.03f * breathe
+                        val s = 0.97f + 0.03f * breathe.value
                         scaleX = s; scaleY = s
                     }
                     .clip(CircleShape).background(accent),
@@ -350,7 +351,7 @@ private fun RefTaskGlowCard(
                 if (completedStyle) RefCheckGlyph(Modifier.size(24.dp), Color.White)
                 else RefClockGlyph(
                     Modifier.size(24.dp), face = Color.White, hands = accent,
-                    minuteAngle = if (reduce) 0f else minuteAngle
+                    minuteAngle = { if (reduce) 0f else minuteAngle.value }
                 )
             }
             Text(
@@ -696,7 +697,7 @@ fun ProgressSparkWidget(
                     val sampler = android.graphics.PathMeasure(line.asAndroidPath(), false)
                     if (sampler.getPosTan(len * draw, position, null)) {
                         val head = Offset(position[0], position[1])
-                        drawCircle(green.copy(alpha = 0.30f * pulse), 11.dp.toPx(), head)
+                        drawCircle(green.copy(alpha = 0.30f * pulse.value), 11.dp.toPx(), head)
                         drawCircle(Color.White, 3.6.dp.toPx(), head)
                     }
                 }
@@ -752,7 +753,7 @@ fun RingStatPill(
                 val c = Offset(size.height * 0.62f, size.height * 0.78f)
                 drawCircle(
                     Brush.radialGradient(
-                        listOf(color.copy(alpha = 0.34f * glow), color.copy(alpha = 0f)),
+                        listOf(color.copy(alpha = 0.34f * glow.value), color.copy(alpha = 0f)),
                         center = c, radius = size.height * 0.75f
                     ),
                     radius = size.height * 0.75f, center = c
@@ -773,7 +774,7 @@ fun RingStatPill(
             val sweep = 360f * ring.value
             if (sweep > 0.5f) {
                 drawArc(
-                    color = color.copy(alpha = 0.22f * glow), startAngle = -90f, sweepAngle = sweep, useCenter = false,
+                    color = color.copy(alpha = 0.22f * glow.value), startAngle = -90f, sweepAngle = sweep, useCenter = false,
                     topLeft = tl, size = arc, style = Stroke(sw * 1.6f, cap = StrokeCap.Round)
                 )
                 drawArc(

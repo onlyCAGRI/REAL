@@ -9,6 +9,8 @@ import com.cagri.real.speech.*
 import com.cagri.real.ui.components.ReminderEntryTracker
 import com.cagri.real.ui.components.planner.PlannerRepository
 import kotlinx.coroutines.CoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 internal typealias AddReminderCallback = suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>, List<ReminderVoiceRecording>, ReminderLocation?, Long?, Long?, List<MusicBlock>, List<MediaBlock>) -> Long?
 
@@ -34,8 +36,16 @@ internal class ReminderComposerCallbacks(
     val onDraftAttachmentsChange: (List<ReminderAttachment>) -> Unit,
     val onDraftReferenceUrlChange: (String?) -> Unit,
     val onShareDraftChange: (Boolean) -> Unit,
-    val onSetRepeatPattern: (Long, Int, Long?) -> Unit
+    val onSetRepeatPattern: (Long, Int, Long?) -> Unit,
+    val onSetTiming: (Long, Int?, Long?) -> Unit = { _, _, _ -> }
 )
+
+/** Early warning and end picked in the composer's date sheet, applied once the card exists. */
+internal object ComposerTimingDraft {
+    var earlyAlertMinutes by androidx.compose.runtime.mutableStateOf<Int?>(null)
+    var endAt by androidx.compose.runtime.mutableStateOf<Long?>(null)
+    fun clear() { earlyAlertMinutes = null; endAt = null }
+}
 
 internal class ReminderVoiceActions(
     val onCreateVoiceCategory: suspend (String, String, Int) -> CustomCategory?,

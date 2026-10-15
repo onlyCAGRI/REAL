@@ -75,6 +75,16 @@ object PanoPush {
 class PanoMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) = PanoPush.registerToken(applicationContext, token)
     override fun onMessageReceived(message: RemoteMessage) {
+        // A card was sent to this account: pull the share inbox now (the sync shows the notification).
+        if (message.data["type"] == "share_inbox") {
+            com.cagri.real.platform.android.sync.SyncLocal.requestSync()
+            return
+        }
+        // Ortak kategori: someone changed a shared card; pull it (a timed card sets its reminder here too).
+        if (message.data["type"] == "category_cards") {
+            com.cagri.real.sharedcategories.SharedCategorySync.request(applicationContext, 0)
+            return
+        }
         if (message.data["type"] != "pano_item") return
         val board = message.data["boardId"] ?: return
         if (PanoPush.openBoard == board) return

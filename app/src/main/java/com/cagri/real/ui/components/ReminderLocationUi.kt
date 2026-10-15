@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cagri.real.data.ReminderLocation
 import org.maplibre.android.MapLibre
+import androidx.compose.ui.graphics.graphicsLayer
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.Style
@@ -53,6 +54,18 @@ fun openReminderLocationInMaps(context: Context, place: ReminderLocation): Boole
 
 
 
+/** Short name for the map's corner: the place's name, or the street when an empty spot was picked. */
+fun reminderLocationLabel(place: ReminderLocation): String? {
+    val name = place.placeName.trim()
+    val street = place.address.split(',').map { it.trim() }.firstOrNull { it.isNotBlank() }
+    return when {
+        name.isNotBlank() && name != "Seçilen yer" && name != place.address.trim() && name.any { it.isLetter() } -> name
+        street != null -> street
+        name.isNotBlank() -> name
+        else -> null
+    }
+}
+
 @Composable
 fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier = Modifier, onOpen: () -> Unit = {}) {
     ReminderLocationMap(place, modifier, cameraZoom = null, onOpen = onOpen)
@@ -60,7 +73,13 @@ fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier = Modifier, 
 
 /** Optional camera control for Pano; original card callers keep their camera behavior. */
 @Composable
-fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier, cameraZoom: Double?, onOpen: () -> Unit = {}) {
+fun ReminderLocationMap(
+    place: ReminderLocation, modifier: Modifier, cameraZoom: Double?, onOpen: () -> Unit = {},
+    /** Live pinch preview: scales the current snapshot until the re-rendered one arrives. */
+    previewScale: (() -> Float)? = null,
+    /** Called each time a freshly rendered snapshot is on screen. */
+    onSnapshotShown: (() -> Unit)? = null
+) {
     val latitude = place.latitude ?: return
     val longitude = place.longitude ?: return
     val context = LocalContext.current
@@ -103,7 +122,7 @@ fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier, cameraZoom:
             try {
             snapshotter.start(object : MapSnapshotter.SnapshotReadyCallback {
                 override fun onSnapshotReady(snapshot: MapSnapshot) {
-                    if (active) snapshotBitmap = snapshot.bitmap
+                    if (active) { snapshotBitmap = snapshot.bitmap; onSnapshotShown?.invoke() }
                 }
             })
             kotlinx.coroutines.awaitCancellation()
@@ -114,7 +133,10 @@ fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier, cameraZoom:
             Image(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = "Harita görünümü",
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().then(
+                    if (previewScale == null) Modifier
+                    else Modifier.graphicsLayer { val s = previewScale(); scaleX = s; scaleY = s }
+                ),
                 contentScale = ContentScale.Crop
             )
         }

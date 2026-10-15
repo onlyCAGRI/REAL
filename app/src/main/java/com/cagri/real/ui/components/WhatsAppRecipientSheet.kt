@@ -5,7 +5,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -88,11 +87,7 @@ fun WhatsAppRecipientSheet(
         if (normalized != null) {
             onSaveRecipient(normalized)
         } else {
-            Toast.makeText(
-                context,
-                "Lütfen geçerli bir telefon numarası girin (örn. 05xx xxx xx xx)",
-                Toast.LENGTH_SHORT
-            ).show()
+            com.cagri.real.ui.components.RealToast.show(context, "Lütfen geçerli bir telefon numarası girin (örn. 05xx xxx xx xx)")
         }
     }
 
@@ -120,14 +115,14 @@ fun WhatsAppRecipientSheet(
                 else slideInVertically(
                     animationSpec = tween(
                         durationMillis = 300,
-                        easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                        easing = RealMotion.Emphasized
                     )
                 ) { fullHeight -> fullHeight },
                 exit = if (reduceAnimations) ExitTransition.None
                 else slideOutVertically(
                     animationSpec = tween(
                         durationMillis = 220,
-                        easing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)
+                        easing = RealMotion.Exit
                     )
                 ) { fullHeight -> fullHeight },
                 modifier = Modifier.align(Alignment.BottomCenter)

@@ -51,55 +51,30 @@ internal fun CalendarPublicationPrompt(state: CalendarConnectionState, reminders
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) publish() else message = "Yazma izni verilmedi. İçeriğin REAL'de duruyor; bağlantı eklenmedi."
     }
-    CalendarGlassDialog(
-        onDismiss = { if (!busy) state.publicationCardId = null },
-        title = "Takvime web bağlantısı eklensin mi?",
-        reduceBlur = reduceDynamicBlur,
-        actions = {
-            CalendarGlassButton(primary = true, enabled = !busy, onClick = {
-                if (state.provider.canWrite()) publish() else permission.launch(Manifest.permission.WRITE_CALENDAR)
-            }) { Text(if (busy) "Ekleniyor…" else "Evet, bağlantı ekle", fontWeight = FontWeight.Medium) }
-            TextButton(
-                enabled = !busy, onClick = { state.publicationCardId = null }, modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.textButtonColors(contentColor = CalendarMuted, disabledContentColor = CalendarMuted.copy(alpha = 0.5f))
-            ) { Text("Hayır, REAL'de kalsın") }
-        }
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(
-                "Kartın REAL'de kaydedildi. Seçtiğin içeriğe bağlı bir web bağlantısı takvim açıklamasına eklenir.",
-                color = Color(0xFFE4E5EA), fontSize = 15.sp, lineHeight = 22.sp
-            )
-            // Visibility warning in its own tinted block so it is read, not skimmed past.
-            Text(
-                "Linki bilen herkes bu içeriği görebilir; paylaşılan takvimin üyeleri de linki görür.",
-                color = Color(0xFFFFD79A), fontSize = 13.sp, lineHeight = 19.sp,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFFFD79A).copy(alpha = 0.10f)).padding(horizontal = 14.dp, vertical = 11.dp)
-            )
-            Text("PAYLAŞILACAK İÇERİK", color = CalendarMuted, fontSize = 11.sp, letterSpacing = 1.2.sp,
-                fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp))
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.06f))) {
-                PublishChoice("Fotoğraflar ve dosyalar", files, !busy) { files = it }
-                PublishDivider()
-                PublishChoice("Konum", location, !busy) { location = it }
-                PublishDivider()
-                PublishChoice("Ses kayıtları", voice, !busy) { voice = it }
-                PublishDivider()
-                PublishChoice("Günlük", journal, !busy) { journal = it }
+    // A plain bottom sheet like the notification question: just the question and two answers.
+    fun close() { if (!busy) state.publicationCardId = null }
+    androidx.compose.ui.window.Dialog(onDismissRequest = ::close, properties = androidx.compose.ui.window.DialogProperties(
+        usePlatformDefaultWidth = false, decorFitsSystemWindows = false
+    )) {
+        val window = (androidx.compose.ui.platform.LocalView.current.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        SideEffect { window?.setDimAmount(0f) }
+        var shown by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { shown = true }
+        com.cagri.real.ui.components.PermissionSheet(
+            visible = shown,
+            title = "Takvime web bağlantısı eklensin mi?",
+            description = "",
+            onAllow = { if (state.provider.canWrite()) publish() else permission.launch(Manifest.permission.WRITE_CALENDAR) },
+            onLater = ::close,
+            primaryLabel = if (busy) "Ekleniyor…" else "Evet, bağlantı ekle",
+            secondaryLabel = "Hayır, REAL'de kalsın",
+            glyph = null,
+            primaryEnabled = !busy,
+            extraContent = {
+                message?.let { Text(it, color = Color(0xFFFFB4AB), fontSize = 13.sp, lineHeight = 19.sp,
+                    modifier = Modifier.padding(top = 12.dp)) }
             }
-            Text(
-                "Başlık, checklist, CardStack metinleri ve medya bilgileri her zaman dahildir. Dosyaların kopyası oluşturulmaz; " +
-                    "asıl dosya silinirse linkte de açılmaz. Link 30 gün geçerlidir, yayımlarken yenilenir. " +
-                    "Hayır dersen yeni içerik yalnız REAL'de kalır; önceden yayımlanan içerik mevcut linkte kalır.",
-                color = CalendarMuted, fontSize = 12.sp, lineHeight = 18.sp
-            )
-            message?.let { Text(it, color = Color(0xFFFFB4AB), fontSize = 13.sp, lineHeight = 19.sp) }
-            if (busy) LinearProgressIndicator(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(2.dp)),
-                color = CalendarAccent, trackColor = Color.White.copy(alpha = 0.12f)
-            )
-        }
+        )
     }
 }
 

@@ -87,7 +87,7 @@ private fun CategoryInviteScreen(token: String, onClose: () -> Unit, onSignIn: (
                     }, Modifier.padding(top = 18.dp), enabled = !busy, filled = true)
                 }
             }
-            if (busy) CircularProgressIndicator(Modifier.padding(top = 18.dp).size(24.dp), color = Color.White, strokeWidth = 2.dp)
+            if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.padding(top = 18.dp).size(24.dp), color = Color.White, strokeWidth = 2.dp)
             error?.let { ConnectionNote(it); ConnectionPill("Yeniden dene", { scope.launch { preview() } }, enabled = !busy) }
             ConnectionPill("Kapat", onClose, Modifier.padding(top = 18.dp))
         }

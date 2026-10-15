@@ -105,7 +105,7 @@ fun ColumnScope.PanoBoardScreen(board:PanoBoard,state:PanoState,controller:PanoC
             }
         }
         Row(Modifier.align(Alignment.TopStart).padding(12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
-            if(state.syncing)CircularProgressIndicator(Modifier.size(16.dp),color=Color.Gray,strokeWidth=1.dp)
+            if(state.syncing)com.cagri.real.ui.components.RealSpinner(Modifier.size(16.dp),color=Color.Gray,strokeWidth=1.dp)
             if(state.queue.isNotEmpty())Text("Saved locally · ${state.queue.size} pending",color=Color.Gray,fontSize=10.sp)
         }
         PanoEditDock(editable,Modifier.align(Alignment.BottomCenter).padding(bottom=14.dp),viewport,

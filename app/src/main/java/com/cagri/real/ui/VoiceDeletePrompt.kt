@@ -42,14 +42,14 @@ internal fun VoiceDeletePrompt(
         val card = reminders.firstOrNull { it.id == plan.cardId }
         onDismiss()
         if (!plan.stillMatches(card)) {
-            Toast.makeText(context, "Kart değişmiş; silinmedi. Komutu yeniden söyle.", Toast.LENGTH_LONG).show()
+            com.cagri.real.ui.components.RealToast.show(context, "Kart değişmiş; silinmedi. Komutu yeniden söyle.", long = true)
             return
         }
         if (scope != null) {
             val occurrence = plan.occurrenceMillis ?: return
             callbacks.deleteOccurrence?.invoke(plan.cardId, occurrence, scope)
         } else if (plan.occurrenceMillis != null) {
-            Toast.makeText(context, "Tekrarlı kartı silmek için kart detayındaki tekrar seçimini kullan.", Toast.LENGTH_LONG).show()
+            com.cagri.real.ui.components.RealToast.show(context, "Tekrarlı kartı silmek için kart detayındaki tekrar seçimini kullan.", long = true)
         } else onDeleteMany(setOf(plan.cardId))
     }
     val scoped = plan.occurrenceMillis != null && callbacks.deleteOccurrence != null

@@ -31,8 +31,8 @@ android {
         applicationId = "com.cagri.real"
         minSdk = 26
         targetSdk = 36
-        versionCode = 55
-        versionName = "0.8.11"
+        versionCode = 57
+        versionName = "0.8.13"
 
     }
 
@@ -120,6 +120,8 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+    // PDF text layer with fonts (bold / italic) on every Android version; OCR stays for scanned pages. Apache-2.0.
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     implementation("com.google.mlkit:text-recognition:16.0.1") // On-device, bundled Latin OCR for scanned books.
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-gif:2.7.0") // Pano GIF decoder; same existing Coil version.

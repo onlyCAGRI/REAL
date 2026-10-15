@@ -35,6 +35,7 @@ import kotlin.coroutines.suspendCoroutine
 /** Only explicitly selected files are copied. OCR and PDF rendering never upload documents. */
 class BookDocumentRepository(private val context: Context, private val store: BookShelfStore) {
     private val gate = kotlinx.coroutines.sync.Semaphore(1)
+    private val pdfText by lazy { PdfBoxText(context) }
     private val pageWork = BookPageWork()
     private val analysisCache = BookAnalysisCache(store.directory)
     private val epubChapters = EpubChapters(store.directory)
@@ -178,9 +179,19 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
         return when (book.format) {
             "pdf", "image" -> {
                 val dir = File(store.directory, "${book.id}.pages").apply { mkdirs() }
-                val cached = File(dir, "$pageIndex.v7.json")
+                val cached = File(dir, "$pageIndex.v8.json")
+                if (!rebuildLayout && cached.exists()) return jsonParagraphs(cached.readText())
+                // v8: a copyable PDF is read from its own text layer (words, bold, italic) on every Android version.
+                // That text replaces older OCR caches of the page; only pages without usable text keep them.
+                val layered: List<String>? = if (book.format == "pdf") gate.withPermit { textLayer(book.id, file, pageIndex) } else null
+                if (layered != null) {
+                    coroutineContext.ensureActive()
+                    val temp = File(dir, "$pageIndex.tmp"); temp.writeText(JSONArray(layered).toString())
+                    if (!temp.renameTo(cached)) { temp.delete(); throw IOException("Sayfa metni kaydedilemedi.") }
+                    return layered
+                }
                 if (!rebuildLayout) {
-                    if (cached.exists()) return jsonParagraphs(cached.readText())
+                    File(dir, "$pageIndex.v7.json").takeIf { it.exists() }?.let { return jsonParagraphs(it.readText()) }
                     // Old manual paragraph deletions have no edit marker; keep the old cache until
                     // the user explicitly chooses to rebuild this page, rather than resurrecting text.
                     (File(dir, "$pageIndex.v6.json").takeIf { it.exists() }
@@ -233,8 +244,9 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
     suspend fun deleteParagraph(book: Book, pageIndex: Int, paragraphIndex: Int) = withContext(Dispatchers.IO) {
         pageWork.withPage("${book.id}:$pageIndex") {
         val dir = File(store.directory, "${book.id}.pages")
-        val cached = File(dir, "$pageIndex.v7.json")
-        val source = cached.takeIf { it.exists() } ?: File(dir, "$pageIndex.v6.json").takeIf { it.exists() }
+        val cached = File(dir, "$pageIndex.v8.json")
+        val source = cached.takeIf { it.exists() } ?: File(dir, "$pageIndex.v7.json").takeIf { it.exists() }
+            ?: File(dir, "$pageIndex.v6.json").takeIf { it.exists() }
             ?: File(dir, "$pageIndex.v5.json").takeIf { it.exists() }
             ?: File(dir, "$pageIndex.v4.json").takeIf { it.exists() }
             ?: throw IOException("Sayfa metni bulunamadı.")
@@ -249,8 +261,9 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
     suspend fun setHeading(book: Book, pageIndex: Int, paragraphIndex: Int, heading: Boolean) = withContext(Dispatchers.IO) {
         pageWork.withPage("${book.id}:$pageIndex") {
         val dir = File(store.directory, "${book.id}.pages")
-        val cached = File(dir, "$pageIndex.v7.json")
-        val source = cached.takeIf { it.exists() } ?: File(dir, "$pageIndex.v6.json").takeIf { it.exists() }
+        val cached = File(dir, "$pageIndex.v8.json")
+        val source = cached.takeIf { it.exists() } ?: File(dir, "$pageIndex.v7.json").takeIf { it.exists() }
+            ?: File(dir, "$pageIndex.v6.json").takeIf { it.exists() }
             ?: File(dir, "$pageIndex.v5.json").takeIf { it.exists() }
             ?: File(dir, "$pageIndex.v4.json").takeIf { it.exists() }
             ?: throw IOException("Sayfa metni bulunamadı.")
@@ -266,6 +279,36 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
         if (book.format == "pdf") renderer(file).use { pdf -> pdf.openPage(pageIndex).use { render(it, 1400) } }
         else decodeImage(file, 1400)
     }
+    /**
+     * Paragraphs from the PDF's text layer, or null when the page has none worth reading (scans, broken encodings,
+     * missing word spaces): those go to OCR. The page bitmap is only used for page geometry.
+     */
+    private suspend fun textLayer(bookId: String, file: File, pageIndex: Int): List<String>? {
+        val page = pdfText.page(file, pageIndex, 1800) ?: return null
+        val runs = page.lines
+        val texts = runs.map { it.text }
+        if (!usableText(texts.joinToString(" ")) || looksSpaceless(texts)) return null
+        // Running headers / page numbers are recognised against the neighbouring pages' own text layer (no OCR).
+        val headers = listOf(pageIndex - 2, pageIndex - 1, pageIndex + 1, pageIndex + 2).mapNotNull { index ->
+            coroutineContext.ensureActive()
+            val key = "$bookId:L:$index:${file.length()}:${file.lastModified()}"
+            headerPages[key] ?: pdfText.page(file, index, 1800)?.let { other ->
+                PageLayout.headerSnapshot(index, other.lines, other.width, other.height).also { headerPages[key] = it }
+            }
+        }
+        return renderer(file).use { pdf ->
+            if (pageIndex !in 0 until pdf.pageCount) return@use null
+            pdf.openPage(pageIndex).use { p ->
+                val bitmap = render(p, 1800)
+                try {
+                    PageLayout.withCancellation(coroutineContext[kotlinx.coroutines.Job]) {
+                        PageLayout.paragraphsFromNative(bitmap, runs, headers)
+                    }.takeIf { it.isNotEmpty() }
+                } finally { bitmap.recycle() }
+            }
+        }
+    }
+
     private data class NativePage(val runs: List<PageLayout.NativeRun>, val complete: Boolean)
 
     @RequiresApi(35)
@@ -390,6 +433,8 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
         private val SoftHyphenBreak = Regex("(?<=\\p{L})-[ \\t]*\\n[ \\t]*(?=\\p{Ll})")
         /** "kitap-\nçı" → "kitapçı" (satır sonu tireleri). */
         internal fun dehyphenate(raw: String): String = raw.replace(SoftHyphenBreak, "")
+        /** Ligatures and odd spaces fixed, as for the platform text layer. */
+        internal fun cleanNativeText(raw: String): String = normalizeSpaces(fixLigatures(raw))
         private fun fixLigatures(raw: String): String = raw
             .replace("\uFB00", "ff").replace("\uFB01", "fi").replace("\uFB02", "fl")
             .replace("\uFB03", "ffi").replace("\uFB04", "ffl").replace("\uFB05", "st").replace("\uFB06", "st")

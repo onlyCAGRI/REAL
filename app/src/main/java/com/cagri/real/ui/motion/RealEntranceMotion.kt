@@ -1,13 +1,8 @@
 package com.cagri.real.ui.motion
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-
+import com.cagri.real.ui.components.RealMotion
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -40,8 +35,8 @@ import androidx.compose.ui.util.lerp
 import kotlin.math.hypot
 
 // Same easing and sliced clock as PlannerIntroMotion; independent of calendar state/data.
-internal val RealEntranceEase = CubicBezierEasing(0.2f, 0f, 0f, 1f)
-internal val RealEntrancePop = CubicBezierEasing(0.2f, 1.2f, 0.35f, 1f)
+internal val RealEntranceEase = RealMotion.Standard
+internal val RealEntrancePop = RealMotion.Pop
 
 @Stable
 internal class RealEntranceMotion(
@@ -60,15 +55,12 @@ internal fun rememberRealEntrance(
     totalMs: Int = 1000,
     play: Boolean = true
 ): RealEntranceMotion {
-    var played by rememberSaveable(identity) { mutableStateOf(false) }
-    val playThisEntry = remember(identity) { play && !played }
-    val clock = remember(identity, totalMs) { Animatable(if (reduceMotion || !playThisEntry) totalMs.toFloat() else 0f) }
-    LaunchedEffect(clock, reduceMotion, playThisEntry) {
-        played = true
-        if (reduceMotion || !playThisEntry) clock.snapTo(totalMs.toFloat())
+    val clock = remember(identity, totalMs) { Animatable(if (reduceMotion || !play) totalMs.toFloat() else 0f) }
+    LaunchedEffect(clock, reduceMotion, play) {
+        if (reduceMotion || !play) clock.snapTo(totalMs.toFloat())
         else if (clock.value < totalMs) clock.animateTo(totalMs.toFloat(), tween(totalMs, easing = LinearEasing))
     }
-    return remember(clock, reduceMotion, playThisEntry) { RealEntranceMotion(clock, !reduceMotion && playThisEntry) }
+    return remember(clock, reduceMotion, play) { RealEntranceMotion(clock, !reduceMotion && play) }
 }
 
 /** Visual transform only: does not change grid measurement, placement, size or persisted data. */
@@ -112,7 +104,7 @@ private class RealGrowShape(private val p: Float, private val finalRadius: Float
 internal fun Modifier.realGrow(
     motion: RealEntranceMotion,
     startMs: Int = 0,
-    durationMs: Int = 420,
+    durationMs: Int = 640,
     radius: Dp = 20.dp,
     paused: Boolean = false
 ): Modifier = if (!motion.enabled) this else graphicsLayer {
@@ -132,7 +124,7 @@ internal fun Modifier.realGrow(
 internal fun Modifier.realGrowGlow(
     motion: RealEntranceMotion,
     startMs: Int = 0,
-    durationMs: Int = 420,
+    durationMs: Int = 640,
     radius: Dp = 20.dp,
     paused: Boolean = false
 ): Modifier = if (!motion.enabled) this else drawWithContent {

@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- One fix when the person taps "Şu anki konumum" in Konum ekle; never in the background. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
@@ -19,6 +22,10 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <!-- Music blocks open in the installed app ("Spotify'ı aç" needs to see Spotify). -->
+        <package android:name="com.spotify.music" />
+        <package android:name="com.apple.android.music" />
+        <package android:name="com.google.android.apps.youtube.music" />
     </queries>
 
     <application
@@ -72,6 +79,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/share_shortcuts" />
         </activity>
         <activity android:name=".ui.sharedcategories.CategoryInviteActivity" android:exported="true">
             <intent-filter>
@@ -99,8 +107,10 @@
                 <data android:scheme="real" android:host="shared" />
             </intent-filter>
         </activity>
+        <!-- Share → REAL: a sheet over the app you shared from, in its own task, so you go back there afterwards. -->
         <activity android:name=".AttachmentImportActivity" android:exported="true"
-            android:launchMode="singleTask" android:screenOrientation="portrait"
+            android:launchMode="singleTask" android:taskAffinity="" android:excludeFromRecents="true"
+            android:screenOrientation="portrait" android:theme="@style/Theme.Real.ShareSheet"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

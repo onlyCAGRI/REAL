@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -75,8 +74,8 @@ import kotlin.math.sin
 /** Hero glyph shown above the title of a permission sheet. */
 enum class PermissionGlyph { Brand, Bell, Mic, Pin }
 
-private val SheetEnterEasing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
-private val SheetExitEasing = CubicBezierEasing(0.4f, 0.0f, 1.0f, 1.0f)
+private val SheetEnterEasing = RealMotion.Emphasized
+private val SheetExitEasing = RealMotion.Exit
 private val TitleColor = Color(0xFFF3F1F4)
 private val BodyColor = Color(0xFF9B9BA4)
 
@@ -91,7 +90,8 @@ fun PermissionSheet(
     modifier: Modifier = Modifier,
     primaryLabel: String = "İzin ver",
     secondaryLabel: String = "Daha sonra",
-    glyph: PermissionGlyph = PermissionGlyph.Brand,
+    /** Null = no hero, just the title (e.g. the calendar web-link question). */
+    glyph: PermissionGlyph? = PermissionGlyph.Brand,
     primaryEnabled: Boolean = true,
     extraContent: @Composable () -> Unit = {}
 ) {
@@ -164,11 +164,14 @@ fun PermissionSheet(
 
                     Spacer(Modifier.height(18.dp))
 
-                    Box(Modifier.staggerIn(entered, 0, reduce)) {
-                        PermissionHero(glyph = glyph, animate = !reduce)
+                    if (glyph != null) {
+                        Box(Modifier.staggerIn(entered, 0, reduce)) {
+                            PermissionHero(glyph = glyph, animate = !reduce)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    } else {
+                        Spacer(Modifier.height(16.dp))
                     }
-
-                    Spacer(Modifier.height(6.dp))
 
                     Text(
                         text = title,
@@ -184,6 +187,7 @@ fun PermissionSheet(
                             .staggerIn(entered, 80, reduce)
                     )
 
+                    if (description.isNotBlank()) {
                     Spacer(Modifier.height(12.dp))
 
                     Text(
@@ -196,6 +200,7 @@ fun PermissionSheet(
                             .padding(horizontal = 6.dp)
                             .staggerIn(entered, 150, reduce)
                     )
+                    }
 
                     extraContent()
 
@@ -526,4 +531,37 @@ private fun Modifier.pressScale(source: MutableInteractionSource, enabled: Boole
         scaleX = scale
         scaleY = scale
     }
+}
+
+
+/**
+ * The REAL bottom sheet surface (notification permission / SYNC question): rounded top, dark glass, a soft light from
+ * the top edge and the liquid edge line. Other windows (category editor, order, goals, members) use the same look.
+ */
+fun Modifier.realSheetSurface(): Modifier {
+    val shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+    return this
+        .clip(shape)
+        .background(LiquidGlassTokens.contentColor)
+        .drawBehind {
+            drawRect(
+                Brush.radialGradient(
+                    listOf(Color.White.copy(alpha = 0.07f), Color.Transparent),
+                    center = Offset(size.width / 2f, 0f),
+                    radius = size.width * 0.85f
+                )
+            )
+        }
+        .border(0.75.dp, liquidContentEdge(), shape)
+}
+
+/** The small bar at the top of a REAL bottom sheet. */
+@Composable
+fun RealSheetHandle(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .padding(top = 12.dp)
+            .size(width = 38.dp, height = 4.dp)
+            .background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(2.dp))
+    )
 }

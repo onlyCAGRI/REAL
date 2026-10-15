@@ -104,6 +104,10 @@ internal class YasamActions(
     val openFilmList: () -> Unit,
     /** Oynanacak listem: doğrudan kayıtlı oynanacak listesi. */
     val openGameList: () -> Unit,
+    /** Müzik önerisi: tür / his seçimi. */
+    val openMusic: () -> Unit = {},
+    /** Müzik listem: sağa kaydırılan şarkılar. */
+    val openMusicList: () -> Unit = {},
     /** Yaşam içinde Günlüklerim moduna geçer (ayrı ekran açmaz). */
     val openJournals: () -> Unit,
     val newJournal: () -> Unit
@@ -165,6 +169,7 @@ internal fun YasamTiles(
     moodEntries: List<MoodTrackerEntry> = emptyList(),
     watchlistCount: Int? = null,
     playlistCount: Int? = null,
+    musicCount: Int? = null,
     /** Bölüm değişiminde (Home → Journals) satırların kademeli çıkış saati (ms); null = çıkış yok. */
     leave: Animatable<Float, AnimationVector1D>? = null
 ) {
@@ -276,7 +281,7 @@ internal fun YasamTiles(
                 if (book != null) YasamTextAction("RAFI AÇ  ›", YasamMuted, actions.openBooks)
             }
             YasamRow(
-                "FİLM & DİZİ · OYUN", "Öneri al",
+                "FİLM & DİZİ · OYUN · MÜZİK", "Öneri al",
                 open == "media", reduceAnimations, rowEnter(entrance, baseMs, 4).rowLeave(leave, 5), { toggle("media") },
                 preview = {
                     Text(mediaPrompt, color = Color.White, fontSize = 19.sp, lineHeight = 25.sp, fontWeight = FontWeight.Light, fontFamily = YasamThin)
@@ -290,6 +295,11 @@ internal fun YasamTiles(
                 YasamTextAction("OYUN ÖNERİ AL  ›", YasamMediaTone, actions.openGame)
                 YasamTextAction(
                     "OYNANACAK LİSTEM" + (playlistCount?.let { " · $it" } ?: "") + "  ›", YasamMuted, actions.openGameList
+                )
+                Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(YasamHairline))
+                YasamTextAction("MÜZİK ÖNERİ AL  ›", YasamMediaTone, actions.openMusic)
+                YasamTextAction(
+                    "MÜZİK LİSTEM" + (musicCount?.let { " · $it" } ?: "") + "  ›", YasamMuted, actions.openMusicList
                 )
             }
         }

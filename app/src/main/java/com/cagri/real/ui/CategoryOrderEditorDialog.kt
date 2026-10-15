@@ -1,5 +1,7 @@
 package com.cagri.real.ui
 
+import com.cagri.real.ui.components.RealSheetHandle
+import com.cagri.real.ui.components.realSheetSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -134,29 +136,40 @@ internal fun CategoryOrderEditorDialog(
     val targetSlot = if (draggedKey != null && draggedKey != CATEGORY_SHOW_ALL_KEY) slot() else null
     val latestVisible by rememberUpdatedState(visible)
     val finishDrag by rememberUpdatedState<(Boolean) -> Unit> { finish(it) }
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.34f))
-        .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
-        .padding(horizontal = 18.dp, vertical = 28.dp), contentAlignment = Alignment.Center) {
-        DesignPanel(
-            backdrop = backdrop, backdropPosition = backdropPosition,
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.88f)
-                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = {}),
-            corners = 32.dp, reduceDynamicBlur = reduceDynamicBlur, designStyle = designStyle,
-            liquidDynamic = true, liquidSheet = true
+    // Slides up like the notification / SYNC sheet.
+    val sheetIn = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(Unit) { sheetIn.animateTo(1f, androidx.compose.animation.core.tween(420, easing = com.cagri.real.ui.components.RealMotion.Emphasized)) }
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f * sheetIn.value))
+        .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+        contentAlignment = Alignment.BottomCenter) {
+        Box(
+            Modifier.fillMaxWidth().fillMaxHeight(0.88f)
+                .graphicsLayer { translationY = size.height * (1f - sheetIn.value) }
+                .realSheetSurface()
+                .navigationBarsPadding()
+                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = {})
         ) {
             Box(Modifier.fillMaxSize().onGloballyPositioned { panelBounds = it.boundsInRoot() }) {
                 Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp)) {
-                    Text("Kategori düzeni", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Tutamacı sürükle. Gizlemek için aşağıdaki alana bırak.", color = Color(0xFFAAAAB4), fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 5.dp, bottom = 10.dp))
+                    RealSheetHandle(Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Ana sayfada göster", color = Color.White, fontSize = 14.sp)
-                            Text("Daha az göster görünümündeki kart sayısı", color = Color(0xFF8F909A), fontSize = 11.sp)
-                        }
-                        TextButton(enabled = previewCount > 1, onClick = { previewCount-- }) { Text("−") }
-                        Text("$previewCount", color = Color.White)
-                        TextButton(enabled = previewCount < allItems.size, onClick = { previewCount++ }) { Text("+") }
+                        Text("Kategoriler", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f))
+                        Text("Tamam", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clip(CircleShape).background(Color.White)
+                                .clickable { onSave(categoryOrderWithVisibility(draft, hidden.toSet()), previewCount) }
+                                .padding(horizontal = 18.dp, vertical = 9.dp))
+                    }
+                    // How many show on Home before "Tümünü göster".
+                    Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp).clip(RoundedCornerShape(18.dp))
+                        .background(Color.White.copy(alpha = 0.05f)).padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("Ana sayfada", color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        OrderStepButton("−", previewCount > 1) { previewCount-- }
+                        com.cagri.real.ui.components.RollingNumberText(previewCount, color = Color.White,
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                            modifier = Modifier.widthIn(min = 26.dp))
+                        OrderStepButton("+", previewCount < allItems.size) { previewCount++ }
                     }
                     LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth()
                         .onGloballyPositioned { listBounds = it.boundsInRoot() }
@@ -234,33 +247,37 @@ internal fun CategoryOrderEditorDialog(
                             }
                         }
                     }
-                    Box(Modifier.fillMaxWidth().height(52.dp).onGloballyPositioned { hideBounds = it.boundsInRoot() }
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (overHide) Color(0xFF453240) else Color(0xFF232329))
-                        .border(1.dp, if (overHide) Color(0xFFFFA6B5) else Color(0xFF45454E), RoundedCornerShape(16.dp)),
+                    // The drop target is the bottom strip itself; it lights up while a row is being dragged.
+                    val dragging = draggedKey != null
+                    Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(52.dp).onGloballyPositioned { hideBounds = it.boundsInRoot() }
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(when {
+                            overHide -> Color(0xFFFF8A80).copy(alpha = 0.22f)
+                            dragging -> Color.White.copy(alpha = 0.06f)
+                            else -> Color.Transparent
+                        }),
                         contentAlignment = Alignment.Center) {
-                        Text(if (overHide) "Bırak ve gizle" else "Gizlemek için buraya bırak", color = Color(0xFFDDDDE5), fontSize = 13.sp)
+                        if (dragging) {
+                            Text("Gizle", color = if (overHide) Color(0xFFFFB4AB) else Color.White.copy(alpha = 0.7f),
+                                fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        } else {
+                            Text("Varsayılan", color = Color.White.copy(alpha = 0.45f), fontSize = 13.sp,
+                                modifier = Modifier.clip(CircleShape).clickable {
+                                    draft.clear(); draft.addAll(allItems.keys); draft.add(CATEGORY_SHOW_ALL_KEY)
+                                    hidden.clear(); previewCount = 4
+                                }.padding(horizontal = 14.dp, vertical = 8.dp))
+                        }
                     }
                     val hiddenItems = draft.filter { it in hidden }
                     if (hiddenItems.isNotEmpty()) {
-                        Text("GİZLENENLER · Dokunarak geri ekle", color = Color(0xFF8F909A), fontSize = 10.sp,
-                            modifier = Modifier.padding(top = 10.dp))
-                        LazyRow {
+                        Text("Gizlenenler", color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 6.dp, bottom = 6.dp, start = 4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(hiddenItems, key = { it }) { key ->
-                                TextButton(onClick = { hidden.remove(key) }) { Text("+ ${title(key)}", maxLines = 1) }
+                                Text("+ ${title(key)}", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, maxLines = 1,
+                                    modifier = Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.07f))
+                                        .clickable { hidden.remove(key) }.padding(horizontal = 14.dp, vertical = 8.dp))
                             }
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = {
-                            draggedKey = null
-                            draft.clear(); draft.addAll(allItems.keys); draft.add(CATEGORY_SHOW_ALL_KEY)
-                            hidden.clear(); previewCount = 4
-                        }) { Text("Varsayılan", color = Color(0xFFB8B9C2)) }
-                        Spacer(Modifier.weight(1f))
-                        TextButton(onClick = onDismiss) { Text("Kapat", color = Color(0xFFB8B9C2)) }
-                        TextButton(onClick = { onSave(categoryOrderWithVisibility(draft, hidden.toSet()), previewCount) }) {
-                            Text("Tamam", color = Color(0xFF9DC3FF))
                         }
                     }
                 }
@@ -277,35 +294,34 @@ internal fun CategoryOrderEditorDialog(
 }
 
 @Composable
+private fun OrderStepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(Modifier.size(40.dp).clip(CircleShape).clickable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
+        Text(label, color = Color.White.copy(alpha = if (enabled) 0.9f else 0.25f), fontSize = 20.sp)
+    }
+}
+
+@Composable
 private fun CategoryOrderRow(title: String, action: Boolean, modifier: Modifier = Modifier,
     handle: Modifier = Modifier, lifted: Boolean = false, item: OrderedCategoryItem? = null) {
-    Row(modifier.heightIn(min = 58.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
-        .background(if (lifted) Color(0xFF30313A) else Color(0xFF1C1D23))
-        .border(0.8.dp, Color.White.copy(alpha = if (lifted) 0.3f else 0.08f), RoundedCornerShape(18.dp)),
+    Row(modifier.heightIn(min = 56.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
+        .background(if (lifted) Color(0xFF2E2F36) else Color.White.copy(alpha = 0.05f)),
         verticalAlignment = Alignment.CenterVertically) {
-        if (item != null) {
-            val colors = when (item) {
-                is OrderedCategoryItem.BuiltIn -> item.category.defaultStyle().let { listOf(it.upper, it.lower) }
-                is OrderedCategoryItem.Custom -> {
-                    val start = ReminderColorChoices.getOrNull(item.category.accentStart)?.color ?: Color(0xFF3B82F6)
-                    listOf(start, item.category.accentEnd?.let { ReminderColorChoices.getOrNull(it)?.color } ?: start)
-                }
-            }
-            Box(Modifier.padding(start = 14.dp).size(32.dp).clip(CircleShape).background(Brush.linearGradient(colors)),
-                contentAlignment = Alignment.Center) {
-                when (item) {
-                    is OrderedCategoryItem.BuiltIn -> CategoryGlyph(item.category.glyph(), Modifier.size(15.dp), Color.White)
-                    is OrderedCategoryItem.Custom -> CategoryIconGlyph(CategoryIcon.fromKey(item.category.iconKey), Modifier.size(15.dp), Color.White)
-                }
-            }
+        val color = when (item) {
+            is OrderedCategoryItem.BuiltIn -> item.category.defaultStyle().upper
+            is OrderedCategoryItem.Custom -> item.category.customSolidColorArgb?.let { Color(it) }
+                ?: ReminderColorChoices.getOrNull(item.category.accentStart)?.color ?: Color(0xFF3B82F6)
+            else -> null
         }
-        Column(Modifier.weight(1f).padding(start = 14.dp, top = 8.dp, bottom = 8.dp)) {
-            Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (action) Text("Ana sayfa düğmesi", color = Color(0xFF858691), fontSize = 11.sp)
+        if (color != null) {
+            Box(Modifier.padding(start = 16.dp).size(12.dp).clip(CircleShape).background(color))
+        } else {
+            Box(Modifier.padding(start = 16.dp).size(12.dp).clip(CircleShape).border(1.2.dp, Color.White.copy(alpha = 0.35f), CircleShape))
         }
+        Text(title, color = if (action) Color.White.copy(alpha = 0.6f) else Color.White, fontSize = 15.sp,
+            fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(start = 14.dp, top = 8.dp, bottom = 8.dp))
         Box(handle.size(48.dp), contentAlignment = Alignment.Center) {
-            ActionIcon(ActionGlyph.DragHandle, Modifier.size(20.dp), Color(0xFFAAAAB4))
+            ActionIcon(ActionGlyph.DragHandle, Modifier.size(18.dp), Color.White.copy(alpha = 0.4f))
         }
     }
 }

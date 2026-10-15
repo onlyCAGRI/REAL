@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -26,6 +25,7 @@ import com.cagri.real.data.ReminderAttachment
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -184,12 +184,13 @@ fun GlassComposer(
         label = "glassCorners"
     )
     // Expanded panel hosts text: same clear dock glass, plus a dim so text stays readable over pastel cards.
-    val expandedDim by animateFloatAsState(
+    // Dim and text inset are read in draw/layout only, so opening the composer does not recompose it per frame.
+    val expandedDimState = animateFloatAsState(
         if (expanded) 0.26f else 0f,
         if (reduceAnimations) snap() else tween(220, easing = FastOutSlowInEasing),
         label = "composerDim"
     )
-    val textInset by animateDpAsState(
+    val textInsetState = animateDpAsState(
         if (expanded) 14.dp else 0.dp,
         if (reduceAnimations) snap() else RealMotion.smooth(0.28f),
         label = "textInset"
@@ -285,7 +286,7 @@ fun GlassComposer(
             petMicKick.snapTo(0f)
         } else {
             petMicKick.snapTo(0f)
-            petMicKick.animateTo(1f, tween(110, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)))
+            petMicKick.animateTo(1f, tween(110, easing = RealMotion.Standard))
             petMicKick.animateTo(-0.65f, tween(120))
             petMicKick.animateTo(0.35f, tween(95))
             petMicKick.animateTo(0f, tween(140))
@@ -415,10 +416,8 @@ fun GlassComposer(
                         detectTapGestures {  }
                     }
                 }
-                .padding(
-                    top = if (expanded) 16.dp else textInset,
-                    bottom = if (expanded) 6.dp else 0.dp
-                )
+                .padding(bottom = if (expanded) 6.dp else 0.dp)
+                .deferredTopPadding { if (expanded) 16.dp else textInsetState.value }
         ) {
             val inputRowModifier = if (recording) {
                 Modifier
@@ -1281,9 +1280,10 @@ fun GlassComposer(
             reduceAnimations = reduceAnimations,
             role = LiquidGlassRole.Dock,
             content = {
-                if (expandedDim > 0.001f) {
-                    Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = expandedDim)))
-                }
+                Box(Modifier.matchParentSize().drawBehind {
+                    val dim = expandedDimState.value
+                    if (dim > 0.001f) drawRect(Color.Black.copy(alpha = dim))
+                })
                 panelContent()
             })
     } else if (designStyle == DesignStyle.Ice) {

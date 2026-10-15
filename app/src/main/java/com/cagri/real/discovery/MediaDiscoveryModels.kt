@@ -10,18 +10,15 @@ enum class DiscoveryFilter(val key: String, val label: String, val genre: Boolea
     ScienceFiction("science-fiction", "Bilim kurgu", aliases = listOf("science fiction", "sci-fi", "science-fiction")),
     Fantasy("fantasy", "Fantastik"), Thriller("thriller", "Gerilim"), Mystery("mystery", "Gizem"),
     Crime("crime", "Suç"), Horror("horror", "Korku"), Animation("animation", "Animasyon"),
+    Anime("anime", "Anime"),
     Documentary("documentary", "Belgesel"), Family("family", "Aile"), History("history", "Tarih", aliases = listOf("history", "historical")),
     War("war", "Savaş"), FeelGood("feel-good", "İyi hissettiren", false), MindBending("mind-bending", "Zihin büken", false),
     SlowBurn("slow-burn", "Yavaş gelişen", false), FastPaced("fast-paced", "Tempolu", false),
-    Scary("scary", "Korkutan", false),
-    Suspenseful("suspenseful", "Gergin tutan", false),
     Emotional("emotional", "Duygulandıran", false),
     Heartbreaking("heartbreaking", "Hüzünlendiren", false),
-    Intriguing("intriguing", "Merak uyandıran", false),
     PlotTwist("plot-twist", "Ters köşe yapan", false),
     ThoughtProvoking("thought-provoking", "Düşündüren", false),
     Inspiring("inspiring", "İlham veren", false),
-    Funny("funny", "Güldüren", false),
     Relaxing("relaxing", "Rahatlatan", false),
     DarkTone("dark-tone", "Karanlık atmosferli", false),
     Nostalgic("nostalgic", "Nostaljik", false),
@@ -56,15 +53,23 @@ enum class DiscoveryFilter(val key: String, val label: String, val genre: Boolea
     }
     companion object {
         const val MAX_PER_GROUP = 3
+        /** Feelings that only repeated a genre (removed); saved selections read as that genre. */
+        val MERGED = mapOf("scary" to "horror", "funny" to "comedy", "suspenseful" to "thriller", "intriguing" to "mystery")
         fun fromKey(key: String) = entries.firstOrNull { it.key == key }
         fun validSelection(keys: Set<String>): Boolean = keys.all { fromKey(it) != null } &&
             keys.groupingBy { fromKey(it)!!.selectionGroup }.eachCount().values.all { it <= MAX_PER_GROUP }
     }
 }
 
-data class DiscoveryCard(val media: MediaBlock, val tags: Set<String>, val reason: String) {
+/** [aiTitle]: the title the recommender used; the catalog title can differ, so both are remembered as seen. */
+data class DiscoveryCard(val media: MediaBlock, val tags: Set<String>, val reason: String, val aiTitle: String = "") {
     val key: String get() = "${media.type}:${media.provider}:${media.providerId ?: media.providerUrl}"
+    val seenTitles: List<String> get() = listOf(media.title, aiTitle).filter { it.isNotBlank() }.distinct()
 }
+
+/** How many seen titles stay remembered locally; the service accepts the latest [DISCOVERY_EXCLUDE_SENT]. */
+const val DISCOVERY_SEEN_LIMIT = 400
+const val DISCOVERY_EXCLUDE_SENT = 40
 
 data class DiscoveryMatch(val keys: Set<String>, val inferred: Set<String>)
 object DiscoveryRanking {
@@ -94,8 +99,11 @@ object DiscoveryRanking {
         .sortedByDescending { match(it, selected).keys.size }
 }
 
-/** A swipe advances a queue; only explicit dock buttons save or remove content. */
-enum class DiscoveryAction { SKIP, ADD_TO_WATCHLIST, REMOVE_FROM_WATCHLIST, SAVE_DISCOVERY, SAVE_WATCHLIST, BROWSE_WATCHLIST }
+/**
+ * Swipes: right saves to the watchlist (in the watchlist: keep, next), left passes (in the watchlist: remove).
+ * Dock: "REAL'e ekle" makes a card, "İzledim" marks it watched — never suggested again (future rating list).
+ */
+enum class DiscoveryAction { SKIP, ADD_TO_WATCHLIST, REMOVE_FROM_WATCHLIST, SAVE_DISCOVERY, SAVE_WATCHLIST, BROWSE_WATCHLIST, WATCHED }
 data class DiscoveryQueues(val cards: List<DiscoveryCard>, val watchlist: List<DiscoveryCard>, val excluded: List<String>)
 object DiscoveryQueueTransitions {
     fun apply(state: DiscoveryQueues, card: DiscoveryCard, action: DiscoveryAction): DiscoveryQueues {
@@ -105,12 +113,14 @@ object DiscoveryQueueTransitions {
         return when (action) {
             DiscoveryAction.BROWSE_WATCHLIST, DiscoveryAction.SAVE_WATCHLIST -> state.copy(watchlist = rotated())
             DiscoveryAction.REMOVE_FROM_WATCHLIST -> state.copy(watchlist = state.watchlist.filterNot { it.key == card.key })
+            DiscoveryAction.WATCHED -> state.copy(cards = remainder, watchlist = state.watchlist.filterNot { it.key == card.key },
+                excluded = (state.excluded + card.seenTitles).distinct().takeLast(DISCOVERY_SEEN_LIMIT))
             DiscoveryAction.SKIP, DiscoveryAction.SAVE_DISCOVERY -> state.copy(cards = remainder,
-                excluded = (state.excluded + card.media.title).distinct().takeLast(40))
+                excluded = (state.excluded + card.seenTitles).distinct().takeLast(DISCOVERY_SEEN_LIMIT))
             DiscoveryAction.ADD_TO_WATCHLIST -> {
                 require(state.watchlist.size < 40 || state.watchlist.any { it.key == card.key }) { "İzlenecek listen dolu. Önce bir afiş çıkar." }
                 state.copy(cards = remainder, watchlist = if (state.watchlist.any { it.key == card.key }) state.watchlist else state.watchlist + card,
-                    excluded = (state.excluded + card.media.title).distinct().takeLast(40))
+                    excluded = (state.excluded + card.seenTitles).distinct().takeLast(DISCOVERY_SEEN_LIMIT))
             }
         }
     }

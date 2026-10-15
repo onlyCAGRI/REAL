@@ -1,10 +1,10 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.ui.components.RealMotion
 import android.content.Context
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
@@ -69,7 +69,6 @@ import com.cagri.real.data.RecurrenceRule
 import com.cagri.real.data.ReminderCategory
 import com.cagri.real.data.ReminderItem
 import com.cagri.real.data.ROLLING_24_HOURS_MILLIS
-import com.cagri.real.data.isIn24HourWindow
 import com.cagri.real.ui.DesignStyle
 import com.cagri.real.ui.components.ActionGlyph
 import com.cagri.real.ui.components.ActionIcon
@@ -112,7 +111,11 @@ fun PlannerScreen(
     /** Category pastel picked in the category screen's pencil popup: (categoryId, ARGB). */
     onUpdateCategoryColor: (Long, Int) -> Unit = { _, _ -> },
     /** (reminderId, tapped occurrence start for repeating events or null, close) */
-    detailContent: @Composable (Long, Long?, () -> Unit) -> Unit = { _, _, _ -> }
+    detailContent: @Composable (Long, Long?, () -> Unit) -> Unit = { _, _, _ -> },
+    /** Opens straight onto this category's goals (from the category screen); closing them closes the planner. */
+    initialGoalCategoryId: Long? = null,
+    /** "Kategorize et" → "Yeni kategori": creates a category with this name (a phone calendar's name). */
+    onCreateCalendarCategory: (String) -> Unit = {}
 ) {
     val proGoals = com.cagri.real.ui.subscription.rememberProAction(com.cagri.real.access.RealFeature.PlannerGoals)
     val uiContext = LocalContext.current
@@ -131,7 +134,9 @@ fun PlannerScreen(
     val today = now.atZone(zone).toLocalDate()
     val (persistedViewMode, updatePersistedViewMode) = rememberPlannerViewModePreference()
     var viewMode by rememberSaveable { mutableStateOf(persistedViewMode) }
-    fun setViewMode(mode: PlannerViewMode) {
+    fun setViewMode(requested: PlannerViewMode) {
+        // Takvim is the month view only; every way into the old daily focus lands on the month.
+        val mode = if (requested == PlannerViewMode.Daily) PlannerViewMode.Monthly else requested
         viewMode = mode
         updatePersistedViewMode(mode)
     }
@@ -155,8 +160,12 @@ fun PlannerScreen(
     // Start time of the exact occurrence that was tapped; lets a repeating event be deleted per day.
     var openedOccurrenceMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     // Category detail ("Planning") overlay; the last id is kept so the exit slide still has content.
-    var detailCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var detailLastCategoryId by remember { mutableStateOf<Long?>(null) }
+    var detailCategoryId by rememberSaveable { mutableStateOf<Long?>(initialGoalCategoryId) }
+    var detailLastCategoryId by remember { mutableStateOf<Long?>(initialGoalCategoryId) }
+    fun closeGoals() {
+        detailCategoryId = null
+        if (initialGoalCategoryId != null) onDismiss()
+    }
     // Tapped category card -> its detail screen grows out of that card (and shrinks back into it on close).
     val revealOrigin = remember { PlannerRevealOrigin() }
     val revealProgress = remember { Animatable(0f) }
@@ -179,7 +188,7 @@ fun PlannerScreen(
         if (!isClosingPlanner) {
             screenSlide.animateTo(
                 0f, tween(if (reduceAnimations) 0 else 300,
-                    easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
+                    easing = RealMotion.Standard)
             )
         }
     }
@@ -190,7 +199,7 @@ fun PlannerScreen(
         scope.launch {
             screenSlide.animateTo(
                 -1f, tween(if (reduceAnimations) 0 else 280,
-                    easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                    easing = RealMotion.StandardInOut)
             )
             onDismiss()
         }
@@ -278,30 +287,43 @@ fun PlannerScreen(
                 categoryPlannerPreferences.setLink(categoryPlannerKey(null, selected)!!, loaded.item.link)
             }, onDismiss = { manageCategory = null })
     }
-    val calendarReminders = remember(reminders, customCategories, categoryPlannerPreferences, categoryPlannerRevision, queryDay) {
-        reminders.filter { categoryPlannerPreferences.includes(it, customCategories) }
-    }
+    // Every card the user scheduled in REAL belongs in its calendar and in "Next 24 hours". The per-category
+    // "REAL takviminde göster" switch only decides which category cards the calendar lists (calendarCategories).
+    val calendarReminders = reminders
     val calendarCategories = remember(customCategories, categoryPlannerPreferences, categoryPlannerRevision) {
         customCategories.filter { categoryPlannerPreferences.visible(categoryPlannerKey(null, it)) }
     }
-    val events = remember(calendarReminders, details, zone, eventRangeStart, eventRangeEnd, externalCalendar.events) {
+    val setReminderTiming = com.cagri.real.ui.components.LocalSetReminderTiming.current
+    val calendarCategoryLinks = remember(uiContext) { com.cagri.real.calendar.CalendarCategoryLinks(uiContext) }
+    val calendarCategoryRevision = com.cagri.real.calendar.CalendarCategoryLinks.revision.intValue
+    // A new category asked for from "Kategorize et": linked once it exists (category creation returns no id).
+    var pendingCalendarCategory by remember { mutableStateOf<Triple<String, com.cagri.real.calendar.CalendarOccurrence, Boolean>?>(null) }
+    LaunchedEffect(customCategories, pendingCalendarCategory) {
+        val (name, occurrence, whole) = pendingCalendarCategory ?: return@LaunchedEffect
+        val created = customCategories.filter { it.name == name }.maxByOrNull { it.createdAt } ?: return@LaunchedEffect
+        calendarCategoryLinks.link(occurrence.eventId, occurrence.calendarId, created.id, whole)
+        pendingCalendarCategory = null
+    }
+    val events = remember(calendarReminders, details, zone, eventRangeStart, eventRangeEnd, externalCalendar.events, calendarCategoryRevision) {
         (plannerEvents(calendarReminders, details, zone, eventRangeStart, eventRangeEnd) +
-            externalPlannerEvents(externalCalendar.events, zone)).sortedBy { it.startMillis }
+            externalPlannerEvents(externalCalendar.events, zone) { calendarCategoryLinks.categoryFor(it.eventId, it.calendarId) })
+            .sortedBy { it.startMillis }
     }
     val next24HourEvents = remember(events, now) {
         val start = now.toEpochMilli()
         val end = start + ROLLING_24_HOURS_MILLIS
         events.filter { it.startMillis in start..end }
     }
-    val next24HourReminders = remember(calendarReminders, now, zone) {
-        val instantNow = now.toEpochMilli()
-        calendarReminders.filter { it.isIn24HourWindow(instantNow, zone) }
-    }
-    val next24HourManual = remember(next24HourReminders, now) {
+    // "Move 24 hour" is an explicit user action, so those cards are not gated by the per-category
+    // calendar visibility (which defaults to hidden); only cards of a deleted category are skipped.
+    val next24HourManual = remember(reminders, customCategories, now) {
         val start = now.toEpochMilli()
         val end = start + ROLLING_24_HOURS_MILLIS
-        next24HourReminders.filter { reminder ->
-            reminder.quick24HourUntilAt?.let { it > start } == true &&
+        val categoryIds = customCategories.mapTo(HashSet()) { it.id }
+        reminders.filter { reminder ->
+            !reminder.isCompleted &&
+                (reminder.customCategoryId == null || reminder.customCategoryId in categoryIds) &&
+                reminder.quick24HourUntilAt?.let { it > start } == true &&
                 reminder.alertAt?.let { it in start..end } != true
         }
     }
@@ -313,8 +335,10 @@ fun PlannerScreen(
         gridDays.associateWith { day ->
             val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
             val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-            events.filter { it.startMillis < end && if (it.externalEndMillis != null)
-                it.externalEndMillis > start else (it.endMillis ?: it.startMillis) >= start }
+            events.filter {
+                val until = it.spanEndMillis ?: it.externalEndMillis
+                it.startMillis < end && if (until != null) until > start else (it.endMillis ?: it.startMillis) >= start
+            }
         }
     }
     val dayListState = rememberLazyListState()
@@ -410,6 +434,28 @@ fun PlannerScreen(
         timeEditorId = null
         endTimeEditorId = reminder.id
     }
+    // "Süre ekle" on a 24 hour / month card opens this under it: start, end and duration. Opens without a bounce.
+    val inlineDurationEditor: @Composable (PlannerEvent, Boolean) -> Unit = { itemEvent, expanded ->
+        AnimatedVisibility(
+            visible = expanded,
+            enter = if (reduceAnimations) EnterTransition.None
+                else fadeIn(tween(200)) + expandVertically(tween(260, easing = com.cagri.real.ui.components.RealMotion.Emphasized)),
+            exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(100)) + shrinkVertically(tween(160))
+        ) {
+            val startTimeStr = if (itemEvent.isDateOnly24Hour) "Saat ekle" else formatTimeAmPm(itemEvent.startMillis, zone)
+            val endMillis = itemEvent.endMillis
+            val endTimeStr = if (itemEvent.isDateOnly24Hour || endMillis == null) "Bitiş ekle" else formatTimeAmPm(endMillis, zone)
+            PlannerInlineEventEditor(
+                startTime = startTimeStr,
+                endTime = endTimeStr,
+                durationMinutes = itemEvent.details?.durationMinutes,
+                designStyle = designStyle,
+                onPickTime = { pickTime(itemEvent.reminder) },
+                onPickEndTime = { pickEndTime(itemEvent.reminder) },
+                onPickDuration = { minutes -> saveDuration(itemEvent.id, minutes) }
+            )
+        }
+    }
 
     val timeEditorReminder = remember(timeEditorId, reminders) {
         timeEditorId?.let { id -> reminders.firstOrNull { it.id == id } }
@@ -432,6 +478,21 @@ fun PlannerScreen(
             com.cagri.real.calendar.ExternalCalendarEventDetail(
                 occurrence = event,
                 reduceDynamicBlur = reduceDynamicBlur,
+                categories = customCategories,
+                currentCategoryId = remember(event, calendarCategoryRevision) { calendarCategoryLinks.categoryFor(event.eventId, event.calendarId) },
+                currentIsWholeCalendar = remember(event, calendarCategoryRevision) {
+                    calendarCategoryLinks.categoryFor(event.eventId, event.calendarId) == null || calendarCategoryLinks.isWholeCalendar(event.calendarId)
+                },
+                onCategorize = { categoryId, newName, whole ->
+                    when {
+                        categoryId != null -> calendarCategoryLinks.link(event.eventId, event.calendarId, categoryId, whole)
+                        newName != null -> {
+                            pendingCalendarCategory = Triple(newName.take(60), event, whole)
+                            onCreateCalendarCategory(newName.take(60))
+                        }
+                        else -> calendarCategoryLinks.link(event.eventId, event.calendarId, null, false)
+                    }
+                },
                 onDismiss = { openedExternalEvent = null },
                 onCreateRealCard = {
                     val provider = com.cagri.real.calendar.DeviceCalendarProvider(uiContext)
@@ -457,7 +518,7 @@ fun PlannerScreen(
             )
         }
         BackHandler(enabled = openedReminderId != null && timeEditorId == null && endTimeEditorId == null) { openedReminderId = null }
-        BackHandler(enabled = detailCategoryId != null && openedReminderId == null) { detailCategoryId = null }
+        BackHandler(enabled = detailCategoryId != null && openedReminderId == null) { closeGoals() }
         BackHandler(enabled = detailCategoryId == null && editDay == null && openedReminderId == null && timeEditorId == null && endTimeEditorId == null, onBack = ::calendarBack)
 
         val dialogView = LocalView.current
@@ -576,7 +637,7 @@ fun PlannerScreen(
                             }
                         },
                     transitionSpec = {
-                        val easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+                        val easing = RealMotion.Standard
                         if (reduceAnimations) {
                             fadeIn(tween(100)) togetherWith fadeOut(tween(100))
                         } else if (initialState == PlannerViewMode.Hours24 || targetState == PlannerViewMode.Hours24) {
@@ -619,7 +680,8 @@ fun PlannerScreen(
                                             )
                                         }
                                         list.addAll(next24HourEvents)
-                                        list.sortedWith(compareBy<PlannerEvent> { it.startMillis }.thenBy { it.id })
+                                        // Timed plans first, nearest at the top; all-day / 24 hour cards follow below them.
+                                        list.sortedWith(compareBy<PlannerEvent> { it.isDateOnly24Hour }.thenBy { it.startMillis }.thenBy { it.id })
                                     }
 
                                     PlannerNext24Title(
@@ -663,37 +725,7 @@ fun PlannerScreen(
                                                         })
                                                     )
 
-                                                    AnimatedVisibility(
-                                                        visible = isEditorExpanded,
-                                                        enter = fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) +
-                                                            expandVertically(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)),
-                                                        exit = fadeOut(tween(100)) + shrinkVertically(tween(140))
-                                                    ) {
-                                                        val durationMinutes = itemEvent.details?.durationMinutes
-                                                        val startTimeStr = if (itemEvent.isDateOnly24Hour) {
-                                                            "Saat ekle"
-                                                        } else {
-                                                            formatTimeAmPm(itemEvent.startMillis, zone)
-                                                        }
-                                                        val endMillis = itemEvent.endMillis
-                                                        val endTimeStr = if (itemEvent.isDateOnly24Hour || endMillis == null) {
-                                                            "Bitiş ekle"
-                                                        } else {
-                                                            formatTimeAmPm(endMillis, zone)
-                                                        }
-
-                                                        PlannerInlineEventEditor(
-                                                            startTime = startTimeStr,
-                                                            endTime = endTimeStr,
-                                                            durationMinutes = durationMinutes,
-                                                            designStyle = designStyle,
-                                                            onPickTime = { pickTime(itemEvent.reminder) },
-                                                            onPickEndTime = { pickEndTime(itemEvent.reminder) },
-                                                            onPickDuration = { minutes ->
-                                                                saveDuration(itemEvent.id, minutes)
-                                                            }
-                                                        )
-                                                    }
+                                                    inlineDurationEditor(itemEvent, isEditorExpanded)
                                                 }
                                             }
                                         }
@@ -732,8 +764,12 @@ fun PlannerScreen(
                                         setViewMode(PlannerViewMode.Daily)
                                     },
                                     onOpenEvent = { id, at -> openOccurrence(id, at) },
+                                    durationEditorId = durationEditorId,
+                                    onToggleDuration = { ev -> durationEditorId = if (durationEditorId == ev.id) null else ev.id },
+                                    durationEditor = inlineDurationEditor,
                                     dayModifier = sharedDayModifier,
-                                    topPadding = chromeInset(visibleMode)
+                                    topPadding = chromeInset(visibleMode),
+                                    ownerName = ownerName
                                 )
                             } else if (dailyView.usesNewLayout) {
                                 PlannerNewDailyView(
@@ -742,7 +778,8 @@ fun PlannerScreen(
                                     events = events,
                                     zone = zone,
                                     ownerName = ownerName,
-                                    customCategories = calendarCategories,
+                                    customCategories = customCategories,
+                                    categoryCardCategories = calendarCategories,
                                     topPadding = chromeInset(visibleMode),
                                     ready = ready,
                                     reduceAnimations = reduceAnimations,
@@ -984,13 +1021,13 @@ fun PlannerScreen(
                                                     // Old labels finish their exit, months switch, new labels glide in from the other side.
                                                     androidx.compose.animation.core.animate(
                                                         monthSlide, -dir * slideSpan,
-                                                        animationSpec = tween(110, easing = CubicBezierEasing(0.4f, 0f, 1f, 1f))
+                                                        animationSpec = tween(110, easing = RealMotion.Exit)
                                                     ) { v, _ -> monthSlide = v }
                                                     changeMonth(currentMonth.plusMonths(dir.toLong()))
                                                     monthSlide = dir * slideSpan
                                                     androidx.compose.animation.core.animate(
                                                         monthSlide, 0f,
-                                                        animationSpec = tween(240, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
+                                                        animationSpec = tween(240, easing = RealMotion.Standard)
                                                     ) { v, _ -> monthSlide = v }
                                                 }
                                             }
@@ -1065,7 +1102,7 @@ fun PlannerScreen(
                 targetState = editDay,
                 modifier = Modifier.fillMaxSize().zIndex(10f),
                 transitionSpec = {
-                    val easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+                    val easing = RealMotion.Standard
                     if (targetState != null) {
                         (fadeIn(tween(180)) + slideInVertically(tween(320, easing = easing)) { it / 2 }) togetherWith
                             fadeOut(tween(80))
@@ -1122,7 +1159,7 @@ fun PlannerScreen(
                     revealProgress.snapTo(0f)
                     revealProgress.animateTo(1f, tween(PlannerRevealOpenMs, easing = PlannerEaseOut))
                 } else {
-                    revealProgress.animateTo(0f, tween(PlannerRevealCloseMs, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)))
+                    revealProgress.animateTo(0f, tween(PlannerRevealCloseMs, easing = RealMotion.StandardInOut))
                     revealOrigin.bounds = null
                 }
             }
@@ -1131,13 +1168,13 @@ fun PlannerScreen(
                 visible = detailCategoryId != null,
                 modifier = Modifier.fillMaxSize().zIndex(15f),
                 enter = if (reduceAnimations || growFromCard) EnterTransition.None else slideInHorizontally(
-                    tween(300, easing = CubicBezierEasing(0.2f, 0f, 0f, 1f))
+                    tween(300, easing = RealMotion.Standard)
                 ) { it },
                 exit = if (reduceAnimations) ExitTransition.None else if (growFromCard) {
                     // Keeps the layer alive while the card-shrink below plays; moves nothing itself.
                     slideOutHorizontally(tween(PlannerRevealCloseMs + 40)) { 0 }
                 } else slideOutHorizontally(
-                    tween(260, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f))
+                    tween(260, easing = RealMotion.StandardInOut)
                 ) { it }
             ) {
                 val shownId = detailCategoryId ?: detailLastCategoryId
@@ -1177,15 +1214,12 @@ fun PlannerScreen(
                     ) {
                         PlannerCategoryDetailScreen(
                             ui = detailUi,
-                            categoryColorBackground = dailyView == PlannerDailyView.NewPlus,
-                            selectedPastel = nearestCalendarPastel(
-                                shownCategory.customSolidColorArgb?.let { Color(it) }
-                                    ?: ReminderColorChoices.getOrNull(shownCategory.accentStart)?.color
-                                    ?: Color(0xFF4558C8)
-                            ),
-                            onPickPastel = { pastel -> onUpdateCategoryColor(shownCategory.id, pastel.toArgb()) },
+                            // Black screen; the tile, progress bar and checks wear the category's own colour.
+                            categoryColorBackground = false,
+                            selectedPastel = null,
+                            onPickPastel = null,
                             visibleInCalendar = categoryPlannerPreferences.visible(categoryPlannerKey(null, shownCategory)),
-                            onCalendarVisibilityChange = { enabled -> categoryPlannerPreferences.setVisible(categoryPlannerKey(null, shownCategory)!!, enabled) },
+                            onCalendarVisibilityChange = null,
                             onPasteLink = { value ->
                                 scope.launch {
                                     try {
@@ -1199,7 +1233,7 @@ fun PlannerScreen(
                                         }
                                         categoryPlannerPreferences.setLink(categoryPlannerKey(null, shownCategory)!!, value)
                                     } catch (cancelled: CancellationException) { throw cancelled }
-                                    catch (failure: Exception) { android.widget.Toast.makeText(context, failure.message ?: "Link kaydedilemedi.", android.widget.Toast.LENGTH_LONG).show() }
+                                    catch (failure: Exception) { com.cagri.real.ui.components.RealToast.show(context, failure.message ?: "Link kaydedilemedi.", long = true) }
                                 }
                             },
                             onAddMember = { manageCategory = shownCategory },
@@ -1212,10 +1246,9 @@ fun PlannerScreen(
                             topPadding = statusTop,
                             reduceAnimations = reduceAnimations,
                             closing = detailCategoryId == null,
-                            reduceDynamicBlur = reduceDynamicBlur,
                             icon = { m, c -> CategoryIconGlyph(CategoryIcon.fromKey(shownCategory.iconKey), m, c) },
-                            onBack = { detailCategoryId = null },
-                            onDone = { detailCategoryId = null },
+                            onBack = ::closeGoals,
+                            onDone = ::closeGoals,
                             // Creating/editing lives in the category's own list screen.
                             onEditCategory = { onOpenCategory(null, shownCategory.id) },
                             onAddReminder = { onOpenCategory(null, shownCategory.id) },
@@ -1261,6 +1294,9 @@ fun PlannerScreen(
                     initial = seed,
                     initialRepeatRule = reminder.repeatRule,
                     initialTimeTab = true,
+                    initialEarlyAlertMinutes = reminder.earlyAlertMinutes,
+                    initialEndAt = reminder.endAt,
+                    onConfirmTiming = { early, end -> setReminderTiming(reminder.id, early, end) },
                     backdrop = scene,
                     backdropPosition = { scenePosition },
                     designStyle = designStyle,
@@ -1290,16 +1326,11 @@ fun PlannerScreen(
             endTimeEditorReminder?.let { reminder ->
                 val startAt = reminder.alertAt ?: reminder.createdAt
                 val currentDur = details[reminder.id]?.durationMinutes
-                val seed = if (currentDur != null) {
-                    startAt + currentDur * 60_000L
-                } else {
-                    startAt + 60 * 60_000L
-                }
+                val seed = reminder.endAt ?: (startAt + (currentDur ?: 60) * 60_000L)
                 AnimatedDateTimePickerOverlay(
                     visible = endTimeEditorId != null,
                     initial = seed,
                     initialRepeatRule = RecurrenceRule.NONE,
-                    initialTimeTab = true,
                     backdrop = scene,
                     backdropPosition = { scenePosition },
                     designStyle = designStyle,
@@ -1309,9 +1340,9 @@ fun PlannerScreen(
                     onRequestExactAlarms = onRequestExactAlarms,
                     onDismiss = { endTimeEditorId = null },
                     onConfirm = { endAt, _ ->
-                        val diffMin = ((endAt - startAt) / 60_000L).toInt()
-                        val newDur = maxOf(1, diffMin)
-                        saveDuration(reminder.id, newDur)
+                        // Bitiş: day and time; the duration (Süre) stays as set.
+                        if (endAt > startAt) setReminderTiming(reminder.id, reminder.earlyAlertMinutes, endAt)
+                        else error = "Bitiş, başlangıçtan sonra olmalı."
                         endTimeEditorId = null
                     }
                 )

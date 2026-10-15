@@ -147,7 +147,8 @@ fun AccountManagementSheet(onDismiss: () -> Unit, onAddAccount: () -> Unit) {
                             onPurge = { ui.run { repository.purgeRetained(); ui.confirmPurge = false; refreshAccount(ui, repository) } },
                             onRefresh = { ui.run { refreshAccount(ui, repository) } },
                             onSignOut = { ui.run { controller.signOut().getOrThrow(); onDismiss() } },
-                            onAdd = { onDismiss(); onAddAccount() }, onClose = onDismiss)
+                            onAdd = { onDismiss(); onAddAccount() }, onClose = onDismiss,
+                            onEditName = { onDismiss(); com.cagri.real.ui.auth.ProfileNamePrompt.forced.value = true })
                         AccountPage.Sync -> SubPage("Eşitleme", { page = AccountPage.Main }) { SyncManagementPanel(user.id, enabled = !ui.busy) }
                         AccountPage.Storage -> SubPage("Bu cihazdaki alan", { page = AccountPage.Main }) { LocalStoragePanel() }
                         AccountPage.Data -> SubPage("Veri ve silme", { page = AccountPage.Main }) {
@@ -164,7 +165,7 @@ fun AccountManagementSheet(onDismiss: () -> Unit, onAddAccount: () -> Unit) {
                 }
             }
             if (ui.busy) Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.Center) {
-                CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                com.cagri.real.ui.components.RealSpinner(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
             }
             ui.error?.let { ConnectionNote(it, Modifier.padding(top = 12.dp)) }
         }
@@ -189,7 +190,8 @@ private fun SubPage(title: String, onBack: () -> Unit, content: @Composable Colu
 
 @Composable
 private fun MainPage(ui: AccountUi, name: String, email: String?, userId: String, open: (AccountPage) -> Unit,
-                     onPurge: () -> Unit, onRefresh: () -> Unit, onSignOut: () -> Unit, onAdd: () -> Unit, onClose: () -> Unit) {
+                     onPurge: () -> Unit, onRefresh: () -> Unit, onSignOut: () -> Unit, onAdd: () -> Unit, onClose: () -> Unit,
+                     onEditName: () -> Unit) {
     Column(Modifier.fillMaxWidth().animateContentSize(tween(220)), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PageTitle("Hesapları yönet")
         Spacer(Modifier.height(6.dp))
@@ -202,6 +204,13 @@ private fun MainPage(ui: AccountUi, name: String, email: String?, userId: String
                     Text(name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     email?.let { Text(it, color = ConnectionPalette.Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 }
+            }
+            // Adın: the name others see in shared categories and on shared cards.
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Ortak kategorilerde ve paylaşımlarda bu ad görünür.", Modifier.weight(1f), color = ConnectionPalette.Muted, fontSize = 13.sp)
+                Spacer(Modifier.width(10.dp))
+                ConnectionPill("Adını değiştir", onEditName, enabled = !ui.busy, small = true)
             }
         }
         // Bulut alanı

@@ -11,7 +11,7 @@ import java.net.URLEncoder
 object MusicCatalog {
     suspend fun search(query: String): List<MusicBlock> = withContext(Dispatchers.IO) {
         val term = URLEncoder.encode(query.trim().take(200), "UTF-8")
-        val connection = URL("https://itunes.apple.com/search?term=$term&entity=song&media=music&country=TR&limit=20")
+        val connection = URL("https://itunes.apple.com/search?term=$term&entity=song&media=music&country=${storefront()}&limit=20")
             .openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 10_000
@@ -38,6 +38,17 @@ object MusicCatalog {
             connection.disconnect()
         }
     }
+
+    /**
+     * The Apple Music store of the person's country (phone region, e.g. DE in Germany), not always Turkey:
+     * songs, prices and previews differ per country. Falls back to the US store.
+     */
+    fun storefront(): String = java.util.Locale.getDefault().country.uppercase()
+        .takeIf { it.length == 2 && it.all(Char::isLetter) } ?: "US"
+
+    /** "Almanya", "Türkiye"… in Turkish. */
+    fun storefrontName(): String =
+        java.util.Locale("", storefront()).getDisplayCountry(java.util.Locale("tr")).ifBlank { storefront() }
 
     private fun secureUrl(value: String): String? = when {
         value.startsWith("https://") -> value

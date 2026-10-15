@@ -67,6 +67,8 @@ data class ReminderItem(
     val location: ReminderLocation? = null,
     val musicBlocks: List<MusicBlock> = emptyList(),
     val mediaBlocks: List<MediaBlock> = emptyList(),
+    /** Oyun bloğu (its own field; see CardGameBlock). */
+    val gameBlocks: List<CardGameBlock> = emptyList(),
     val cardStack: CardStackBlock? = null,
     val contentBlockOrder: List<String> = emptyList(),
     /** Weekday set for a WEEKLY repeat (bit0 = Monday ... bit6 = Sunday). 0 = plain single-day repeat. */
@@ -81,7 +83,22 @@ data class ReminderItem(
      * Local epoch days of single occurrences the person deleted from a repeating series
      * ("sadece bu gün"). The series itself stays; projections and reschedules skip these days.
      */
-    val repeatSkippedEpochDays: List<Long> = emptyList()
+    val repeatSkippedEpochDays: List<Long> = emptyList(),
+    /**
+     * When the event ends ("Bitiş"), possibly days later (12 Eki 10:00 → 15 Eki 18:00). Independent of the planner
+     * duration: a 4-day course of 1 hour a day keeps "60 dk" and this end.
+     */
+    val endAt: Long? = null,
+    /** Early warning ("Erken uyarı"): a heads-up this many minutes before [alertAt]. Null = none. */
+    val earlyAlertMinutes: Int? = null,
+    /**
+     * Ortak kategori: the server id of this card when it lives in a shared category. Such cards are kept on the device
+     * like any other card but never enter personal sync; SharedCategorySync carries them.
+     */
+    val sharedCardId: String? = null,
+    /** Who added it (shown bottom-right when it is someone else). */
+    val sharedAuthorUid: String? = null,
+    val sharedAuthorName: String? = null
 ) {
     val gradientBlendIndex: Int?
         get() = gradientBlendFraction?.let { frac ->

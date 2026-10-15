@@ -38,7 +38,10 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                             useDarkText = item.optBoolean("useDarkText", false),
                             gradientBlendFraction = if (!item.has("gradientBlendFraction") || item.isNull("gradientBlendFraction")) null else item.optDouble("gradientBlendFraction").toFloat().coerceIn(0f, 1f),
                             customSolidColorArgb = if (!item.has("customSolidColorArgb") || item.isNull("customSolidColorArgb")) null else item.optInt("customSolidColorArgb"),
-                            createdAt = item.optLong("createdAt", System.currentTimeMillis())
+                            createdAt = item.optLong("createdAt", System.currentTimeMillis()),
+                            sharedId = item.optString("sharedId", "").takeIf { it.isNotBlank() && it != "null" },
+                            sharedRole = item.optString("sharedRole", "").takeIf { it.isNotBlank() && it != "null" },
+                            sharedOwnerName = item.optString("sharedOwnerName", "").takeIf { it.isNotBlank() && it != "null" }
                         )
                     )
                 }
@@ -142,6 +145,11 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                     .put("gradientBlendFraction", category.gradientBlendFraction?.toDouble() ?: JSONObject.NULL)
                     .put("customSolidColorArgb", category.customSolidColorArgb ?: JSONObject.NULL)
                     .put("createdAt", category.createdAt)
+                    .apply {
+                        category.sharedId?.let { put("sharedId", it) }
+                        category.sharedRole?.let { put("sharedRole", it) }
+                        category.sharedOwnerName?.let { put("sharedOwnerName", it) }
+                    }
             )
         }
         val raw = array.toString()

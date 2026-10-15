@@ -52,7 +52,13 @@ private val RealColors = darkColorScheme(
 fun RealTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = RealColors,
-        typography = RealTypography,
-        content = content
-    )
+        typography = RealTypography
+    ) {
+        // Default clickables press-scale like the rest of REAL instead of drawing a Material ripple.
+        // Material components (IconButton, TextButton…) draw their own ripple and are unaffected.
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.foundation.LocalIndication provides com.cagri.real.ui.components.RealPressIndication,
+            content = content
+        )
+    }
 }

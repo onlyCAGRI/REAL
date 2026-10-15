@@ -138,6 +138,13 @@ fun MediaDiscoveryScreen(
     val watchlist = page == DiscoveryPage.WATCHLIST
     val deckPage = page == DiscoveryPage.DISCOVER || watchlist
     val cards = if (watchlist) snapshot?.later.orEmpty() else snapshot?.cards.orEmpty()
+    // Keep the deck stocked: when only a couple of posters are left, the next ones are fetched in the background.
+    LaunchedEffect(page, cards.size, loading, error) {
+        if (page == DiscoveryPage.DISCOVER && !loading && error == null && ready && repo != null && cards.size <= 2 &&
+            snapshot != null && (snapshot?.cards?.isNotEmpty() == true || snapshot?.excluded?.isNotEmpty() == true)) {
+            discover(useSavedPreferences = true)
+        }
+    }
     Box(Modifier.fillMaxSize().background(Color.Black).pointerInput(Unit) {
         awaitPointerEventScope { while (true) awaitPointerEvent(PointerEventPass.Final) }
     }) {
@@ -173,7 +180,6 @@ fun MediaDiscoveryScreen(
                                 DiscoveryButton(label, selected = type == key, enabled = !loading, onClick = { type = key })
                             }
                         }
-                        Text(if (filterHeader == null) "Her bölümde en fazla 3 seçim · Birlikte uyanlar önce gelir." else "Her bölümde en fazla 3 seçim", color = Color(0xFF9A9A9F), fontSize = 13.sp)
                         @Composable
                         fun filterChips(options: List<DiscoveryFilter>) {
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -205,8 +211,8 @@ fun MediaDiscoveryScreen(
                         ) { index, _ ->
                             filterChips(feelingPages[index])
                         }
-                        Text("Öneriler AI ile seçilir; afiş ve başlıklar TVmaze / TheTVDB kataloglarından doğrulanır. İnternet gerekir.",
-                            color = Color(0xFF85858E), fontSize = 12.sp, lineHeight = 18.sp)
+                        // Catalog credit only (TVmaze / TheTVDB attribution), small and quiet.
+                        Text("TVmaze · TheTVDB", color = Color(0xFF5E5E66), fontSize = 11.sp)
                     }
                     }
                     Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
@@ -253,7 +259,7 @@ fun MediaDiscoveryScreen(
 }
 
 @Composable
-private fun DiscoveryHeadline(text: String, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Center, small: Boolean = false) {
+internal fun DiscoveryHeadline(text: String, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Center, small: Boolean = false) {
     Text(text, modifier = modifier.fillMaxWidth(), textAlign = align, maxLines = 1,
         style = RealType.editorialTitle.copy(
             brush = Brush.verticalGradient(listOf(Color.White, Color(0xFFB4B4B9))),
@@ -280,7 +286,7 @@ internal fun PosterAmbient(url: String?, reduceAnimations: Boolean, reduceDynami
 }
 
 @Composable
-private fun DiscoveryButton(label: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit,
+internal fun DiscoveryButton(label: String, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit,
                             modifier: Modifier = Modifier, icon: ActionGlyph? = null) {
     val shape = RoundedCornerShape(24.dp)
     val isSelected = selected
@@ -341,6 +347,7 @@ private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceA
         val posterHeight = width / PosterAspect
         val visible = cards.take(4)
         PosterEdgeGlow(card.media.artworkUrl, reduceAnimations, Modifier.fillMaxWidth().height(posterHeight))
+        SwipeEdgeGlow({ offset }, threshold, later)
 
         for (depth in visible.indices.reversed()) {
             val item = visible[depth]
@@ -352,10 +359,11 @@ private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceA
                     .pointerInput(card.key, later) {
                         detectDragGestures(onDragStart = { if (!currentBusy) settling?.cancel() }, onDragCancel = { if (!currentBusy) settle() },
                             onDragEnd = {
+                                // Right = save (watchlist: keep, next) · left = pass (watchlist: remove) · up/down: nothing yet.
                                 if (!currentBusy) when {
-                                    offset.y > threshold && offset.y > abs(offset.x) -> decide(if (later) DiscoveryAction.BROWSE_WATCHLIST else DiscoveryAction.SKIP, Offset(0f, threshold * 9))
-                                    offset.x > threshold -> decide(if (later) DiscoveryAction.BROWSE_WATCHLIST else DiscoveryAction.SKIP, Offset(threshold * 6, 0f))
-                                    offset.x < -threshold -> decide(if (later) DiscoveryAction.BROWSE_WATCHLIST else DiscoveryAction.SKIP, Offset(-threshold * 6, 0f))
+                                    abs(offset.y) > abs(offset.x) -> settle()
+                                    offset.x > threshold -> decide(if (later) DiscoveryAction.BROWSE_WATCHLIST else DiscoveryAction.ADD_TO_WATCHLIST, Offset(threshold * 6, 0f))
+                                    offset.x < -threshold -> decide(if (later) DiscoveryAction.REMOVE_FROM_WATCHLIST else DiscoveryAction.SKIP, Offset(-threshold * 6, 0f))
                                     else -> settle()
                                 }
                             }) { change, delta -> change.consume(); if (!currentBusy) offset += delta }
@@ -397,33 +405,40 @@ private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceA
                             PosterLabel(if (series) "Dizi" else "Film")
                             if (filters.isNotEmpty()) PosterLabel("${match.keys.size}/${filters.size}${if (match.inferred.isNotEmpty()) " · AI" else ""}")
                         }
-                        if (busy) CircularProgressIndicator(Modifier.size(32.dp).align(Alignment.Center), color = Color.White, strokeWidth = 2.dp)
+                        if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(32.dp).align(Alignment.Center), color = Color.White, strokeWidth = 2.dp)
                     }
                 }
             }
         }
 
         // The dock stays below the poster and does not move with the swiped artwork.
-        DiscoveryActionBar(later, busy,
-            onPass = { decide(DiscoveryAction.REMOVE_FROM_WATCHLIST, Offset(-threshold * 6, 0f)) },
-            onLater = { decide(DiscoveryAction.ADD_TO_WATCHLIST) },
+        DiscoveryActionBar("İzledim", busy,
+            onDone = { decide(DiscoveryAction.WATCHED, Offset(0f, -threshold * 9)) },
             onSave = { decide(if (later) DiscoveryAction.SAVE_WATCHLIST else DiscoveryAction.SAVE_DISCOVERY) },
             modifier = Modifier.align(Alignment.TopCenter).offset(y = posterHeight + 12.dp))
+        SwipeTutorial("film", "Kaydet", "Geç")
     }
 }
 
+/** Under the poster: "REAL'e ekle" (a card) and "İzledim" / "Oynadım" (done; never suggested again). */
 @Composable
-private fun DiscoveryActionBar(later: Boolean, busy: Boolean, onPass: () -> Unit, onLater: () -> Unit, onSave: () -> Unit, modifier: Modifier = Modifier) {
+internal fun DiscoveryActionBar(doneLabel: String?, busy: Boolean, onDone: () -> Unit, onSave: (() -> Unit)?, modifier: Modifier = Modifier,
+                                accent: Color = DiscoveryBlue) {
     Row(modifier.background(Color.Black.copy(alpha = .55f), RoundedCornerShape(32.dp)).liquidChrome(corners = 32.dp, selected = false)
-        .padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (later) BarIconButton(ActionGlyph.Close, "İzlenecek listemden çıkar", enabled = !busy, onClick = onPass)
-        else BarIconButton(ActionGlyph.Calendar, "İzlenecek listeme ekle", enabled = !busy, onClick = onLater)
-        Row(Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(DiscoveryBlue.copy(alpha = .9f))
+        .padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (onSave != null) Row(Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(accent.copy(alpha = .9f))
             .clickable(enabled = !busy, role = Role.Button, onClick = onSave).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically) {
             ActionIcon(ActionGlyph.Add, Modifier.size(20.dp), if (busy) Color(0xFF66666C) else Color.White)
             Spacer(Modifier.width(7.dp))
             Text("REAL'e ekle", color = if (busy) Color(0xFF66666C) else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        }
+        if (doneLabel != null) Row(Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Color.White.copy(alpha = .10f))
+            .clickable(enabled = !busy, role = Role.Button, onClick = onDone).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            ActionIcon(ActionGlyph.Check, Modifier.size(19.dp), if (busy) Color(0xFF66666C) else Color.White)
+            Spacer(Modifier.width(7.dp))
+            Text(doneLabel, color = if (busy) Color(0xFF66666C) else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
 }

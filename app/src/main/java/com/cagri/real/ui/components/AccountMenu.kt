@@ -3,7 +3,6 @@ package com.cagri.real.ui.components
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.LaunchedEffect
@@ -88,7 +87,7 @@ fun AccountMenuOverlay(
                 1f,
                 animationSpec = tween(
                     durationMillis = 260,
-                    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+                    easing = RealMotion.Emphasized
                 )
             )
         }

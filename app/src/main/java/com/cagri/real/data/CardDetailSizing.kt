@@ -3,21 +3,27 @@ package com.cagri.real.data
 import kotlin.math.ceil
 
 /** UI-only constraints. Wire placement format and Pano transforms are unchanged. */
-fun cardDetailMinimumSpan(key: String, widthDp: Float): Int {
-    val minimumDp = when (key.substringBefore(':')) {
+/** [compactKeys]: small widget blocks (counter, market) that can sit two in a row at half width. */
+fun cardDetailMinimumSpan(key: String, widthDp: Float, compactKeys: Set<String> = emptySet()): Int {
+    val minimumDp = when {
+        key in compactKeys -> 150f
+        else -> when (key.substringBefore(':')) {
         "text", "checklist", "journal", "voice", "files", "location" -> 224f
         "card_stack" -> 156f
         else -> 88f
+        }
     }
     return ceil((minimumDp + 12f) / ((widthDp + 12f) / CARD_GRID_UNITS).coerceAtLeast(1f))
         .toInt().coerceIn(2, CARD_GRID_UNITS)
 }
 
 /** Legacy narrow text fields are presented at the same readable floor as new handle edits. */
-fun cardDetailReadablePlacements(placements: Map<String, CardBlockPlacement>, widthDp: Float): Map<String, CardBlockPlacement> =
+fun cardDetailReadablePlacements(
+    placements: Map<String, CardBlockPlacement>, widthDp: Float, compactKeys: Set<String> = emptySet()
+): Map<String, CardBlockPlacement> =
     placements.mapValues { (key, value) ->
         val p = value.normalized()
-        val span = maxOf(p.span, cardDetailMinimumSpan(key, widthDp))
+        val span = maxOf(p.span, cardDetailMinimumSpan(key, widthDp, compactKeys))
         p.copy(span = span, column = p.column.coerceAtMost(CARD_GRID_UNITS - span))
     }
 
@@ -31,6 +37,13 @@ fun cardDetailResizeFits(key: String, span: Int, height: Float,
     val old = boxes[key] ?: return false
     if (!height.isFinite() || !unitDp.isFinite() || height < 0 || unitDp <= 0) return false
     val candidate = old.copy(width = (span * unitDp - gutterDp).coerceAtLeast(1f), height = height)
+    return boxes.none { (other, box) -> other != key && intersects(candidate, box) }
+}
+
+/** Any edge resize: the candidate rectangle must stay inside the card and clear of every neighbour. */
+fun cardDetailBoxFits(key: String, candidate: CardMeasuredBox, boxes: Map<String, CardMeasuredBox>): Boolean {
+    if (listOf(candidate.left, candidate.top, candidate.width, candidate.height).any { !it.isFinite() }) return false
+    if (candidate.left < -0.5f || candidate.top < 0f || candidate.width <= 0f || candidate.height <= 0f) return false
     return boxes.none { (other, box) -> other != key && intersects(candidate, box) }
 }
 

@@ -224,7 +224,8 @@ fun CategoryColorSelectorHeader(
             }
 
             
-            ReminderColorChoices.forEachIndexed { index, choice ->
+            ReminderColorDisplayOrder.forEach { index ->
+                val choice = ReminderColorChoices[index]
                 val isSelected = selectedColorFilter == index
                 Box(
                     modifier = Modifier

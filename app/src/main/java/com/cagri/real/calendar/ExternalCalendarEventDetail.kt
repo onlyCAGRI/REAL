@@ -1,7 +1,13 @@
 package com.cagri.real.calendar
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -32,7 +38,13 @@ import java.util.Locale
 /** Read-only external event detail. Never dispatches REAL reminder mutations. */
 @Composable
 internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismiss: () -> Unit,
-    onCreateRealCard: suspend () -> Unit, reduceDynamicBlur: Boolean = false) {
+    onCreateRealCard: suspend () -> Unit, reduceDynamicBlur: Boolean = false,
+    /** REAL categories to file the event (or its whole calendar) under. */
+    categories: List<com.cagri.real.data.CustomCategory> = emptyList(),
+    currentCategoryId: Long? = null,
+    currentIsWholeCalendar: Boolean = true,
+    /** categoryId = existing category, newName = create one with that name; both null = remove the link. */
+    onCategorize: (categoryId: Long?, newName: String?, wholeCalendar: Boolean) -> Unit = { _, _, _ -> }) {
     val context = LocalContext.current
     val provider = remember(context) { DeviceCalendarProvider(context) }
     var description by remember(occurrence) { mutableStateOf<String?>(null) }
@@ -41,6 +53,7 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
     var available by remember(occurrence) { mutableStateOf(false) }
     var loading by remember(occurrence) { mutableStateOf(true) }
     var creating by remember(occurrence) { mutableStateOf(false) }
+    var categorizeOpen by remember(occurrence) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(occurrence) {
         try {
@@ -71,7 +84,9 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
                 Text("Takvim etkinliği", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f).padding(start = 14.dp))
             }
-            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+            val detailScroll = rememberScrollState()
+            LaunchedEffect(categorizeOpen) { if (categorizeOpen) detailScroll.animateScrollTo(detailScroll.maxValue) }
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(detailScroll).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 SelectionContainer {
                     Text(occurrence.title, color = Color.White, fontSize = 28.sp, lineHeight = 34.sp,
@@ -85,6 +100,8 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
                 error?.let { Text(it, color = Color(0xFFFFB4AB)) }
                 Text("Bu etkinliğin tarih ve saati bağlı takviminden gelir. İçine fotoğraf, checklist, CardStack ve diğer REAL içeriklerini eklemek için bir REAL kartı bağlayabilirsin. Bağlantı kurmak içerikleri public yapmaz.",
                     color = Color(0xFF9B9BA6), fontSize = 13.sp, lineHeight = 19.sp)
+                if (categorizeOpen) CategorizePanel(occurrence.calendarName, categories, currentCategoryId,
+                    currentIsWholeCalendar) { id, name, whole -> onCategorize(id, name, whole); categorizeOpen = false }
             }
             CalendarGlassButton(enabled = available && !creating, onClick = {
                 creating = true
@@ -97,6 +114,16 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
             }, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
                 Text(if (creating) "Bağlanıyor…" else "REAL içeriği ekle", color = Color.White)
             }
+            // Kategorize et: shows the current category (with its colour) once linked.
+            val linked = categories.firstOrNull { it.id == currentCategoryId }
+            CalendarGlassButton(onClick = { categorizeOpen = !categorizeOpen },
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp)) {
+                if (linked != null) {
+                    Box(Modifier.size(12.dp).clip(CircleShape).background(categoryDotColor(linked)))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(linked?.name ?: "Kategorize et", color = Color.White)
+            }
             CalendarGlassButton(enabled = available, onClick = {
                 try { provider.open(occurrence.eventId, occurrence.start) }
                 catch (_: Exception) { error = "Etkinliği düzenleyecek takvim uygulaması bulunamadı." }
@@ -106,6 +133,59 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
                 Text("Takvimde düzenle", color = Color.White)
             }
         }
+        }
+    }
+}
+
+/**
+ * Kategorize et: file this event — or everything in its calendar — under a REAL category, so the planner shows them
+ * in that category's colour. The events stay in their calendar.
+ */
+internal fun categoryDotColor(c: com.cagri.real.data.CustomCategory): Color = c.customSolidColorArgb?.let { Color(it) }
+    ?: com.cagri.real.ui.components.ReminderColorChoices.getOrNull(c.accentStart)?.color ?: Color(0xFF4558C8)
+
+@Composable
+private fun CategorizePanel(
+    calendarName: String,
+    categories: List<com.cagri.real.data.CustomCategory>,
+    currentCategoryId: Long?,
+    currentIsWholeCalendar: Boolean,
+    onCategorize: (Long?, String?, Boolean) -> Unit
+) {
+    var whole by remember(currentIsWholeCalendar) { mutableStateOf(currentIsWholeCalendar) }
+    CalendarGlassPanel(Modifier.fillMaxWidth(), corners = 22.dp) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth().clickable { whole = !whole }, verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(20.dp).clip(CircleShape)
+                    .background(if (whole) Color(0xFF91B9FF) else Color.Transparent)
+                    .border(1.2.dp, if (whole) Color(0xFF91B9FF) else Color(0xFF777780), CircleShape),
+                    contentAlignment = Alignment.Center) {
+                    if (whole) ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color(0xFF111216))
+                }
+                Text("$calendarName takvimindeki tüm etkinlikler", color = Color.White, fontSize = 14.sp,
+                    modifier = Modifier.padding(start = 10.dp))
+            }
+            categories.forEach { c ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .clickable { onCategorize(c.id, null, whole) }
+                    .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(16.dp).clip(CircleShape).background(categoryDotColor(c)))
+                    Text(c.name, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                    if (c.id == currentCategoryId) ActionIcon(ActionGlyph.Check, Modifier.size(16.dp), Color(0xFF91B9FF))
+                }
+            }
+            if (categories.none { it.name.equals(calendarName, ignoreCase = true) }) {
+                Text("+ Yeni kategori: $calendarName", color = Color(0xFF91B9FF), fontSize = 15.sp,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .clickable { onCategorize(null, calendarName, whole) }
+                        .padding(vertical = 8.dp))
+            }
+            if (currentCategoryId != null) {
+                Text("Kategoriden çıkar", color = Color(0xFFFFB4AB), fontSize = 14.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                        .clickable { onCategorize(null, null, false) }
+                        .padding(vertical = 6.dp))
+            }
         }
     }
 }

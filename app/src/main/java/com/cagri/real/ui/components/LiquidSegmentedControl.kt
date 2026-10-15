@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -42,12 +43,12 @@ fun LiquidSegmentedControl(
     val height = 40.dp * LocalDensity.current.fontScale.coerceAtLeast(1f) + 8.dp
     BoxWithConstraints(modifier.fillMaxWidth().height(height).liquidChrome(26.dp).padding(4.dp)) {
         val cellWidth = maxWidth / labels.size
-        val selectionX by animateDpAsState(
+        val selectionX = animateDpAsState(
             cellWidth * selected,
             animationSpec = if (reduceAnimations) snap() else tween(LiquidGlassTokens.settleMillis),
             label = "liquidSegmentSelection"
         )
-        Box(Modifier.offset(x = selectionX).width(cellWidth).fillMaxHeight().liquidChrome(22.dp, selected = true))
+        Box(Modifier.offset { IntOffset(selectionX.value.roundToPx(), 0) }.width(cellWidth).fillMaxHeight().liquidChrome(22.dp, selected = true))
         Row(Modifier.fillMaxSize().selectableGroup()) {
             labels.forEachIndexed { index, label ->
                 Box(Modifier.weight(1f).fillMaxHeight()

@@ -40,13 +40,13 @@ fun rememberDirectVoiceSave(
                             latestText("")
                         } else {
                             latestRecover()
-                            Toast.makeText(context, "Kaydedilemedi. Metin korundu.", Toast.LENGTH_LONG).show()
+                            com.cagri.real.ui.components.RealToast.show(context, "Kaydedilemedi. Metin korundu.", long = true)
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled // The composer already holds the final text.
                     } catch (_: Exception) {
                         latestRecover()
-                        Toast.makeText(context, "Kaydedilemedi. Metin korundu.", Toast.LENGTH_LONG).show()
+                        com.cagri.real.ui.components.RealToast.show(context, "Kaydedilemedi. Metin korundu.", long = true)
                     } finally {
                         busy.value = false
                         latestBusy(false)

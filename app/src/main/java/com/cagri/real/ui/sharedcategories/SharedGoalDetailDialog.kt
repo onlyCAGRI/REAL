@@ -40,7 +40,7 @@ internal fun SharedGoalDetailDialog(api: SharedCategoryApi, categoryId: String, 
             .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             com.cagri.real.ui.components.RealBackButton(onDismiss)
             Text(card.text, color = Color.White, fontSize = 25.sp)
-            if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+            if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
             if (card.checklistItems.isNotEmpty()) {
                 com.cagri.real.ui.DetailChecklistBox(DesignStyle.LiquidGlass, false, card.checklistItems, "", {}, {}, { _, _ -> }, {}, {}, {}, {},
                     remember { androidx.compose.ui.focus.FocusRequester() }, true, false)
@@ -53,10 +53,10 @@ internal fun SharedGoalDetailDialog(api: SharedCategoryApi, categoryId: String, 
             MediaContentSection(card.mediaBlocks, DesignStyle.LiquidGlass, false, {})
             card.cardStack?.let { CardStackContentSection(it, DesignStyle.LiquidGlass, false, onUpdate = {}, onRemove = {}) }
             com.cagri.real.ui.AttachmentMediaSection(card.attachments.filter { it.type == AttachmentType.IMAGE }, DesignStyle.LiquidGlass, false,
-                onOpen = { runCatching { api.open(it) }.onFailure { android.widget.Toast.makeText(context, it.message ?: "Dosya açılamadı.", android.widget.Toast.LENGTH_SHORT).show() } }, onRemove = {})
+                onOpen = { runCatching { api.open(it) }.onFailure { com.cagri.real.ui.components.RealToast.show(context, it.message ?: "Dosya açılamadı.") } }, onRemove = {})
             ReminderContentSections(card.attachments, card.referenceUrl, false, DesignStyle.LiquidGlass, backdrop,
                 backdropPosition = { androidx.compose.ui.geometry.Offset.Zero }, onRemove = {}, onRemoveLink = {},
-                onOpenAttachment = { runCatching { api.open(it) }.onFailure { android.widget.Toast.makeText(context, it.message ?: "Dosya açılamadı.", android.widget.Toast.LENGTH_SHORT).show() } }, allowSnippetEditing = false)
+                onOpenAttachment = { runCatching { api.open(it) }.onFailure { com.cagri.real.ui.components.RealToast.show(context, it.message ?: "Dosya açılamadı.") } }, allowSnippetEditing = false)
             card.voiceRecordings.forEach { VoicePlaybackRow(it, compact = true) }
             card.mood?.let { Text(it.label, color = Color.White) }
             card.journal?.let { Text(it.text, color = Color.White.copy(alpha = 0.8f)) }

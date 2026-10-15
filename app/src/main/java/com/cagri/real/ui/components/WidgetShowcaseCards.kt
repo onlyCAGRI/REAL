@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -340,14 +341,13 @@ fun MoodMonthChartCard(
             val offsets = points.map { Offset(xOf(it.x), yOf(it.level)) }
             val latestIndex = points.lastIndex
 
-            val pulse = if (reduceAnimations) 0f else {
-                val t = rememberInfiniteTransition(label = "moodPulse")
-                val v by t.animateFloat(
+            // State read inside the Canvas only: the pulse redraws the chart, it does not recompose the card.
+            val pulseState: State<Float>? = if (reduceAnimations) null else {
+                rememberInfiniteTransition(label = "moodPulse").animateFloat(
                     0f, 1f,
                     infiniteRepeatable(tween(1600, easing = LinearEasing), RepeatMode.Restart),
                     label = "moodPulseValue"
                 )
-                v
             }
 
             Canvas(Modifier.fillMaxSize()) {
@@ -387,6 +387,7 @@ fun MoodMonthChartCard(
                     if (progress < points[i].x) return@forEachIndexed
                     val isLatest = i == latestIndex
                     if (isLatest && !reduceAnimations) {
+                        val pulse = pulseState?.value ?: 0f
                         drawCircle(points[i].tint.copy(alpha = 0.35f * (1f - pulse)), 7.dp.toPx() + 12.dp.toPx() * pulse, o)
                     }
                     drawCircle(points[i].tint.copy(alpha = 0.28f), if (isLatest) 11.dp.toPx() else 8.dp.toPx(), o)
@@ -577,8 +578,8 @@ fun WeekProgressCard(
 
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MiniStat("Önemli", progress.importantDone, progress.importantTotal, Modifier.weight(1f))
-            MiniStat("Planlı", progress.plannedDone, progress.plannedTotal, Modifier.weight(1f))
+            MiniStat("Important", progress.importantDone, progress.importantTotal, Modifier.weight(1f))
+            MiniStat("Planned", progress.plannedDone, progress.plannedTotal, Modifier.weight(1f))
         }
     }
 }
