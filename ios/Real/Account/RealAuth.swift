@@ -88,6 +88,25 @@ final class RealAuth {
 
     func handle(url: URL) -> Bool { GIDSignIn.sharedInstance.handle(url) }
 
+    // MARK: Account deletion (FirebaseAuthRepository.reauthenticateWithGoogle / deleteAccount)
+
+    /// The server asks for a sign-in from the last 5 minutes before deleting; this signs in with Google again.
+    func reauthenticateWithGoogle() async throws {
+        guard let user = Auth.auth().currentUser, let presenter = Self.topViewController() else { throw URLError(.userAuthenticationRequired) }
+        let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presenter)
+        guard let idToken = result.user.idToken?.tokenString else { throw URLError(.userAuthenticationRequired) }
+        let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: result.user.accessToken.tokenString)
+        try await user.reauthenticate(with: credential)
+        _ = try await user.getIDTokenResult(forcingRefresh: true)
+    }
+
+    func deleteFirebaseUser() async throws {
+        guard let user = Auth.auth().currentUser else { return }
+        try await user.delete()
+        GIDSignIn.sharedInstance.signOut()
+        refreshAccount()
+    }
+
     // MARK: Name shown to others
 
     private var nameRevision = 0

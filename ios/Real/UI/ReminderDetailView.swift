@@ -23,6 +23,7 @@ struct ReminderDetailView: View {
     @State private var textToolsKey: String?
     @State private var showMediaSearch = false
     @State private var showGameSearch = false
+    @State private var showCardShare = false
     @State private var deleting = false
     @State private var reordering = false
     @State private var newChecklistText = ""
@@ -143,6 +144,9 @@ struct ReminderDetailView: View {
         }
         .sheet(isPresented: $showMediaSearch) {
             MediaSearchSheet { m in withAnimation(.spring(duration: 0.3)) { draft?.mediaBlocks.append(m) } }
+        }
+        .sheet(isPresented: $showCardShare) {
+            if let r = store.reminder(reminderId) { CardShareSheet(card: r) }
         }
         .sheet(isPresented: $showGameSearch) {
             GameSearchSheet { g in
@@ -890,7 +894,7 @@ struct ReminderDetailView: View {
                     categorySelection = r.customCategoryId
                     checklistOpen = !r.checklistItems.isEmpty
                 }
-                ShareLink(item: r.shareText) {
+                Button { showCardShare = true } label: {
                     VStack(spacing: 1) {
                         RealSymbol("square.and.arrow.up", size: 20.7)
                         Text("Share").font(RealFont.inter(10))
@@ -898,6 +902,7 @@ struct ReminderDetailView: View {
                     .foregroundStyle(Color(argb: 0xFFF0F0F4))
                     .frame(maxWidth: .infinity, minHeight: 56)
                 }
+                .buttonStyle(.plain)
                 .disabled(deleting)
                 DetailAction(label: "Sil", symbol: "trash") { deleting.toggle() }
             }

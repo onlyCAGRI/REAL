@@ -60,7 +60,7 @@ struct RealApp: App {
                     ProfileNameSheet()
                 }
                 .sheet(item: Binding(get: { RealDeepLinks.shared.pending }, set: { RealDeepLinks.shared.pending = $0 })) { link in
-                    InviteAcceptSheet(link: link).environment(store)
+                    InviteAcceptSheet(link: link).environment(store).environment(life)
                 }
                 .sheet(item: Binding(get: { CalendarCardPublisher.shared.offerCardId.map(PublicationOffer.init) },
                                      set: { CalendarCardPublisher.shared.offerCardId = $0?.id })) { offer in
@@ -90,6 +90,8 @@ struct RealApp: App {
                     while !Task.isCancelled {
                         await RealCloudSync.shared.run(store, life)
                         await SharedCategorySync.shared.syncNow(store)
+                        await CardShareClient.receive(store: store, life: life)
+                        await AnnouncementClient.receive(store: store, life: life)
                         try? await Task.sleep(for: .seconds(60))
                     }
                 }

@@ -631,6 +631,67 @@ struct AccountManageSheet: View {
     let onRestore: () -> Void
     let onSignOut: () -> Void
     @State private var auth = RealAuth.shared
+    @State private var confirmDelete = false
+    @State private var cloud = RealCloudSync.shared
+    @State private var syncing = false
+    @State private var localSize = "…"
+    @Environment(ReminderStore.self) private var store
+    @Environment(LifeStore.self) private var life
+
+    private var syncLine: String {
+        if let e = cloud.lastError { return "Son deneme olmadı: \(e)" }
+        guard let t = cloud.lastSuccess else { return "Bu oturumda henüz eşitlenmedi." }
+        return "Son eşitleme: " + t.formatted(.relative(presentation: .named, unitsStyle: .wide))
+    }
+
+    private func syncNow() {
+        syncing = true
+        Task { await cloud.runFully(store, life); syncing = false }
+    }
+
+    private func measureLocal() async {
+        let dir = AttachmentStorage.directory
+        let bytes = await Task.detached { () -> Int64 in
+            let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+            return files.reduce(Int64(0)) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+        }.value
+        localSize = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+    @State private var deleting: String?
+    @State private var deleteError: String?
+
+    /// AccountManagementSheet "Veri ve silme": Google sign-in again (the server wants a fresh one), start the account
+    /// erasure, follow it to the end, then delete the Firebase account. Cards on this iPhone stay.
+    private func deleteAccount() {
+        deleteError = nil
+        deleting = "Google ile doğrulanıyor…"
+        Task {
+            do {
+                try await RealAuth.shared.reauthenticateWithGoogle()
+                deleting = "Bulut verileri siliniyor…"
+                let op = UUID().uuidString.lowercased()
+                var r = try await RealBackend.post("/api/account/v1/erasure",
+                    ["operationId": op, "mode": "ACCOUNT", "confirmation": "DELETE_ACCOUNT", "deleteOwnedBoards": true], timeout: 60)
+                let operation = ((r["erasure"] as? [String: Any])?["operationId"] as? String) ?? op
+                for _ in 0..<40 {
+                    if ((r["erasure"] as? [String: Any])?["phase"] as? String) == "COMPLETE" { break }
+                    try await Task.sleep(for: .seconds(2))
+                    r = try await RealBackend.post("/api/account/v1/erasure/continue", ["operationId": operation], timeout: 60)
+                }
+                guard ((r["erasure"] as? [String: Any])?["phase"] as? String) == "COMPLETE" else {
+                    throw CalendarCardPublisher.Failure(errorDescription: "Silme sürüyor. Birazdan yeniden dene; işlem kaldığı yerden devam eder.")
+                }
+                deleting = "Hesap siliniyor…"
+                RealCloudSync.shared.reset()
+                try await RealAuth.shared.deleteFirebaseUser()
+                deleting = nil
+                onSignOut()
+            } catch {
+                deleting = nil
+                deleteError = (error as? LocalizedError)?.errorDescription ?? RealBackend.message(for: error)
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -654,6 +715,19 @@ struct AccountManageSheet: View {
             }
             .padding(16)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.05)))
+            // Eşitleme ve bu cihazdaki alan (SyncManagementPanel / LocalStoragePanel, short).
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Eşitleme").font(RealFont.inter(15, .medium)).foregroundStyle(.white)
+                    Spacer()
+                    Button(syncing ? "Eşitleniyor…" : "Şimdi eşitle") { syncNow() }
+                        .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
+                }
+                Text(syncLine).font(RealFont.inter(13)).foregroundStyle(cloud.lastError == nil ? Color(argb: 0xFFA4A4AD) : Color(argb: 0xFFFFB4AB))
+                Text("Bu cihazdaki dosyalar: \(localSize)").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA4A4AD))
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.05)))
             Button(action: onRestore) {
                 Text("Kartları hesaptan yeniden yükle").font(RealFont.inter(15)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white.opacity(0.08)))
@@ -664,9 +738,22 @@ struct AccountManageSheet: View {
                     .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white.opacity(0.05)))
             }
             .buttonStyle(.plain)
+            Button { confirmDelete = true } label: {
+                Text(deleting ?? "Hesabı sil").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFF8A80))
+                    .frame(maxWidth: .infinity, minHeight: 40)
+            }
+            .buttonStyle(.plain).disabled(deleting != nil)
+            if let deleteError { Text(deleteError).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)) }
         }
         .padding(22)
-        .presentationDetents([.height(420)])
+        .presentationDetents([.height(600), .large])
+        .task { await measureLocal() }
+        .confirmationDialog("Hesabın ve buluttaki tüm verilerin kalıcı olarak silinsin mi?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Hesabı kalıcı olarak sil", role: .destructive) { deleteAccount() }
+            Button("Vazgeç", role: .cancel) {}
+        } message: {
+            Text("Buluttaki kartların, dosyaların, paylaşım linklerin ve sahibi olduğun panolar silinir. Bu iPhone'daki kartlar kalır. Geri alınamaz.")
+        }
         .presentationBackground(Color(argb: 0xFF111113))
     }
 }

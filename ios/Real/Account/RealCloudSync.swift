@@ -1,11 +1,13 @@
 import Foundation
 import CryptoKit
+import Observation
 
 /// Two-way REAL cloud sync on iOS (SyncEngine.kt): pull the account's change feed, merge it with this iPhone's cards
 /// and push what changed here, with the same records Android uses (CARD, CATEGORY, PLANNER, MOOD and the category
 /// order / description preferences). Each record keeps the last synced payload as its base; a record changed on both
 /// sides takes the cloud copy. Photos, files and voice notes travel as attachments of their card.
 @MainActor
+@Observable
 final class RealCloudSync {
     static let shared = RealCloudSync()
     private var running = false
@@ -128,6 +130,10 @@ final class RealCloudSync {
                                  raw: payload.flatMap { try? JSONSerialization.data(withJSONObject: $0) }.flatMap { String(data: $0, encoding: .utf8) })
     }
 
+    private static func drinkPayload(_ e: WaterIntakeEntry) -> [String: Any] {
+        ["id": e.id, "amountMl": e.amountMl, "createdAt": e.createdAt, "beverage": e.beverage.rawValue]
+    }
+
     private func push(_ store: ReminderStore, _ life: LifeStore, _ st: inout State) async throws {
         var docs: [String: [String: Any]] = [:]
         for card in store.reminders where card.id >= 0 && card.sharedCardId == nil {
@@ -140,6 +146,9 @@ final class RealCloudSync {
             if !c.description.isEmpty || st.records[dk]?.base != nil { docs[dk] = ["value": c.description.isEmpty ? NSNull() : c.description] }
         }
         for m in life.moods { docs["MOOD/\(m.id)"] = moodPayload(m, base: st.records["MOOD/\(m.id)"]?.raw) }
+        // Drinks (DRINK) and the water goal, like Android's water tracker.
+        for e in life.entries { docs["DRINK/\(e.id)"] = Self.drinkPayload(e) }
+        docs["PREFERENCE/water/goal"] = ["value": life.goalMl]
         let order = store.categoryOrderKeys.joined(separator: "|")
         if !order.isEmpty || st.records["PREFERENCE/ui/category_order_v1"]?.base != nil {
             docs["PREFERENCE/ui/category_order_v1"] = ["value": order.isEmpty ? NSNull() : order]
@@ -148,7 +157,7 @@ final class RealCloudSync {
         if preview > 0 { docs["PREFERENCE/ui/home_category_preview_count_v1"] = ["value": preview] }
 
         // Everything this account had that is gone here is deleted (only kinds this iPhone writes).
-        let written: Set<String> = ["CARD", "CATEGORY", "PLANNER", "MOOD"]
+        let written: Set<String> = ["CARD", "CATEGORY", "PLANNER", "MOOD", "DRINK"]
         var keys = Set(docs.keys)
         for (k, rec) in st.records where rec.base != nil && written.contains(String(k.split(separator: "/").first ?? "")) { keys.insert(k) }
 
@@ -360,6 +369,8 @@ final class RealCloudSync {
         case "MOOD":
             guard let id = Int64(key), let m = life.moods.first(where: { $0.id == id }) else { return nil }
             return moodPayload(m, base: base)
+        case "DRINK":
+            return life.entries.first { $0.id == key }.map(Self.drinkPayload)
         case "PREFERENCE":
             if key == "ui/category_order_v1" {
                 let order = store.categoryOrderKeys.joined(separator: "|")
@@ -369,6 +380,7 @@ final class RealCloudSync {
                 let n = UserDefaults.standard.integer(forKey: "home_category_preview_count_v1")
                 return n > 0 ? ["value": n] : nil
             }
+            if key == "water/goal" { return ["value": life.goalMl] }
             if key.hasPrefix("description/custom_"), let c = store.categories.first(where: { "description/custom_\($0.id)_\($0.createdAt)" == key }) {
                 return c.description.isEmpty ? nil : ["value": c.description]
             }
@@ -429,8 +441,19 @@ final class RealCloudSync {
             var moods = life.moods.filter { $0.id != id }
             if let payload, let m = RealCloudRestore.decodeMood(payload, decoder) { moods.append(m) }
             life.replaceAll(goal: life.goalMl, entries: life.entries, moods: moods.sorted { $0.id > $1.id })
+        case "DRINK":
+            var entries = life.entries.filter { $0.id != key }
+            if let payload, let ml = (payload["amountMl"] as? NSNumber)?.intValue, let at = (payload["createdAt"] as? NSNumber)?.int64Value {
+                entries.append(WaterIntakeEntry(id: key, amountMl: ml, createdAt: at,
+                                                beverage: BeverageType(rawValue: ((payload["beverage"] as? String) ?? "water").lowercased()) ?? .water))
+            }
+            life.replaceAll(goal: life.goalMl, entries: entries.sorted { $0.createdAt < $1.createdAt }, moods: life.moods)
         case "PREFERENCE":
             let value = payload?["value"]
+            if key == "water/goal", let ml = (value as? NSNumber)?.intValue, (100...10_000).contains(ml) {
+                life.replaceAll(goal: ml, entries: life.entries, moods: life.moods)
+                return
+            }
             if key == "ui/category_order_v1" {
                 store.setCategoryOrderFromSync(((value as? String) ?? "").split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
             } else if key == "ui/home_category_preview_count_v1", let n = (value as? NSNumber)?.intValue, n > 0 {
@@ -441,7 +464,7 @@ final class RealCloudSync {
                 store.putCategoryFromSync(c)
             }
         default:
-            break // water comes later
+            break
         }
     }
 

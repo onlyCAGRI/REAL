@@ -78,8 +78,8 @@ final class RealConnections {
 final class RealDeepLinks {
     static let shared = RealDeepLinks()
     enum Pending: Identifiable, Equatable {
-        case connection(String), category(String)
-        var id: String { switch self { case .connection(let t): "c" + t; case .category(let t): "g" + t } }
+        case connection(String), category(String), sharedCard(String)
+        var id: String { switch self { case .connection(let t): "c" + t; case .category(let t): "g" + t; case .sharedCard(let t): "s" + t } }
     }
     var pending: Pending?
 
@@ -87,6 +87,11 @@ final class RealDeepLinks {
     func handle(_ url: URL) -> Bool {
         guard url.scheme == "real", url.user == nil, url.port == nil, url.query == nil, url.fragment == nil else { return false }
         let token = String(url.path.dropFirst())
+        // real://shared/<share id>: a card someone shared (SharedCardLink.kt).
+        if url.host == "shared" {
+            guard CardShareClient.isShareId(token) else { return false }
+            pending = .sharedCard(token); return true
+        }
         guard token.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { return false }
         switch url.host {
         case "connection": pending = .connection(token); return true
@@ -101,6 +106,7 @@ struct InviteAcceptSheet: View {
     let link: RealDeepLinks.Pending
     @Environment(\.dismiss) private var dismiss
     @Environment(ReminderStore.self) private var store
+    @Environment(LifeStore.self) private var life
     @State private var from: String?
     @State private var error: String?
     @State private var busy = false
@@ -143,10 +149,13 @@ struct InviteAcceptSheet: View {
     private var title: String {
         if done { return "Eklendi" }
         if case .category = link { return "Kategori daveti" }
+        if case .sharedCard = link { return "Paylaşılan kart" }
         return "Kişi daveti"
     }
     private var message: String {
+        if done, case .sharedCard = link { return "Kart REAL'ine eklendi." }
         if done { return "Artık birbirinizin Kişilerim listesindesiniz." }
+        if case .sharedCard = link { return "Bu kartın bir kopyası REAL'ine eklensin mi?" }
         if case .category = link { return "\(from ?? "Bir arkadaşın") seni ortak bir REAL kategorisine davet ediyor." }
         return "\(from ?? "Bir arkadaşın") seni REAL'de Kişilerim'e eklemek istiyor."
     }
@@ -160,9 +169,11 @@ struct InviteAcceptSheet: View {
                 case .category(let t):
                     _ = try await RealBackend.post("/api/categories/v1/invites/\(t)/accept", [:])
                     await SharedCategorySync.shared.syncNow(store)
+                case .sharedCard(let id):
+                    try await CardShareClient.claim(id, store: store, life: life)
                 }
                 done = true
-            } catch { self.error = RealBackend.message(for: error) }
+            } catch { self.error = (error as? LocalizedError)?.errorDescription ?? RealBackend.message(for: error) }
             busy = false
         }
     }
