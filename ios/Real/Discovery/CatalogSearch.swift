@@ -1,21 +1,6 @@
 import SwiftUI
 import AVFoundation
 
-/// MusicBlock.kt: an iTunes track attached to a card ("music:<id>" detail block). No audio is downloaded.
-struct MusicBlock: Codable, Hashable, Identifiable {
-    var id: String = UUID().uuidString
-    var title: String
-    var artist: String
-    var album: String?
-    var artworkUrl: String?
-    var provider: String
-    var providerTrackId: String?
-    var providerUrl: String
-    var previewUrl: String?
-    var previewDurationMillis: Int64?
-    var createdAt: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
-}
-
 private func secureUrl(_ value: String?) -> String? {
     guard let v = value, !v.isEmpty else { return nil }
     if v.hasPrefix("https://") { return v }
@@ -36,10 +21,10 @@ private func encoded(_ q: String) -> String {
     String(q.trimmingCharacters(in: .whitespaces).prefix(200)).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
 }
 
-/// MusicCatalog.kt: public iTunes catalog (Türkiye storefront).
+/// MusicCatalog.kt: public iTunes catalog of the person's country (MusicStorefront).
 enum MusicCatalog {
     static func search(_ query: String) async throws -> [MusicBlock] {
-        let url = URL(string: "https://itunes.apple.com/search?term=\(encoded(query))&entity=song&media=music&country=TR&limit=20")!
+        let url = URL(string: "https://itunes.apple.com/search?term=\(encoded(query))&entity=song&media=music&country=\(MusicStorefront.code)&limit=20")!
         let json = try await getJSON(url) as? [String: Any]
         return ((json?["results"] as? [[String: Any]]) ?? []).compactMap { item in
             guard let title = item["trackName"] as? String, !title.isEmpty, let link = secureUrl(item["trackViewUrl"] as? String) else { return nil }
@@ -223,7 +208,7 @@ struct MusicSearchSheet: View {
 
     var body: some View {
         CatalogPanel(title: "Müzik", placeholder: "Şarkı veya sanatçı ara", query: $query, searching: searching, message: message,
-                     attribution: "iTunes • Türkiye kataloğu", onClose: { dismiss() }) {
+                     attribution: "Apple Music • \(MusicStorefront.name) kataloğu", onClose: { dismiss() }) {
             ForEach(results) { m in
                 Button { onSelect(m); dismiss() } label: {
                     HStack(spacing: 12) {
@@ -258,6 +243,58 @@ struct MusicSearchSheet: View {
         } catch {
             guard !Task.isCancelled else { return }
             message = "Müzik araması yapılamadı. Bağlantını kontrol edip yeniden dene."
+        }
+        searching = false
+    }
+}
+
+/// GameSearchSheet (GameContent.kt): "Oyun" — IGDB through the REAL server, searching while typing.
+struct GameSearchSheet: View {
+    let onSelect: (CardGameBlock) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var results: [CardGameBlock] = []
+    @State private var searching = false
+    @State private var message: String?
+
+    var body: some View {
+        CatalogPanel(title: "Oyun", placeholder: "Oyun ara", query: $query, searching: searching, message: message,
+                     attribution: "Kaynak: IGDB", onClose: { dismiss() }) {
+            ForEach(results, id: \.providerId) { g in
+                Button { var picked = g; picked.id = UUID().uuidString.lowercased(); onSelect(picked); dismiss() } label: {
+                    HStack(spacing: 12) {
+                        GameCover(block: g).frame(width: 40, height: 53)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(g.title).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
+                            Text([g.year.map(String.init), g.platforms.prefix(3).joined(separator: " · ").nilIfEmpty].compactMap { $0 }.joined(separator: " · "))
+                                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).lineLimit(1)
+                        }
+                        Spacer()
+                        RealSymbol("plus", size: 17.2).foregroundStyle(.white)
+                    }
+                    .padding(8).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .task(id: query) { await search(query) }
+    }
+
+    private func search(_ raw: String) async {
+        let q = raw.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 2 else { results = []; message = nil; searching = false; return }
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled else { return }
+        searching = true
+        message = nil
+        do {
+            let found = try await GameSearch.search(q)
+            guard !Task.isCancelled else { return }
+            results = found
+            message = found.isEmpty ? "Sonuç bulunamadı. Oyunun adını farklı yazmayı dene." : nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            message = (error as? LocalizedError)?.errorDescription ?? "Oyun araması yapılamadı. Bağlantını kontrol edip yeniden dene."
         }
         searching = false
     }

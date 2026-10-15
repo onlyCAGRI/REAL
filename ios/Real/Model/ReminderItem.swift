@@ -17,6 +17,9 @@ struct ReminderAttachment: Codable, Identifiable, Hashable {
     var text: String? = nil
     /// "REAL_TEXT_BLOCK" marks a standalone text box added from the edit dock.
     var sourceTitle: String? = nil
+    /// Text snippet origin (Android SnippetSource): "WHATSAPP_TEXT", "EMAIL_TEXT", "PLAIN_TEXT". Kept so an edit here
+    /// never drops what Android set.
+    var source: String? = nil
 }
 
 enum JournalMood: String, Codable, CaseIterable, Identifiable {
@@ -144,6 +147,8 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     var voiceRecordings: [ReminderVoiceRecording] = []
     var musicBlocks: [MusicBlock] = []
     var mediaBlocks: [MediaBlock] = []
+    /// Oyun bloğu (own field; see CardGameBlock).
+    var gameBlocks: [CardGameBlock] = []
     var contentBlockLayout: [String: CardBlockPlacement] = [:]
     /// PlannerEventDetails.colorIndex (Takvim card pastel).
     var plannerColorIndex: Int?
@@ -241,6 +246,7 @@ struct ReminderItem: Codable, Identifiable, Hashable {
         if !voiceRecordings.isEmpty || includeVoiceRecorder { keys.append("voice") }
         keys += musicBlocks.map { "music:\($0.id)" }
         keys += mediaBlocks.map { "media:\($0.id)" }
+        keys += gameBlocks.map { "game:\($0.id)" }
         if location != nil { keys.append("location") }
         if journal != nil || includeJournal { keys.append("journal") }
         return keys
@@ -275,7 +281,7 @@ extension ReminderItem {
              quick24HourUntilAt, notifiedAlertAt, accentStart, accentEnd, repeatRule, anchorAlertAt,
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
-             cardStack, voiceRecordings, musicBlocks, mediaBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex,
+             cardStack, voiceRecordings, musicBlocks, mediaBlocks, gameBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex,
              endAt, earlyAlertMinutes, sharedCardId, sharedAuthorUid, sharedAuthorName
     }
 
@@ -311,6 +317,7 @@ extension ReminderItem {
         voiceRecordings = try c.decodeIfPresent([ReminderVoiceRecording].self, forKey: .voiceRecordings) ?? []
         musicBlocks = try c.decodeIfPresent([MusicBlock].self, forKey: .musicBlocks) ?? []
         mediaBlocks = try c.decodeIfPresent([MediaBlock].self, forKey: .mediaBlocks) ?? []
+        gameBlocks = (try? c.decodeIfPresent([CardGameBlock].self, forKey: .gameBlocks)) ?? []
         repeatWeekdaysMask = try c.decodeIfPresent(Int.self, forKey: .repeatWeekdaysMask) ?? 0
         repeatUntilEpochDay = try c.decodeIfPresent(EpochDay.self, forKey: .repeatUntilEpochDay)
         repeatSkippedEpochDays = try c.decodeIfPresent([EpochDay].self, forKey: .repeatSkippedEpochDays) ?? []

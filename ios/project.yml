@@ -25,6 +25,7 @@ targets:
     platform: iOS
     sources:
       - path: Real
+      - path: Shared
     dependencies:
       - package: Firebase
         product: FirebaseCore

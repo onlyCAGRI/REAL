@@ -22,6 +22,7 @@ struct ReminderDetailView: View {
     @State private var voiceRecorderOpen = false
     @State private var textToolsKey: String?
     @State private var showMediaSearch = false
+    @State private var showGameSearch = false
     @State private var deleting = false
     @State private var reordering = false
     @State private var newChecklistText = ""
@@ -143,6 +144,14 @@ struct ReminderDetailView: View {
         .sheet(isPresented: $showMediaSearch) {
             MediaSearchSheet { m in withAnimation(.spring(duration: 0.3)) { draft?.mediaBlocks.append(m) } }
         }
+        .sheet(isPresented: $showGameSearch) {
+            GameSearchSheet { g in
+                withAnimation(.spring(duration: 0.3)) {
+                    if editing { if draft?.gameBlocks.contains(where: { $0.providerId == g.providerId }) != true { draft?.gameBlocks.append(g) } }
+                    else { store.mutate(reminderId) { r in if !r.gameBlocks.contains(where: { $0.providerId == g.providerId }) { r.gameBlocks.append(g) } } }
+                }
+            }
+        }
         .fullScreenCover(isPresented: $showMoodPicker) {
             MoodAddSheet(onSaved: { mood, _ in
                 if editing { draft?.mood = mood } else { store.mutate(reminderId) { $0.mood = mood } }
@@ -218,7 +227,10 @@ struct ReminderDetailView: View {
         case "files":
             if id == "reference", let url = r.referenceUrl { linkBlock(url) }
             else if let a = r.attachments.first(where: { $0.id == id }) {
-                if a.sourceTitle == "REAL_TEXT_BLOCK" { textBoxBlock(a, r) } else { fileBlock(a) }
+                if a.sourceTitle == "REAL_TEXT_BLOCK" { textBoxBlock(a, r) }
+                else if a.type == .textSnippet {
+                    SnippetBlockView(attachment: a, editing: editing, onSave: { updateSnippet(a.id, $0) }, onRemove: { removeAttachment(a) })
+                } else { fileBlock(a) }
             }
         case "location": if let l = r.location { locationBlock(l) }
         case "journal": if let j = r.journal { journalBlock(j) }
@@ -235,6 +247,10 @@ struct ReminderDetailView: View {
             if let m = r.mediaBlocks.first(where: { $0.id == id }) {
                 MediaBlockView(block: m, editing: editing) { draft?.mediaBlocks.removeAll { $0.id == id } }
             }
+        case "game":
+            if let g = r.gameBlocks.first(where: { $0.id == id }) {
+                GameBlockView(block: g, editing: editing) { draft?.gameBlocks.removeAll { $0.id == id } }
+            }
         default: EmptyView()
         }
     }
@@ -250,6 +266,8 @@ struct ReminderDetailView: View {
             }
             .accessibilityLabel("Geri")
             Spacer()
+            FreshPastePill { providers in paste(providers) }
+                .padding(.trailing, 8)
             if CalendarCardPublisher.shared.hasExternalTarget(r.id) {
                 let done = CalendarCardPublisher.shared.isPublished(r)
                 Button { CalendarCardPublisher.shared.offer(r.id) } label: {
@@ -268,9 +286,12 @@ struct ReminderDetailView: View {
             HStack(spacing: 0) {
                 // iOS counterpart of Android's Now Bar is the Dynamic Island (a Live Activity). That needs a widget
                 // extension that is not built yet, so the island mark is shown dimmed.
-                DynamicIslandMark(color: Color(argb: 0xFF66666F))
+                // Yapıştır (Android: in the Now Bar button's place). The system PasteButton: no "Allow paste?" prompt.
+                PasteButton(supportedContentTypes: CardPaste.contentTypes) { providers in paste(providers) }
+                    .labelStyle(.iconOnly)
+                    .buttonBorderShape(.circle)
+                    .tint(Color.white.opacity(0.0))
                     .frame(width: 48, height: 40)
-                    .accessibilityLabel("Dynamic Island henüz kullanılamıyor")
                 Rectangle().fill(.white.opacity(0.13)).frame(width: 1, height: 18)
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -977,6 +998,8 @@ struct ReminderDetailView: View {
                                 count: d?.musicBlocks.count) { showMusicSearch = true }
                     QuickAction(symbol: "play.rectangle", label: "Film & Dizi", active: !(d?.mediaBlocks.isEmpty ?? true),
                                 count: d?.mediaBlocks.count) { showMediaSearch = true }
+                    QuickAction(symbol: "gamecontroller", label: "Oyun", active: !(d?.gameBlocks.isEmpty ?? true),
+                                count: d?.gameBlocks.count) { showGameSearch = true }
                     QuickAction(symbol: "doc", label: "Dosya ekle", active: false,
                                 count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
                     QuickAction(symbol: "face.smiling", label: "Mood", active: d?.mood != nil) { showMoodPicker = true }
@@ -1031,6 +1054,22 @@ struct ReminderDetailView: View {
         draft = nil
         secondaryExpanded = false
         checklistOpen = false
+    }
+
+    /// Yapıştır: the copied item becomes blocks on this card (the draft while editing, saved right away otherwise).
+    private func paste(_ providers: [NSItemProvider]) {
+        Task { @MainActor in
+            guard let result = await CardPaste.read(providers) else { RealToast.shared.show("Yapıştırılacak bir şey bulunamadı"); return }
+            if editing, var d = draft { CardPaste.apply(result, to: &d); draft = d }
+            else { store.mutate(reminderId) { CardPaste.apply(result, to: &$0) } }
+            ClipboardWatcher.shared.consume()
+            RealToast.shared.show("Yapıştırıldı · \(result.label)")
+        }
+    }
+
+    private func updateSnippet(_ id: String, _ text: String) {
+        if editing, let i = draft?.attachments.firstIndex(where: { $0.id == id }) { draft?.attachments[i].text = text }
+        else { store.mutate(reminderId) { r in if let i = r.attachments.firstIndex(where: { $0.id == id }) { r.attachments[i].text = text; r.updatedAt = .now } } }
     }
 
     private func addAttachment(_ a: ReminderAttachment?) {
@@ -1621,6 +1660,7 @@ private struct BlockReorderSheet: View {
         case "voice": return ("Ses", "\(item.voiceRecordings.count) kayıt", "waveform")
         case "music": return ("Müzik", item.musicBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "music.note")
         case "media": return ("Film / Dizi", item.mediaBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "film")
+        case "game": return ("Oyun", item.gameBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "gamecontroller")
         default: return (key, "", "square")
         }
     }

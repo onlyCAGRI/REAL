@@ -103,6 +103,7 @@ final class SharedCategorySync {
     private func outgoing(_ item: ReminderItem, _ st: inout State, sharedId: String, upload: Bool) async throws -> [String: Any]? {
         guard var o = try JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any] else { return nil }
         Self.localOnly.forEach { o.removeValue(forKey: $0) }
+        if (o["gameBlocks"] as? [Any])?.isEmpty ?? true { o.removeValue(forKey: "gameBlocks") }
         for (key, voice) in [("attachments", false), ("voiceRecordings", true)] {
             guard var rows = o[key] as? [[String: Any]] else { continue }
             for i in rows.indices {
