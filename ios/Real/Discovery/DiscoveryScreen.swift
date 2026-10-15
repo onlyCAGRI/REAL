@@ -217,7 +217,10 @@ struct DiscoveryScreen: View {
                 }
                 if let error { errorLine(error) }
             }
-            if !cards.isEmpty { SwipeTutorial(kind: kind == .film ? "film" : "game", rightLabel: "Kaydet", leftLabel: "Geç") }
+            if !cards.isEmpty {
+                if isList { SwipeTutorial(kind: kind == .film ? "film_list" : "game_list", rightLabel: "Kaldır", leftLabel: "Sona at") }
+                else { SwipeTutorial(kind: kind == .film ? "film" : "game", rightLabel: "Kaydet", leftLabel: "Geç") }
+            }
         }
         // Keep the deck stocked: with a couple of posters left the next ones load in the background.
         .onChange(of: cards.count, initial: true) { _, count in
@@ -461,6 +464,8 @@ struct PosterAmbient: View {
 struct PosterArtwork: View {
     let media: MediaBlock
     var titleSize: CGFloat = 20
+    /// false: the image is not requested yet (a deck poster waits for the front one).
+    var load = true
     var body: some View {
         ZStack {
             Color(argb: 0xFF1B1B20)
@@ -469,7 +474,7 @@ struct PosterArtwork: View {
                 Text(media.title).font(RealFont.inter(titleSize)).foregroundStyle(.white).multilineTextAlignment(.center).lineLimit(4)
             }
             .padding(28)
-            if let s = media.artworkUrl, let u = URL(string: s) {
+            if load, let s = media.artworkUrl, let u = URL(string: s) {
                 AsyncImage(url: u) { phase in
                     if let img = phase.image { img.resizable().scaledToFill() }
                 }
@@ -501,6 +506,8 @@ private struct PosterDeck: View {
     let onAddToReal: (DiscoveryCard) -> Void
 
     @State private var busy = false
+    /// The posters behind wait until the front one is on screen.
+    @State private var frontReady = false
     private let threshold: CGFloat = 85
 
     var body: some View {
@@ -518,6 +525,11 @@ private struct PosterDeck: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 34)
+        }
+        .task(id: cards.first?.id) {
+            frontReady = false
+            if let s = cards.first?.media.artworkUrl, let u = URL(string: s) { _ = try? await URLSession.shared.data(from: u) }
+            frontReady = true
         }
     }
 
@@ -543,7 +555,7 @@ private struct PosterDeck: View {
     }
 
     private func posterFace(_ item: DiscoveryCard, front: Bool, width: CGFloat, height: CGFloat) -> some View {
-        PosterArtwork(media: item.media)
+        PosterArtwork(media: item.media, load: front || frontReady)
             .frame(width: width, height: height)
             .overlay(alignment: .topLeading) { if front { leftLabels(item) } }
             .overlay(alignment: .topTrailing) { if front { rightLabels(item) } }
@@ -579,8 +591,9 @@ private struct PosterDeck: View {
                 guard !busy else { return }
                 // Right = save (list: keep, next) · left = pass (list: remove) · up / down: nothing yet.
                 if abs(offset.height) > abs(offset.width) { withAnimation(.spring()) { offset = .zero } }
-                else if offset.width > threshold { decide(item, later ? .browseList : .addToList, fly: CGSize(width: threshold * 6, height: 0)) }
-                else if offset.width < -threshold { decide(item, later ? .removeFromList : .skip, fly: CGSize(width: -threshold * 6, height: 0)) }
+                // In the saved list: right removes, left sends the poster to the back.
+                else if offset.width > threshold { decide(item, later ? .removeFromList : .addToList, fly: CGSize(width: threshold * 6, height: 0)) }
+                else if offset.width < -threshold { decide(item, later ? .browseList : .skip, fly: CGSize(width: -threshold * 6, height: 0)) }
                 else { withAnimation(.spring()) { offset = .zero } }
             }
     }

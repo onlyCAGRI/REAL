@@ -76,13 +76,28 @@ final class MusicDiscoveryStore {
         let known = Set(snapshot.excluded + snapshot.list.map(\.id) + snapshot.cards.map(\.id))
         var perGenre: [[MusicCard]] = []
         await withTaskGroup(of: (Int, [MusicCard]).self) { group in
-            for (i, g) in list.enumerated() { group.addTask { (i, await Self.chart(country, g)) } }
+            // The country's chart first; the US chart of the same genre is woven in, so small local charts (jazz,
+            // classical…) do not fill the deck with songs nobody knows.
+            for (i, g) in list.enumerated() {
+                group.addTask {
+                    async let local = Self.chart(country, g)
+                    async let us = country == "us" ? [] : Self.chart("us", g)
+                    return (i, Self.interleave(await local, await us))
+                }
+            }
             var results = Array(repeating: [MusicCard](), count: list.count)
             for await (i, cards) in group { results[i] = cards }
             perGenre = results
         }
         if perGenre.allSatisfy(\.isEmpty) { throw BookError.message("Müzik listeleri alınamadı. Bağlantını kontrol edip yeniden dene.") }
-        var queues = perGenre.map { $0.filter { !known.contains($0.id) }.shuffled() }
+        // Each genre keeps Apple's ranking (most played first), only mixed inside small windows; songs with a
+        // preview come first within a window.
+        var queues: [[MusicCard]] = perGenre.map { list in
+            let fresh = list.filter { !known.contains($0.id) }
+            return stride(from: 0, to: fresh.count, by: 6).flatMap { start in
+                fresh[start..<min(start + 6, fresh.count)].shuffled().sorted { ($0.music.previewUrl != nil ? 0 : 1) < ($1.music.previewUrl != nil ? 0 : 1) }
+            }
+        }
         var fresh: [MusicCard] = []
         var seen = Set<String>()
         while fresh.count < 40, queues.contains(where: { !$0.isEmpty }) {
@@ -109,6 +124,15 @@ final class MusicDiscoveryStore {
         case .remove: s.list = s.list.filter { $0.id != card.id }
         }
         set(s)
+    }
+
+    nonisolated static func interleave(_ a: [MusicCard], _ b: [MusicCard]) -> [MusicCard] {
+        var seen = Set<String>(), out: [MusicCard] = []
+        for i in 0..<max(a.count, b.count) {
+            if i < a.count, seen.insert(a[i].id).inserted { out.append(a[i]) }
+            if i < b.count, seen.insert(b[i].id).inserted { out.append(b[i]) }
+        }
+        return out
     }
 
     /// Apple Music top songs of one genre in one country (iTunes RSS).
@@ -246,7 +270,10 @@ struct MusicDiscoveryScreen: View {
                 }
                 if let error { errorLine(error) }
             }
-            if !cards.isEmpty { SwipeTutorial(kind: "music", rightLabel: "Kaydet", leftLabel: "Geç", upLabel: "Uygulamada aç") }
+            if !cards.isEmpty {
+                if list { SwipeTutorial(kind: "music_list", rightLabel: "Kaldır", leftLabel: "Sona at", upLabel: "Uygulamada aç") }
+                else { SwipeTutorial(kind: "music", rightLabel: "Kaydet", leftLabel: "Geç", upLabel: "Uygulamada aç") }
+            }
         }
         .onChange(of: cards.count, initial: true) { _, count in
             if deck && !list && !loading && error == nil && count <= 3 && !music.snapshot.selection.isEmpty { selection = Set(music.snapshot.selection); fetch() }
@@ -271,14 +298,20 @@ private struct MusicDeck: View {
     @State private var paused = false
     @State private var player: AVPlayer?
     @State private var playingId: String?
+    /// Next previews already loading, so a swipe starts the sound at once.
+    @State private var prepared: [String: AVPlayer] = [:]
+    /// The covers behind wait until the front one is on screen.
+    @State private var frontReady = false
     @State private var ambient: Color = Color(argb: 0xFF3A3530)
     @Environment(\.scenePhase) private var scenePhase
     private let threshold: CGFloat = 85
 
     var body: some View {
         GeometryReader { geo in
-            let side = min(geo.size.width * 0.96, max(1, geo.size.height - 76 - 42))
-            let top = max(0, (geo.size.height - 76 - 42 - side) / 2)
+            // Same place as the film / game dock: the button sits at the bottom, the cover centred above it.
+            let avail = max(1, geo.size.height - 34 - 76)
+            let side = min(geo.size.width * 0.96, avail)
+            let top = max(0, (avail - side) / 2)
             let visible = Array(cards.prefix(4))
             ZStack(alignment: .top) {
                 // The cover's own colours behind the deck, softly pulsing while the preview plays.
@@ -291,13 +324,15 @@ private struct MusicDeck: View {
                 ForEach(Array(visible.enumerated()).reversed(), id: \.element.id) { depth, item in
                     cover(item, depth: depth, side: side).offset(y: top)
                 }
-                bar.offset(y: top + side + 12)
+                bar.offset(y: avail + 12)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 34)
         }
         .task(id: "\(cards.first?.id ?? "")|\(paused)|\(scenePhase == .active)|\(busy)") { await play() }
         .task(id: cards.first?.music.artworkUrl) {
+            frontReady = false
+            defer { frontReady = true }
             guard let s = cards.first?.music.artworkUrl, let u = URL(string: s), let (d, _) = try? await URLSession.shared.data(from: u),
                   let img = UIImage(data: d), let c = CoverPalette.dominant(img) else { return }
             withAnimation(.easeOut(duration: 0.4)) { ambient = c }
@@ -310,8 +345,10 @@ private struct MusicDeck: View {
         guard let first = cards.first, !paused, !busy, scenePhase == .active,
               let s = first.music.previewUrl, let url = URL(string: s) else { return }
         try? AVAudioSession.sharedInstance().setCategory(.playback)
-        let p = AVPlayer(url: url)
+        let p = prepared[first.id] ?? AVPlayer(url: url)
+        p.seek(to: .zero)
         p.play()
+        prepareNext()
         player = p
         playingId = first.id
         NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: p.currentItem, queue: .main) { _ in
@@ -321,11 +358,24 @@ private struct MusicDeck: View {
 
     private func stop() { player?.pause(); player = nil; playingId = nil }
 
+    /// Keeps players for the next three previews; the rest are dropped.
+    private func prepareNext() {
+        let next = cards.dropFirst().prefix(3)
+        var keep: [String: AVPlayer] = [:]
+        for c in next {
+            guard let s = c.music.previewUrl, let u = URL(string: s) else { continue }
+            let p = prepared[c.id] ?? AVPlayer(url: u)
+            p.automaticallyWaitsToMinimizeStalling = false
+            keep[c.id] = p
+        }
+        prepared = keep
+    }
+
     private func cover(_ item: MusicCard, depth: Int, side: CGFloat) -> some View {
         let d = CGFloat(depth)
         let front = depth == 0
         return ZStack(alignment: .bottomLeading) {
-            MusicArtwork(url: item.music.artworkUrl)
+            MusicArtwork(url: front || frontReady ? item.music.artworkUrl : nil)
             if front {
                 LinearGradient(colors: [.clear, .black.opacity(0.82)], startPoint: .center, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 2) {
@@ -366,8 +416,9 @@ private struct MusicDeck: View {
                     paused = true
                     openInPreferredMusicApp(item.music)
                 } else if abs(offset.height) > abs(offset.width) { withAnimation(.spring()) { offset = .zero } }
-                else if offset.width > threshold { decide(item, list ? .keep : .save, fly: CGSize(width: threshold * 6, height: 0)) }
-                else if offset.width < -threshold { decide(item, list ? .remove : .skip, fly: CGSize(width: -threshold * 6, height: 0)) }
+                // In Müzik listem: right removes, left sends the song to the back.
+                else if offset.width > threshold { decide(item, list ? .remove : .save, fly: CGSize(width: threshold * 6, height: 0)) }
+                else if offset.width < -threshold { decide(item, list ? .keep : .skip, fly: CGSize(width: -threshold * 6, height: 0)) }
                 else { withAnimation(.spring()) { offset = .zero } }
             }
     }

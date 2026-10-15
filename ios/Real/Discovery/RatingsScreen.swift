@@ -190,22 +190,40 @@ private struct PeriodPicker: View {
     }
 }
 
-/// Genre filter: small faded words that scroll sideways; the chosen one is white.
+/// Genre filter: "Hepsi" sits at the left edge with nothing to its right; the genres wait off screen to its left (most
+/// common nearest). Pulling the row right brings them in from the left; whichever word reaches the left edge is chosen
+/// while scrolling, and the row snaps to it.
 private struct GenreRow: View {
     let genres: [String]
     @Binding var selected: String?
+    @State private var position: String?
+    private static let all = "*hepsi*"
     var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 16) {
-                ForEach([nil] + genres.map { Optional($0) }, id: \.self) { g in
-                    let on = g == selected
-                    Text(g ?? "Hepsi").font(RealFont.inter(on ? 14 : 12)).foregroundStyle(on ? .white : faded)
-                        .padding(.vertical, 6).contentShape(Rectangle())
-                        .onTapGesture { withAnimation(.easeOut(duration: 0.22)) { selected = on ? nil : g } }
+        GeometryReader { geo in
+            ScrollView(.horizontal) {
+                HStack(spacing: 16) {
+                    ForEach(genres.reversed() + [Self.all], id: \.self) { g in
+                        let on = (position ?? Self.all) == g
+                        Text(g == Self.all ? "Hepsi" : g).font(RealFont.inter(on ? 14 : 12)).foregroundStyle(on ? .white : faded)
+                            .padding(.vertical, 6).contentShape(Rectangle())
+                            .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { position = g } }
+                            .id(g)
+                    }
                 }
+                .scrollTargetLayout()
             }
+            .contentMargins(.trailing, geo.size.width, for: .scrollContent)
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $position)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
+        .frame(height: 30)
+        .onAppear { position = selected ?? Self.all }
+        .onChange(of: genres) { _, _ in position = selected ?? Self.all }
+        .onChange(of: position) { _, p in
+            let next = p == nil || p == Self.all ? nil : p
+            if next != selected { withAnimation(.easeOut(duration: 0.2)) { selected = next } }
+        }
     }
 }
 
@@ -320,9 +338,7 @@ private struct SeriesGrid: View {
                             Text("Kötü"); Capsule().fill(LinearGradient(colors: ratingScale, startPoint: .leading, endPoint: .trailing)).frame(height: 6); Text("Efsane")
                         }
                         .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF777777)).padding(.top, 10)
-                        Text("Bölüme basıp puan ver. Sezona (S1) basınca o sezonun bütün bölümlerine aynı puanı verirsin. Bölüm bilgileri TVmaze ve TheTVDB; Türkçesi olmayan özetler yapay zekâyla çevrilir.")
-                            .font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF666666)).frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 12).padding(.bottom, 40)
+                        Color.clear.frame(height: 40)
                     }
                 }
                 .padding(.horizontal, 20)

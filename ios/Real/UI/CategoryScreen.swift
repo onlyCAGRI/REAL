@@ -12,6 +12,7 @@ struct CategoryScreen: View {
     let customId: Int64?
     @Binding var path: [Route]
 
+    @AppStorage(HomeCardStyle.plainKey) private var plainSetting = false
     @AppStorage("category_sort_order") private var sortRaw = ReminderSortOrder.recentlyAdded.rawValue
     @State private var colorFilter: Int?
     @State private var filterMode = false
@@ -57,7 +58,8 @@ struct CategoryScreen: View {
                             onFilter: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.2)) { filterMode = true } },
                             onSort: { changeSort() },
                             onGoals: customId.map { id in { path.append(.goal(id)) } },
-                            onPeople: custom.map { _ in { showPeople = true } }
+                            onPeople: custom.map { _ in { showPeople = true } },
+                            shared: custom?.isShared == true
                         )
                         .opacity(selectedIds.isEmpty ? 1 : 0.35)
                         .background(GeometryReader { g in
@@ -298,7 +300,11 @@ struct CategoryScreen: View {
         let category = store.category(reminder.customCategoryId)
         // Sınırlı access to a shared category: the card is only looked at.
         let viewOnly = category?.isReadOnlyShared == true
-        let rightAction: (() -> Void)? = (builtIn == .today || viewOnly) ? nil : { withAnimation { store.moveTo24Hour(reminder.id) } }
+        // Sade kartlar (Ayarlar) here too, not in the journal list: a right swipe completes (or undoes).
+        let plainCards = plainSetting && builtIn != .journalEntries
+        let rightAction: (() -> Void)? = viewOnly ? nil
+            : plainCards ? { withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(reminder.id) } }
+            : builtIn == .today ? nil : { withAnimation { store.moveTo24Hour(reminder.id) } }
         let deleteAction: (() -> Void)? = viewOnly ? nil : { withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo([reminder.id]) } }
         return ReminderCardView(
             reminder: reminder,
@@ -315,7 +321,10 @@ struct CategoryScreen: View {
             },
             onLongPress: { if !viewOnly { selectedIds.insert(reminder.id) } },
             onSwipeTo24Hour: rightAction,
-            onSwipeDelete: deleteAction
+            onSwipeDelete: deleteAction,
+            swipeRightLabel: plainCards ? (reminder.isCompleted ? "Geri al" : "Tamamla") : "Move 24 hour",
+            swipeRightKeepsCard: !plainCards || (reminder.hasRepeat && !reminder.isCompleted),
+            plainStyle: plainCards
         )
         .zoomSource("card-\(reminder.id)", in: nav)
         .padding(.horizontal, 16)
@@ -384,6 +393,8 @@ private struct CategoryHero: View {
     var onGoals: (() -> Void)? = nil
     /// Ortak kategori: the people in this category (friend button in the ••• menu).
     var onPeople: (() -> Void)? = nil
+    /// Ortak kategori: a friend mark left of the progress ring (tap opens Kişiler).
+    var shared = false
     @State private var menuOpen = false
     @FocusState private var searching: Bool
 
@@ -460,6 +471,13 @@ private struct CategoryHero: View {
                 (Text("\(count) kart") + (detail.map { d in Text("  •  ") + Text(d.text).foregroundColor(d.alert ? alertColor : fg.opacity(0.9)) } ?? Text("")))
                     .font(RealFont.inter(13, .semibold)).foregroundStyle(fg.opacity(0.9)).lineLimit(1)
                 Spacer()
+                if shared {
+                    Button { onPeople?() } label: {
+                        CategoryIconGlyph(icon: .friends, color: fg, size: 19).frame(width: 34, height: 34).contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Ortak kategori · Kişiler")
+                }
                 if let stats {
                     Button { withAnimation(.spring(duration: 0.35)) { showProgress.toggle() } } label: {
                         CategoryProgressDisc(fraction: stats.fraction, active: showProgress, tint: fg).frame(width: 44, height: 44)

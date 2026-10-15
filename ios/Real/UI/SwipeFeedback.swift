@@ -20,7 +20,7 @@ struct SwipeEdgeGlow: View {
     var body: some View {
         Canvas { ctx, size in
             drawEdgeGlow(&ctx, size: size, offset: offset == .zero ? shown : offset, threshold: threshold,
-                         right: listMode ? swipeNext : swipeSave, left: listMode ? swipeRemove : swipePass, up: upColor)
+                         right: listMode ? swipeRemove : swipeSave, left: listMode ? swipeNext : swipePass, up: upColor)
         }
         .opacity(offset == .zero ? 0 : 1)
         .animation(.easeOut(duration: 0.3), value: offset == .zero)
