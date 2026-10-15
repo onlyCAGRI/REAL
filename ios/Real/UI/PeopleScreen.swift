@@ -256,3 +256,50 @@ struct PeopleScreen: View {
         }
     }
 }
+
+/// "REAL'de adın ne olsun?" — asked once after Google sign-in, prefilled with the first name only.
+struct ProfileNameSheet: View {
+    @State private var name = RealAuth.shared.account?.firstName ?? ""
+    @State private var busy = false
+    @State private var error: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3).frame(maxWidth: .infinity)
+            Text("REAL'de adın ne olsun?").font(RealFont.inter(22, .semibold)).foregroundStyle(.white)
+            Text("Ortak kategorilerde ve paylaştığın kartlarda bu ad görünür.").font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.65))
+            TextField("Adın", text: $name)
+                .font(RealFont.inter(16)).foregroundStyle(.white).tint(.white)
+                .textContentType(.givenName).submitLabel(.done).focused($focused)
+                .onSubmit { save() }
+                .padding(.horizontal, 18).frame(height: 52)
+                .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.06)))
+            if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)) }
+            Button { save() } label: {
+                Text(busy ? "Kaydediliyor…" : "Kaydet").font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white))
+            }
+            .buttonStyle(.plain).disabled(busy || name.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button { RealAuth.shared.confirmName() } label: {
+                Text("Google adım kalsın").font(RealFont.inter(15)).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white.opacity(0.08)))
+            }
+            .buttonStyle(.plain).disabled(busy)
+        }
+        .padding(22)
+        .presentationDetents([.height(error == nil ? 360 : 400)])
+        .presentationBackground(Color(argb: 0xFF111113))
+        .interactiveDismissDisabled()
+    }
+
+    private func save() {
+        guard !busy else { return }
+        busy = true; error = nil
+        Task {
+            do { try await RealAuth.shared.updateDisplayName(name) }
+            catch { self.error = (error as? LocalizedError)?.errorDescription ?? "Ad kaydedilemedi." }
+            busy = false
+        }
+    }
+}

@@ -88,6 +88,37 @@ final class RealAuth {
 
     func handle(url: URL) -> Bool { GIDSignIn.sharedInstance.handle(url) }
 
+    // MARK: Name shown to others
+
+    private var nameRevision = 0
+    /// Google gives the full name ("Ad Soyad"); once per account REAL asks which name others should see.
+    var needsNameChoice: Bool {
+        _ = nameRevision
+        guard let uid = account?.uid else { return false }
+        return !UserDefaults.standard.bool(forKey: "profile_name_confirmed_\(uid)")
+    }
+    func confirmName() {
+        guard let uid = account?.uid else { return }
+        UserDefaults.standard.set(true, forKey: "profile_name_confirmed_\(uid)")
+        nameRevision += 1
+    }
+
+    /// Saves the Firebase display name; the worker reads it from a fresh ID token.
+    func updateDisplayName(_ name: String) async throws {
+        let clean = name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard !clean.isEmpty else { throw CalendarCardPublisher.Failure(errorDescription: "Adını yaz.") }
+        guard clean.count <= 80, !clean.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+            throw CalendarCardPublisher.Failure(errorDescription: "Ad en fazla 80 karakter olmalı.")
+        }
+        guard let user = Auth.auth().currentUser, user.uid == account?.uid else { throw URLError(.userAuthenticationRequired) }
+        let change = user.createProfileChangeRequest()
+        change.displayName = clean
+        try await change.commitChanges()
+        _ = try await user.getIDTokenResult(forcingRefresh: true)
+        refreshAccount()
+        confirmName()
+    }
+
     /// Headers for REAL worker requests.
     nonisolated static func requestHeaders() async throws -> [String: String] {
         guard let user = await MainActor.run(body: { Auth.auth().currentUser }) else {

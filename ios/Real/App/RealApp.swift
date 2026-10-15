@@ -56,6 +56,9 @@ struct RealApp: App {
                     if RealDeepLinks.shared.handle(url) { return }
                     _ = RealAuth.shared.handle(url: url)
                 }
+                .sheet(isPresented: Binding(get: { RealAuth.shared.needsNameChoice }, set: { _ in })) {
+                    ProfileNameSheet()
+                }
                 .sheet(item: Binding(get: { RealDeepLinks.shared.pending }, set: { RealDeepLinks.shared.pending = $0 })) { link in
                     InviteAcceptSheet(link: link).environment(store)
                 }

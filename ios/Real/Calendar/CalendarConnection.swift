@@ -83,8 +83,7 @@ final class CalendarConnection {
         return store.events(matching: predicate)
             .filter { e in
                 let n = e.notes ?? ""
-                return !n.hasPrefix("REAL
-[REAL-CALENDAR:") && !n.hasPrefix("REAL planı")
+                return !n.hasPrefix("REAL\n[REAL-CALENDAR:") && !n.hasPrefix("REAL planı")
             }
             .map { e in
                 CalendarOccurrence(id: (e.eventIdentifier ?? UUID().uuidString) + "@\(Int(e.startDate.timeIntervalSince1970))",
