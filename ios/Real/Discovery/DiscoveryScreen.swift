@@ -15,6 +15,7 @@ struct DiscoveryScreen: View {
     let onClose: () -> Void
 
     @Environment(DiscoveryStore.self) private var discovery
+    @State private var rateWatched: MediaBlock?
     @Environment(ReminderStore.self) private var store
     @State private var page: DiscoveryPage = .filters
     @State private var type = "BOTH"
@@ -53,6 +54,11 @@ struct DiscoveryScreen: View {
         }
         .alert("Öneriyi bildir", isPresented: $reportNotice) { Button("Tamam", role: .cancel) {} } message: {
             Text("Bildirim göndermek için REAL'e giriş yapman gerekiyor.")
+        }
+        .sheet(item: $rateWatched) { media in
+            FilmRatingSheet(media: media, meta: [media.year.map(String.init), "İzledim"].compactMap { $0 }.joined(separator: " · "), initial: nil) {
+                MediaRatingStore.shared.rate(media, $0, past: true)
+            }
         }
     }
 
@@ -229,6 +235,11 @@ struct DiscoveryScreen: View {
         do {
             if action == .saveDiscovery || action == .saveList { addToReal(card) }
             try discovery.act(kind, card, action)
+            // "İzledim" on a film asks for its score right away (optional); it goes to Puanlarım as the past.
+            if action == .watched, kind == .film {
+                MediaRatingStore.shared.importWatched([card])
+                if card.media.type == .MOVIE { rateWatched = card.media }
+            }
             return true
         } catch let e {
             error = e.localizedDescription

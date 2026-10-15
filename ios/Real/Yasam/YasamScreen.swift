@@ -14,6 +14,8 @@ struct YasamScreen: View {
     @State private var discoveryTarget: (kind: DiscoveryKind, list: Bool)?
     /// Müzik keşfi: false = öneri, true = Müzik listem.
     @State private var musicTarget: Bool?
+    /// Puanlarım (Keşfet → Puanla).
+    @State private var showRatings = false
     @State private var resumeBook: String?
     var onOpenCard: (Int64) -> Void = { _ in }
 
@@ -75,6 +77,13 @@ struct YasamScreen: View {
                 .transition(.move(edge: .trailing).combined(with: .opacity))
                 .zIndex(4)
             }
+            if showRatings {
+                RatingsScreen {
+                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { showRatings = false }
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .zIndex(4)
+            }
             if let list = musicTarget {
                 MusicDiscoveryScreen(startInList: list) {
                     withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = nil }
@@ -84,7 +93,10 @@ struct YasamScreen: View {
             }
         }
         .presentationBackground(.clear)
-        .onAppear { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9)) { revealed = true } }
+        .onAppear {
+            MediaRatingStore.shared.importWatched(discovery.film.watched)
+            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9)) { revealed = true }
+        }
         .fullScreenCover(isPresented: $showBooks) { BooksModuleScreen(resumeBookId: resumeBook).liftedTopSafeArea() }
         .fullScreenCover(isPresented: $showWater) { WaterTrackerScreen().liftedTopSafeArea().presentationBackground(.black) }
         .fullScreenCover(isPresented: $showMoodAdd) { MoodAddSheet().liftedTopSafeArea() }
@@ -255,25 +267,27 @@ struct YasamScreen: View {
                         YasamTextAction(text: "RAFINI AÇ  ›", tone: YasamTone.book) { resumeBook = nil; showBooks = true }
                     }
                 }
-                YasamRow(label: "FİLM & DİZİ · OYUN · MÜZİK", value: "Öneri al", expanded: open == "media", index: 4, revealed: revealed,
-                         toggle: { toggle("media") }) {
-                    Text(mediaPrompt).font(.system(size: 19, weight: .light)).foregroundStyle(.white)
-                } content: {
-                    YasamTextAction(text: "FİLM / DİZİ ÖNERİ AL  ›", tone: YasamTone.media) { openDiscovery(.film, list: false) }
-                    YasamTextAction(text: "İZLENECEK LİSTEM" + listCount(.film) + "  ›", tone: YasamTone.muted) { openDiscovery(.film, list: true) }
-                    Rectangle().fill(.white.opacity(0.10)).frame(height: 1).padding(.vertical, 4)
-                    YasamTextAction(text: "OYUN ÖNERİ AL  ›", tone: YasamTone.media) { openDiscovery(.game, list: false) }
-                    YasamTextAction(text: "OYNANACAK LİSTEM" + listCount(.game) + "  ›", tone: YasamTone.muted) { openDiscovery(.game, list: true) }
-                    Rectangle().fill(.white.opacity(0.10)).frame(height: 1).padding(.vertical, 4)
-                    YasamTextAction(text: "MÜZİK ÖNERİ AL  ›", tone: YasamTone.media) {
-                        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = false }
-                    }
-                    YasamTextAction(text: "MÜZİK LİSTEM" + musicCount + "  ›", tone: YasamTone.muted) {
-                        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = true }
-                    }
-                }
+                Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
+                YasamDiscoverGrid(
+                    watchCount: discovery.snapshot(.film).later.count, playCount: discovery.snapshot(.game).later.count,
+                    listenCount: MusicDiscoveryStore.shared.snapshot.list.count,
+                    watchArt: discovery.snapshot(.film).later.compactMap(\.media.artworkUrl),
+                    playArt: discovery.snapshot(.game).later.compactMap(\.media.artworkUrl),
+                    listenArt: MusicDiscoveryStore.shared.snapshot.list.reversed().compactMap(\.music.artworkUrl),
+                    ratings: MediaRatingStore.shared.entries,
+                    open: { kind, list in
+                        switch kind {
+                        case 0: openDiscovery(.film, list: list)
+                        case 1: openDiscovery(.game, list: list)
+                        case 2: withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = list }
+                        default: withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { showRatings = true }
+                        }
+                    })
+                .yasamEnter(revealed, delay: 0.48 + 4 * 0.055, y: 14)
             }
-            Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
+            if tab == 1 {
+                Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
+            }
         }
         .padding(.horizontal, 22).padding(.top, 20)
         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32), value: open)

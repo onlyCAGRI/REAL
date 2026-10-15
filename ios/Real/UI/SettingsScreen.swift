@@ -174,6 +174,8 @@ struct SettingsScreen: View {
     @State private var showLicenses = false
     @State private var showAiPrivacy = false
     @State private var showClearMoods = false
+    @State private var showRatingReset = false
+    @Environment(DiscoveryStore.self) private var discovery
     @State private var showCalendar = false
     @State private var notice: String?
     @Environment(\.openURL) private var openURL
@@ -200,6 +202,13 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
         .sheet(isPresented: $showAiPrivacy) { AiPrivacySheet() }
         .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false }.liftedTopSafeArea() }
+        .alert("Puanlar sıfırlansın mı?", isPresented: $showRatingReset) {
+            Button("Sıfırla", role: .destructive) {
+                MediaRatingStore.shared.reset(watched: discovery.film.watched)
+                RealToast.shared.show("Puanlar sıfırlandı")
+            }
+            Button("Vazgeç", role: .cancel) {}
+        } message: { Text("Puanlarım listesi boşalır. Bu geri alınamaz.") }
         .alert("Tüm mood kayıtlarını sil?", isPresented: $showClearMoods) {
             Button("Sil", role: .destructive) {
                 life.clearAllMoods()
@@ -249,6 +258,11 @@ struct SettingsScreen: View {
             SettingsActionRow(icon: .music, title: "Müzik uygulaması", subtitle: musicSource.label + " · şarkılar burada açılır") {
                 musicSource = musicSource == .apple ? .spotify : .apple
                 MusicSource.saved = musicSource
+            }
+            SettingsDivider()
+            // Puanlarım: film / dizi / bölüm puanlarını siler (şimdilik test için).
+            SettingsActionRow(icon: .delete, title: "Puanlarımı sıfırla", subtitle: "Film, dizi ve bölüm puanlarının hepsini siler") {
+                showRatingReset = true
             }
         }
         SettingsSectionHeader(title: "BİLDİRİMLER VE DAVRANIŞ")
