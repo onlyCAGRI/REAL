@@ -28,6 +28,8 @@ private let periods = [Period(short: "7", long: "Son 7 gün", days: 7), Period(s
                        Period(short: "1 yıl", long: "Son 1 yıl", days: 365), Period(short: "Tümü", long: "Tümü", days: nil)]
 
 private let periodLabels = periods.map { p in p.days.map { $0 <= 30 ? "\(p.short) gün" : p.short } ?? p.short }
+/// Picker order: "Tümü" at the edge, then 7 gün, 30 gün, 3 ay… as they come in from the right (nearest first).
+private let periodOrder = Array(periods.indices.filter { periods[$0].days != nil }.reversed()) + [periods.count - 1]
 
 private func genresOf(_ e: RatingEntry) -> [String] {
     var seen = Set<String>()
@@ -68,8 +70,9 @@ struct RatingsScreen: View {
             guard let at = e.addedAt else { return false }
             return now - at <= Int64(days) * 86_400_000
         }.sorted { ($0.addedAt ?? .min, $0.order) > ($1.addedAt ?? .min, $1.order) }
+        // Genres of the whole list: the row stays the same when the period changes, so both can be chosen together.
         var counts: [String: Int] = [:]
-        for g in inPeriod.flatMap(genresOf) { counts[g, default: 0] += 1 }
+        for g in ratings.entries.flatMap(genresOf) { counts[g, default: 0] += 1 }
         var genres = counts.sorted { $0.value > $1.value }.map(\.key)
         if let genre, !genres.contains(genre) { genres.append(genre) }
         let shown = genre.map { g in inPeriod.filter { genresOf($0).contains(g) } } ?? inPeriod
@@ -82,6 +85,7 @@ struct RatingsScreen: View {
                     Color.clear.frame(height: 54)
                     Text(avg.map { scoreText(round1($0)) } ?? "–").font(RealFont.inter(56, .medium)).foregroundStyle(.white)
                         .contentTransition(.numericText()).frame(maxWidth: .infinity).padding(.top, 6)
+                    Text("ortalaman").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF888888)).frame(maxWidth: .infinity).padding(.top, 2)
                     // One row: genres pull in from the left of "Hepsi", periods from the right of "Tümü".
                     let genreLabels = genres.reversed() + ["Hepsi"]
                     HStack(spacing: 0) {
@@ -89,8 +93,9 @@ struct RatingsScreen: View {
                             get: { genre.flatMap { genreLabels.firstIndex(of: $0) } ?? genreLabels.count - 1 },
                             set: { i in withAnimation(.easeOut(duration: 0.2)) { genre = i == genreLabels.count - 1 ? nil : genreLabels[i] } }),
                                        rtl: false)
-                        AnchoredPicker(labels: periodLabels, selected: Binding(
-                            get: { period }, set: { i in withAnimation(.easeOut(duration: 0.2)) { period = i } }), rtl: true)
+                        AnchoredPicker(labels: periodOrder.map { periodLabels[$0] }, selected: Binding(
+                            get: { periodOrder.firstIndex(of: period) ?? periodOrder.count - 1 },
+                            set: { i in withAnimation(.easeOut(duration: 0.2)) { period = periodOrder[i] } }), rtl: true)
                     }
                     .padding(.top, 14).padding(.bottom, 16)
                     if !shown.isEmpty {
