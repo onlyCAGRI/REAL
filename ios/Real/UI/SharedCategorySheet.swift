@@ -10,6 +10,8 @@ struct SharedCategorySheet: View {
     let calendarLinked: Bool
 
     @Environment(ReminderStore.self) private var store
+    @Environment(LifeStore.self) private var life
+    @State private var showPeople = false
     @State private var members: [SharedMember] = []
     @State private var people: [SharedMember] = []
     @State private var error: String?
@@ -40,6 +42,7 @@ struct SharedCategorySheet: View {
             }
         }
         .task { await refresh() }
+        .sheet(isPresented: $showPeople, onDismiss: { Task { await refresh() } }) { PeopleScreen() }
     }
 
     private var content: some View {
@@ -66,8 +69,12 @@ struct SharedCategorySheet: View {
                             VStack(spacing: 0) {
                                 let candidates = people.filter { p in !members.contains { $0.uid == p.uid } }
                                 if candidates.isEmpty {
-                                    Text(people.isEmpty ? "Kişilerim boş. Kişi eklemek için Android'deki Kişilerim'i kullan." : "Herkes bu kategoride.")
+                                    Text(people.isEmpty ? "Kişilerim boş." : "Herkes bu kategoride.")
                                         .font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.5)).padding(14)
+                                    if people.isEmpty {
+                                        Button("Kişilerim'i aç") { showPeople = true }
+                                            .font(RealFont.inter(13, .semibold)).foregroundStyle(.white).padding(.bottom, 12)
+                                    }
                                 }
                                 ForEach(candidates) { p in
                                     HStack {
@@ -139,6 +146,8 @@ struct SharedCategorySheet: View {
         act {
             if current.sharedId == nil {
                 working = "Kategori paylaşılıyor"; moved = 0
+                // The server only shares categories it already has.
+                await RealCloudSync.shared.run(store, life)
                 try await sync.share(store, category: current, personUid: uid, access: newAccess) { moved = $0 }
             } else {
                 try await sync.addMember(current, uid: uid, access: newAccess)
@@ -173,7 +182,8 @@ private struct AccessToggle: View {
     let onChange: (String) -> Void
     var body: some View {
         HStack(spacing: 0) {
-            ForEach([("full", "Tam"), ("view", "Sınırlı")], id: \.0) { key, label in
+            ForEach([("full", "Tam"), ("view", "Sınırlı")], id: \.0) { pair in
+                let key = pair.0, label = pair.1
                 let on = access == key
                 Button { if !on { onChange(key) } } label: {
                     Text(label).font(RealFont.inter(12, on ? .semibold : .regular)).foregroundStyle(on ? .black : .white.opacity(0.7))

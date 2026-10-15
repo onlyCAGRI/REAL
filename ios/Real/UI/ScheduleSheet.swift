@@ -361,7 +361,7 @@ struct EarlyAlertScreen: View {
     let onBack: () -> Void
 
     enum Unit: CaseIterable { case minutes, hours, days
-        var minutes: Int { switch self { case .minutes: 1; case .hours: 60; case .days: 1440 } }
+        var factor: Int { switch self { case .minutes: 1; case .hours: 60; case .days: 1440 } }
         var word: String { switch self { case .minutes: "dakika"; case .hours: "saat"; case .days: "gün" } }
         var range: ClosedRange<Int> { switch self { case .minutes: 5...180; case .hours: 1...72; case .days: 1...30 } }
         var step: Int { self == .minutes ? 5 : 1 }
@@ -412,7 +412,7 @@ struct EarlyAlertScreen: View {
             if let s = selected {
                 let u = Self.unit(of: s)
                 active = u
-                amounts[u] = min(max(s / u.minutes, u.range.lowerBound), u.range.upperBound)
+                amounts[u] = min(max(s / u.factor, u.range.lowerBound), u.range.upperBound)
             }
         }
     }
@@ -421,7 +421,7 @@ struct EarlyAlertScreen: View {
         let next = min(max(amount(u) + (up ? u.step : -u.step), u.range.lowerBound), u.range.upperBound)
         guard next != amount(u) else { return }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { amounts[u] = next }
-        selected = next * u.minutes
+        selected = next * u.factor
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
@@ -449,9 +449,9 @@ struct EarlyAlertScreen: View {
         .padding(.horizontal, 18).padding(.vertical, 4)
         .contentShape(Rectangle())
         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22), value: on)
-        .onTapGesture { active = u; selected = amount(u) * u.minutes }
+        .onTapGesture { active = u; selected = amount(u) * u.factor }
         .gesture(DragGesture(minimumDistance: 6).onChanged { v in
-            if active != u { active = u; selected = amount(u) * u.minutes }
+            if active != u { active = u; selected = amount(u) * u.factor }
             let delta = -v.translation.height - dragCarry
             if abs(delta) >= 18 { step(u, up: delta > 0); dragCarry += delta > 0 ? 18 : -18 }
         }.onEnded { _ in dragCarry = 0 })

@@ -71,6 +71,14 @@
 				<string>com.googleusercontent.apps.547860940198-r61tg5etrv3burml5qsm9bmgtfpupc39</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>real-links</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>real</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

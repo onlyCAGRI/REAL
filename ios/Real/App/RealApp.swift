@@ -52,16 +52,28 @@ struct RealApp: App {
                 .environment(discovery)
                 .background(Color.black)
                 .overlay { RealToastHost() }
-                .onOpenURL { url in _ = RealAuth.shared.handle(url: url) }
+                .onOpenURL { url in
+                    if RealDeepLinks.shared.handle(url) { return }
+                    _ = RealAuth.shared.handle(url: url)
+                }
+                .sheet(item: Binding(get: { RealDeepLinks.shared.pending }, set: { RealDeepLinks.shared.pending = $0 })) { link in
+                    InviteAcceptSheet(link: link).environment(store)
+                }
                 // Ortak kategori: local edits go up shortly; while the app is open it also pulls every minute.
                 .task {
                     let store = store
                     _ = KeyboardWatcher.shared
+                    let life = life
                     store.onSaved = { [weak store] in
                         guard let store else { return }
-                        Task { @MainActor in SharedCategorySync.shared.request(store) }
+                        Task { @MainActor in
+                            SharedCategorySync.shared.request(store)
+                            RealCloudSync.shared.request(store, life)
+                        }
                     }
+                    // Two-way cloud sync and shared categories, every minute while the app is open.
                     while !Task.isCancelled {
+                        await RealCloudSync.shared.run(store, life)
                         await SharedCategorySync.shared.syncNow(store)
                         try? await Task.sleep(for: .seconds(60))
                     }

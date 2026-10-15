@@ -358,6 +358,21 @@ final class ReminderStore {
         ids.forEach(NotificationScheduler.cancel)
     }
 
+    /// A category deleted in the cloud (its cards arrive on their own).
+    func removeCategoryOnlyFromSync(_ id: Int64) {
+        syncWriting = true; defer { syncWriting = false }
+        categories.removeAll { $0.id == id }
+        categoryOrderKeys.removeAll { $0 == "custom:\(id)" }
+        save()
+    }
+
+    func setCategoryOrderFromSync(_ keys: [String]) {
+        guard keys != categoryOrderKeys else { return }
+        syncWriting = true; defer { syncWriting = false }
+        categoryOrderKeys = keys
+        save()
+    }
+
     /// Rewrites cards in one go (e.g. a category coming home: its shared cards become personal).
     func rewriteFromSync(_ change: (inout [ReminderItem]) -> Void) {
         syncWriting = true; defer { syncWriting = false }

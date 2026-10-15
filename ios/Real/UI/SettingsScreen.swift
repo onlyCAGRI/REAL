@@ -17,6 +17,7 @@ struct AccountMenuOverlay: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showPhotoPicker = false
     @State private var notice: String?
+    @State private var showPeople = false
 
     /// Google sign-in, then the account's cards / categories / moods replace this device's (read-only restore).
     private func signInAndRestore() {
@@ -32,6 +33,7 @@ struct AccountMenuOverlay: View {
     private func restore() {
         Task { @MainActor in
             do {
+                RealCloudSync.shared.reset()
                 let summary = try await RealCloudRestore.run(store: store, life: life)
                 var text = "Hesabından \(summary.cards) kart, \(summary.categories) kategori ve \(summary.moods) mood yüklendi"
                 if summary.categoryOrder { text += ", kategori sıralaman uygulandı" }
@@ -73,6 +75,7 @@ struct AccountMenuOverlay: View {
                     if auth.account == nil {
                         item(.add, auth.busy ? "Google açılıyor…" : "Hesap ekle") { signInAndRestore() }
                     } else {
+                        item(.person, "Kişilerim") { showPeople = true }
                         item(.manage, "Kartları hesaptan yeniden yükle") { restore() }
                         item(.close, "Hesaptan çık") {
                             auth.signOut()
@@ -106,6 +109,7 @@ struct AccountMenuOverlay: View {
         .alert("REAL", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("Tamam", role: .cancel) {}
         } message: { Text(notice ?? "") }
+        .sheet(isPresented: $showPeople) { PeopleScreen() }
     }
 
     private func item(_ glyph: ActionGlyph, _ label: String, action: @escaping () -> Void) -> some View {

@@ -112,7 +112,7 @@ struct PlannerMonthView: View {
         for k in order where !firstSeen.contains(k) { firstSeen.append(k) }
         _ = spanKeys
         let spanSlot = Dictionary(uniqueKeysWithValues: firstSeen.prefix(3).enumerated().map { ($0.element, [1, 0, 2][$0.offset]) })
-        let slots: [[Int]?] = dots.map { list in
+        let slots: [[Int]?] = dots.map { list -> [Int]? in
             guard list.contains(where: { spanSlot[$0.id] != nil }) else { return nil }
             let used = Set(list.compactMap { spanSlot[$0.id] })
             var free = (0...2).filter { !used.contains($0) }

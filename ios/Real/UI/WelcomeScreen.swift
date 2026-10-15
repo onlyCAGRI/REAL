@@ -179,6 +179,7 @@ struct WelcomeScreen: View {
                         return
                     }
                     do {
+                        RealCloudSync.shared.reset()
                         _ = try await RealCloudRestore.run(store: store, life: life)
                     } catch {
                         authError = "Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin."

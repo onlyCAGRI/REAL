@@ -310,7 +310,8 @@ final class SharedCategorySync {
                 if !readOnly, let current, let entry, await hashOf(current, &st, sharedId: sharedId) != entry.hash { continue }
                 guard let item = try await incoming(card, localId: current?.id ?? localId, categoryId: category.id, existing: current, &st, sharedId: sharedId) else { continue }
                 store.putFromSync(item)
-                st.cards[cardId] = .init(localId: item.id, revision: revision, hash: await hashOf(item, &st, sharedId: sharedId) ?? "")
+                let freshHash = await hashOf(item, &st, sharedId: sharedId) ?? ""
+                st.cards[cardId] = .init(localId: item.id, revision: revision, hash: freshHash)
             }
             st.cursor = (page["cursor"] as? NSNumber)?.int64Value ?? st.cursor
             save(st, uid, sharedId)
@@ -330,8 +331,8 @@ final class SharedCategorySync {
                 updated.sharedAuthorUid = card["authorUid"] as? String
                 updated.sharedAuthorName = card["authorName"] as? String
                 store.putFromSync(updated)
-                st.cards[cardId] = .init(localId: updated.id, revision: (card["revision"] as? NSNumber)?.intValue ?? 1,
-                                         hash: await hashOf(updated, &st, sharedId: sharedId) ?? "")
+                let freshHash = await hashOf(updated, &st, sharedId: sharedId) ?? ""
+                st.cards[cardId] = .init(localId: updated.id, revision: (card["revision"] as? NSNumber)?.intValue ?? 1, hash: freshHash)
                 continue
             }
             guard let cardId = item.sharedCardId, let entry = st.cards[cardId],
@@ -388,7 +389,7 @@ final class SharedCategorySync {
             var after: String? = nil
             var moved = 0
             repeat {
-                let page = try await json("shared/\(id)/adopt", method: "POST", body: after.map { ["after": $0] } ?? [:])
+                let page = try await json("shared/\(id)/adopt", method: "POST", body: after.map { ["after": $0] as [String: Any] } ?? [:])
                 for a in (page["adopted"] as? [[String: Any]]) ?? [] {
                     guard let sourceKey = a["sourceKey"] as? String, let card = a["card"] as? [String: Any], let cardId = card["id"] as? String else { continue }
                     let item: ReminderItem?
@@ -403,8 +404,8 @@ final class SharedCategorySync {
                     }
                     guard let item else { continue }
                     store.putFromSync(item)
-                    st.cards[cardId] = .init(localId: item.id, revision: (card["revision"] as? NSNumber)?.intValue ?? 1,
-                                             hash: await hashOf(item, &st, sharedId: id) ?? "")
+                    let freshHash = await hashOf(item, &st, sharedId: id) ?? ""
+                    st.cards[cardId] = .init(localId: item.id, revision: (card["revision"] as? NSNumber)?.intValue ?? 1, hash: freshHash)
                     moved += 1
                     progress(moved)
                 }

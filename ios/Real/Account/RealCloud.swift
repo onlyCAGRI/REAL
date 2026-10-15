@@ -137,7 +137,7 @@ enum RealCloudRestore {
 
     /// Cloud attachments carry a blobId instead of a device path. If a rich block still does not fit the iOS
     /// model, the card is kept without it rather than dropped.
-    private static func decodeCard(_ payload: [String: Any], _ decoder: JSONDecoder) -> ReminderItem? {
+    static func decodeCard(_ payload: [String: Any], _ decoder: JSONDecoder) -> ReminderItem? {
         var p = payload
         for key in ["attachments", "voiceRecordings"] {
             if let rows = p[key] as? [[String: Any]] {
@@ -157,7 +157,7 @@ enum RealCloudRestore {
     }
 
     /// Android keeps the category description in a separate preference, so it is not in the record.
-    private static func decodeCategory(_ payload: [String: Any], _ decoder: JSONDecoder) -> CustomCategory? {
+    static func decodeCategory(_ payload: [String: Any], _ decoder: JSONDecoder) -> CustomCategory? {
         var p = payload
         let defaults: [String: Any] = ["description": "", "hideFromGeneralLists": false, "useDarkText": false,
                                        "iconKey": "folder", "accentStart": 0,
@@ -168,7 +168,7 @@ enum RealCloudRestore {
 
     /// Android stores a mood entry flat (scope, descriptors, energy, factors, loggedAt next to id / mood);
     /// iOS nests them in `details`.
-    private static func decodeMood(_ payload: [String: Any], _ decoder: JSONDecoder) -> MoodTrackerEntry? {
+    static func decodeMood(_ payload: [String: Any], _ decoder: JSONDecoder) -> MoodTrackerEntry? {
         var p = payload
         if p["details"] == nil {
             var details: [String: Any] = [:]
