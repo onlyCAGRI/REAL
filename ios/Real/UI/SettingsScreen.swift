@@ -75,6 +75,7 @@ struct AccountMenuOverlay: View {
                     if auth.account == nil {
                         item(.add, auth.busy ? "Google açılıyor…" : "Hesap ekle") { signInAndRestore() }
                     } else {
+                        item(.edit, "Adın") { close(then: { RealAuth.shared.nameEditRequested = true }) }
                         item(.person, "Kişilerim") { showPeople = true }
                         item(.manage, "Kartları hesaptan yeniden yükle") { restore() }
                         item(.close, "Hesaptan çık") {

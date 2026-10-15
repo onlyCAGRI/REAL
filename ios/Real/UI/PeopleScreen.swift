@@ -259,7 +259,8 @@ struct PeopleScreen: View {
 
 /// "REAL'de adın ne olsun?" — asked once after Google sign-in, prefilled with the first name only.
 struct ProfileNameSheet: View {
-    @State private var name = RealAuth.shared.account?.firstName ?? ""
+    private let editing = RealAuth.shared.nameEditRequested
+    @State private var name = RealAuth.shared.nameEditRequested ? (RealAuth.shared.account?.displayName ?? "") : (RealAuth.shared.account?.firstName ?? "")
     @State private var busy = false
     @State private var error: String?
     @FocusState private var focused: Bool
@@ -282,7 +283,7 @@ struct ProfileNameSheet: View {
             }
             .buttonStyle(.plain).disabled(busy || name.trimmingCharacters(in: .whitespaces).isEmpty)
             Button { RealAuth.shared.confirmName() } label: {
-                Text("Google adım kalsın").font(RealFont.inter(15)).foregroundStyle(.white)
+                Text(editing ? "Vazgeç" : "Google adım kalsın").font(RealFont.inter(15)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white.opacity(0.08)))
             }
             .buttonStyle(.plain).disabled(busy)

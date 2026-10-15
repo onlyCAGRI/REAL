@@ -91,15 +91,19 @@ final class RealAuth {
     // MARK: Name shown to others
 
     private var nameRevision = 0
+    /// Hesap menüsü → Adın: opens the same window again.
+    var nameEditRequested = false
     /// Google gives the full name ("Ad Soyad"); once per account REAL asks which name others should see.
     var needsNameChoice: Bool {
         _ = nameRevision
         guard let uid = account?.uid else { return false }
+        if nameEditRequested { return true }
         return !UserDefaults.standard.bool(forKey: "profile_name_confirmed_\(uid)")
     }
     func confirmName() {
         guard let uid = account?.uid else { return }
         UserDefaults.standard.set(true, forKey: "profile_name_confirmed_\(uid)")
+        nameEditRequested = false
         nameRevision += 1
     }
 
