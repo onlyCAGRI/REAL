@@ -81,7 +81,11 @@ final class CalendarConnection {
         guard !cals.isEmpty else { return [] }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: cals)
         return store.events(matching: predicate)
-            .filter { !($0.notes ?? "").contains("[REAL-CALENDAR:") }
+            .filter { e in
+                let n = e.notes ?? ""
+                return !n.hasPrefix("REAL
+[REAL-CALENDAR:") && !n.hasPrefix("REAL planı")
+            }
             .map { e in
                 CalendarOccurrence(id: (e.eventIdentifier ?? UUID().uuidString) + "@\(Int(e.startDate.timeIntervalSince1970))",
                                    calendarId: e.calendar.calendarIdentifier, title: e.title ?? "Etkinlik",
@@ -389,6 +393,21 @@ struct ExternalCalendarEventDetail: View {
     @State private var categorizeOpen = false
     @State private var whole = true
     private var links: CalendarCategoryLinks { CalendarCategoryLinks.shared }
+    private var linkedCard: Int64? { CalendarCardPublisher.shared.card(for: event, in: store) }
+
+    /// Links a REAL card (in the event's category) to this event and opens it; the event itself is not changed.
+    private func addRealContent() {
+        let id = linkedCard ?? {
+            let made = store.addReminder(text: String(event.title.prefix(2000)), categoryId: links.categoryFor(event))
+            CalendarCardPublisher.shared.associate(event, cardId: made.id)
+            return made.id
+        }()
+        dismiss()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            NotificationCenter.default.post(name: .realOpenReminder, object: nil, userInfo: ["reminderId": id])
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -401,7 +420,8 @@ struct ExternalCalendarEventDetail: View {
                 .font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.8))
             if let l = event.location, !l.isEmpty { Text(l).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF9A9AA5)) }
             if let n = event.notes, !n.isEmpty { Text(n).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.7)).lineLimit(6) }
-            Text("Bu etkinlik takvimden gösteriliyor; REAL'e kopyalanmadı.").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF77777F))
+            Text(linkedCard == nil ? "Bu etkinlik takvimden gösteriliyor; REAL'e kopyalanmadı." : "Bu etkinliğe bağlı bir REAL kartı var.")
+                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF77777F))
             HStack(spacing: 10) {
                 Button {
                     if let u = URL(string: "calshow:\(event.start.timeIntervalSinceReferenceDate)") { openURL(u) }
@@ -415,6 +435,11 @@ struct ExternalCalendarEventDetail: View {
                 }
             }
             .buttonStyle(.plain).padding(.top, 6)
+            Button { addRealContent() } label: {
+                Text(linkedCard == nil ? "REAL içeriği ekle" : "REAL kartını aç").font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).frame(height: 48).background(Capsule().fill(.white.opacity(0.08)))
+            }
+            .buttonStyle(.plain)
             categorize
         }
         .padding(22)

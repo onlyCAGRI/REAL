@@ -250,6 +250,21 @@ struct ReminderDetailView: View {
             }
             .accessibilityLabel("Geri")
             Spacer()
+            if CalendarCardPublisher.shared.hasExternalTarget(r.id) {
+                let done = CalendarCardPublisher.shared.isPublished(r)
+                Button { CalendarCardPublisher.shared.offer(r.id) } label: {
+                    HStack(spacing: 5) {
+                        RealSymbol(done ? "checkmark" : "arrow.triangle.2.circlepath", size: 11)
+                        Text("SYNC").font(RealFont.inter(11, .semibold)).tracking(0.8)
+                    }
+                    .foregroundStyle(.white.opacity(done ? 0.55 : 0.9))
+                    .padding(.horizontal, 12).frame(height: 32)
+                    .liquidGlass(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Takvime web bağlantısı ekle")
+                .padding(.trailing, 8)
+            }
             HStack(spacing: 0) {
                 // iOS counterpart of Android's Now Bar is the Dynamic Island (a Live Activity). That needs a widget
                 // extension that is not built yet, so the island mark is shown dimmed.

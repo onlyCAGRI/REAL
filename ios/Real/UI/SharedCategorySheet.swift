@@ -147,7 +147,7 @@ struct SharedCategorySheet: View {
             if current.sharedId == nil {
                 working = "Kategori paylaşılıyor"; moved = 0
                 // The server only shares categories it already has.
-                await RealCloudSync.shared.run(store, life)
+                await RealCloudSync.shared.runFully(store, life)
                 try await sync.share(store, category: current, personUid: uid, access: newAccess) { moved = $0 }
             } else {
                 try await sync.addMember(current, uid: uid, access: newAccess)

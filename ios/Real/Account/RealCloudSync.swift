@@ -61,6 +61,12 @@ final class RealCloudSync {
 
     // MARK: Run
 
+    /// Waits for a run already in progress, then runs once more (before sharing, so the server has the latest copy).
+    func runFully(_ store: ReminderStore, _ life: LifeStore) async {
+        while running { try? await Task.sleep(for: .milliseconds(200)) }
+        await run(store, life)
+    }
+
     func run(_ store: ReminderStore, _ life: LifeStore) async {
         guard !running, RealAuth.shared.account != nil else { return }
         running = true

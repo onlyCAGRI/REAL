@@ -59,6 +59,10 @@ struct RealApp: App {
                 .sheet(item: Binding(get: { RealDeepLinks.shared.pending }, set: { RealDeepLinks.shared.pending = $0 })) { link in
                     InviteAcceptSheet(link: link).environment(store)
                 }
+                .sheet(item: Binding(get: { CalendarCardPublisher.shared.offerCardId.map(PublicationOffer.init) },
+                                     set: { CalendarCardPublisher.shared.offerCardId = $0?.id })) { offer in
+                    CalendarPublicationSheet(cardId: offer.id).environment(store).environment(life)
+                }
                 // Ortak kategori: local edits go up shortly; while the app is open it also pulls every minute.
                 .task {
                     let store = store
@@ -273,3 +277,5 @@ enum DemoData {
         }
     }
 }
+
+private struct PublicationOffer: Identifiable { let id: Int64 }
