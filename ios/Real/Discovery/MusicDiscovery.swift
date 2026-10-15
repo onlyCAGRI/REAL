@@ -331,8 +331,12 @@ private struct MusicDeck: View {
         }
         .task(id: "\(cards.first?.id ?? "")|\(paused)|\(scenePhase == .active)|\(busy)") { await play() }
         .task(id: cards.first?.music.artworkUrl) {
-            frontReady = false
-            defer { frontReady = true }
+            defer {
+                frontReady = true
+                // The next covers are fetched ahead so a swipe never shows an empty cover.
+                let next = cards.dropFirst().prefix(6).compactMap { $0.music.artworkUrl.flatMap(URL.init(string:)) }
+                Task { for u in next { _ = try? await URLSession.shared.data(from: u) } }
+            }
             guard let s = cards.first?.music.artworkUrl, let u = URL(string: s), let (d, _) = try? await URLSession.shared.data(from: u),
                   let img = UIImage(data: d), let c = CoverPalette.dominant(img) else { return }
             withAnimation(.easeOut(duration: 0.4)) { ambient = c }

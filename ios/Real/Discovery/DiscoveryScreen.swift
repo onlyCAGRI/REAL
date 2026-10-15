@@ -526,10 +526,16 @@ private struct PosterDeck: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 34)
         }
+        // The deck's first front poster loads alone; after that the posters behind always load, and the next ones
+        // are fetched ahead so a swipe never shows an empty poster.
         .task(id: cards.first?.id) {
-            frontReady = false
-            if let s = cards.first?.media.artworkUrl, let u = URL(string: s) { _ = try? await URLSession.shared.data(from: u) }
-            frontReady = true
+            if !frontReady {
+                if let s = cards.first?.media.artworkUrl, let u = URL(string: s) { _ = try? await URLSession.shared.data(from: u) }
+                frontReady = true
+            }
+            for c in cards.dropFirst().prefix(6) {
+                if let s = c.media.artworkUrl, let u = URL(string: s) { _ = try? await URLSession.shared.data(from: u) }
+            }
         }
     }
 
