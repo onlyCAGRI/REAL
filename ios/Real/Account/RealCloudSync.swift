@@ -240,6 +240,7 @@ final class RealCloudSync {
                 for (k, v) in try await RealAuth.requestHeaders() { req.setValue(v, forHTTPHeaderField: k) }
                 req.setValue(wire, forHTTPHeaderField: "Content-Type")
                 let (_, response) = try await URLSession.shared.data(for: req)
+                AppUpdateGate.observe(status: (response as? HTTPURLResponse)?.statusCode ?? 0)
                 guard (200..<300).contains((response as? HTTPURLResponse)?.statusCode ?? 0) else { throw RealBackend.Failure(status: -1) }
             }
         }

@@ -17,6 +17,7 @@ enum RealBackend {
         for (key, value) in try await RealAuth.requestHeaders() { request.setValue(value, forHTTPHeaderField: key) }
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        AppUpdateGate.observe(status: status)
         guard (200..<300).contains(status) else {
             let code = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
             throw Failure(status: status, code: code)
@@ -241,13 +242,13 @@ enum RealCloudFiles {
         guard store.reminder(ref.cardId) != nil, let data = try? JSONSerialization.data(withJSONObject: row) else { return }
         if ref.voice {
             guard let recording = try? JSONDecoder().decode(ReminderVoiceRecording.self, from: data) else { return }
-            store.mutate(ref.cardId) { card in
+            store.mutateRestored(ref.cardId) { card in
                 if let i = card.voiceRecordings.firstIndex(where: { $0.id == recording.id }) { card.voiceRecordings[i].localPath = fileName }
                 else { card.voiceRecordings.append(recording) }
             }
         } else {
             guard let attachment = try? JSONDecoder().decode(ReminderAttachment.self, from: data) else { return }
-            store.mutate(ref.cardId) { card in
+            store.mutateRestored(ref.cardId) { card in
                 if let i = card.attachments.firstIndex(where: { $0.id == attachment.id }) { card.attachments[i].localPath = fileName }
                 else { card.attachments.append(attachment) }
             }

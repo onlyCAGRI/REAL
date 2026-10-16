@@ -243,6 +243,7 @@ final class DiscoveryStore {
 
     /// DiscoveryQueueTransitions.apply
     func act(_ kind: DiscoveryKind, _ card: DiscoveryCard, _ action: DiscoveryAction) throws {
+        guard AppUpdateGate.writable() else { throw BookError.message(AppUpdateGate.blockedMessage) }
         var s = snapshot(kind)
         let remainder = s.cards.filter { $0.id != card.id }
         func rotated() -> [DiscoveryCard] { s.later.contains { $0.id == card.id } ? s.later.filter { $0.id != card.id } + [card] : s.later }

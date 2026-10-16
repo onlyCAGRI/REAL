@@ -208,9 +208,9 @@ struct MusicSearchSheet: View {
     @State private var source = MusicSource.saved
 
     var body: some View {
-        CatalogPanel(title: "Müzik", placeholder: source == .apple ? "Şarkı veya sanatçı ara" : "Spotify şarkı bağlantısını yapıştır",
+        CatalogPanel(title: "Müzik", placeholder: source == .apple ? "Şarkı veya sanatçı ara" : "Şarkı ara veya Spotify bağlantısı yapıştır",
                      query: $query, searching: searching, message: message,
-                     attribution: source == .apple ? "Apple Music • \(MusicStorefront.name) kataloğu" : "Spotify",
+                     attribution: "Apple Music • \(MusicStorefront.name) kataloğu",
                      onClose: { dismiss() }, header: AnyView(sourceHeader)) {
             ForEach(results) { m in
                 Button { onSelect(m); dismiss() } label: {
@@ -231,7 +231,8 @@ struct MusicSearchSheet: View {
         .task(id: "\(source.rawValue)|\(query)") { await search(query) }
     }
 
-    /// Logos only (remembered). Spotify has no open search for apps: open Spotify, copy the song's link, paste it here.
+    /// Logos only (remembered): where the song opens. Songs always come from the Apple Music catalog; with Spotify
+    /// chosen the card opens the song in Spotify (searched by title and artist). A pasted Spotify link works too.
     private var sourceHeader: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 0) {
@@ -245,26 +246,6 @@ struct MusicSearchSheet: View {
                 }
             }
             .padding(4).background(Capsule().fill(Color.white.opacity(0.06)))
-            if source == .spotify {
-                Text("1. Spotify'ı aç, şarkıyı bul.\n2. ⋯ → Paylaş → Bağlantıyı kopyala, sonra buraya dön ve yapıştır.")
-                    .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFBCBCC5))
-                HStack(spacing: 10) {
-                    Button {
-                        if let app = URL(string: "spotify:"), let web = URL(string: "https://open.spotify.com") {
-                            UIApplication.shared.open(app) { ok in if !ok { UIApplication.shared.open(web) } }
-                        }
-                    } label: {
-                        HStack(spacing: 8) { MusicSourceLogo(provider: "Spotify", size: 16); Text("Spotify'ı aç").font(RealFont.inter(14, .medium)) }
-                            .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 40)
-                            .background(Capsule().fill(Color.white.opacity(0.08)))
-                    }
-                    .buttonStyle(.plain)
-                    PasteButton(payloadType: String.self) { strings in
-                        if let first = strings.first { Task { @MainActor in query = first } }
-                    }
-                    .labelStyle(.titleAndIcon).buttonBorderShape(.capsule).tint(Color.white.opacity(0.18))
-                }
-            }
         }
     }
 
@@ -275,10 +256,7 @@ struct MusicSearchSheet: View {
         guard !Task.isCancelled else { return }
         searching = true
         message = nil
-        if source == .spotify {
-            guard let r = q.range(of: #"https://(open\.spotify\.com/(intl-[a-z-]+/)?track/[A-Za-z0-9]{22}|spotify\.link/[A-Za-z0-9]+)"#, options: .regularExpression) else {
-                searching = false; results = []; message = "Spotify'da bir şarkının bağlantısını yapıştır."; return
-            }
+        if let r = q.range(of: #"https://(open\.spotify\.com/(intl-[a-z-]+/)?track/[A-Za-z0-9]{22}|spotify\.link/[A-Za-z0-9]+)"#, options: .regularExpression) {
             let found = await LinkResolver.resolve(String(q[r])).music
             guard !Task.isCancelled else { return }
             searching = false
@@ -515,7 +493,7 @@ struct MusicBlockView: View {
                     Button { flipped = true } label: { MusicSourceLogo(provider: block.provider, size: 18).frame(width: 30, height: 30) }
                         .buttonStyle(.plain).accessibilityLabel("Spotify kodunu göster")
                 } else {
-                    MusicSourceLogo(provider: block.provider, size: 18)
+                    MusicSourceLogo(provider: musicOpensIn(block), size: 18)
                 }
             }
             if block.previewUrl != nil {
@@ -534,7 +512,7 @@ struct MusicBlockView: View {
                 }
             }
             Button { if playing { preview.toggle(block) }; openMusicBlock(block) } label: {
-                Text("\(musicProviderLabel(block.provider))'\(block.provider == "Spotify" ? "da" : "te") aç ↗").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD0D0D8))
+                Text("\(musicProviderLabel(musicOpensIn(block)))'\(musicOpensIn(block) == "Spotify" ? "da" : "te") aç ↗").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD0D0D8))
                     .frame(maxWidth: .infinity).frame(height: 40)
                     .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 24))
             }

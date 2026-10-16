@@ -101,6 +101,7 @@ final class BookStore {
     }
 
     func add(_ book: Book) throws {
+        guard AppUpdateGate.writable() else { throw BookError.message(AppUpdateGate.blockedMessage) }
         guard !books.contains(where: { $0.id == book.id }) else { return }
         guard books.count < 200 else { throw BookError.message("Kitaplık sınırına ulaşıldı (200 kitap).") }
         books.append(book)

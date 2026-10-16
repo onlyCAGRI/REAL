@@ -109,19 +109,31 @@ struct HomeView: View {
     @AppStorage(HomeCardStyle.plainKey) private var plainCards = false
     @AppStorage(CalendarCards.homeDaysKey) private var calendarDays = 0
     @State private var externalDetail: CalendarOccurrence?
+    /// "Kartlarım" swiped left: search the cards (hidden-from-Home categories too); the categories step aside meanwhile.
+    @State private var searchOpen = false
+    @State private var searchQuery = ""
     private var keyboard: KeyboardWatcher { KeyboardWatcher.shared }
 
     /// "Ana sayfada göster" in Kategori düzeni (Android ui/home_category_preview_count_v1).
     @AppStorage("home_category_preview_count_v1") private var previewCount = 4
 
     var body: some View {
-        let active = filterAndSortReminders(store.homeActive(), sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded)
-        let completed = store.homeCompleted()
+        let search = searchOpen ? searchQuery.trimmingCharacters(in: .whitespaces).lowercased(with: Locale(identifier: "tr_TR")) : ""
+        let searching = !search.isEmpty
+        let matches: (ReminderItem) -> Bool = { r in
+            let tr = Locale(identifier: "tr_TR")
+            return r.text.lowercased(with: tr).contains(search) || r.checklistItems.contains { $0.text.lowercased(with: tr).contains(search) } ||
+                (store.category(r.customCategoryId)?.name.lowercased(with: tr).contains(search) ?? false)
+        }
+        let active = searching
+            ? filterAndSortReminders(store.reminders.filter { !$0.isCompleted && matches($0) }, sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded)
+            : filterAndSortReminders(store.homeActive(), sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded)
+        let completed = searching ? store.reminders.inCategory(.completed).filter(matches) : store.homeCompleted()
         // Ayarlar → "Ana ekranda takvim": the phone calendar's next 7 / 14 days as cards too (categorized ones carry
         // their category stripe; hidden-from-home categories stay out).
         let hidden = Set(store.categories.filter(\.hideFromGeneralLists).map(\.id))
         let calendarItems = calendarDays > 0 ? CalendarCards.upcoming(days: calendarDays).filter { o in
-            !(CalendarCategoryLinks.shared.categoryFor(o).map(hidden.contains) ?? false)
+            searching ? matches(CalendarCards.card(o)) : !(CalendarCategoryLinks.shared.categoryFor(o).map(hidden.contains) ?? false)
         } : []
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -130,11 +142,10 @@ struct HomeView: View {
                     .padding(.top, 20)
                     .padding(.bottom, 22)
                     .opacity(selectedIds.isEmpty ? 1 : 0)
-                categoryDeck.padding(.horizontal, 16).zIndex(1)
-                // "Kartlarım" + the category screen's sort arrow: newest on top → newest at the bottom → nearest date.
-                HStack {
-                    Text("Kartlarım").font(RealFont.inter(20, .semibold)).foregroundStyle(Color(argb: 0xFFF2F2F4))
-                    Spacer()
+                if !searchOpen { categoryDeck.padding(.horizontal, 16).zIndex(1).transition(.opacity) }
+                // "Kartlarım" (swipe left to search) + the category screen's sort arrow: newest on top → newest at the
+                // bottom → nearest date.
+                HomeCardsSearchTitle(open: $searchOpen.animation(.timingCurve(0.2, 0, 0, 1, duration: 0.3)), query: $searchQuery) {
                     Button { changeHomeSort() } label: {
                         SortArrow(sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded, fg: Color(argb: 0xFFF2F2F4))
                             .frame(width: 44, height: 44)
@@ -152,14 +163,16 @@ struct HomeView: View {
                             withAnimation(.easeOut(duration: 0.3)) { self.sortHint = nil }
                         }
                 }
-                if active.isEmpty && completed.isEmpty {
+                if active.isEmpty && completed.isEmpty && calendarItems.isEmpty && searching {
+                    Text("Bununla eşleşen kart yok").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF888890)).padding(.top, 40)
+                } else if active.isEmpty && completed.isEmpty {
                     Text("Bir REAL yaz, gerisini biz hatırlayalım.")
                         .font(RealType.cardTitle)
                         .foregroundStyle(RealColors.textMuted)
                         .padding(.top, 40)
                 }
                 ForEach(active) { reminder in
-                    card(reminder, swipe: true)
+                    card(reminder, swipe: true, label: searching)
                 }
                 ForEach(calendarItems) { o in
                     // A phone-calendar event: opens the event window; no completing, swiping or selecting.
@@ -349,7 +362,7 @@ struct HomeView: View {
         return 0
     }
 
-    private func card(_ reminder: ReminderItem, swipe: Bool) -> some View {
+    private func card(_ reminder: ReminderItem, swipe: Bool, label: Bool = false) -> some View {
         let category = store.category(reminder.customCategoryId)
         // Sınırlı access to a shared category: the card is only looked at.
         let viewOnly = category?.isReadOnlyShared == true
@@ -375,7 +388,8 @@ struct HomeView: View {
             onSwipeDelete: deleteAction,
             swipeRightLabel: plainCards ? (reminder.isCompleted ? "Geri al" : "Tamamla") : "Move 24 hour",
             swipeRightKeepsCard: !plainCards || (reminder.hasRepeat && !reminder.isCompleted),
-            plainStyle: plainCards
+            plainStyle: plainCards,
+            categoryLabel: label
         )
         .zoomSource("card-\(reminder.id)", in: nav)
         .padding(.horizontal, 16)

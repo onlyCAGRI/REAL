@@ -126,6 +126,7 @@ final class MusicDiscoveryStore {
     }
 
     func act(_ card: MusicCard, _ action: Action) {
+        guard AppUpdateGate.writable() else { return }
         var s = snapshot
         let rest = s.cards.filter { $0.id != card.id }
         switch action {
@@ -412,7 +413,7 @@ private struct MusicDeck: View {
             }
         }
         .frame(width: side, height: side)
-        .overlay(alignment: .topTrailing) { if front { MusicSourceLogo(provider: item.music.provider, size: 20).padding(14) } }
+        .overlay(alignment: .topTrailing) { if front { MusicSourceLogo(provider: musicOpensIn(item.music), size: 20).padding(14) } }
         .overlay(alignment: .topLeading) {
             if front && item.music.previewUrl == nil {
                 Text("Önizleme yok").font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.7))

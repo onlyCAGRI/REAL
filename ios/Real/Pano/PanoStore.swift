@@ -327,6 +327,7 @@ final class PanoStore {
         for (k, v) in try await RealAuth.requestHeaders() { request.setValue(v, forHTTPHeaderField: k) }
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        AppUpdateGate.observe(status: status)
         let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         guard (200..<300).contains(status) else { throw PanoFailure.http(status, json) }
         return json
@@ -553,6 +554,7 @@ final class PanoStore {
         request.setValue(mime, forHTTPHeaderField: "Content-Type")
         let (body, response) = try await URLSession.shared.upload(for: request, from: data)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        AppUpdateGate.observe(status: status)
         guard (200..<300).contains(status) else {
             throw PanoFailure.http(status, (try? JSONSerialization.jsonObject(with: body) as? [String: Any]) ?? [:])
         }

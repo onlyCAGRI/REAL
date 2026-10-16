@@ -51,6 +51,7 @@ struct RealApp: App {
                 .environment(books)
                 .environment(discovery)
                 .background(Color.black)
+                .overlay { RequiredUpdateHost(uid: RealAuth.shared.account?.uid) }
                 .overlay { RealToastHost() }
                 .onOpenURL { url in
                     if RealDeepLinks.shared.handle(url) { return }

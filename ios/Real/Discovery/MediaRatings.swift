@@ -76,8 +76,8 @@ final class MediaRatingStore {
         save()
     }
 
-    func rate(_ media: MediaBlock, _ score: Double, past: Bool = false) { upsert(media, past: past) { $0.score = score } }
-    func add(_ media: MediaBlock, past: Bool) { upsert(media, past: past) { _ in } }
+    func rate(_ media: MediaBlock, _ score: Double, past: Bool = false) { guard AppUpdateGate.writable() else { return }; upsert(media, past: past) { $0.score = score } }
+    func add(_ media: MediaBlock, past: Bool) { guard AppUpdateGate.writable() else { return }; upsert(media, past: past) { _ in } }
     func rateEpisodes(_ media: MediaBlock, _ scores: [String: Double?]) {
         upsert(media, past: false) { e in for (k, v) in scores { e.episodes[k] = v } }
     }

@@ -46,6 +46,8 @@ struct MusicSourceLogo: View {
 /// Opens the song in the phone's own app (Spotify by its track id; Apple Music links open the Music app), else the web.
 @MainActor
 func openMusicBlock(_ block: MusicBlock) {
+    // An Apple Music song opens as a Spotify search for someone whose music app is Spotify (per viewer).
+    if block.provider != "Spotify" && musicOpensIn(block) == "Spotify" { searchSpotify(block); return }
     let web = URL(string: block.providerUrl).flatMap { ["http", "https"].contains($0.scheme ?? "") ? $0 : nil }
     if block.provider == "Spotify", let id = block.providerTrackId, id.count == 22, let app = URL(string: "spotify:track:\(id)") {
         UIApplication.shared.open(app) { ok in if !ok, let web { UIApplication.shared.open(web) } }
@@ -54,10 +56,19 @@ func openMusicBlock(_ block: MusicBlock) {
     if let web { UIApplication.shared.open(web) }
 }
 
-/// Opens a song in the app chosen in Settings → Müzik uygulaması (Spotify: search for "title artist").
+/// Where a song opens for this person: an Apple Music song opens in Spotify when Ayarlar → Müzik uygulaması is
+/// Spotify (the same card opens in Apple Music for someone else); a Spotify song always in Spotify.
+func musicOpensIn(_ block: MusicBlock) -> String {
+    (block.provider == "iTunes" || block.provider == "Apple Music") && MusicSource.saved == .spotify ? "Spotify" : block.provider
+}
+
+/// Opens a song in the app chosen in Settings → Müzik uygulaması.
 @MainActor
-func openInPreferredMusicApp(_ music: MusicBlock) {
-    guard MusicSource.saved == .spotify else { openMusicBlock(music); return }
+func openInPreferredMusicApp(_ music: MusicBlock) { openMusicBlock(music) }
+
+/// Spotify has no open catalog for apps: the song opens as a Spotify search for "title artist".
+@MainActor
+private func searchSpotify(_ music: MusicBlock) {
     let q = [music.title, music.artist].filter { !$0.isEmpty }.joined(separator: " ")
     let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? q
     if let app = URL(string: "spotify:search:\(encoded)") {

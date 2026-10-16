@@ -23,6 +23,8 @@ struct ReminderCardView: View {
     var swipeRightKeepsCard = true
     /// Sade kartlar (Ayarlar, deneysel): no completion circle; the text moves left.
     var plainStyle = false
+    /// Home search results: the card's category name in a small pill (like the category descriptions).
+    var categoryLabel = false
 
     @State private var dragX: CGFloat = 0
     @State private var recurringAck = false
@@ -258,6 +260,12 @@ struct ReminderCardView: View {
                 .font(RealType.cardMeta)
                 .foregroundStyle(useDark ? Color(argb: 0xFF55555E) : Color(argb: 0xFF92929A))
                 .padding(.top, 5)
+        }
+        if categoryLabel, reminder.customCategoryId != nil, let category {
+            // The category colour, lifted a little so dark ones stay readable on the card.
+            CategoryPill(text: category.name, foreground: useDark ? textColor : category.visual.stripe.0.lerp(.white, 0.3))
+                .frame(maxWidth: 200, alignment: .leading)
+                .padding(.top, 8)
         }
     }
 

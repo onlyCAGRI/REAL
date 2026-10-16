@@ -196,6 +196,8 @@ final class ReminderStore {
             item.checklistItems = checklist.enumerated().map { ChecklistItem(id: now + Int64($0.offset), text: $0.element) }
         }
         configure?(&item)
+        // An app version below the minimum may only look: the card is not kept.
+        guard AppUpdateGate.writable() else { return item }
         reminders.append(item)
         save()
         NotificationScheduler.categories = categories
@@ -205,6 +207,7 @@ final class ReminderStore {
     }
 
     func update(_ item: ReminderItem) {
+        guard AppUpdateGate.writable() else { return }
         guard let index = reminders.firstIndex(where: { $0.id == item.id }) else { return }
         var updated = item
         let old = reminders[index]
@@ -226,12 +229,21 @@ final class ReminderStore {
     }
 
     func mutate(_ id: Int64, _ change: (inout ReminderItem) -> Void) {
+        guard AppUpdateGate.writable() else { return }
         guard var item = reminder(id) else { return }
         change(&item)
         update(item)
     }
 
+    /// Restored files put back on their card (cloud restore): not a person's change, so never stopped by AppUpdateGate.
+    func mutateRestored(_ id: Int64, _ change: (inout ReminderItem) -> Void) {
+        guard var item = reminder(id) else { return }
+        change(&item)
+        putFromSync(item)
+    }
+
     func toggleCompleted(_ id: Int64) {
+        guard AppUpdateGate.writable() else { return }
         guard let index = reminders.firstIndex(where: { $0.id == id }) else { return }
         reminders[index] = reminders[index].toggledCompleted(now: .now, calendar: calendar)
         save()
@@ -240,6 +252,7 @@ final class ReminderStore {
     }
 
     func toggleChecklistItem(_ reminderId: Int64, itemId: Int64) {
+        guard AppUpdateGate.writable() else { return }
         mutate(reminderId) { r in
             r.checklistItems = r.checklistItems.map { $0.id == itemId ? $0.toggled() : $0 }
         }
@@ -248,6 +261,7 @@ final class ReminderStore {
     /// Swipe left on Home (ReminderRepository.moveTo24Hour): into the rolling 24 hour view without a clock time.
     /// The card becomes today's, its alarm and repeat are cleared and a pending notification is cancelled.
     func moveTo24Hour(_ id: Int64) {
+        guard AppUpdateGate.writable() else { return }
         let now = EpochMillis.now
         let today = calendar.epochDay(ofMillis: now)
         mutate(id) {
@@ -270,6 +284,7 @@ final class ReminderStore {
     /// in their old places and with their alarms, if the action is tapped.
     @MainActor
     func deleteWithUndo(_ ids: Set<Int64>) {
+        guard AppUpdateGate.writable() else { return }
         let removed = reminders.enumerated().filter { ids.contains($0.element.id) }
         guard !removed.isEmpty else { return }
         delete(ids)
@@ -285,6 +300,7 @@ final class ReminderStore {
     }
 
     func delete(_ ids: Set<Int64>) {
+        guard AppUpdateGate.writable() else { return }
         reminders.removeAll { ids.contains($0.id) }
         save()
         ids.forEach(NotificationScheduler.cancel)
@@ -303,6 +319,7 @@ final class ReminderStore {
 
     /// "Sadece bu gün": skip one occurrence of a repeating series, the series itself stays.
     func deleteOccurrence(_ id: Int64, occurrence: EpochMillis) {
+        guard AppUpdateGate.writable() else { return }
         mutate(id) { r in
             let day = calendar.epochDay(ofMillis: occurrence)
             if !r.repeatSkippedEpochDays.contains(day) { r.repeatSkippedEpochDays.append(day) }
@@ -317,6 +334,7 @@ final class ReminderStore {
 
     /// "Bu ve sonraki tüm tekrarları sil": the series ends the day before the chosen occurrence.
     func deleteThisAndFuture(_ id: Int64, occurrence: EpochMillis) {
+        guard AppUpdateGate.writable() else { return }
         guard let item = reminder(id) else { return }
         let day = calendar.epochDay(ofMillis: occurrence)
         let anchorDay = calendar.epochDay(ofMillis: item.anchorAlertAt ?? item.alertAt ?? occurrence)
@@ -397,12 +415,14 @@ final class ReminderStore {
                                       name: name.trimmingCharacters(in: .whitespacesAndNewlines), iconKey: icon.rawValue,
                                       accentStart: accentStart, accentEnd: accentEnd, hideFromGeneralLists: hideFromGeneralLists,
                                       useDarkText: useDarkText, gradientBlendFraction: blend, description: description, createdAt: now)
+        guard AppUpdateGate.writable() else { return category }
         categories.append(category)
         save()
         return category
     }
 
     func updateCategory(_ category: CustomCategory) {
+        guard AppUpdateGate.writable() else { return }
         guard let index = categories.firstIndex(where: { $0.id == category.id }) else { return }
         categories[index] = category
         save()
@@ -410,6 +430,7 @@ final class ReminderStore {
 
     /// deleteCategoryWithRollback: either delete the cards too or keep them uncategorised.
     func deleteCategory(_ id: Int64, deleteReminders: Bool) {
+        guard AppUpdateGate.writable() else { return }
         if deleteReminders {
             let ids = Set(reminders.filter { $0.customCategoryId == id }.map(\.id))
             reminders.removeAll { ids.contains($0.id) }

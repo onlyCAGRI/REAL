@@ -154,7 +154,8 @@ final class RealAuth {
         } catch {
             throw AppCheckUnavailable(reason: (error as NSError).localizedDescription)
         }
-        return ["Authorization": "Bearer \(idToken)", "X-Firebase-AppCheck": appCheck.token]
+        // X-REAL-Client: the server keeps each person's app version and may ask an old one to update.
+        return ["Authorization": "Bearer \(idToken)", "X-Firebase-AppCheck": appCheck.token, "X-REAL-Client": AppUpdateGate.clientTag]
     }
 
     private static func topViewController() -> UIViewController? {

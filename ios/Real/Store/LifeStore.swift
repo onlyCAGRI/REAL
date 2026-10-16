@@ -91,6 +91,7 @@ final class LifeStore {
     // MARK: Drinks
 
     func addDrink(_ amountMl: Int, beverage: BeverageType = .water) {
+        guard AppUpdateGate.writable() else { return }
         guard (1...5_000).contains(amountMl) else { return }
         entries.append(WaterIntakeEntry(id: UUID().uuidString, amountMl: amountMl, createdAt: .now, beverage: beverage))
         retain()
@@ -98,6 +99,7 @@ final class LifeStore {
     }
 
     func removeDrink(_ id: String) {
+        guard AppUpdateGate.writable() else { return }
         entries.removeAll { $0.id == id }
         save()
     }
@@ -123,6 +125,7 @@ final class LifeStore {
     // MARK: Moods
 
     func addMood(_ mood: JournalMood, details: MoodDetails) {
+        guard AppUpdateGate.writable() else { return }
         let now = EpochMillis.now
         let loggedAt = details.loggedAt > 0 ? details.loggedAt : now
         var d = details
