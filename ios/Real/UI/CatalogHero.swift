@@ -44,7 +44,8 @@ struct CatalogHeroCover<Content: View>: View {
                     .position(x: geo.size.width / 2, y: inset + 8 + areaH / 2)
                 }
             }
-            .frame(height: total > 0 ? nil : 320)
+            // The picture gets most of the cover (the text below adds its own height), never a thumbnail.
+            .frame(height: total > 0 ? max(total * 0.66, 340) : 340)
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(RealFont.inter(26, .semibold)).foregroundStyle(Color(argb: 0xFFF4F4F6)).lineLimit(2)
                 if let subtitle, !subtitle.isEmpty {
@@ -61,7 +62,7 @@ struct CatalogHeroCover<Content: View>: View {
             .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: total > 0 ? total : nil)
+        .frame(minHeight: total > 0 ? total : nil)
         .background(LinearGradient(colors: [base, Color(argb: 0xFF0D0D0F)], startPoint: .top, endPoint: .bottom))
         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28, style: .continuous))
         .task(id: imageURL) {

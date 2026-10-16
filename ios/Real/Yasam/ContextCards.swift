@@ -24,6 +24,14 @@ struct ContextCardSignals {
     var lastMoodToday: JournalMood?
     var unfinishedBookTitle: String?
     var unfinishedBookAuthor: String?
+    /// When the app was first installed; nil = unknown, no warm-up quiet.
+    var installedAt: Date? = ContextCardSignals.appInstalledAt
+
+    /// iOS has no install date API: the app's Documents folder is created on the first launch after install.
+    static let appInstalledAt: Date? = {
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return nil }
+        return (try? FileManager.default.attributesOfItem(atPath: docs.path))?[.creationDate] as? Date
+    }()
 }
 
 struct ContextCard: Equatable {
@@ -109,6 +117,8 @@ enum ContextCardEngine {
     static let completeSnooze = 12 * hour
     static let streakLimit = 3
     static let streakSnooze = 3 * 24 * hour
+    /// A fresh install stays quiet for its first day: no "you haven't had water" on the very first open.
+    static let installQuiet = 24 * hour
     private static let sameTypePenalty = 25
     private static let lowMoods: Set<JournalMood> = [.tired, .bored, .sad, .low, .stressed, .hard, .bad]
 
@@ -118,6 +128,9 @@ enum ContextCardEngine {
         guard history.enabled else { return Decision() }
         if let forced = history.forcedType.flatMap(ContextCardType.init(rawValue:)) { return Decision(card: build(forced, s)) }
         let nowMs = Int64(s.now.timeIntervalSince1970 * 1000)
+        if let installed = s.installedAt, (0..<installQuiet).contains(nowMs - Int64(installed.timeIntervalSince1970 * 1000)) {
+            return Decision()
+        }
         let h = history.rolled(Calendar.real.epochDay(of: s.now))
         if let active = h.activeType.flatMap(ContextCardType.init(rawValue:)),
            (0..<activeWindow).contains(nowMs - h.activeSince), isEligible(active, s) {

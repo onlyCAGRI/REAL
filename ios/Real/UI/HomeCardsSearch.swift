@@ -16,8 +16,9 @@ struct HomeCardsSearchTitle<Trailing: View>: View {
 
     var body: some View {
         ZStack {
+            // The field opens right where the title was (no slide in from the right edge).
             if open {
-                field.transition(.move(edge: .trailing).combined(with: .opacity))
+                field.transition(.opacity)
             } else {
                 closed.transition(.move(edge: .leading).combined(with: .opacity))
             }
@@ -29,13 +30,14 @@ struct HomeCardsSearchTitle<Trailing: View>: View {
 
     private var closed: some View {
         HStack(spacing: 0) {
+            // Pulling left: the title slides out with the finger and "Kartlarda ara" comes up in its place.
             ZStack(alignment: .leading) {
-                Text("Ara").font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFF9A9AA4))
-                    .frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, 12)
+                Text("Kartlarda ara…").font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFF9A9AA4))
+                    .offset(x: (1 - progress) * 24)
                     .opacity(progress)
                 Text("Kartlarım").font(RealFont.inter(20, .semibold)).foregroundStyle(Color(argb: 0xFFF2F2F4))
                     .offset(x: drag)
-                    .opacity(1 - progress * 0.6)
+                    .opacity(1 - progress)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 44)
