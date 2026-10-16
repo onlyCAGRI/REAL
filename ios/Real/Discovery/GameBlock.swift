@@ -70,8 +70,27 @@ struct GameBlockView: View {
     let block: CardGameBlock
     var editing = false
     var onRemove: () -> Void = {}
+    /// > 0: drawn as the card's cover (CatalogHeroCover) under the status bar.
+    var heroInset: CGFloat = 0
 
     var body: some View {
+        if heroInset > 0 && !editing {
+            CatalogHeroCover(imageURL: block.artworkUrl.flatMap { URL(string: $0.replacingOccurrences(of: "t_cover_big", with: "t_cover_big_2x")) },
+                             posterAspect: 3.0 / 4.0, title: block.title,
+                             subtitle: [block.year.map(String.init), block.genres.prefix(2).joined(separator: " · ").nilIfEmpty].compactMap { $0 }.joined(separator: " · "),
+                             description: block.platforms.prefix(6).joined(separator: " · "), placeholderSymbol: "play.rectangle", inset: heroInset) {
+                if let url = URL(string: block.providerUrl), url.scheme == "https" {
+                    HeroOpenRow(label: "Oyun sayfasını aç ↗", action: { UIApplication.shared.open(url) }) {
+                        Text(block.provider).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                    }
+                }
+            }
+        } else {
+            compact
+        }
+    }
+
+    private var compact: some View {
         VStack(alignment: .leading, spacing: 10) {
             if editing {
                 HStack {

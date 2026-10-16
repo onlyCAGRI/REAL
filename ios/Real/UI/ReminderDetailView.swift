@@ -223,8 +223,19 @@ struct ReminderDetailView: View {
         let id = key.contains(":") ? String(key.split(separator: ":", maxSplits: 1)[1]) : ""
         switch kind {
         case "text": textBlock(r, heroInset: heroInset)
-        case "card_stack": if let stack = r.cardStack { CardStackDeck(stack: stack, editing: editing, onEdit: { editingStackCard = $0 },
-                                                                       onAdd: { editingStackCard = CardStackCard() }) }
+        case "card_stack":
+            if let stack = r.cardStack {
+                if heroInset > 0 && !editing {
+                    // As the card's cover the stack sits below the status bar on a full-bleed dark ground.
+                    CardStackDeck(stack: stack, editing: editing, onEdit: { editingStackCard = $0 }, onAdd: { editingStackCard = CardStackCard() })
+                        .padding(.horizontal, 16).padding(.top, heroInset + 8).padding(.bottom, 16)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .background(LinearGradient(colors: [Color(argb: 0xFF16161A), Color(argb: 0xFF0D0D0F)], startPoint: .top, endPoint: .bottom))
+                        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28, style: .continuous))
+                } else {
+                    CardStackDeck(stack: stack, editing: editing, onEdit: { editingStackCard = $0 }, onAdd: { editingStackCard = CardStackCard() })
+                }
+            }
         case "mood": if let mood = r.mood { moodBlock(mood) }
         case "checklist": checklistBlock(r)
         case "photos": if let a = r.attachments.first(where: { $0.id == id }) { photoBlock(a) }
@@ -245,15 +256,15 @@ struct ReminderDetailView: View {
                                 onClose: { voiceRecorderOpen = false; draft?.voiceRecordings = [] })
         case "music":
             if let m = r.musicBlocks.first(where: { $0.id == id }) {
-                MusicBlockView(block: m, editing: editing) { draft?.musicBlocks.removeAll { $0.id == id } }
+                MusicBlockView(block: m, editing: editing, onRemove: { draft?.musicBlocks.removeAll { $0.id == id } }, heroInset: heroInset)
             }
         case "media":
             if let m = r.mediaBlocks.first(where: { $0.id == id }) {
-                MediaBlockView(block: m, editing: editing) { draft?.mediaBlocks.removeAll { $0.id == id } }
+                MediaBlockView(block: m, editing: editing, onRemove: { draft?.mediaBlocks.removeAll { $0.id == id } }, heroInset: heroInset)
             }
         case "game":
             if let g = r.gameBlocks.first(where: { $0.id == id }) {
-                GameBlockView(block: g, editing: editing) { draft?.gameBlocks.removeAll { $0.id == id } }
+                GameBlockView(block: g, editing: editing, onRemove: { draft?.gameBlocks.removeAll { $0.id == id } }, heroInset: heroInset)
             }
         default: EmptyView()
         }

@@ -792,8 +792,35 @@ struct MediaBlockView: View {
     let block: MediaBlock
     var editing = false
     var onRemove: () -> Void = {}
+    /// > 0: drawn as the card's cover (CatalogHeroCover) under the status bar.
+    var heroInset: CGFloat = 0
 
     var body: some View {
+        if heroInset > 0 && !editing {
+            CatalogHeroCover(imageURL: block.artworkUrl.flatMap(URL.init(string:)), posterAspect: 2.0 / 3.0, title: block.title,
+                             subtitle: [block.year.map(String.init), block.type == .MOVIE ? "Film" : "Dizi", block.genre].compactMap { $0 }.joined(separator: " • "),
+                             description: block.description, placeholderSymbol: "film", inset: heroInset) {
+                if let url = URL(string: block.providerUrl), ["http", "https"].contains(url.scheme ?? "") {
+                    HeroOpenRow(label: openLabel, action: { UIApplication.shared.open(url) }) {
+                        Text(providerName).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                    }
+                }
+            }
+        } else {
+            compact
+        }
+    }
+
+    private var providerName: String {
+        switch block.provider.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "tvmaze": return "TVmaze"
+        case "thetvdb": return "TheTVDB"
+        case "apple": return "Apple TV"
+        default: return block.provider
+        }
+    }
+
+    private var compact: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(block.type == .MOVIE ? "Film" : "Dizi").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
