@@ -74,7 +74,7 @@ jobs:
           status=$?
           grep -E "error:|\*\* BUILD" build/xcodebuild.log | sort -u | head -200
           # Compiler errors also as annotations (readable through the public checks API).
-          grep -E "^/.*:[0-9]+:[0-9]+: error: " build/xcodebuild.log | sort -u | head -40 |             sed -E 's#^.*/ios/([^:]+):([0-9]+):[0-9]+: error: (.*)$#::error file=ios/,line=::#'
+          grep -E "^/.*:[0-9]+:[0-9]+: error: " build/xcodebuild.log | sort -u | head -40 | sed -E 's#^.*/ios/([^:]+):([0-9]+):[0-9]+: error: (.*)$#::error file=ios/\1,line=\2::\3#'
           exit $status
 
       - name: Pick simulator
