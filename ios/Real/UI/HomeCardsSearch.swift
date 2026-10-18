@@ -35,9 +35,15 @@ struct HomeCardsSearchTitle<Trailing: View>: View {
                 Text("Kartlarda ara…").font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFF9A9AA4))
                     .offset(x: (1 - progress) * 24)
                     .opacity(progress)
-                Text("Kartlarım").font(RealFont.inter(20, .semibold)).foregroundStyle(Color(argb: 0xFFF2F2F4))
-                    .offset(x: drag)
-                    .opacity(1 - progress)
+                HStack(spacing: 8) {
+                    Text("Kartlarım").font(RealFont.inter(20, .semibold)).foregroundStyle(Color(argb: 0xFFF2F2F4))
+                    // A context card is waiting on top of the list: its colour dot sits right beside the title.
+                    if let type = ContextCardPresence.shared.activeType {
+                        Circle().fill(type.accent).frame(width: 7, height: 7)
+                    }
+                }
+                .offset(x: drag)
+                .opacity(1 - progress)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 44)

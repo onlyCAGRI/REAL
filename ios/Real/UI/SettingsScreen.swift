@@ -343,12 +343,19 @@ struct SettingsScreen: View {
         SettingsSectionHeader(title: "BAĞLAM KARTLARI TESTİ")
         SettingsGlassGroup {
             let tests: [(ContextCardType, ActionGlyph, String)] = [(.water, .bell, "Su kartını göster"), (.mood, .moodNeutral, "Mood kartını göster"),
-                                                                  (.book, .note, "Kitap kartını göster"), (.media, .video, "Film & dizi kartını göster")]
+                                                                  (.book, .note, "Kitap kartını göster"), (.media, .video, "Film & dizi kartını göster"),
+                                                                  (.watch, .play, "Sıradaki bölüm kartını göster"), (.listen, .music, "Müzik kartını göster"),
+                                                                  (.play, .cards, "Oyun kartını göster"), (.journal, .edit, "Günlük kartını göster")]
+            SettingsActionRow(icon: .cards, title: "Tüm kartları göster", subtitle: "Sadece test: bütün türler sırayla gelir (normalde günde en fazla 2 kart)") {
+                ContextCardStore.forceAll()
+                notice = "Kartlar ana ekranda Kartlarım'ın en üstünde, sırayla görünecek."
+            }
+            SettingsDivider()
             ForEach(Array(tests.enumerated()), id: \.offset) { i, t in
                 if i > 0 { SettingsDivider() }
-                SettingsActionRow(icon: t.1, title: t.2, subtitle: "Saat ve limit kurallarını yok sayar; ana ekranın en altında görünür") {
-                    ContextCardStore.update { var h = $0; h.forcedType = t.0.rawValue; return h }
-                    notice = "Kart ana ekranın en altında görünecek."
+                SettingsActionRow(icon: t.1, title: t.2, subtitle: "Saat ve limit kurallarını yok sayar; Kartlarım'ın en üstünde görünür") {
+                    ContextCardStore.force(t.0)
+                    notice = "Kart ana ekranda Kartlarım'ın en üstünde görünecek."
                 }
             }
             SettingsDivider()

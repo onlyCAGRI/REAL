@@ -14,9 +14,23 @@ enum VoiceAI {
         case draft(title: String, schedule: ScheduleDraft, categoryId: Int64?, checklist: [String])
         /// Nothing usable (not signed in, no consent, offline, an edit command…): keep the transcript.
         case none(String?)
+        /// "Doğru mu anladım?": nothing is saved until the person confirms (VoiceConfirmSheet), then commit(...).
+        case confirm(Pending)
     }
 
-    private struct Intent {
+    /// A parsed command waiting for "Doğru mu anladım?".
+    struct Pending: Identifiable {
+        let id = UUID()
+        fileprivate let intents: [Intent]
+        let transcript: String
+        /// The sentence shown, and the words underlined in it.
+        let display: String
+        let underlined: [String]
+        /// The cards' place, when there is one ("Yeri yaz").
+        let place: String?
+    }
+
+    fileprivate struct Intent {
         var title: String
         var date: Date?
         var hour: Int?
@@ -31,6 +45,7 @@ enum VoiceAI {
         var checklist: [String]
         var music: MoodSuggestion.Music?
         var media: (MoodSuggestion.Media, MediaType)?
+        var locationName: String?
     }
 
     static func interpret(_ transcript: String, store: ReminderStore) async -> Outcome {
@@ -42,12 +57,56 @@ enum VoiceAI {
             return .none(nil)
         }
         let intents: [Intent]
+        let heard: VoiceHeard?
         do {
-            intents = try await fetch(spoken, categories: store.categories.map(\.name))
+            let fetched = try await fetch(spoken, categories: store.categories.map(\.name), store: store)
+            intents = fetched.0
+            heard = fetched.1
         } catch {
             return .none(RealBackend.message(for: error))
         }
         guard !intents.isEmpty else { return .none(nil) }
+        if let pending = check(spoken, intents: intents, heard: heard) { return .confirm(pending) }
+        return await create(intents, store: store)
+    }
+
+    /// "Doğru": save what was understood. [place]: the place the person typed instead ("Yeri yaz").
+    static func commit(_ pending: Pending, place: String?, store: ReminderStore) async -> Outcome {
+        var intents = pending.intents
+        if let place, !place.isEmpty {
+            let oldName = (pending.place ?? "").split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+            let newName = place.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? place
+            intents = intents.map { intent in
+                guard intent.locationName?.isEmpty == false else { return intent }
+                var fixed = intent
+                fixed.locationName = place
+                if oldName.count >= 2 { fixed.title = fixed.title.replacingOccurrences(of: oldName, with: newName, options: .caseInsensitive) }
+                return fixed
+            }
+        }
+        return await create(intents, store: store)
+    }
+
+    /// Ask when the AI was unsure, or when a card names something that was never said.
+    private static func check(_ transcript: String, intents: [Intent], heard: VoiceHeard?) -> Pending? {
+        let place = intents.compactMap(\.locationName).first { !$0.isEmpty }
+        if let heard, !heard.confident {
+            var display = transcript
+            for word in heard.unsure { if let meant = word.meant { display = display.replacingOccurrences(of: word.heard, with: meant, options: .caseInsensitive) } }
+            return Pending(intents: intents, transcript: transcript, display: display,
+                           underlined: heard.unsure.map { $0.meant ?? $0.heard }, place: place)
+        }
+        let names = VoiceSubstitutions.names(transcript: transcript, titles: intents.map(\.title),
+                                             places: intents.compactMap(\.locationName),
+                                             content: intents.flatMap { [$0.media?.0.title, $0.music?.artist, $0.music?.track].compactMap { $0 } })
+        guard !names.isEmpty else { return nil }
+        let understood = heard?.understood ?? ""
+        let display = !understood.isEmpty && names.allSatisfy({ understood.localizedCaseInsensitiveContains($0) }) ? understood
+            : intents.map { [$0.title, $0.locationName].compactMap { $0 }.joined(separator: " — ") }.joined(separator: " · ")
+        return Pending(intents: intents, transcript: transcript, display: display, underlined: names, place: place)
+    }
+
+    private static func create(_ intents: [Intent], store: ReminderStore) async -> Outcome {
 
         // A single card that still needs a clock, or whose one-off time has already passed, goes to the composer.
         if intents.count == 1, let only = intents.first {
@@ -70,12 +129,16 @@ enum VoiceAI {
                 media = await MediaCatalog.resolve(title: candidate.title.isEmpty ? candidate.searchQuery : candidate.title,
                                                    year: candidate.year, type: wanted.1)
             }
+            // The place with its address and map position, found right away.
+            var location: ReminderLocation?
+            if let place = intent.locationName, !place.isEmpty { location = await VoicePlaceLookup.resolve(place) }
             store.addReminder(text: intent.title, alertAt: schedule.alertAt, plannedDay: schedule.plannedDay,
                               repeatRule: schedule.repeatRule, categoryId: category(named: intent.categoryName, in: store),
                               checklist: intent.checklist) { item in
                 schedule.apply(to: &item)
                 if let music { item.musicBlocks = [music] }
                 if let media { item.mediaBlocks = [media] }
+                if let location { item.location = location }
             }
             created += 1
         }
@@ -85,7 +148,7 @@ enum VoiceAI {
 
     // MARK: Request
 
-    private static func fetch(_ transcript: String, categories: [String]) async throws -> [Intent] {
+    private static func fetch(_ transcript: String, categories: [String], store: ReminderStore) async throws -> ([Intent], VoiceHeard?) {
         let now = Date()
         let iso = ISO8601DateFormatter()
         iso.timeZone = .current
@@ -103,7 +166,8 @@ enum VoiceAI {
         let json = try await RealBackend.post("/api/voice-intent", body, timeout: 15)
         guard json["ok"] as? Bool == true else { throw RealBackend.Failure(status: -1) }
         let list = (json["intents"] as? [[String: Any]]) ?? ((json["intent"] as? [String: Any]).map { [$0] } ?? [])
-        return list.prefix(20).map { parse($0, fallback: transcript, today: now) }
+        return (list.prefix(20).map { parse($0, fallback: transcript, today: now) },
+                VoiceHeard.parse(json["heard"] as? [String: Any], transcript: transcript))
     }
 
     private static func parse(_ o: [String: Any], fallback: String, today: Date) -> Intent {
@@ -163,7 +227,8 @@ enum VoiceAI {
                       requiresTime: (o["requiresTimeSelection"] as? Bool) == true, timeOfDay: string("timeOfDay").uppercased(),
                       durationMinutes: (o["durationMinutes"] as? Int).flatMap { (1...1440).contains($0) ? $0 : nil },
                       categoryName: string("categoryName").isEmpty ? nil : string("categoryName"),
-                      checklist: checklistOK ? Array(items.prefix(30)) : [], music: music, media: media)
+                      checklist: checklistOK ? Array(items.prefix(30)) : [], music: music, media: media,
+                      locationName: string("locationName").isEmpty ? nil : String(string("locationName").prefix(180)))
     }
 
     // MARK: Mapping

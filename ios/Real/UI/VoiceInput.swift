@@ -6,6 +6,8 @@ import Observation
 /// Speech-to-text for the composer microphone (VoiceInputController.kt): tr-TR, partial results shown live.
 @Observable
 final class VoiceInput {
+    /// Words to expect, set by the composer before listening.
+    nonisolated(unsafe) static var hints: [String] = []
     enum Phase { case idle, listening, finishing }
 
     private(set) var phase: Phase = .idle
@@ -52,6 +54,8 @@ final class VoiceInput {
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
+            // Category names and short card titles: proper names and foreign titles are what it mishears most.
+            request.contextualStrings = Array(VoiceInput.hints.prefix(100))
             if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = false }
             self.request = request
             let input = engine.inputNode

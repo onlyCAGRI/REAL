@@ -97,6 +97,7 @@ struct ComposerBar: View {
 
     @State private var text = ""
     @State private var schedule = ScheduleDraft()
+    @State private var voiceConfirm: VoiceAI.Pending?
     @State private var categoryId: Int64?
     @State private var important = false
     @State private var sendImmediate = false
@@ -165,6 +166,15 @@ struct ComposerBar: View {
         .onChange(of: expanded) { _, e in if e { navExpanded = false } }
         .onAppear(perform: reset)
         .onReceive(NotificationCenter.default.publisher(for: .realStartVoice)) { _ in if isHome { startVoiceIfIdle() } }
+        // "Doğru mu anladım?": nothing was saved yet.
+        .sheet(item: $voiceConfirm) { pending in
+            VoiceConfirmSheet(pending: pending, onConfirm: { place in
+                Task { @MainActor in handleVoice(await VoiceAI.commit(pending, place: place, store: store)) }
+            }, onCorrect: {
+                text = pending.transcript
+                focus = .title
+            })
+        }
         .realOverlay(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
         .realOverlay(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId) }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
@@ -463,26 +473,39 @@ struct ComposerBar: View {
 
     private func startVoiceIfIdle() { if voice.phase == .idle { startVoice() } }
 
+    /// Applies what the AI returned (also after "Doğru mu anladım?").
+    private func handleVoice(_ outcome: VoiceAI.Outcome) {
+        switch outcome {
+        case .created:
+            reset()
+            focus = nil
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        case .draft(let title, let draft, let category, let items):
+            text = title
+            schedule = draft
+            if let category { categoryId = category }
+            if !items.isEmpty { checklistMode = true; checklistItems = items }
+        case .confirm(let pending):
+            voiceConfirm = pending
+        case .none:
+            break
+        }
+    }
+
     private func startVoice() {
         focus = nil
+        // Names the recognizer should expect: categories and short open card titles (where foreign titles live).
+        VoiceInput.hints = store.categories.map(\.name) + store.reminders
+            .filter { !$0.isCompleted }
+            .map { $0.text.split(separator: "\n").first.map(String.init) ?? $0.text }
+            .filter { $0.split(separator: " ").count <= 4 }
+            .prefix(60)
         let base = text
         // A spoken command into an empty composer goes to the AI (signed in, with consent); it either creates the
         // cards, fills the composer for a last look (a clock to pick), or leaves the transcript as typed text.
         let interpret: ((String, @escaping () -> Void) -> Void)? = base.isEmpty && RealAuth.shared.account != nil ? { spoken, done in
             Task { @MainActor in
-                switch await VoiceAI.interpret(spoken, store: store) {
-                case .created:
-                    reset()
-                    focus = nil
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                case .draft(let title, let draft, let category, let items):
-                    text = title
-                    schedule = draft
-                    if let category { categoryId = category }
-                    if !items.isEmpty { checklistMode = true; checklistItems = items }
-                case .none:
-                    break
-                }
+                handleVoice(await VoiceAI.interpret(spoken, store: store))
                 done()
             }
         } : nil

@@ -171,6 +171,7 @@ struct HomeView: View {
                         .foregroundStyle(RealColors.textMuted)
                         .padding(.top, 40)
                 }
+                if selectedIds.isEmpty && !searching { HomeContextCard(onOpen: openContext) }
                 ForEach(active) { reminder in
                     card(reminder, swipe: true, label: searching)
                 }
@@ -181,7 +182,6 @@ struct HomeView: View {
                         .padding(.horizontal, 16).padding(.bottom, 8)
                 }
                 let completedMore = completed.count > completedShown
-                if completedMore && selectedIds.isEmpty { HomeContextCard(onOpen: openContext) }
                 if !completed.isEmpty {
                     SectionTitle(text: "Tamamlandı").padding(.top, 18)
                     let shown = Array(completed.prefix(completedShown))
@@ -213,7 +213,6 @@ struct HomeView: View {
                         }
                     }
                 }
-                if !completedMore && selectedIds.isEmpty { HomeContextCard(onOpen: openContext) }
                 if !completedMore { Color.clear.frame(height: 140) }
             }
             .animation(.spring(duration: 0.35), value: active.map(\.id))
@@ -264,6 +263,16 @@ struct HomeView: View {
                 case .mood: MoodAddSheet()
                 case .book: BooksModuleScreen(resumeBookId: books.books.last { books.page($0) > 0 }?.id)
                 case .media: DiscoveryScreen(kind: .film) { contextTarget = nil }
+                case .watch: RatingsScreen { contextTarget = nil }
+                case .listen: MusicDiscoveryScreen(startInList: false) { contextTarget = nil }
+                case .play: DiscoveryScreen(kind: .game) { contextTarget = nil }
+                case .journal:
+                    YasamJournalSheet { text in
+                        _ = store.addReminder(text: YasamJournalSheet.title()) { r in
+                            r.journal = ReminderJournal(mood: nil, text: text, createdAt: .now, updatedAt: .now)
+                        }
+                        return true
+                    }
                 }
             }
             .liftedTopSafeArea()

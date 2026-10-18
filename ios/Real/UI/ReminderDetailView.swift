@@ -16,6 +16,8 @@ struct ReminderDetailView: View {
     let reminderId: Int64
 
     @State private var draft: ReminderItem?
+    @State private var showClipboardTray = false
+    @State private var trayBusy = false
     @State private var secondaryExpanded = false
     @State private var dockCollapsed = false
     @State private var showMusicSearch = false
@@ -307,6 +309,15 @@ struct ReminderDetailView: View {
                     .buttonBorderShape(.circle)
                     .tint(Color.white.opacity(0.0))
                     .frame(width: 48, height: 40)
+                // "Panodan ekle": collect several copies, add them one by one (Android: long press on Yapıştır).
+                Button { showClipboardTray = true } label: {
+                    Image(systemName: "list.clipboard").font(.system(size: 15)).foregroundStyle(Color(white: 0.79))
+                        .frame(width: 36, height: 40)
+                }
+                .accessibilityLabel("Panodan ekle")
+                .sheet(isPresented: $showClipboardTray) {
+                    ClipboardTraySheet(busy: trayBusy) { item in addFromTray(item) }
+                }
                 Rectangle().fill(.white.opacity(0.13)).frame(width: 1, height: 18)
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -1070,6 +1081,19 @@ struct ReminderDetailView: View {
         draft = nil
         secondaryExpanded = false
         checklistOpen = false
+    }
+
+    /// "+" in Panodan ekle: the row becomes blocks on this card and stays in the tray for other cards.
+    private func addFromTray(_ item: TrayItem) {
+        guard !trayBusy else { return }
+        trayBusy = true
+        Task { @MainActor in
+            defer { trayBusy = false }
+            guard let result = await ClipboardTrayStore.result(for: item) else { RealToast.shared.show("Yapıştırılacak bir şey bulunamadı"); return }
+            if editing, var d = draft { CardPaste.apply(result, to: &d); draft = d }
+            else { store.mutate(reminderId) { CardPaste.apply(result, to: &$0) } }
+            RealToast.shared.show("Eklendi · \(result.label)")
+        }
     }
 
     /// Yapıştır: the copied item becomes blocks on this card (the draft while editing, saved right away otherwise).
