@@ -330,7 +330,8 @@ struct ReminderDetailView: View {
                 }
                 .accessibilityLabel(r.isImportant ? "Önemli işaretini kaldır" : "Önemli olarak işaretle")
             }
-            .frame(width: 97, height: 40)
+            // Yapıştır 48 + Panodan ekle 36 + divider 1 + star 48.
+            .frame(width: 133, height: 40)
             .liquidGlass(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
