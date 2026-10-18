@@ -195,17 +195,7 @@ private struct AnchoredPicker: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 14) {
                     ForEach(Array(labels.enumerated()), id: \.offset) { i, label in
-                        let on = (position ?? labels.count - 1) == i
-                        Text(label).font(RealFont.inter(on ? 14 : 12)).foregroundStyle(on ? .white : faded).lineLimit(1)
-                            .environment(\.layoutDirection, .leftToRight)
-                            .padding(.vertical, 6).contentShape(Rectangle())
-                            .visualEffect { content, proxy in
-                                // Only the chosen word stays; the others fade out as they move away from the edge.
-                                let frame = proxy.frame(in: .scrollView)
-                                return content.opacity(max(0, 1 - abs(frame.minX) / 90))
-                            }
-                            .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { position = i } }
-                            .id(i)
+                        item(label, at: i)
                     }
                 }
                 .scrollTargetLayout()
@@ -220,6 +210,23 @@ private struct AnchoredPicker: View {
         .onAppear { position = selected }
         .onChange(of: labels) { _, _ in position = selected }
         .onChange(of: position) { _, p in if let p, p != selected { selected = p } }
+    }
+
+    /// One word of the row (split out so the compiler type-checks it quickly).
+    private func item(_ label: String, at i: Int) -> some View {
+        let on = (position ?? labels.count - 1) == i
+        let color: Color = on ? .white : faded
+        return Text(label).font(RealFont.inter(on ? 14 : 12)).foregroundStyle(color).lineLimit(1)
+            .environment(\.layoutDirection, .leftToRight)
+            .padding(.vertical, 6).contentShape(Rectangle())
+            .visualEffect { content, proxy in
+                // Only the chosen word stays; the others fade out as they move away from the edge.
+                let x: CGFloat = proxy.frame(in: .scrollView).minX
+                let fade = Double(max(0, 1 - abs(x) / 90))
+                return content.opacity(fade)
+            }
+            .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { position = i } }
+            .id(i)
     }
 }
 
