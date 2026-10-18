@@ -6,6 +6,8 @@ on:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+  # A push whose commit message contains [appetize] also builds the Appetize simulator zip (the "Run workflow"
+  # button only shows when this file is on the default branch).
   workflow_dispatch:
     inputs:
       mode:
@@ -136,7 +138,7 @@ jobs:
 
       - name: Package simulator app (Appetize)
         # "appetize" runs only.
-        if: success() && inputs.mode == 'appetize'
+        if: success() && (inputs.mode == 'appetize' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[appetize]')))
         run: |
           mkdir -p build   # the test step that used to create it is skipped on manual runs
           xcodebuild build -project Real.xcodeproj -scheme Real -configuration Release \
@@ -148,7 +150,7 @@ jobs:
           zip -qry "$GITHUB_WORKSPACE/REAL-simulator.zip" REAL.app
 
       - name: Upload simulator app
-        if: success() && inputs.mode == 'appetize'
+        if: success() && (inputs.mode == 'appetize' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[appetize]')))
         uses: actions/upload-artifact@v4
         with:
           name: REAL-simulator-app
