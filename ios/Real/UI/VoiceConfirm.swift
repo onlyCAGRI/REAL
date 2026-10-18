@@ -13,13 +13,13 @@ struct VoiceHeard {
     static func parse(_ o: [String: Any]?, transcript: String) -> VoiceHeard? {
         guard let o else { return nil }
         let lower = transcript.lowercased(with: Locale(identifier: "tr_TR"))
-        var unsure: [(String, String?)] = []
+        var unsure: [(heard: String, meant: String?)] = []
         for entry in (o["unsure"] as? [[String: Any]]) ?? [] {
             let heard = ((entry["heard"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
             guard !heard.isEmpty, lower.contains(heard.lowercased(with: Locale(identifier: "tr_TR"))),
-                  !unsure.contains(where: { $0.0.caseInsensitiveCompare(heard) == .orderedSame }) else { continue }
+                  !unsure.contains(where: { $0.heard.caseInsensitiveCompare(heard) == .orderedSame }) else { continue }
             let meant = ((entry["meant"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
-            unsure.append((heard, meant.isEmpty || meant.caseInsensitiveCompare(heard) == .orderedSame ? nil : meant))
+            unsure.append((heard: heard, meant: meant.isEmpty || meant.caseInsensitiveCompare(heard) == .orderedSame ? nil : meant))
             if unsure.count >= 6 { break }
         }
         return VoiceHeard(understood: ((o["understood"] as? String) ?? "").trimmingCharacters(in: .whitespaces),

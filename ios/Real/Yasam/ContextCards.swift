@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // contextcards/*: rare, gentle Home nudges (at most two a day, one at a time) shown at the TOP of Kartlarım, looking
 // like a card: tap opens it, a swipe to the left puts it away ("Şimdi değil").

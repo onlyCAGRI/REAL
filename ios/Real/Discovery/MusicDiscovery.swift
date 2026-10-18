@@ -373,7 +373,7 @@ private struct MusicDeck: View {
               let s = first.music.previewUrl, let url = URL(string: s) else { return }
         try? AVAudioSession.sharedInstance().setCategory(.playback)
         let p = prepared[first.id] ?? AVPlayer(url: url)
-        p.seek(to: .zero)
+        await p.seek(to: .zero)
         p.play()
         prepareNext()
         player = p
