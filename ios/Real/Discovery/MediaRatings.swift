@@ -198,14 +198,17 @@ final class MediaRatingStore {
         if let saved = UserDefaults.standard.string(forKey: key) { return saved.isEmpty ? nil : saved }
         var text = media.description.flatMap { $0.isEmpty ? nil : $0 }
         var turkish = false
+        // "No description" is kept only when TheTVDB really answered; a network failure is tried again next time.
+        var answered = !(media.type == .MOVIE && media.provider.lowercased() == "thetvdb")
         if media.type == .MOVIE, media.provider.lowercased() == "thetvdb", let id = media.providerId,
            id.range(of: "^[1-9]\\d{0,9}$", options: .regularExpression) != nil,
            let r = try? await RealBackend.post("/api/media-details", ["provider": "TheTVDB", "type": "MOVIE", "providerId": id], timeout: 15),
            let d = r["details"] as? [String: Any] {
+            answered = true
             if let desc = d["description"] as? String, !desc.isEmpty { text = desc }
             turkish = (d["language"] as? String) == "tur"
         }
-        guard let source = text else { UserDefaults.standard.set("", forKey: key); return nil }
+        guard let source = text else { if answered { UserDefaults.standard.set("", forKey: key) }; return nil }
         if turkish { UserDefaults.standard.set(source, forKey: key); return source }
         guard let out = await Self.aiTranslate([String(source.prefix(1500))])?.first, !out.isEmpty else { return source } // Not saved: retry later.
         UserDefaults.standard.set(out, forKey: key)

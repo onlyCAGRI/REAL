@@ -380,7 +380,7 @@ struct FilmRatingSheet: View {
         RatingSheet(title: media.title, meta: meta, reminder: text, initial: initial, onRemove: onRemove, removeLabel: removeLabel,
                     reminderLoading: loading, onSkipLoading: { if loading { text = media.description; loading = false } }, onSave: onSave)
             .task(id: media.id) {
-                let result = await withTimeout(8) { await MediaRatingStore.shared.filmSummary(media) } ?? media.description
+                let result = await awaitAtMost(translationWait) { await MediaRatingStore.shared.filmSummary(media) } ?? media.description
                 if loading { text = result; loading = false }
             }
     }
@@ -401,10 +401,19 @@ private struct EpisodeRatingSheet: View {
                     onSkipLoading: { loading = false }, onSave: onSave)
             .task(id: episode.key) {
                 guard !episode.translated else { loading = false; return }
-                let result = await withTimeout(8) { await MediaRatingStore.shared.translate(media, episode) } ?? nil
+                let result = await awaitAtMost(translationWait) { await MediaRatingStore.shared.translate(media, episode) }
                 if loading { shown = result; loading = false }
             }
     }
+}
+
+/// A translation that is not back within this time gives way to the original text (Android: TRANSLATION_WAIT_MS).
+let translationWait: Double = 3
+
+/// Starts `work` on its own (a slow translation still finishes and is kept for next time) and waits at most `seconds`.
+func awaitAtMost<T: Sendable>(_ seconds: Double, _ work: @escaping @Sendable () async -> T?) async -> T? {
+    let job = Task { await work() }
+    return await withTimeout(seconds) { await job.value } ?? nil
 }
 
 /// Runs `work`, nil after `seconds`.
@@ -434,6 +443,8 @@ struct RatingSheet: View {
     @State private var value: Double = 7
     @State private var expanded = false
     @State private var overflows = false
+    /// The sheet is as tall as its content, like Android's bottom sheet (it used to open full height).
+    @State private var contentHeight: CGFloat = 540
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -502,8 +513,12 @@ struct RatingSheet: View {
             .padding(.top, 22)
         }
         .padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 16)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
+            withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.32)) { contentHeight = h }
+        }
         .frame(maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.large])
+        .presentationDetents([.height(contentHeight)])
         .presentationBackground(Color(argb: 0xFF0B0B0D))
         .presentationDragIndicator(.visible)
         .onAppear { value = initial ?? 7 }
