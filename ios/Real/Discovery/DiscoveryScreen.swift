@@ -434,6 +434,52 @@ struct DiscoveryHeadline: View {
     }
 }
 
+/// PosterEdgeGlow.kt: six lights from the cover's own left / right regions behind the deck (nothing over the cover).
+/// `playing` makes them grow and brighten with the music preview's beat. A SwiftUI Canvas clips to its frame
+/// (Compose's does not), so the lights get a wide margin and fade out softly instead of ending in a rectangle.
+struct PosterEdgeGlow: View {
+    let url: String?
+    var playing: Bool = false
+    @State private var colors: [Color] = []
+
+    /// MusicDiscoveryScreen.kt's sound pulse: a quick beat on a slow swell, 0…1.
+    static func beat(_ t: Double) -> Double {
+        let b = pow(sin(t * 7) * 0.5 + 0.5, 2)
+        return min(1, max(0, 0.25 + 0.45 * b + 0.10 * sin(t * 2.3)))
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width, h = geo.size.height
+            let pad = max(w, h) * 0.8
+            TimelineView(.animation(paused: !playing)) { t in
+                let beat = playing ? Self.beat(t.date.timeIntervalSinceReferenceDate) : 0
+                Canvas { ctx, _ in
+                    let radius = w * (0.47 + 0.14 * beat)
+                    let boost = 1 + 1.3 * beat
+                    for (region, color) in colors.enumerated() {
+                        let center = CGPoint(x: pad + w * (region % 2 == 0 ? 0.15 : 0.85), y: pad + h * (0.16 + CGFloat(region / 2) * 0.34))
+                        let g = Gradient(stops: [.init(color: color.opacity(min(0.8, 0.32 * boost)), location: 0),
+                                                 .init(color: color.opacity(min(0.4, 0.12 * boost)), location: 0.5),
+                                                 .init(color: .clear, location: 1)])
+                        ctx.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
+                                 with: .radialGradient(g, center: center, startRadius: 0, endRadius: radius))
+                    }
+                }
+                .frame(width: w + pad * 2, height: h + pad * 2)
+            }
+            .frame(width: w, height: h)
+        }
+        .allowsHitTesting(false)
+        .task(id: url) {
+            guard let url, let img = await PosterImageCache.load(url), let c = CoverPalette.edgeRegions(img) else {
+                withAnimation(.easeOut(duration: 0.38)) { colors = [] }; return
+            }
+            withAnimation(.easeOut(duration: 0.38)) { colors = c }
+        }
+    }
+}
+
 /// PosterAmbient: the top poster's colour as a blurred light at the top of the screen.
 struct PosterAmbient: View {
     let url: String?
@@ -540,7 +586,11 @@ private struct PosterDeck: View {
             let visible = Array(cards.prefix(4))
             ZStack(alignment: .top) {
                 // No blurred copy of the front poster here: its unclipped blur left a rectangle behind the deck, and
-                // it went black while the next poster's copy loaded. The screen's PosterAmbient already gives the glow.
+                // it went black while the next poster's copy loaded. The screen's PosterAmbient gives the top light and
+                // PosterEdgeGlow the side lights (as on Android).
+                PosterEdgeGlow(url: cards.first?.media.artworkUrl)
+                    .frame(width: geo.size.width + 28, height: height)
+                    .frame(width: geo.size.width)
                 ForEach(Array(visible.enumerated()).reversed(), id: \.element.id) { depth, item in
                     poster(item, depth: depth, width: width, height: height)
                 }

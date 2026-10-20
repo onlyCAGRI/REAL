@@ -145,7 +145,7 @@ struct CategoryScreen: View {
                     }
                     if !lists.completed.isEmpty {
                         SectionTitle(text: "Tamamlandı").padding(.top, 18)
-                        // Same as Home: 3 (the 3rd under glass) until "Daha fazla" opens 10, then 10 more each time.
+                        // Same as Home: 2 + a 3rd under glass until "Daha fazla" opens 10, then 10 more each time.
                         // "Tamamlananlar" itself lists everything.
                         let limit = builtIn != .completed
                         let shown = limit ? Array(lists.completed.prefix(completedShown)) : lists.completed
@@ -238,7 +238,7 @@ struct CategoryScreen: View {
 
     /// The arrow's new meaning, shown briefly under the header (id restarts the fade on every press).
     @State private var sortHint: (id: Int, text: String)?
-    @State private var completedShown = 4
+    @State private var completedShown = 3
 
     private func changeSort() {
         let next = nextSort

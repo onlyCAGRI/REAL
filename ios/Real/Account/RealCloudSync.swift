@@ -367,6 +367,7 @@ final class RealCloudSync {
         for key in Self.omitWhenEmpty {
             if let v = mine[key], !((v as? [Any])?.isEmpty ?? false) { o[key] = v } else { o.removeValue(forKey: key) }
         }
+        o["contentBlockLayout"] = Self.layoutPayload(card.contentBlockLayout)
         // Ayraç: only a divider carries the flag (as on Android).
         if card.isDivider { o["isDivider"] = true } else { o.removeValue(forKey: "isDivider") }
         // Files: a local name becomes the blob id; a cloud file not downloaded here yet stays as the cloud has it.
@@ -405,6 +406,30 @@ final class RealCloudSync {
             o.removeValue(forKey: key)
         }
         return o
+    }
+
+    /// encodeCardContentLayout (CardContentLayoutJson.kt): "grid": 6 marks the six-unit layout (without it the account
+    /// reads the old two-column one and rejects span 6); text styling only on text / files, hideActions only on
+    /// music / media, and only block kinds the account knows.
+    private static let layoutKinds: Set<String> = ["text", "card_stack", "mood", "checklist", "photos", "files", "voice", "music", "media", "location", "journal"]
+    private static func layoutPayload(_ layout: [String: CardBlockPlacement]) -> [String: Any] {
+        var out: [String: Any] = [:]
+        for (key, raw) in layout {
+            let kind = String(key.split(separator: ":").first ?? "")
+            guard layoutKinds.contains(kind), key.count <= 160, out.count < 100 else { continue }
+            let p = raw.normalized
+            var row: [String: Any] = ["grid": CardBlockPlacement.units, "span": p.span, "column": p.column,
+                                      "gapBefore": p.gapBefore, "minHeight": p.minHeight]
+            if let top = p.top { row["top"] = top }
+            if p.hideActions && (kind == "music" || kind == "media") { row["hideActions"] = true }
+            if key == "text" || key.hasPrefix("files:") {
+                if ["center", "end"].contains(p.textAlignment) { row["textAlignment"] = p.textAlignment }
+                if p.textBold { row["textBold"] = true }
+                if p.textItalic { row["textItalic"] = true }
+            }
+            out[key] = row
+        }
+        return out
     }
 
     private func plannerPayload(_ card: ReminderItem, base: String?) -> [String: Any]? {

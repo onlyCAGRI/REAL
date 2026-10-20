@@ -28,6 +28,22 @@ struct HomeCardsSearchTitle<Trailing: View>: View {
 
     private var progress: Double { Double(min(max(-drag / threshold, 0), 1)) }
 
+    /// Measured on screen: the title it sits on slides with the finger.
+    private var pull: some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .global)
+            .onChanged { v in
+                guard abs(v.translation.width) > abs(v.translation.height) else { return }
+                let next = min(0, max(-threshold * 1.6, v.translation.width))
+                if next < -threshold && drag >= -threshold { UISelectionFeedbackGenerator().selectionChanged() }
+                drag = next
+            }
+            .onEnded { _ in
+                let pulled = drag < -threshold
+                withAnimation(.spring(duration: 0.3)) { drag = 0 }
+                if pulled { open = true }
+            }
+    }
+
     private var closed: some View {
         HStack(spacing: 0) {
             // Pulling left: the title slides out with the finger and "Kartlarda ara" comes up in its place.
@@ -42,24 +58,15 @@ struct HomeCardsSearchTitle<Trailing: View>: View {
                         Circle().fill(type.accent).frame(width: 7, height: 7)
                     }
                 }
+                // Only the title itself pulls (not the empty row beside it).
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+                .simultaneousGesture(pull)
                 .offset(x: drag)
                 .opacity(1 - progress)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 44)
-            .contentShape(Rectangle())
-            .simultaneousGesture(DragGesture(minimumDistance: 10)
-                .onChanged { v in
-                    guard abs(v.translation.width) > abs(v.translation.height) else { return }
-                    let next = min(0, max(-threshold * 1.6, v.translation.width))
-                    if next < -threshold && drag >= -threshold { UISelectionFeedbackGenerator().selectionChanged() }
-                    drag = next
-                }
-                .onEnded { _ in
-                    let pulled = drag < -threshold
-                    withAnimation(.spring(duration: 0.3)) { drag = 0 }
-                    if pulled { open = true }
-                })
             .accessibilityAction(named: "Kartlarda ara") { open = true }
             trailing()
         }

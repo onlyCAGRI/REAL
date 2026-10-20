@@ -12,6 +12,9 @@ struct RealApp: App {
     private let initialPath: [Route]
 
     init() {
+        // No scroll indicator bars anywhere (Android shows none): every SwiftUI ScrollView / List is a UIScrollView.
+        UIScrollView.appearance().showsVerticalScrollIndicator = false
+        UIScrollView.appearance().showsHorizontalScrollIndicator = false
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-REALDemo") {
             // Screenshot / UI test mode: in-memory store with a fixed demo dataset, no permission prompts.
@@ -45,6 +48,7 @@ struct RealApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(initialPath: initialPath)
+                .scrollIndicators(.hidden)
                 .environment(store)
                 .environment(life)
                 .environment(pano)

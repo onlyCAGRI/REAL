@@ -90,8 +90,8 @@ struct HomeView: View {
     @Environment(\.navNamespace) private var nav
     @Binding var path: [Route]
     @State private var expanded = false
-    /// Home "Tamamlandı": 3 (the 3rd under glass) until "Daha fazla" opens 10, then 10 more each time.
-    @State private var completedShown = 4
+    /// Home "Tamamlandı": 2 + a 3rd under glass until "Daha fazla" opens 10, then 10 more each time.
+    @State private var completedShown = 3
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedIds: Set<Int64> = []
     /// Kontrol ettir: the cards it is for and the people to pick from (nil = sheet closed).
@@ -216,7 +216,8 @@ struct HomeView: View {
                         }
                     }
                 }
-                Color.clear.frame(height: 140)
+                // While "Daha fazla" is up the list ends at the card under glass: no extra room to pull it further.
+                if completed.count <= completedShown { Color.clear.frame(height: 140) }
             }
             .animation(.spring(duration: 0.35), value: active.map(\.id))
         }
@@ -260,10 +261,10 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: path) { _, now in
-            if now.contains(where: { if case .detail = $0 { return false } else { return true } }) { completedShown = 4 }
+            if now.contains(where: { if case .detail = $0 { return false } else { return true } }) { completedShown = 3 }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { completedShown = 4 }
+            if phase == .background { completedShown = 3 }
             // Profile picture for connected people (only uploads when it, or the photo-sharing switch, changed).
             if phase == .active { Task { await ProfilePictures.push() } }
         }
