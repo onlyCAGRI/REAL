@@ -24,16 +24,50 @@ struct CategoryScreen: View {
     @State private var heroBottom: CGFloat = 1000
     @State private var showPeople = false
     @State private var externalDetail: CalendarOccurrence?
+    @State private var dividerPrompt = false
+    @State private var dividerTitle = ""
+    @State private var dividerEditing: ReminderItem?
+    /// Owner and full members write Ayraçlar; Sınırlı members only see them.
+    private var canEditDividers: Bool { custom != nil && custom?.isReadOnlyShared != true }
     private var keyboard: KeyboardWatcher { KeyboardWatcher.shared }
     /// Phone-calendar events filed under this category ("Kategorize et"), the coming year, as read-only cards.
     private var calendarItems: [CalendarOccurrence] { customId.map { CalendarCards.inCategory($0) } ?? [] }
 
     private var sort: ReminderSortOrder { ReminderSortOrder(rawValue: sortRaw) ?? .recentlyAdded }
+
+    /// Ayraç in the list: the title in the middle with a thin line on each side; long press → Başlığı düzenle / Sil.
+    private func dividerRow(_ d: ReminderItem) -> some View {
+        HStack(spacing: 12) {
+            Rectangle().fill(Color.white.opacity(0.16)).frame(height: 0.75)
+            if !d.text.isEmpty {
+                Text(d.text).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0)).lineLimit(1)
+                    .frame(maxWidth: 240)
+                Rectangle().fill(Color.white.opacity(0.16)).frame(height: 0.75)
+            }
+        }
+        .padding(.horizontal, 28).padding(.vertical, 14)
+        .contentShape(Rectangle())
+        .contextMenu {
+            if canEditDividers {
+                Button("Başlığı düzenle", systemImage: "pencil") { dividerEditing = d; dividerTitle = d.text; dividerPrompt = true }
+                Button("Sil", systemImage: "trash", role: .destructive) { withAnimation { store.delete([d.id]) } }
+            }
+        }
+        .accessibilityLabel(d.text.isEmpty ? "Ayraç" : "Ayraç: \(d.text)")
+        .transition(.opacity)
+    }
+
+    private func saveDivider() {
+        let title = String(dividerTitle.trimmingCharacters(in: .whitespaces).prefix(40))
+        if let d = dividerEditing { store.mutate(d.id) { $0.text = title; $0.updatedAt = .now } }
+        else if let customId { withAnimation { store.addDivider(categoryId: customId, title: title) } }
+        dividerEditing = nil
+    }
     private var custom: CustomCategory? { store.category(customId) }
 
     var body: some View {
         let lists = projection
-        let stats = store.reminders.categoryProgress(builtIn: builtIn, customId: customId)
+        let stats = store.cards.categoryProgress(builtIn: builtIn, customId: customId)
         GeometryReader { outer in
             // A parent can hand this reader a zero top inset; the window's own inset keeps the hero buttons below
             // the status bar either way.
@@ -58,7 +92,8 @@ struct CategoryScreen: View {
                             onSort: { changeSort() },
                             onGoals: customId.map { id in { path.append(.goal(id)) } },
                             onPeople: custom.map { _ in { showPeople = true } },
-                            shared: custom?.isShared == true
+                            shared: custom?.isShared == true,
+                            onAddDivider: canEditDividers ? { dividerTitle = ""; dividerEditing = nil; dividerPrompt = true } : nil
                         )
                         .opacity(selectedIds.isEmpty ? 1 : 0.35)
                         .background(GeometryReader { g in
@@ -91,7 +126,13 @@ struct CategoryScreen: View {
                     if builtIn == .journalEntries {
                         journalList(lists.active)
                     } else {
-                        ForEach(lists.active) { card($0) }
+                        // Ayraçlar sit between the cards at the moment they were added (added-time orders only).
+                        let slots = (customId != nil && query.isEmpty) ? dividerSlots(lists.active, store.dividers(in: customId!), sort: sort) : [:]
+                        ForEach(Array(lists.active.enumerated()), id: \.element.id) { index, reminder in
+                            ForEach(slots[index] ?? []) { dividerRow($0) }
+                            card(reminder)
+                        }
+                        ForEach(slots[lists.active.count] ?? []) { dividerRow($0) }
                         ForEach(calendarItems.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }) { o in
                             // A phone-calendar event: opens the event window; no completing, swiping or selecting.
                             ReminderCardView(reminder: CalendarCards.card(o), category: custom, showCategoryStripes: false,
@@ -172,6 +213,11 @@ struct CategoryScreen: View {
         }
         .sheet(isPresented: $showColorSheet) { if let builtIn { BuiltInCategoryColorSheet(category: builtIn) } }
         .onChange(of: custom == nil && customId != nil) { _, gone in if gone { dismiss() } }
+        .alert(dividerEditing == nil ? "Ayraç ekle" : "Ayracı düzenle", isPresented: $dividerPrompt) {
+            TextField("Ör. 1. hafta bitti", text: $dividerTitle)
+            Button(dividerEditing == nil ? "Ekle" : "Kaydet") { saveDivider() }
+            Button("Vazgeç", role: .cancel) { dividerEditing = nil }
+        } message: { Text("Kartlarının arasına bir çizgi ve kısa bir başlık. Boş bırakırsan sadece çizgi olur.") }
     }
 
     private var nextSort: ReminderSortOrder {
@@ -226,7 +272,7 @@ struct CategoryScreen: View {
 
     private var baseProjection: (active: [ReminderItem], completed: [ReminderItem]) {
         if let customId {
-            let mine = store.reminders.filter { $0.customCategoryId == customId }
+            let mine = store.cards.filter { $0.customCategoryId == customId }
             let active = filterAndSortReminders(mine.filter { !$0.isCompleted }, colorFilter: colorFilter, sort: sort)
             let completed = mine.filter(\.isCompleted).sorted { ($0.completedAt ?? 0) > ($1.completedAt ?? 0) }
             return (active, completed)
@@ -392,6 +438,8 @@ private struct CategoryHero: View {
     var onPeople: (() -> Void)? = nil
     /// Ortak kategori: a friend mark left of the progress ring (tap opens Kişiler).
     var shared = false
+    /// Ayraç ekle (custom categories you may write in; nil hides it).
+    var onAddDivider: (() -> Void)? = nil
     @State private var menuOpen = false
     @FocusState private var searching: Bool
 
@@ -444,6 +492,17 @@ private struct CategoryHero: View {
                             if let onPeople {
                                 HeroRound(fg: fg, label: "Kişiler", action: { menuOpen = false; onPeople() }) {
                                     CategoryIconGlyph(icon: .friends, color: fg, size: 18)
+                                }
+                                .transition(.scale(scale: 0.6).combined(with: .opacity))
+                            }
+                            if let onAddDivider {
+                                // Ayraç: a line broken by a short title mark (CategoryFullHero.kt).
+                                HeroRound(fg: fg, label: "Ayraç ekle", action: { menuOpen = false; onAddDivider() }) {
+                                    HStack(spacing: 2.5) {
+                                        Capsule().fill(fg).frame(width: 5, height: 1.6)
+                                        Capsule().fill(fg).frame(width: 4, height: 3.4)
+                                        Capsule().fill(fg).frame(width: 5, height: 1.6)
+                                    }
                                 }
                                 .transition(.scale(scale: 0.6).combined(with: .opacity))
                             }

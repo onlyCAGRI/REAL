@@ -87,7 +87,7 @@ enum ShareImport {
 
     /// The light list the extension shows under "Karta ekle".
     static func writeSnapshot(_ store: ReminderStore) {
-        let cards = store.reminders.filter { $0.mood == nil }.prefix(400).map {
+        let cards = store.cards.filter { $0.mood == nil }.prefix(400).map {
             ShareInbox.CardSummary(id: $0.id, text: String($0.text.prefix(200)), completed: $0.isCompleted, updatedAt: $0.updatedAt,
                                    hasLink: $0.referenceUrl != nil, link: $0.referenceUrl,
                                    photoCount: $0.attachments.filter { $0.type == .image }.count)

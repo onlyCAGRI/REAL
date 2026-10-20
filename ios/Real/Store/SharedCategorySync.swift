@@ -106,6 +106,8 @@ final class SharedCategorySync {
         guard var o = try JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any] else { return nil }
         Self.localOnly.forEach { o.removeValue(forKey: $0) }
         if (o["gameBlocks"] as? [Any])?.isEmpty ?? true { o.removeValue(forKey: "gameBlocks") }
+        // Ayraç: only a divider carries the flag.
+        if o["isDivider"] as? Bool != true { o.removeValue(forKey: "isDivider") }
         for (key, voice) in [("attachments", false), ("voiceRecordings", true)] {
             guard var rows = o[key] as? [[String: Any]] else { continue }
             for i in rows.indices {

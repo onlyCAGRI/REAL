@@ -277,6 +277,8 @@ final class RealCloudSync {
         for key in Self.omitWhenEmpty {
             if let v = mine[key], !((v as? [Any])?.isEmpty ?? false) { o[key] = v } else { o.removeValue(forKey: key) }
         }
+        // Ayraç: only a divider carries the flag (as on Android).
+        if card.isDivider { o["isDivider"] = true } else { o.removeValue(forKey: "isDivider") }
         // Files: a local name becomes the blob id; a cloud file not downloaded here yet stays as the cloud has it.
         let baseObject = base.flatMap(Self.object)
         for key in ["attachments", "voiceRecordings"] {

@@ -65,7 +65,7 @@ struct PlannerScreen: View {
         let today = calendar.startOfDay(for: now)
         // Every card the user scheduled in REAL is in its calendar and in "Next 24 hours". The category switch
         // "REAL takviminde göster" only decides which category cards the calendar lists.
-        let calendarReminders = store.reminders
+        let calendarReminders = store.cards
 
         let isCalendar = modeRaw != "hours_24"
         ZStack {
@@ -85,7 +85,7 @@ struct PlannerScreen: View {
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top) { topBar(isCalendar: isCalendar) }
         .sheet(item: $externalDetail) { ExternalCalendarEventDetail(event: $0) }
-        .task { calendarConnection.reconcile(store.reminders) }
+        .task { calendarConnection.reconcile(store.cards) }
         .overlay {
             if let request = addRequest {
                 PlannerEventEditor(request: request) { addRequest = nil }.id(request.id).zIndex(10)

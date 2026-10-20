@@ -45,7 +45,7 @@ struct PlannerGoalScreen: View {
     private var members: [ReminderItem] {
         let order = store.goalOrder[categoryId] ?? []
         let position = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($0.element, $0.offset) })
-        return store.reminders
+        return store.cards
             .filter { $0.customCategoryId == categoryId && $0.journal == nil && $0.mood == nil }
             .sorted { a, b in
                 let pa = position[a.id] ?? .max, pb = position[b.id] ?? .max

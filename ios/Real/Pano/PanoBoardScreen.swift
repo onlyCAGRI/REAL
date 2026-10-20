@@ -379,10 +379,10 @@ struct PanoAddSheet: View {
                     row("Photo", "photo") { onAdd(.photo, nil) }
                 }
                 Section("REAL card") {
-                    if store.reminders.isEmpty {
+                    if store.cards.isEmpty {
                         Text("No local cards available.").foregroundStyle(.secondary)
                     }
-                    ForEach(store.reminders.sorted { $0.createdAt > $1.createdAt }.prefix(40)) { r in
+                    ForEach(store.cards.sorted { $0.createdAt > $1.createdAt }.prefix(40)) { r in
                         Button { onAdd(.card, r.id) } label: {
                             Text(r.text.isEmpty ? "Boş not" : r.text).foregroundStyle(.white).lineLimit(1)
                         }

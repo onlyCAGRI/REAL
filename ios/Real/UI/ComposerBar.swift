@@ -495,7 +495,7 @@ struct ComposerBar: View {
     private func startVoice() {
         focus = nil
         // Names the recognizer should expect: categories and short open card titles (where foreign titles live).
-        VoiceInput.hints = store.categories.map(\.name) + store.reminders
+        VoiceInput.hints = store.categories.map(\.name) + store.cards
             .filter { !$0.isCompleted }
             .map { $0.text.split(separator: "\n").first.map(String.init) ?? $0.text }
             .filter { $0.split(separator: " ").count <= 4 }

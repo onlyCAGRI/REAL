@@ -128,9 +128,9 @@ struct HomeView: View {
                 (store.category(r.customCategoryId)?.name.lowercased(with: tr).contains(search) ?? false)
         }
         let active = searching
-            ? filterAndSortReminders(store.reminders.filter { !$0.isCompleted && matches($0) }, sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded)
+            ? filterAndSortReminders(store.cards.filter { !$0.isCompleted && matches($0) }, sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded)
             : filterAndSortReminders(store.homeActive(), sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded)
-        let completed = searching ? store.reminders.inCategory(.completed).filter(matches) : store.homeCompleted()
+        let completed = searching ? store.cards.inCategory(.completed).filter(matches) : store.homeCompleted()
         // Ayarlar → "Ana ekranda takvim": the phone calendar's next 7 / 14 days as cards too (categorized ones carry
         // their category stripe; hidden-from-home categories stay out).
         let hidden = Set(store.categories.filter(\.hideFromGeneralLists).map(\.id))

@@ -200,7 +200,7 @@ struct CalendarConnectionScreen: View {
     private let muted = Color(argb: 0xFF9A9AA5)
     private var dirty: Bool { draft != connection.options }
     private var datedPlans: [ReminderItem] {
-        reminders.reminders.filter { !$0.isCompleted && ($0.alertAt != nil || $0.plannedDateEpochDay != nil) }
+        reminders.cards.filter { !$0.isCompleted && ($0.alertAt != nil || $0.plannedDateEpochDay != nil) }
     }
 
     var body: some View {

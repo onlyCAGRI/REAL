@@ -17,7 +17,7 @@ struct PlannerMonthView: View {
     var body: some View {
         let days = monthDays(month)
         let start = days.first!, end = calendar.date(byAdding: .day, value: 1, to: days.last!)!
-        let all = store.reminders + externals(start, end)
+        let all = store.cards + externals(start, end)
         let events = Planner.events(all, rangeStart: start.epochMillis, rangeEnd: end.epochMillis, calendar: calendar)
         let byDay = Planner.byDay(events, calendar: calendar)
         let picked = (byDay[calendar.startOfDay(for: selectedDay)] ?? []).sorted { ($0.isDateOnly ? 0 : 1, $0.startMillis) < ($1.isDateOnly ? 0 : 1, $1.startMillis) }

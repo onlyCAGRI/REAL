@@ -106,6 +106,21 @@ final class ReminderStore {
     // MARK: Lookups
 
     func reminder(_ id: Int64) -> ReminderItem? { reminders.first { $0.id == id } }
+    /// Real cards only: Ayraçlar (dividers) are drawn just in their category's list.
+    var cards: [ReminderItem] { reminders.contains(where: \.isDivider) ? reminders.filter { !$0.isDivider } : reminders }
+    func dividers(in categoryId: Int64) -> [ReminderItem] { reminders.filter { $0.isDivider && $0.customCategoryId == categoryId } }
+
+    /// A divider in `categoryId` at this moment (Ayraç ekle).
+    func addDivider(categoryId: Int64, title: String) {
+        guard AppUpdateGate.writable() else { return }
+        let now = EpochMillis.now
+        var d = ReminderItem(id: max(now, (reminders.map(\.id).max() ?? 0) + 1), text: String(title.trimmingCharacters(in: .whitespaces).prefix(40)), createdAt: now)
+        d.customCategoryId = categoryId
+        d.sendImmediateNotification = false
+        d.isDivider = true
+        reminders.insert(d, at: 0)
+        save()
+    }
     func category(_ id: Int64?) -> CustomCategory? { id.flatMap { id in categories.first { $0.id == id } } }
     private var hiddenCategoryIds: Set<Int64> { Set(categories.filter(\.hideFromGeneralLists).map(\.id)) }
 
@@ -153,26 +168,26 @@ final class ReminderStore {
     /// Home list: active cards outside hidden categories. Cards moved into 24 hour stay on Home too.
     func homeActive(now: EpochMillis = .now) -> [ReminderItem] {
         let hidden = hiddenCategoryIds
-        return reminders.filter { r in
+        return cards.filter { r in
             !r.isCompleted && !(r.customCategoryId.map(hidden.contains) ?? false)
         }.sorted { $0.createdAt > $1.createdAt }
     }
 
     func homeCompleted() -> [ReminderItem] {
         let hidden = hiddenCategoryIds
-        return reminders.inCategory(.completed).filter { !($0.customCategoryId.map(hidden.contains) ?? false) }
+        return cards.inCategory(.completed).filter { !($0.customCategoryId.map(hidden.contains) ?? false) }
     }
 
     func items(in category: ReminderCategory, now: EpochMillis = .now) -> [ReminderItem] {
         let hidden = hiddenCategoryIds
-        let list = reminders.inCategory(category, now: now, calendar: calendar)
+        let list = cards.inCategory(category, now: now, calendar: calendar)
         return category == .journalEntries ? list : list.filter { !($0.customCategoryId.map(hidden.contains) ?? false) }
     }
 
     func count(for item: OrderedCategory) -> Int {
         switch item {
         case .builtIn(let c): return items(in: c).count
-        case .custom(let c): return reminders.filter { $0.customCategoryId == c.id }.count
+        case .custom(let c): return cards.filter { $0.customCategoryId == c.id }.count
         }
     }
 

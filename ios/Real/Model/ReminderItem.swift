@@ -173,6 +173,9 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     /// Who added it; shown bottom-right when it is someone else.
     var sharedAuthorUid: String? = nil
     var sharedAuthorName: String? = nil
+    /// Ayraç: not a card but a divider line in its category's list; `text` is its title (may be empty). It sits at its
+    /// `createdAt` among the cards and stays out of every other list, count, alert and share.
+    var isDivider = false
 
     init(id: Int64, text: String, createdAt: EpochMillis, updatedAt: EpochMillis? = nil) {
         self.id = id
@@ -282,7 +285,7 @@ extension ReminderItem {
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
              cardStack, voiceRecordings, musicBlocks, mediaBlocks, gameBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex,
-             endAt, earlyAlertMinutes, sharedCardId, sharedAuthorUid, sharedAuthorName
+             endAt, earlyAlertMinutes, sharedCardId, sharedAuthorUid, sharedAuthorName, isDivider
     }
 
     init(from decoder: Decoder) throws {
@@ -331,7 +334,21 @@ extension ReminderItem {
         sharedCardId = try c.decodeIfPresent(String.self, forKey: .sharedCardId)
         sharedAuthorUid = try c.decodeIfPresent(String.self, forKey: .sharedAuthorUid)
         sharedAuthorName = try c.decodeIfPresent(String.self, forKey: .sharedAuthorName)
+        isDivider = try c.decodeIfPresent(Bool.self, forKey: .isDivider) ?? false
     }
+}
+
+/// Where each Ayraç sits in a category's sorted `cards`: index → dividers drawn before cards[index] (index == count: after
+/// the last card). Only the added-time orders show them (dividerSlots in ReminderItem.kt).
+func dividerSlots(_ cards: [ReminderItem], _ dividers: [ReminderItem], sort: ReminderSortOrder) -> [Int: [ReminderItem]] {
+    guard !dividers.isEmpty, sort == .recentlyAdded || sort == .oldestFirst else { return [:] }
+    let newestFirst = sort == .recentlyAdded
+    var out: [Int: [ReminderItem]] = [:]
+    for d in dividers.sorted(by: { newestFirst ? $0.createdAt > $1.createdAt : $0.createdAt < $1.createdAt }) {
+        let index = cards.firstIndex { c in c.id >= 0 && (newestFirst ? c.createdAt < d.createdAt : c.createdAt > d.createdAt) } ?? cards.count
+        out[index, default: []].append(d)
+    }
+    return out
 }
 
 enum ReminderSortOrder: String, CaseIterable, Codable {
