@@ -16,6 +16,8 @@ struct AccountMenuOverlay: View {
     @State private var progress: CGFloat = 0
     @State private var photoItem: PhotosPickerItem?
     @State private var showPhotoPicker = false
+    @State private var showPhotoChoice = false
+    @State private var showAvatarEditor = false
     @State private var showAuthChoice = false
     @State private var notice: String?
     @State private var showPeople = false
@@ -66,7 +68,7 @@ struct AccountMenuOverlay: View {
                 }
                 .padding(.top, 13)
                 VStack(spacing: 3) {
-                    item(.person, "Fotoğrafın veya avatarın") { showPhotoPicker = true }
+                    item(.person, "Fotoğrafın veya avatarın") { showPhotoChoice = true }
                     item(.star, "REAL Pro") { notice = "REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak." }
                     if auth.account == nil {
                         item(.add, auth.busy ? "Google açılıyor…" : "Hesap ekle") { signInAndRestore() }
@@ -90,6 +92,13 @@ struct AccountMenuOverlay: View {
             .opacity(progress)
         }
         .onAppear { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.26)) { progress = 1 } }
+        // ProfilePhotoChooser.kt: your own photo, or a Humation avatar drawn in REAL.
+        .confirmationDialog("Profil görünümün", isPresented: $showPhotoChoice, titleVisibility: .visible) {
+            Button("Fotoğraf seç") { showPhotoPicker = true }
+            Button("Avatar oluştur") { showAvatarEditor = true }
+            Button("Vazgeç", role: .cancel) {}
+        } message: { Text("Avatar kişilerinde her zaman görünür; fotoğraf yalnız Ayarlar'da paylaşmayı açarsan.") }
+        .fullScreenCover(isPresented: $showAvatarEditor) { AvatarEditorView() }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
@@ -143,7 +152,13 @@ enum ProfilePhotoStore {
     static var url: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("profile_photo.jpg")
     }
-    static func save(_ image: UIImage) {
+    /// "photo" (shared only when "Fotoğrafımı kişilerimle paylaş" is on) or "avatar" (always shared, as on Android).
+    static var kind: String {
+        get { UserDefaults.standard.string(forKey: "profile_photo_kind") ?? "photo" }
+        set { UserDefaults.standard.set(newValue, forKey: "profile_photo_kind") }
+    }
+    static func save(_ image: UIImage, kind: String = "photo") {
+        self.kind = kind
         let side: CGFloat = 512
         let scale = side / max(1, min(image.size.width, image.size.height))
         let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)

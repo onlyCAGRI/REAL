@@ -3,7 +3,7 @@ import UIKit
 import CryptoKit
 
 /// Profile pictures between people (ProfilePictures.kt): connected people and shared-category co-members only, never
-/// public pages. iOS has only a real photo, which is shared when "Fotoğrafımı kişilerimle paylaş" is on (off by default).
+/// public pages. A Humation avatar is always shared; a real photo only when "Fotoğrafımı kişilerimle paylaş" is on (off by default).
 @MainActor
 enum ProfilePictures {
     private static let side: CGFloat = 256
@@ -24,14 +24,16 @@ enum ProfilePictures {
         pushing = true
         defer { pushing = false }
         let revision = UserDefaults.standard.double(forKey: "profile_photo_revision")
-        let photo = sharePhoto ? ProfilePhotoStore.load() : nil
-        let wanted = photo != nil ? "photo/\(revision)" : "none"
+        // An avatar is always shared (it is drawn, not a real face); a photo only when the person allowed it.
+        let kind = ProfilePhotoStore.kind
+        let photo = (kind == "avatar" || sharePhoto) ? ProfilePhotoStore.load() : nil
+        let wanted = photo != nil ? "\(kind)/\(revision)" : "none"
         guard UserDefaults.standard.string(forKey: stateKey) != wanted else { return }
         do {
             if let photo {
                 guard let base64 = encode(photo) else { return }
                 _ = try await RealBackend.request("/api/connections/v1/me/picture", method: "PUT",
-                                                  body: try JSONSerialization.data(withJSONObject: ["kind": "photo", "image": base64]))
+                                                  body: try JSONSerialization.data(withJSONObject: ["kind": kind, "image": base64]))
             } else {
                 _ = try await RealBackend.request("/api/connections/v1/me/picture", method: "DELETE", body: Data("{}".utf8))
             }
