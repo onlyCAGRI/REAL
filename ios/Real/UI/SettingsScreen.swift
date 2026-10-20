@@ -666,6 +666,8 @@ struct AccountManageSheet: View {
     @State private var syncing = false
     @State private var showIssues = false
     @State private var issueLimit = 5
+    /// The choice waiting for "Onayla" (conflict id + choice).
+    @State private var pendingChoice: (String, RealCloudSync.Choice)?
     @State private var localSize = "…"
     @Environment(ReminderStore.self) private var store
     @Environment(LifeStore.self) private var life
@@ -679,6 +681,72 @@ struct AccountManageSheet: View {
     private func syncNow() {
         syncing = true
         Task { await cloud.runFully(store, life); syncing = false }
+    }
+
+    private func act(_ work: @escaping () async -> Void) {
+        syncing = true
+        Task { await work(); syncing = false }
+    }
+
+    private func choiceLabel(_ c: RealCloudSync.ConflictInfo, _ choice: RealCloudSync.Choice) -> String {
+        switch choice {
+        case .keepLocal: return "Bu iPhone'daki sürüm hesaba gönderilecek; hesaptaki sürüm değişecek."
+        case .useAccount: return c.remote == nil ? "Kart bu iPhone'dan da kaldırılacak." : "Bu iPhone'da hesaptaki sürüm kullanılacak."
+        case .keepAsNewCard: return "Bu iPhone'daki içerik ayrı bir kartta korunacak; eski karta hesaptaki sürüm uygulanacak."
+        }
+    }
+
+    @ViewBuilder private func conflictRow(_ c: RealCloudSync.ConflictInfo) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(c.remote == nil ? "Bu kart hesabında silinmiş" : (c.isCard ? "Kart sürümleri çakışıyor" : "Kayıt sürümleri çakışıyor"))
+                .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+            Text(c.title).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA4A4AD)).lineLimit(1)
+            Text(c.remote == nil ? "Başka bir cihazda silindi ama bu iPhone'da değişmişti. Ne olacağını sen seç."
+                                 : "İki tarafta da değişti; hiçbiri ezilmedi. Karşılaştırıp seç.")
+                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
+            Text("Bu iPhone'daki").font(RealFont.inter(11, .medium)).foregroundStyle(Color(argb: 0xFF6FD6FF))
+            Text(c.local).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+            Text("Hesaptaki").font(RealFont.inter(11, .medium)).foregroundStyle(Color(argb: 0xFF6FD6FF))
+            Text(c.remote ?? "Silinmiş kayıt").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+            if let chosen = pendingChoice, chosen.0 == c.id {
+                Text(choiceLabel(c, chosen.1)).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFFFD27A)).fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 14) {
+                    Button("Onayla") {
+                        let (id, choice) = chosen
+                        pendingChoice = nil
+                        act { await cloud.resolve(id, choice, store, life) }
+                    }
+                    Button("Vazgeç") { pendingChoice = nil }
+                }
+                .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    if c.remote != nil { Button("Bu iPhone'dakini koru") { pendingChoice = (c.id, .keepLocal) } }
+                    Button(c.remote == nil ? "Silmeyi uygula" : "Hesaptakini kullan") { pendingChoice = (c.id, .useAccount) }
+                    if c.isCard { Button("Yeni kart olarak sakla") { pendingChoice = (c.id, .keepAsNewCard) } }
+                }
+                .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
+            }
+        }
+        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.05)))
+    }
+
+    @ViewBuilder private func issueRow(_ issue: RealCloudSync.Issue) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(issue.title).font(RealFont.inter(13, .medium)).foregroundStyle(.white).lineLimit(1)
+            Text(issue.reason).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA4A4AD)).fixedSize(horizontal: false, vertical: true)
+            Text(issue.hasAccountCopy ? "Bu iPhone'daki sürüm korunuyor. Kartı düzenlersen kendiliğinden tekrar gönderilir."
+                                      : "Bu kayıt hesabına hiç ulaşmadı; bu iPhone'daki sürüm korunuyor.")
+                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 14) {
+                Button("Tekrar dene") { syncNow() }
+                if issue.hasAccountCopy { Button("Hesaptakini kullan") { act { await cloud.useAccount(forRefused: issue.id, store, life) } } }
+            }
+            .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
+        }
+        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.05)))
     }
 
     private func measureLocal() async {
@@ -762,28 +830,23 @@ struct AccountManageSheet: View {
                         .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
                 }
                 Text(syncLine).font(RealFont.inter(13)).foregroundStyle(cloud.lastError == nil ? Color(argb: 0xFFA4A4AD) : Color(argb: 0xFFFFB4AB))
-                Text("Kartlar, kategoriler, mood ve su kayıtları bu iPhone ile hesabın arasında iki yönlü eşitlenir. İki tarafta da değişen bir kayıtta hesabındaki sürüm kullanılır.")
+                Text("Kartlar, kategoriler, mood ve su kayıtları bu iPhone ile hesabın arasında iki yönlü eşitlenir. Bir kart iki tarafta da değişirse ya da hesapta silinirse hiçbiri ezilmez; ne olacağını sen seçersin.")
                     .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
+                let waiting = cloud.issues.count + cloud.conflicts.count
                 if cloud.lastError == nil && cloud.lastSuccess != nil {
-                    Text(cloud.issues.isEmpty ? "Bekleyen kayıt yok." : "\(cloud.issues.count) kayıt gönderilemedi · diğerleri eşitlendi")
-                        .font(RealFont.inter(13)).foregroundStyle(cloud.issues.isEmpty ? Color(argb: 0xFFA4A4AD) : Color(argb: 0xFFFFD27A))
+                    Text(waiting == 0 ? "Bekleyen kayıt yok." : "\(waiting) kayıt senin seçimini bekliyor · diğerleri eşitlendi")
+                        .font(RealFont.inter(13)).foregroundStyle(waiting == 0 ? Color(argb: 0xFFA4A4AD) : Color(argb: 0xFFFFD27A))
                 }
-                if !cloud.issues.isEmpty {
-                    Button(showIssues ? "Ayrıntıları gizle" : "Sorunları göster") { withAnimation(.snappy) { showIssues.toggle() } }
+                if waiting > 0 {
+                    Button(showIssues ? "Ayrıntıları gizle" : "Sorunları ve sürümleri göster") { withAnimation(.snappy) { showIssues.toggle() } }
                         .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                     if showIssues {
-                        ForEach(cloud.issues.prefix(issueLimit)) { issue in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(issue.title).font(RealFont.inter(13, .medium)).foregroundStyle(.white).lineLimit(1)
-                                Text(issue.reason).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA4A4AD)).fixedSize(horizontal: false, vertical: true)
-                            }
-                            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.05)))
-                        }
+                        ForEach(cloud.conflicts.prefix(issueLimit)) { conflict in conflictRow(conflict) }
+                        ForEach(cloud.issues.prefix(issueLimit)) { issue in issueRow(issue) }
                         HStack {
-                            if cloud.issues.count > issueLimit { Button("Daha fazla göster") { issueLimit += 10 } }
+                            if max(cloud.issues.count, cloud.conflicts.count) > issueLimit { Button("Daha fazla göster") { issueLimit += 10 } }
                             Spacer()
-                            Button(syncing ? "Deneniyor…" : "Tekrar dene") { syncNow() }.disabled(syncing)
+                            if !cloud.issues.isEmpty { Button(syncing ? "Deneniyor…" : "Hepsini tekrar dene") { syncNow() }.disabled(syncing) }
                         }
                         .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                     }

@@ -4,8 +4,10 @@ import Observation
 
 /// Two-way REAL cloud sync on iOS (SyncEngine.kt): pull the account's change feed, merge it with this iPhone's cards
 /// and push what changed here, with the same records Android uses (CARD, CATEGORY, PLANNER, MOOD and the category
-/// order / description preferences). Each record keeps the last synced payload as its base; a record changed on both
-/// sides takes the cloud copy. Photos, files and voice notes travel as attachments of their card.
+/// order / description preferences). Each record keeps the last synced payload as its base; a card, category or mood
+/// changed on both sides (or deleted in the account while changed here) waits as a conflict until the person chooses,
+/// and a record the account refuses waits with its reason; the others keep syncing. Photos, files and voice notes
+/// travel as attachments of their card.
 @MainActor
 @Observable
 final class RealCloudSync {
@@ -22,6 +24,8 @@ final class RealCloudSync {
         let id: String       // "KIND/key"
         let title: String
         let reason: String
+        /// The account has a version of it ("Hesaptakini kullan"); otherwise it never reached the account.
+        var hasAccountCopy = false
     }
 
     /// Runs a sync shortly (edits in a row collapse into one).
@@ -52,7 +56,37 @@ final class RealCloudSync {
         var blobs: [String: String] = [:]
         /// PLANNER details that arrived before their card.
         var planner: [String: String] = [:]
+        /// Records changed here AND in the account (or deleted there): nothing is applied or sent until the person
+        /// chooses in Hesapları yönet → Eşitleme ("KIND/key" → both versions).
+        var conflicts: [String: Conflict] = [:]
+
+        init() {}
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            cursor = try c.decodeIfPresent(Int64.self, forKey: .cursor) ?? 0
+            records = try c.decodeIfPresent([String: Rec].self, forKey: .records) ?? [:]
+            blobs = try c.decodeIfPresent([String: String].self, forKey: .blobs) ?? [:]
+            planner = try c.decodeIfPresent([String: String].self, forKey: .planner) ?? [:]
+            conflicts = try c.decodeIfPresent([String: Conflict].self, forKey: .conflicts) ?? [:]
+        }
     }
+    private struct Conflict: Codable {
+        /// This iPhone's version when the account's arrived (JSON text).
+        var local: String
+        /// The account's version; nil = deleted there.
+        var remote: String?
+    }
+
+    /// A conflict as Hesapları yönet shows it.
+    struct ConflictInfo: Identifiable, Equatable {
+        let id: String           // "KIND/key"
+        let title: String
+        let isCard: Bool
+        let local: String
+        /// nil: the account deleted it.
+        let remote: String?
+    }
+    private(set) var conflicts: [ConflictInfo] = []
     private var stateURL: URL? {
         guard let uid = RealAuth.shared.account?.uid else { return nil }
         let hash = SHA256.hash(data: Data(uid.utf8)).map { String(format: "%02x", $0) }.joined().prefix(16)
@@ -94,6 +128,103 @@ final class RealCloudSync {
             saveState(st)
             lastError = Self.describe(error)
         }
+        publishConflicts(st, store)
+    }
+
+    private func publishConflicts(_ st: State, _ store: ReminderStore) {
+        conflicts = st.conflicts.keys.sorted().compactMap { docKey in
+            guard let c = st.conflicts[docKey] else { return nil }
+            return ConflictInfo(id: docKey, title: issueTitle(docKey, store), isCard: docKey.hasPrefix("CARD/"),
+                                local: Self.preview(c.local), remote: c.remote.map(Self.preview))
+        }
+    }
+
+    /// A few lines of a version for comparing (SyncManagementPanel's syncBranchPreview).
+    private static func preview(_ raw: String) -> String {
+        guard let o = object(raw) else { return "İçerik önizlenemedi." }
+        var lines: [String] = []
+        for key in ["text", "name"] { if let t = o[key] as? String, !t.isEmpty { lines.append(String(t.prefix(300))); break } }
+        if let items = o["checklistItems"] as? [[String: Any]] {
+            lines += items.prefix(6).compactMap { ($0["text"] as? String).map { "• " + $0.prefix(100) } }
+            if items.count > 6 { lines.append("… \(items.count) madde") }
+        }
+        for (key, label) in [("attachments", "ek"), ("voiceRecordings", "ses kaydı"), ("musicBlocks", "müzik"), ("mediaBlocks", "film/dizi")] {
+            if let list = o[key] as? [Any], !list.isEmpty { lines.append("\(list.count) \(label)") }
+        }
+        if let ms = (o["alertAt"] as? NSNumber)?.int64Value, ms > 0 {
+            lines.append("Saat: " + Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .shortened))
+        }
+        if let ms = (o["updatedAt"] as? NSNumber)?.int64Value, ms > 0 {
+            lines.append("Düzenleme: " + Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .shortened))
+        }
+        return lines.isEmpty ? "İçerik kaydı" : lines.joined(separator: "\n")
+    }
+
+    // MARK: Choices (Hesapları yönet → Eşitleme)
+
+    enum Choice { case keepLocal, useAccount, keepAsNewCard }
+
+    /// Resolves one conflict as the person chose, then syncs.
+    func resolve(_ docKey: String, _ choice: Choice, _ store: ReminderStore, _ life: LifeStore) async {
+        while running { try? await Task.sleep(for: .milliseconds(200)) }
+        var st = loadState()
+        guard let c = st.conflicts[docKey] else { publishConflicts(st, store); return }
+        let parts = docKey.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return }
+        switch choice {
+        case .keepLocal:
+            // Base is already the account's version: this iPhone's differs from it, so the next push sends it.
+            guard c.remote != nil else { return }   // a card deleted in the account cannot come back under its old id
+        case .useAccount:
+            apply(kind: parts[0], key: parts[1], payload: c.remote.flatMap(Self.object), store, life, &st)
+        case .keepAsNewCard:
+            guard parts[0] == "CARD", let id = Int64(parts[1]), let card = store.reminder(id) else { return }
+            store.putFromSync(Self.copy(of: card, newId: Self.freeId(store)))
+            apply(kind: parts[0], key: parts[1], payload: c.remote.flatMap(Self.object), store, life, &st)
+        }
+        st.conflicts[docKey] = nil
+        saveState(st)
+        publishConflicts(st, store)
+        await run(store, life)
+    }
+
+    /// "Hesaptakini kullan" for a refused record: this iPhone takes the account's copy back (none there: removed here).
+    func useAccount(forRefused docKey: String, _ store: ReminderStore, _ life: LifeStore) async {
+        while running { try? await Task.sleep(for: .milliseconds(200)) }
+        var st = loadState()
+        let parts = docKey.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return }
+        apply(kind: parts[0], key: parts[1], payload: st.records[docKey]?.raw.flatMap(Self.object), store, life, &st)
+        saveState(st)
+        issues.removeAll { $0.id == docKey }
+        await run(store, life)
+    }
+
+    private static func freeId(_ store: ReminderStore) -> Int64 {
+        var id = Int64(Date().timeIntervalSince1970 * 1000)
+        while store.reminder(id) != nil { id += 1 }
+        return id
+    }
+
+    /// The same card under a new id; its files are copied so the two cards never share one upload.
+    private static func copy(of card: ReminderItem, newId: Int64) -> ReminderItem {
+        var copy = card
+        copy.id = newId
+        copy.createdAt = newId
+        copy.updatedAt = newId
+        copy.notifiedAlertAt = nil
+        func duplicate(_ name: String) -> String {
+            guard !name.isEmpty else { return name }
+            let src = AttachmentStorage.directory.appendingPathComponent(name)
+            let ext = src.pathExtension
+            let fresh = UUID().uuidString.lowercased() + (ext.isEmpty ? "" : "." + ext)
+            return (try? FileManager.default.copyItem(at: src, to: AttachmentStorage.directory.appendingPathComponent(fresh))) != nil ? fresh : name
+        }
+        copy.attachments = card.attachments.map { a in
+            var a = a; if a.type != .textSnippet { a.localPath = duplicate(a.localPath) }; return a
+        }
+        copy.voiceRecordings = card.voiceRecordings.map { r in var r = r; r.localPath = duplicate(r.localPath); return r }
+        return copy
     }
 
     /// A short Turkish line for a failed run, with the worker's code so a problem can be traced.
@@ -137,6 +268,10 @@ final class RealCloudSync {
         default:
             return f.status == 413 ? "Kayıt eşitleme sınırını aşıyor (\(code))." : "Hesap bu kaydı kabul etmedi (\(code))."
         }
+    }
+
+    private func issue(_ docKey: String, _ store: ReminderStore, _ st: State, reason: String) -> Issue {
+        Issue(id: docKey, title: issueTitle(docKey, store), reason: reason, hasAccountCopy: st.records[docKey]?.raw != nil)
     }
 
     private func issueTitle(_ docKey: String, _ store: ReminderStore) -> String {
@@ -197,16 +332,25 @@ final class RealCloudSync {
             st.records[docKey] = Rec(id: id, revision: revision, base: remote, raw: raw)
             return
         }
-        let local = export(docKey, store, life, base: old?.raw, &st).map(Self.canonical)
+        let exported = export(docKey, store, life, base: old?.raw, &st)
+        let local = exported.map(Self.canonical)
         let base = old?.base
         var take = false
-        if local == remote { take = false }
+        if local == remote { take = false; st.conflicts[docKey] = nil }
+        else if st.conflicts[docKey] != nil {
+            // Still waiting for the person's choice: only the account's side is refreshed.
+            st.conflicts[docKey]?.remote = raw
+        }
         else if local == base { take = true }
         else if remote == base { take = false }         // only this iPhone changed it: it goes up
-        else { take = true }                            // changed on both sides: the cloud copy wins
+        else if let exported, ["CARD", "CATEGORY", "MOOD"].contains(kind),
+                let localRaw = (try? JSONSerialization.data(withJSONObject: exported)).flatMap({ String(data: $0, encoding: .utf8) }) {
+            // Changed here AND in the account (or deleted there): nothing is overwritten; the person chooses.
+            st.conflicts[docKey] = Conflict(local: localRaw, remote: raw)
+        }
+        else { take = true }                            // the rest (drinks, settings, deleted here): the account's copy
         if take { apply(kind: kind, key: key, payload: payload, store, life, &st) }
-        st.records[docKey] = Rec(id: id, revision: revision, base: remote,
-                                 raw: payload.flatMap { try? JSONSerialization.data(withJSONObject: $0) }.flatMap { String(data: $0, encoding: .utf8) })
+        st.records[docKey] = Rec(id: id, revision: revision, base: remote, raw: raw)
     }
 
     private static func drinkPayload(_ e: WaterIntakeEntry) -> [String: Any] {
@@ -242,6 +386,8 @@ final class RealCloudSync {
         for (k, rec) in st.records where rec.base != nil && written.contains(String(k.split(separator: "/").first ?? "")) { keys.insert(k) }
 
         for docKey in keys.sorted(by: { Self.order($0) < Self.order($1) }) {
+            // Waiting for the person's choice (Hesapları yönet → Eşitleme): neither side is touched.
+            if st.conflicts[docKey] != nil { continue }
             var payload = docs[docKey]
             let rec = st.records[docKey]
             if payload.map(Self.canonical) == rec?.base { continue }
@@ -252,7 +398,7 @@ final class RealCloudSync {
             // The account takes no untitled card (only an Ayraç may be empty): it stays here and is listed.
             if kind == "CARD", let p = payload, ((p["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                p["isDivider"] as? Bool != true {
-                found.append(Issue(id: docKey, title: issueTitle(docKey, store), reason: "Kartın metni boş; hesaba gönderilmesi için bir başlık yaz."))
+                found.append(issue(docKey, store, st, reason: "Kartın metni boş; hesaba gönderilmesi için bir başlık yaz."))
                 continue
             }
             if kind == "CARD" {
@@ -267,7 +413,7 @@ final class RealCloudSync {
                 } catch {
                     let network = (error as? URLError).map { [.notConnectedToInternet, .networkConnectionLost, .cancelled].contains($0.code) } ?? false
                     if network || error is CancellationError || !(Self.recordOnly(error) || error is URLError) { throw error }
-                    found.append(Issue(id: docKey, title: issueTitle(docKey, store),
+                    found.append(issue(docKey, store, st,
                                        reason: "Bu kartın bir eki buluta gönderilemedi. Yerel içerik kaldırılmadı. (\((error as? RealBackend.Failure)?.code ?? "ek"))"))
                     continue
                 }
@@ -290,7 +436,7 @@ final class RealCloudSync {
                     receive(current, store, life, &st)
                 }
             } catch where Self.recordOnly(error) {
-                found.append(Issue(id: docKey, title: issueTitle(docKey, store), reason: Self.reason(error)))
+                found.append(issue(docKey, store, st, reason: Self.reason(error)))
             }
         }
         return found
