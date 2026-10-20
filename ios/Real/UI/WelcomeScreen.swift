@@ -49,6 +49,7 @@ struct WelcomeScreen: View {
     @Environment(LifeStore.self) private var life
     @State private var auth = RealAuth.shared
     @State private var authError: String?
+    @State private var showEmailAuth = false
     @State private var sound = WelcomeSound()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -149,7 +150,21 @@ struct WelcomeScreen: View {
                 // Shown with the sign-in set but not available yet: it cannot be pressed.
                 authButton("Apple ile devam et", emphasized: false)
                 Color.clear.frame(height: 9)
-                authButton("E-posta ile devam et", emphasized: false)
+                if auth.isAvailable {
+                    Button { focused = false; authError = nil; showEmailAuth = true } label: {
+                        Text("E-posta ile devam et").font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                            .frame(width: 300, height: 50)
+                            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white.opacity(0.08)))
+                            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.14)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(auth.busy)
+                    .sheet(isPresented: $showEmailAuth) {
+                        AuthChoiceSheet(startWithEmail: true) { account in Task { @MainActor in await finishAfterAuthentication(account) } }
+                    }
+                } else {
+                    authButton("E-posta ile devam et", emphasized: false)
+                }
                 Color.clear.frame(height: 22)
                 // Kept quiet on purpose: the three documents in one small row. The longer explanations live behind
                 // "Veri kullanımı" and AI asks for its own consent before it is first used.
@@ -178,18 +193,7 @@ struct WelcomeScreen: View {
                         authError = auth.lastError
                         return
                     }
-                    do {
-                        RealCloudSync.shared.reset()
-                        _ = try await RealCloudRestore.run(store: store, life: life)
-                    } catch {
-                        authError = "Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin."
-                    }
-                    let typed = name.trimmingCharacters(in: .whitespaces)
-                    name = typed.isEmpty ? (account.firstName ?? "") : typed
-                    phase = .greeting
-                    withAnimation(.easeOut(duration: 0.3)) { greetingAlpha = 1 }
-                    try? await Task.sleep(for: .seconds(1.1))
-                    onComplete(name)
+                    await finishAfterAuthentication(account)
                 }
             } label: {
                 Text(auth.busy ? "Google açılıyor…" : "Google ile devam et")
@@ -202,6 +206,23 @@ struct WelcomeScreen: View {
         } else {
             authButton("Google ile devam et", emphasized: true)
         }
+    }
+
+    /// After Google or e-posta: the account's cards, categories and moods come back, then onboarding finishes with the
+    /// typed name or the account's first name.
+    private func finishAfterAuthentication(_ account: RealAuth.Account) async {
+        do {
+            RealCloudSync.shared.reset()
+            _ = try await RealCloudRestore.run(store: store, life: life)
+        } catch {
+            authError = "Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin."
+        }
+        let typed = name.trimmingCharacters(in: .whitespaces)
+        name = typed.isEmpty ? (account.firstName ?? "") : typed
+        phase = .greeting
+        withAnimation(.easeOut(duration: 0.3)) { greetingAlpha = 1 }
+        try? await Task.sleep(for: .seconds(1.1))
+        onComplete(name)
     }
 
     /// WelcomeAuthButton in its disabled state (sign-in not available in this build, or Apple for now).

@@ -80,6 +80,67 @@ final class RealAuth {
         }
     }
 
+    // MARK: E-posta ile giriş (FirebaseAuthRepository: signInWithEmail / createAccountWithName / sendPasswordReset)
+
+    /// The signed-in account uses e-mail + password (account deletion then asks for the password, not Google).
+    var usesPassword: Bool { Auth.auth().currentUser?.providerData.contains { $0.providerID == EmailAuthProviderID } ?? false }
+
+    func signInWithEmail(_ email: String, password: String) async throws -> Account? {
+        guard isAvailable else { throw Self.failure("Giriş bu sürümde henüz kullanılamıyor.") }
+        do {
+            _ = try await Auth.auth().signIn(withEmail: email.trimmingCharacters(in: .whitespaces), password: password)
+            refreshAccount()
+            return account
+        } catch { throw Self.mapped(error) }
+    }
+
+    /// New account with the name others see (Ad zorunlu, Soyad isteğe bağlı); the name is saved before returning.
+    func createAccount(email: String, password: String, firstName: String, lastName: String) async throws -> Account? {
+        guard isAvailable else { throw Self.failure("Giriş bu sürümde henüz kullanılamıyor.") }
+        let name = [firstName, lastName].map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
+        do {
+            let result = try await Auth.auth().createUser(withEmail: email.trimmingCharacters(in: .whitespaces), password: password)
+            let change = result.user.createProfileChangeRequest()
+            change.displayName = name
+            try await change.commitChanges()
+            _ = try await result.user.getIDTokenResult(forcingRefresh: true)
+            refreshAccount()
+            confirmName()
+            return account
+        } catch { throw Self.mapped(error) }
+    }
+
+    func sendPasswordReset(_ email: String) async throws {
+        do { try await Auth.auth().sendPasswordReset(withEmail: email.trimmingCharacters(in: .whitespaces)) }
+        catch { throw Self.mapped(error) }
+    }
+
+    /// Account deletion with an e-mail account: the server wants a sign-in from the last 5 minutes.
+    func reauthenticateWithPassword(_ password: String) async throws {
+        guard let user = Auth.auth().currentUser, let email = user.email else { throw URLError(.userAuthenticationRequired) }
+        do {
+            try await user.reauthenticate(with: EmailAuthProvider.credential(withEmail: email, password: password))
+            _ = try await user.getIDTokenResult(forcingRefresh: true)
+        } catch { throw Self.mapped(error) }
+    }
+
+    private static func failure(_ text: String) -> Error { CalendarCardPublisher.Failure(errorDescription: text) }
+
+    /// Firebase errors in plain Turkish (FirebaseAuthRepository.mapFailure).
+    private static func mapped(_ error: Error) -> Error {
+        let code = AuthErrorCode(rawValue: (error as NSError).code)
+        let text: String
+        switch code {
+        case .weakPassword: text = "Şifre çok zayıf. En az 6 karakter kullanın."
+        case .emailAlreadyInUse: text = "Bu e-posta adresi zaten başka bir hesapta kullanılıyor."
+        case .wrongPassword, .invalidCredential, .userNotFound, .invalidEmail: text = "E-posta veya şifre geçersiz."
+        case .tooManyRequests: text = "Çok fazla deneme yapıldı. Biraz sonra tekrar deneyin."
+        case .networkError: text = "İnternet bağlantısını kontrol edin."
+        default: text = "Kimlik doğrulama başarısız."
+        }
+        return failure(text)
+    }
+
     func signOut() {
         try? Auth.auth().signOut()
         GIDSignIn.sharedInstance.signOut()

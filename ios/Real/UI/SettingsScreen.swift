@@ -16,20 +16,14 @@ struct AccountMenuOverlay: View {
     @State private var progress: CGFloat = 0
     @State private var photoItem: PhotosPickerItem?
     @State private var showPhotoPicker = false
+    @State private var showAuthChoice = false
     @State private var notice: String?
     @State private var showPeople = false
     @State private var showManage = false
 
     /// Google sign-in, then the account's cards / categories / moods replace this device's (read-only restore).
-    private func signInAndRestore() {
-        Task { @MainActor in
-            guard await auth.signInWithGoogle() != nil else {
-                if let error = auth.lastError { notice = error }
-                return
-            }
-            restore()
-        }
-    }
+    /// Hesap ekle: Google or e-posta (AuthChoiceSheet), then the account's cards come back.
+    private func signInAndRestore() { showAuthChoice = true }
 
     private func restore() {
         Task { @MainActor in
@@ -76,6 +70,7 @@ struct AccountMenuOverlay: View {
                     item(.star, "REAL Pro") { notice = "REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak." }
                     if auth.account == nil {
                         item(.add, auth.busy ? "Google açılıyor…" : "Hesap ekle") { signInAndRestore() }
+                            .sheet(isPresented: $showAuthChoice) { AuthChoiceSheet { _ in restore() } }
                     } else {
                         item(.manage, "Hesapları yönet") { showManage = true }
                         item(.person, "Kişilerim") { showPeople = true }
@@ -694,15 +689,20 @@ struct AccountManageSheet: View {
     }
     @State private var deleting: String?
     @State private var deleteError: String?
+    @State private var askDeletePassword = false
+    @State private var deletePassword = ""
 
     /// AccountManagementSheet "Veri ve silme": Google sign-in again (the server wants a fresh one), start the account
     /// erasure, follow it to the end, then delete the Firebase account. Cards on this iPhone stay.
-    private func deleteAccount() {
+    private func deleteAccount(password: String? = nil) {
+        // An e-mail account confirms with its password instead of Google.
+        if RealAuth.shared.usesPassword && password == nil { deletePassword = ""; askDeletePassword = true; return }
         deleteError = nil
-        deleting = "Google ile doğrulanıyor…"
+        deleting = password != nil ? "Şifre doğrulanıyor…" : "Google ile doğrulanıyor…"
         Task {
             do {
-                try await RealAuth.shared.reauthenticateWithGoogle()
+                if let password { try await RealAuth.shared.reauthenticateWithPassword(password) }
+                else { try await RealAuth.shared.reauthenticateWithGoogle() }
                 deleting = "Bulut verileri siliniyor…"
                 let op = UUID().uuidString.lowercased()
                 var r = try await RealBackend.post("/api/account/v1/erasure",
@@ -789,6 +789,11 @@ struct AccountManageSheet: View {
         } message: {
             Text("Buluttaki kartların, dosyaların, paylaşım linklerin ve sahibi olduğun panolar silinir. Bu iPhone'daki kartlar kalır. Geri alınamaz.")
         }
+        .alert("Şifreni yaz", isPresented: $askDeletePassword) {
+            SecureField("Şifre", text: $deletePassword)
+            Button("Sil", role: .destructive) { deleteAccount(password: deletePassword) }
+            Button("Vazgeç", role: .cancel) { deletePassword = "" }
+        } message: { Text("Hesabı silmek için e-posta hesabının şifresiyle doğrula.") }
         .presentationBackground(Color(argb: 0xFF111113))
     }
 }
