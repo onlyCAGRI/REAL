@@ -24,8 +24,10 @@ struct PlannerGoalScreen: View {
     /// Ortak kategori people (owner first), loaded for Manage; empty for a private category.
     @State private var people: [SharedMember] = []
     @State private var showPeople = false
-    @State private var noteGoal: Goal?
+    /// Pencil on a completed goal: its Tamamlama notu is written right in the row, with the keyboard.
+    @State private var noteGoalId: Int64?
     @State private var noteText = ""
+    @FocusState private var noteFocused: Bool
 
     private let calendar = Calendar.real
     private static let sheet = Color(argb: 0xFF121216)
@@ -178,17 +180,6 @@ struct PlannerGoalScreen: View {
             guard !showPeople, let category, category.isShared else { people = []; return }
             people = (try? await SharedCategorySync.shared.members(category)) ?? people
         }
-        .alert("Tamamlama notu", isPresented: Binding(get: { noteGoal != nil }, set: { if !$0 { noteGoal = nil } })) {
-            TextField("Ör. test edilecek", text: $noteText)
-            Button("Kaydet") {
-                if let g = noteGoal {
-                    let text = String(noteText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(140))
-                    store.mutate(g.id) { $0.completionNote = text.isEmpty ? nil : text; $0.updatedAt = .now }
-                }
-                noteGoal = nil
-            }
-            Button("Vazgeç", role: .cancel) { noteGoal = nil }
-        } message: { Text("Tamamlandı yazısının altında görünür. Boş bırakırsan not kalkar.") }
     }
 
     private var topBar: some View {
@@ -436,6 +427,23 @@ struct PlannerGoalScreen: View {
         .padding(.top, 30)
     }
 
+    private func startNote(_ goal: Goal) {
+        saveNote()
+        noteText = goal.note ?? ""
+        noteGoalId = goal.id
+    }
+
+    /// Saves the note being written (empty removes it) and closes the field.
+    private func saveNote() {
+        guard let id = noteGoalId else { return }
+        noteGoalId = nil
+        noteFocused = false
+        let text = String(noteText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(140))
+        if text != (store.reminder(id)?.completionNote ?? "") {
+            store.mutate(id) { $0.completionNote = text.isEmpty ? nil : text; $0.updatedAt = .now }
+        }
+    }
+
     private func goalRow(_ goal: Goal, number: Int, active: Bool, isLast: Bool) -> some View {
         let state: Int = goal.done ? 0 : (active ? 1 : 2) // Done, Active, Locked
         let rail: Double = state == 0 ? 1 : (state == 1 ? (goal.progress ?? 0) : 0)
@@ -483,14 +491,28 @@ struct PlannerGoalScreen: View {
                     .strikethrough(goal.done, color: Self.muted)
                     .padding(.top, 4)
                     .onTapGesture { path.append(.detail(goal.id)) }
-                // Tamamlama notu under a completed goal; tap to write or change it.
-                if goal.done {
-                    Text(goal.note ?? "+ Not bırak")
-                        .font(RealFont.inter(13)).italic(goal.note != nil)
-                        .foregroundStyle(goal.note != nil ? Color(argb: 0xFFB7B7C0) : Self.faint)
+                // Tamamlama notu under a completed goal. The pencil (or a tap on the note) writes it in place.
+                if goal.done && noteGoalId == goal.id {
+                    TextField("Not yaz…", text: $noteText, axis: .vertical)
+                        .font(RealFont.inter(13)).italic()
+                        .foregroundStyle(Color(argb: 0xFFE6E6EC)).tint(accent)
+                        .focused($noteFocused)
+                        .onChange(of: noteFocused) { _, focused in if !focused { saveNote() } }
+                        .submitLabel(.done)
+                        .onChange(of: noteText) { _, t in
+                            // Return finishes the note (a vertical field would otherwise add a line).
+                            if t.contains(where: \.isNewline) { noteText = t.filter { !$0.isNewline }; saveNote() }
+                            else if t.count > 140 { noteText = String(t.prefix(140)) }
+                        }
                         .padding(.top, 6)
-                        .onTapGesture { noteText = goal.note ?? ""; noteGoal = goal }
-                        .accessibilityLabel(goal.note.map { "Tamamlama notu: \($0)" } ?? "Tamamlama notu bırak")
+                        .onAppear { noteFocused = true }
+                } else if goal.done, let note = goal.note {
+                    Text(note)
+                        .font(RealFont.inter(13)).italic()
+                        .foregroundStyle(Color(argb: 0xFFB7B7C0))
+                        .padding(.top, 6)
+                        .onTapGesture { startNote(goal) }
+                        .accessibilityLabel("Tamamlama notu: \(note)")
                 }
                 if let p = goal.progress, !goal.done {
                     HStack(spacing: 10) {
@@ -509,10 +531,10 @@ struct PlannerGoalScreen: View {
                     .frame(width: 44, height: 36, alignment: .leading)
                     .contentShape(Rectangle())
                     .gesture(reorderGesture(goal.id), including: reorderMode ? .all : .none)
-                    Button { path.append(.detail(goal.id)) } label: {
+                    Button { if goal.done { startNote(goal) } else { path.append(.detail(goal.id)) } } label: {
                         RealSymbol("pencil", size: 17.2).foregroundStyle(Self.muted).frame(width: 32, height: 32)
                     }
-                    .accessibilityLabel("Edit goal")
+                    .accessibilityLabel(goal.done ? "Tamamlama notu yaz" : "Edit goal")
                     Spacer()
                     Button { withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(goal.id) } } label: {
                         Text(goal.done ? "Undo" : "Mark done")

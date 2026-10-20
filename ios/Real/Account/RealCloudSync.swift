@@ -189,6 +189,14 @@ final class RealCloudSync {
         let remote = payload.map(Self.canonical)
         let revision = (record["revision"] as? NSNumber)?.int64Value ?? 0
         let old = st.records[docKey]
+        // An Ortak kategori card lives in the shared store: its personal record (the copy from before it was shared)
+        // never overwrites it, or it loses its link and goes up to the category again as a duplicate. The record is
+        // only remembered, so the next push removes it from the personal cloud (as Android does).
+        let raw = payload.flatMap { try? JSONSerialization.data(withJSONObject: $0) }.flatMap { String(data: $0, encoding: .utf8) }
+        if kind == "CARD" || kind == "PLANNER", let localId = Int64(key), store.reminder(localId)?.sharedCardId != nil {
+            st.records[docKey] = Rec(id: id, revision: revision, base: remote, raw: raw)
+            return
+        }
         let local = export(docKey, store, life, base: old?.raw, &st).map(Self.canonical)
         let base = old?.base
         var take = false

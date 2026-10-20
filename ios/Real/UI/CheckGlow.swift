@@ -21,8 +21,8 @@ final class CheckRequests {
         UserDefaults.standard.set(Array(seen.suffix(400)), forKey: Self.key)
     }
 
-    /// The light this viewer should see on `r`, or nil.
-    func glow(_ r: ReminderItem, me: String?, today: Date = Date()) -> Color? {
+    /// The light this viewer should see on `r`, or nil: the card's category colour, else blue / amber.
+    func glow(_ r: ReminderItem, me: String?, categoryColor: Color? = nil, today: Date = Date()) -> Color? {
         guard let c = r.checkRequest, !r.isCompleted, !r.isDivider else { return nil }
         if let start = c.startEpochDay, Calendar.real.epochDay(of: today) < start { return nil }
         let forMe: Bool
@@ -32,7 +32,8 @@ final class CheckRequests {
             forMe = c.to.contains(me) || (c.to.contains(CheckRequest.everyone) && c.from != me) || (c.to.contains(CheckRequest.me) && c.from == me)
         } else { forMe = false }
         guard forMe, !seen.contains(Self.id(r)) else { return nil }
-        if let color = c.color { return Color(argb: UInt32(bitPattern: Int32(truncatingIfNeeded: color))) }
+        // The light blinks in the card's category colour (a colour picked in older versions is ignored).
+        if let categoryColor { return categoryColor }
         let mine = c.from == nil || c.from == me || (r.sharedCardId == nil && c.to.contains(CheckRequest.me))
         return mine ? Self.selfColor : Self.otherColor
     }
@@ -71,8 +72,6 @@ struct CheckRequestSheet: View {
     @State private var target = ""
     @State private var useDate = false
     @State private var day = Date()
-    @State private var color: Int?
-    private let swatches: [UInt32] = [0xFFFF8FB1, 0xFF7BE0A4, 0xFFB59BFF]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -88,20 +87,12 @@ struct CheckRequestSheet: View {
                 DatePicker("", selection: $day, in: Date()..., displayedComponents: .date).labelsHidden().datePickerStyle(.compact)
                     .environment(\.locale, Locale(identifier: "tr_TR"))
             }
-            label("RENK")
-            chips {
-                chip("Otomatik", color == nil, swatch: AnyShapeStyle(LinearGradient(stops: [.init(color: CheckRequests.selfColor, location: 0.5),
-                    .init(color: CheckRequests.otherColor, location: 0.5)], startPoint: .leading, endPoint: .trailing))) { color = nil }
-                ForEach(swatches, id: \.self) { argb in
-                    chip("", color == Int(Int32(bitPattern: argb)), swatch: AnyShapeStyle(Color(argb: argb))) { color = Int(Int32(bitPattern: argb)) }
-                }
-            }
             HStack(spacing: 10) {
                 Button { if canClear { onClear() }; dismiss() } label: {
                     Text(canClear ? "Kontrolü kaldır" : "Vazgeç").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFE9E9EF))
                         .frame(maxWidth: .infinity, minHeight: 46).background(Capsule().fill(.white.opacity(0.08)))
                 }
-                Button { onSave(target, useDate ? Calendar.real.epochDay(of: day) : nil, color); dismiss() } label: {
+                Button { onSave(target, useDate ? Calendar.real.epochDay(of: day) : nil, nil); dismiss() } label: {
                     Text("Işığı yak").font(RealFont.inter(14, .semibold)).foregroundStyle(.black)
                         .frame(maxWidth: .infinity, minHeight: 46).background(Capsule().fill(.white))
                 }

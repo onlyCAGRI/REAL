@@ -133,7 +133,7 @@ struct ReminderCardView: View {
                 if let accent { shape.fill(accent) } else { shape.fill(RealColors.cardSurface) }
                 if isSelected { shape.fill(RealColors.accentBlue.opacity(0.07)) }
                 // Kontrol ettir: a slow light from the right edge until this viewer opens the card.
-                if let glow = CheckRequests.shared.glow(reminder, me: RealAuth.shared.account?.uid) { CheckGlowOverlay(color: glow) }
+                if let glow = CheckRequests.shared.glow(reminder, me: RealAuth.shared.account?.uid, categoryColor: reminder.customCategoryId == nil ? nil : category.map { $0.visual.stripe.0 }) { CheckGlowOverlay(color: glow) }
                 if let stripes {
                     HStack(spacing: 3.5) {
                         Rectangle().fill(stripes.0).frame(width: 5)

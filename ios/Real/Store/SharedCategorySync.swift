@@ -310,7 +310,11 @@ final class SharedCategorySync {
                 let revision = (card["revision"] as? NSNumber)?.intValue ?? 1
                 let entry = st.cards[cardId]
                 let localId = entry?.localId ?? Self.localId(for: cardId)
+                // An adopted card is linked to the owner's personal copy restored from the account (fresh install):
+                // without this the copy looked new and went up again as a duplicate.
+                let sourceKey = card["sourceKey"] as? String
                 let current = store.reminders.first { $0.id == localId || $0.sharedCardId == cardId }
+                    ?? sourceKey.flatMap { key in store.reminders.first { $0.sharedCardId == nil && $0.customCategoryId == category.id && String($0.id) == key } }
                 if card["deleted"] as? Bool == true {
                     if let current { store.removeFromSync(current.id) }
                     st.cards[cardId] = nil; continue

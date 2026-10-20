@@ -84,11 +84,13 @@ final class ReminderStore {
     func replaceAll(reminders: [ReminderItem], categories: [CustomCategory], ownerName: String) {
         // Ortak kategori cards and other people's categories are not in the personal cloud: keep them, and keep the
         // sharing bookkeeping of this person's own shared categories.
-        let restoredIds = Set(reminders.map(\.id))
-        let shared = self.reminders.filter { $0.sharedCardId != nil && !restoredIds.contains($0.id) }
+        // A shared card wins over its personal copy from before it was shared (same id): the copy would lose the link
+        // and go up to the category again as a duplicate.
+        let shared = self.reminders.filter { $0.sharedCardId != nil }
+        let sharedIds = Set(shared.map(\.id))
         let mirrors = self.categories.filter(\.isSharedMirror)
         let ownShared = Dictionary(self.categories.filter { $0.sharedRole == "owner" }.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        self.reminders = reminders + shared
+        self.reminders = reminders.filter { !sharedIds.contains($0.id) } + shared
         self.categories = categories.map { c in
             guard let old = ownShared[c.id] else { return c }
             var c = c; c.sharedId = old.sharedId; c.sharedRole = old.sharedRole; return c
