@@ -29,6 +29,7 @@ struct AvatarEditorView: View {
 }
 
 /// Saved avatar state (the editor reopens where you left it), per account like the photo.
+@MainActor
 enum AvatarStore {
     private static var stateKey: String { "avatar_state_json_" + (RealAuth.shared.account?.uid ?? "local") }
     static var stateJSON: String {
