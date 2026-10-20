@@ -20,6 +20,9 @@ struct CategoryScreen: View {
     @State private var showEditor = false
     @State private var showColorSheet = false
     @State private var selectedIds: Set<Int64> = []
+    /// Kontrol ettir: the cards it is for and the people to pick from (nil = sheet closed).
+    @State private var checkIds: Set<Int64> = []
+    @State private var checkTargets: [CheckTarget]?
     @State private var query = ""
     @State private var heroBottom: CGFloat = 1000
     @State private var showPeople = false
@@ -199,7 +202,11 @@ struct CategoryScreen: View {
                              onComplete: { selectedIds.forEach { store.toggleCompleted($0) }; selectedIds = [] },
                              // As on Android: delete at once, "N kart silindi · Geri al" brings them back.
                              onDelete: { let ids = selectedIds; selectedIds = []; withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo(ids) } },
-                             onCancel: { selectedIds = [] })
+                             onCancel: { selectedIds = [] },
+                             onCheck: {
+                                 let ids = selectedIds
+                                 Task { checkTargets = await store.checkTargets(for: ids); checkIds = ids; selectedIds = [] }
+                             })
             } else if builtIn != .completed && builtIn != .journalEntries && custom?.isReadOnlyShared != true {
                 ComposerBar(defaultCategoryId: customId, defaultImportant: builtIn == .important,
                             defaultPlannedToday: builtIn == .today || builtIn == .planned)
@@ -213,6 +220,11 @@ struct CategoryScreen: View {
         }
         .sheet(isPresented: $showColorSheet) { if let builtIn { BuiltInCategoryColorSheet(category: builtIn) } }
         .onChange(of: custom == nil && customId != nil) { _, gone in if gone { dismiss() } }
+        .sheet(isPresented: Binding(get: { checkTargets != nil }, set: { if !$0 { checkTargets = nil } })) {
+            CheckRequestSheet(targets: checkTargets ?? [], canClear: checkIds.contains { store.reminder($0)?.checkRequest != nil },
+                              onSave: { target, day, color in store.setCheckRequest(checkIds, target: target, startEpochDay: day, color: color) },
+                              onClear: { store.setCheckRequest(checkIds, target: nil) })
+        }
         .alert(dividerEditing == nil ? "Ayraç ekle" : "Ayracı düzenle", isPresented: $dividerPrompt) {
             TextField("Ör. 1. hafta bitti", text: $dividerTitle)
             Button(dividerEditing == nil ? "Ekle" : "Kaydet") { saveDivider() }

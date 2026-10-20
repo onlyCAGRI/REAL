@@ -132,6 +132,8 @@ struct ReminderCardView: View {
             ZStack(alignment: .trailing) {
                 if let accent { shape.fill(accent) } else { shape.fill(RealColors.cardSurface) }
                 if isSelected { shape.fill(RealColors.accentBlue.opacity(0.07)) }
+                // Kontrol ettir: a slow light from the right edge until this viewer opens the card.
+                if let glow = CheckRequests.shared.glow(reminder, me: RealAuth.shared.account?.uid) { CheckGlowOverlay(color: glow) }
                 if let stripes {
                     HStack(spacing: 3.5) {
                         Rectangle().fill(stripes.0).frame(width: 5)

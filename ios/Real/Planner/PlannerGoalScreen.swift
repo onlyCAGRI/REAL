@@ -21,6 +21,11 @@ struct PlannerGoalScreen: View {
     @State private var dragId: Int64?
     @State private var dragOrder: [Int64]?
     @State private var dragStartIndex = 0
+    /// Ortak kategori people (owner first), loaded for Manage; empty for a private category.
+    @State private var people: [SharedMember] = []
+    @State private var showPeople = false
+    @State private var noteGoal: Goal?
+    @State private var noteText = ""
 
     private let calendar = Calendar.real
     private static let sheet = Color(argb: 0xFF121216)
@@ -60,6 +65,7 @@ struct PlannerGoalScreen: View {
         let caption: String
         let done: Bool
         let progress: Double?
+        var note: String? = nil
     }
 
     private var goals: [Goal] {
@@ -74,7 +80,8 @@ struct PlannerGoalScreen: View {
                 .compactMap { $0 }.joined(separator: "  ·  ")
             return Goal(id: r.id, title: r.text.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled" : r.text, caption: caption,
                         done: r.isCompleted,
-                        progress: (!r.isCompleted && !items.isEmpty && checked > 0) ? Double(checked) / Double(items.count) : nil)
+                        progress: (!r.isCompleted && !items.isEmpty && checked > 0) ? Double(checked) / Double(items.count) : nil,
+                        note: r.completionNote)
         }
         if let live = dragOrder {
             let byId = Dictionary(uniqueKeysWithValues: list.map { ($0.id, $0) })
@@ -164,6 +171,24 @@ struct PlannerGoalScreen: View {
                 .presentationBackground(Color(argb: 0xFF1B1B1F))
         }
         .sheet(isPresented: $showPasteLink) { PasteLinkSheet(categoryId: categoryId).presentationDetents([.height(380)]) }
+        .realOverlay(isPresented: $showPeople) {
+            if let category { SharedCategorySheet(category: category, calendarLinked: CalendarCategoryLinks.shared.hasCategory(category.id)) }
+        }
+        .task(id: "\(category?.sharedId ?? "")/\(showPeople)") {
+            guard !showPeople, let category, category.isShared else { people = []; return }
+            people = (try? await SharedCategorySync.shared.members(category)) ?? people
+        }
+        .alert("Tamamlama notu", isPresented: Binding(get: { noteGoal != nil }, set: { if !$0 { noteGoal = nil } })) {
+            TextField("Ör. test edilecek", text: $noteText)
+            Button("Kaydet") {
+                if let g = noteGoal {
+                    let text = String(noteText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(140))
+                    store.mutate(g.id) { $0.completionNote = text.isEmpty ? nil : text; $0.updatedAt = .now }
+                }
+                noteGoal = nil
+            }
+            Button("Vazgeç", role: .cancel) { noteGoal = nil }
+        } message: { Text("Tamamlandı yazısının altında görünür. Boş bırakırsan not kalkar.") }
     }
 
     private var topBar: some View {
@@ -242,8 +267,9 @@ struct PlannerGoalScreen: View {
                 Text("goals done").font(RealFont.inter(12)).foregroundStyle(onAccent.opacity(0.6))
             }
             .padding(.leading, 16).padding(.bottom, 12)
+            // Düzenle only reorders the goals; the badge then becomes the "done" check.
             Button {
-                if reorderMode { reorderMode = false } else { stylePopup = true }
+                withAnimation(.easeOut(duration: 0.2)) { reorderMode.toggle() }
             } label: {
                 ZStack {
                     // The badge sits in the black notch, so it is drawn in the tile colour.
@@ -256,7 +282,7 @@ struct PlannerGoalScreen: View {
             }
             .frame(maxWidth: .infinity, alignment: .topTrailing)
             .padding(5)
-            .accessibilityLabel(reorderMode ? "Finish reordering goals" : "Edit category style")
+            .accessibilityLabel(reorderMode ? "Sıralamayı bitir" : "Hedefleri sırala")
         }
     }
 
@@ -294,18 +320,34 @@ struct PlannerGoalScreen: View {
             .tag(1)
             HStack(spacing: 0) {
                 VStack(alignment: .leading) {
-                    Text("Members (1)").font(RealFont.inter(12)).foregroundStyle(Self.muted)
+                    Text("Members (\(max(people.count, 1)))").font(RealFont.inter(12)).foregroundStyle(Self.muted)
                     Spacer()
                     HStack(spacing: -10) {
-                        ProfileAvatar(name: store.ownerName, size: 36).overlay(Circle().strokeBorder(Self.black, lineWidth: 2))
-                        RealSymbol("plus", size: 14.9).foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(Self.black)).overlay(Circle().strokeBorder(Self.faint, lineWidth: 1))
+                        // Real people of a shared category (it showed only you, even to members).
+                        if people.isEmpty {
+                            ProfileAvatar(name: store.ownerName, size: 36).overlay(Circle().strokeBorder(Self.black, lineWidth: 2))
+                        } else {
+                            ForEach(people.prefix(3)) { p in
+                                ConnectionAvatar(name: p.name, key: p.uid, size: 36, pictureVersion: p.pictureVersion)
+                                    .overlay(Circle().strokeBorder(Self.black, lineWidth: 2))
+                            }
+                            if people.count > 3 {
+                                Text("+\(people.count - 3)").font(RealFont.inter(12, .medium)).foregroundStyle(.white)
+                                    .frame(width: 36, height: 36).background(Circle().fill(.white.opacity(0.12)))
+                                    .overlay(Circle().strokeBorder(Self.black, lineWidth: 2))
+                            }
+                        }
+                        Button { showPeople = true } label: {
+                            RealSymbol("plus", size: 14.9).foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Circle().fill(Self.black)).overlay(Circle().strokeBorder(Self.faint, lineWidth: 1))
+                        }
+                        .accessibilityLabel("Kişi ekle")
                     }
                 }
                 .padding(.leading, 18).padding(.vertical, 14).padding(.trailing, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                PagerActionButton(label: "Manage", symbol: "person", accent: accent, enabled: true) {}
+                PagerActionButton(label: "Manage", symbol: "person", accent: accent, enabled: category != nil) { showPeople = true }
             }
             .tag(2)
         }
@@ -397,7 +439,7 @@ struct PlannerGoalScreen: View {
     private func goalRow(_ goal: Goal, number: Int, active: Bool, isLast: Bool) -> some View {
         let state: Int = goal.done ? 0 : (active ? 1 : 2) // Done, Active, Locked
         let rail: Double = state == 0 ? 1 : (state == 1 ? (goal.progress ?? 0) : 0)
-        let caption = goal.done ? "Done" : (!goal.caption.isEmpty ? goal.caption : (state == 1 ? "In progress" : "Up next"))
+        let caption = goal.done ? "Tamamlandı" : (!goal.caption.isEmpty ? goal.caption : (state == 1 ? "In progress" : "Up next"))
         return HStack(alignment: .top, spacing: 14) {
             VStack(spacing: 0) {
                 ZStack {
@@ -441,6 +483,15 @@ struct PlannerGoalScreen: View {
                     .strikethrough(goal.done, color: Self.muted)
                     .padding(.top, 4)
                     .onTapGesture { path.append(.detail(goal.id)) }
+                // Tamamlama notu under a completed goal; tap to write or change it.
+                if goal.done {
+                    Text(goal.note ?? "+ Not bırak")
+                        .font(RealFont.inter(13)).italic(goal.note != nil)
+                        .foregroundStyle(goal.note != nil ? Color(argb: 0xFFB7B7C0) : Self.faint)
+                        .padding(.top, 6)
+                        .onTapGesture { noteText = goal.note ?? ""; noteGoal = goal }
+                        .accessibilityLabel(goal.note.map { "Tamamlama notu: \($0)" } ?? "Tamamlama notu bırak")
+                }
                 if let p = goal.progress, !goal.done {
                     HStack(spacing: 10) {
                         Capsule().fill(.white.opacity(0.10)).frame(width: 120, height: 4)

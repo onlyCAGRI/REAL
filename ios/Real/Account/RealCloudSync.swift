@@ -267,7 +267,7 @@ final class RealCloudSync {
         "useDarkText", "journal", "mood", "location", "cardStack", "musicBlocks", "mediaBlocks", "repeatWeekdaysMask",
         "repeatUntilEpochDay", "contentBlockOrder", "contentBlockLayout"]
     /// Android leaves these out when they are empty / unset.
-    private static let omitWhenEmpty: Set<String> = ["endAt", "earlyAlertMinutes", "repeatSkippedEpochDays", "gameBlocks"]
+    private static let omitWhenEmpty: Set<String> = ["endAt", "earlyAlertMinutes", "repeatSkippedEpochDays", "gameBlocks", "completionNote", "checkRequest"]
 
     private func cardPayload(_ card: ReminderItem, base: String?, _ st: inout State, upload: Bool, resourceId: String? = nil) -> [String: Any] {
         var o = base.flatMap(Self.object) ?? [:]

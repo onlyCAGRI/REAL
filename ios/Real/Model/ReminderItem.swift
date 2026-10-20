@@ -176,6 +176,10 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     /// Ayraç: not a card but a divider line in its category's list; `text` is its title (may be empty). It sits at its
     /// `createdAt` among the cards and stays out of every other list, count, alert and share.
     var isDivider = false
+    /// Tamamlama notu: a short line left when the card was completed; shown under "Tamamlandı".
+    var completionNote: String? = nil
+    /// Kontrol ettir: someone (or you) asked for this card to be looked at; it glows for them until they open it.
+    var checkRequest: CheckRequest? = nil
 
     init(id: Int64, text: String, createdAt: EpochMillis, updatedAt: EpochMillis? = nil) {
         self.id = id
@@ -285,7 +289,7 @@ extension ReminderItem {
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
              cardStack, voiceRecordings, musicBlocks, mediaBlocks, gameBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex,
-             endAt, earlyAlertMinutes, sharedCardId, sharedAuthorUid, sharedAuthorName, isDivider
+             endAt, earlyAlertMinutes, sharedCardId, sharedAuthorUid, sharedAuthorName, isDivider, completionNote, checkRequest
     }
 
     init(from decoder: Decoder) throws {
@@ -335,7 +339,21 @@ extension ReminderItem {
         sharedAuthorUid = try c.decodeIfPresent(String.self, forKey: .sharedAuthorUid)
         sharedAuthorName = try c.decodeIfPresent(String.self, forKey: .sharedAuthorName)
         isDivider = try c.decodeIfPresent(Bool.self, forKey: .isDivider) ?? false
+        completionNote = (try c.decodeIfPresent(String.self, forKey: .completionNote)).flatMap { $0.isEmpty ? nil : $0 }
+        checkRequest = try? c.decodeIfPresent(CheckRequest.self, forKey: .checkRequest)
     }
+}
+
+/// Kontrol ettir (CheckRequest in ReminderItem.kt). `to`: uids in a shared category, "me" for your own cards, "*" for all
+/// members but `from`. `at` identifies the request; `startEpochDay`: it glows from that day; `color`: nil = automatic.
+struct CheckRequest: Codable, Hashable {
+    static let me = "me"
+    static let everyone = "*"
+    var to: [String]
+    var from: String?
+    var at: EpochMillis
+    var startEpochDay: Int64? = nil
+    var color: Int? = nil
 }
 
 /// Where each Ayraç sits in a category's sorted `cards`: index → dividers drawn before cards[index] (index == count: after

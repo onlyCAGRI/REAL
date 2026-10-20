@@ -54,6 +54,8 @@ struct ReminderDetailView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.black.ignoresSafeArea()
+                // Kontrol ettir: opening the card puts its light out for this viewer.
+                .task(id: store.reminder(reminderId)?.checkRequest?.at) { if let r = store.reminder(reminderId) { CheckRequests.shared.markSeen(r) } }
             if let r = shown {
                 ScrollView {
                     VStack(spacing: 12) {

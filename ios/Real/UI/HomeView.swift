@@ -94,6 +94,9 @@ struct HomeView: View {
     @State private var completedShown = 4
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedIds: Set<Int64> = []
+    /// Kontrol ettir: the cards it is for and the people to pick from (nil = sheet closed).
+    @State private var checkIds: Set<Int64> = []
+    @State private var checkTargets: [CheckTarget]?
     @State private var editingBuiltIn: ReminderCategory?
     @State private var showNewCategory = false
     @State private var showSettings = false
@@ -248,7 +251,11 @@ struct HomeView: View {
                              onComplete: { selectedIds.forEach(store.toggleCompleted); selectedIds = [] },
                              // As on Android: delete at once, "N kart silindi · Geri al" brings them back.
                              onDelete: { let ids = selectedIds; selectedIds = []; withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo(ids) } },
-                             onCancel: { selectedIds = [] })
+                             onCancel: { selectedIds = [] },
+                             onCheck: {
+                                 let ids = selectedIds
+                                 Task { checkTargets = await store.checkTargets(for: ids); checkIds = ids; selectedIds = [] }
+                             })
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -300,6 +307,11 @@ struct HomeView: View {
             .liftedTopSafeArea()
         }
         .sheet(item: $externalDetail) { ExternalCalendarEventDetail(event: $0) }
+        .sheet(isPresented: Binding(get: { checkTargets != nil }, set: { if !$0 { checkTargets = nil } })) {
+            CheckRequestSheet(targets: checkTargets ?? [], canClear: checkIds.contains { store.reminder($0)?.checkRequest != nil },
+                              onSave: { target, day, color in store.setCheckRequest(checkIds, target: target, startEpochDay: day, color: color) },
+                              onClear: { store.setCheckRequest(checkIds, target: nil) })
+        }
     }
 
     private func changeHomeSort() {
@@ -556,6 +568,8 @@ struct SelectionBar: View {
     let onComplete: (() -> Void)?
     let onDelete: () -> Void
     let onCancel: () -> Void
+    /// Kontrol ettir for the selected cards (nil hides it).
+    var onCheck: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 18) {
@@ -564,6 +578,14 @@ struct SelectionBar: View {
             Spacer()
             if let onStar { Button(action: onStar) { ActionIcon(.star, size: 21) } }
             if let onComplete { Button(action: onComplete) { ActionIcon(.check, size: 21) } }
+            if let onCheck {
+                Button(action: onCheck) {
+                    Text("Kontrol").font(RealFont.inter(14, .semibold)).foregroundStyle(CheckRequests.otherColor)
+                        .padding(.horizontal, 12).frame(height: 34)
+                        .background(Capsule().fill(CheckRequests.otherColor.opacity(0.14)))
+                }
+                .accessibilityLabel("Kontrol ettir")
+            }
             Button(action: onDelete) { ActionIcon(.delete, size: 21) }.tint(RealColors.overdue)
         }
         .font(.system(size: 18))
