@@ -14,6 +14,15 @@ final class RealCloudSync {
     private var pending: Task<Void, Never>?
     private(set) var lastError: String?
     private(set) var lastSuccess: Date?
+    /// Records the account did not take in the last run (SyncManagementPanel's issues). The others still went up;
+    /// these are tried again on every run and nothing is removed from this iPhone.
+    private(set) var issues: [Issue] = []
+
+    struct Issue: Identifiable, Equatable {
+        let id: String       // "KIND/key"
+        let title: String
+        let reason: String
+    }
 
     /// Runs a sync shortly (edits in a row collapse into one).
     func request(_ store: ReminderStore, _ life: LifeStore, delay: Double = 2) {
@@ -77,13 +86,75 @@ final class RealCloudSync {
         do {
             try await pull(store, life, &st)
             saveState(st)
-            try await push(store, life, &st)
+            issues = try await push(store, life, &st)
             saveState(st)
             lastError = nil
             lastSuccess = Date()
         } catch {
             saveState(st)
-            lastError = RealBackend.message(for: error)
+            lastError = Self.describe(error)
+        }
+    }
+
+    /// A short Turkish line for a failed run, with the worker's code so a problem can be traced.
+    static func describe(_ error: Error) -> String {
+        if let u = error as? URLError {
+            switch u.code {
+            case .notConnectedToInternet, .networkConnectionLost: return "İnternet bağlantısı yok."
+            case .timedOut: return "Bağlantı zaman aşımına uğradı. Biraz sonra tekrar dene."
+            case .userAuthenticationRequired: return "Bunun için REAL'e giriş yap."
+            default: return "Sunucuya ulaşılamadı (\(u.code.rawValue))."
+            }
+        }
+        if error is AppCheckUnavailable { return "Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene." }
+        guard let f = error as? RealBackend.Failure else { return "Şu anda yapılamadı (\(String(describing: type(of: error))))." }
+        let code = f.code ?? (f.status > 0 ? "HTTP \(f.status)" : "yanıt okunamadı")
+        switch f.status {
+        case 401: return "Oturumun yenilenmeli. Hesaptan çıkıp tekrar gir."
+        case 403 where f.code == "APP_CHECK_REQUIRED": return "Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene."
+        case 423: return "Hesabın şu anda bir işlem nedeniyle kilitli. Biraz sonra tekrar dene."
+        case 429: return "Çok sık eşitlendi. Biraz sonra tekrar dene."
+        case 503: return "Bulut eşitlemesi şu anda kapalı (\(code))."
+        default: return "Şu anda yapılamadı (\(code)). Biraz sonra tekrar dene."
+        }
+    }
+
+    /// Errors that belong to one record (it stays here and is listed); the rest stop the whole run.
+    private static func recordOnly(_ error: Error) -> Bool {
+        guard let f = error as? RealBackend.Failure else { return false }
+        return f.status == -1 || ((400..<500).contains(f.status) && ![401, 403, 423, 426, 429].contains(f.status))
+    }
+
+    private static func reason(_ error: Error) -> String {
+        guard let f = error as? RealBackend.Failure else { return "Gönderilemedi." }
+        let code = f.code ?? (f.status > 0 ? "HTTP \(f.status)" : "yanıt okunamadı")
+        switch f.code ?? "" {
+        case "INVALID_CARD", "INVALID_SYNC_PAYLOAD", "LOCAL_ONLY_FIELD", "LOCAL_IMAGE_URI", "INVALID_ID", "INVALID_LOCAL_ID",
+             "INVALID_RELATION", "INVALID_SHARE_PROVENANCE", "INVALID_CARD_LAYOUT":
+            return "Kaydın bir alanı hesabın kurallarına uymadı (\(code))."
+        case "SYNC_ARRAY_LIMIT", "ATTACHMENT_COUNT_LIMIT", "PAYLOAD_TOO_LARGE":
+            return "Kayıt eşitleme sınırını aşıyor (\(code))."
+        default:
+            return f.status == 413 ? "Kayıt eşitleme sınırını aşıyor (\(code))." : "Hesap bu kaydı kabul etmedi (\(code))."
+        }
+    }
+
+    private func issueTitle(_ docKey: String, _ store: ReminderStore) -> String {
+        let parts = docKey.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return docKey }
+        switch parts[0] {
+        case "CARD", "PLANNER":
+            if let id = Int64(parts[1]), let card = store.reminder(id) {
+                let t = card.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return t.isEmpty ? (card.isDivider ? "Ayraç" : "Başlıksız kart") : String(t.prefix(60))
+            }
+            return "Silinen kart"
+        case "CATEGORY":
+            if let id = Int64(parts[1]), let c = store.category(id) { return "Kategori: \(c.name)" }
+            return "Silinen kategori"
+        case "MOOD": return "Mood kaydı"
+        case "DRINK": return "Su kaydı"
+        default: return "Ayar"
         }
     }
 
@@ -134,7 +205,8 @@ final class RealCloudSync {
         ["id": e.id, "amountMl": e.amountMl, "createdAt": e.createdAt, "beverage": e.beverage.rawValue]
     }
 
-    private func push(_ store: ReminderStore, _ life: LifeStore, _ st: inout State) async throws {
+    private func push(_ store: ReminderStore, _ life: LifeStore, _ st: inout State) async throws -> [Issue] {
+        var found: [Issue] = []
         var docs: [String: [String: Any]] = [:]
         for card in store.reminders where card.id >= 0 && card.sharedCardId == nil {
             docs["CARD/\(card.id)"] = cardPayload(card, base: st.records["CARD/\(card.id)"]?.raw, &st, upload: false)
@@ -169,12 +241,27 @@ final class RealCloudSync {
             guard parts.count == 2 else { continue }
             let kind = parts[0], key = parts[1]
             let id = rec?.id ?? UUID().uuidString.lowercased()
+            // The account takes no untitled card (only an Ayraç may be empty): it stays here and is listed.
+            if kind == "CARD", let p = payload, ((p["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               p["isDivider"] as? Bool != true {
+                found.append(Issue(id: docKey, title: issueTitle(docKey, store), reason: "Kartın metni boş; hesaba gönderilmesi için bir başlık yaz."))
+                continue
+            }
             if kind == "CARD" {
-                // The card is a cloud resource; its files are attachments of it.
-                try await ensureResource(id, title: (payload?["text"] as? String) ?? "Deleted REAL")
-                if let card = store.reminders.first(where: { "CARD/\($0.id)" == docKey }) {
-                    payload = cardPayload(card, base: rec?.raw, &st, upload: true, resourceId: id)
-                    if let p = payload { try await uploadFiles(p, resourceId: id, &st) }
+                // The card is a cloud resource; its files are attachments of it. A file that does not go up keeps
+                // only this card waiting; the others continue.
+                do {
+                    try await ensureResource(id, title: (payload?["text"] as? String) ?? "Deleted REAL")
+                    if let card = store.reminders.first(where: { "CARD/\($0.id)" == docKey }) {
+                        payload = cardPayload(card, base: rec?.raw, &st, upload: true, resourceId: id)
+                        if let p = payload { try await uploadFiles(p, resourceId: id, &st) }
+                    }
+                } catch {
+                    let network = (error as? URLError).map { [.notConnectedToInternet, .networkConnectionLost, .cancelled].contains($0.code) } ?? false
+                    if network || error is CancellationError || !(Self.recordOnly(error) || error is URLError) { throw error }
+                    found.append(Issue(id: docKey, title: issueTitle(docKey, store),
+                                       reason: "Bu kartın bir eki buluta gönderilemedi. Yerel içerik kaldırılmadı. (\((error as? RealBackend.Failure)?.code ?? "ek"))"))
+                    continue
                 }
             }
             var body: [String: Any] = ["kind": kind, "key": key, "revision": rec?.revision ?? 0, "schema": 1]
@@ -194,8 +281,11 @@ final class RealCloudSync {
                    let current = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     receive(current, store, life, &st)
                 }
+            } catch where Self.recordOnly(error) {
+                found.append(Issue(id: docKey, title: issueTitle(docKey, store), reason: Self.reason(error)))
             }
         }
+        return found
     }
 
     /// Categories before their cards, cards before their planner details.

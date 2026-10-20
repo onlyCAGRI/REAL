@@ -352,6 +352,27 @@ enum CoverPalette {
         cache[key] = color
         return color
     }
+
+    /// PosterEdgeGlow.kt: average colours of six regions (left / right edge × three bands) on a 24×36 thumbnail.
+    static func edgeRegions(_ image: UIImage) -> [Color]? {
+        guard let cg = image.cgImage else { return nil }
+        let w = 24, h = 36
+        var px = [UInt8](repeating: 0, count: w * h * 4)
+        guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return (0..<6).map { region in
+            let side = region % 2, band = region / 2
+            var r = 0, g = 0, b = 0, n = 0
+            for y in band * 12 ..< (band + 1) * 12 {
+                for x in (side == 0 ? 0 : 16) ..< (side == 0 ? 8 : 24) {
+                    let i = (y * w + x) * 4
+                    r += Int(px[i]); g += Int(px[i + 1]); b += Int(px[i + 2]); n += 1
+                }
+            }
+            return Color(red: Double(r) / Double(n) / 255, green: Double(g) / Double(n) / 255, blue: Double(b) / Double(n) / 255)
+        }
+    }
 }
 
 extension Color {

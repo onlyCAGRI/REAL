@@ -295,7 +295,7 @@ struct SettingsScreen: View {
         SettingsSectionHeader(title: "GİZLİLİK")
         SettingsGlassGroup {
             SettingsActionRow(icon: .note, title: "Veri kullanımı", subtitle: "Hesap, bulut, paylaşım ve cihaz izinleri") {
-                notice = "Kartların, kategorilerin, su, mood ve kitap kayıtların bu iPhone'da saklanıyor. Hesabındakileri 'Kartları hesaptan yeniden yükle' ile alabilirsin; iPhone'dan hesaba gönderim henüz yok."
+                notice = "Kartların, kategorilerin, su, mood ve kitap kayıtların bu iPhone'da saklanıyor. REAL hesabınla giriş yaptığında kartlar, kategoriler, mood ve su kayıtları hesabınla iki yönlü eşitlenir; durumu Hesapları yönet → Eşitleme'de görürsün."
             }
             SettingsDivider()
             SettingsActionRow(icon: .note, title: "AI ve gizlilik", subtitle: "Açıklamalar ve veri aktarımı onayları") {
@@ -664,6 +664,8 @@ struct AccountManageSheet: View {
     @State private var confirmDelete = false
     @State private var cloud = RealCloudSync.shared
     @State private var syncing = false
+    @State private var showIssues = false
+    @State private var issueLimit = 5
     @State private var localSize = "…"
     @Environment(ReminderStore.self) private var store
     @Environment(LifeStore.self) private var life
@@ -729,6 +731,7 @@ struct AccountManageSheet: View {
     }
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 14) {
             Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3).frame(maxWidth: .infinity)
             Text("Hesapları yönet").font(RealFont.inter(26, .semibold)).foregroundStyle(.white)
@@ -759,6 +762,32 @@ struct AccountManageSheet: View {
                         .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
                 }
                 Text(syncLine).font(RealFont.inter(13)).foregroundStyle(cloud.lastError == nil ? Color(argb: 0xFFA4A4AD) : Color(argb: 0xFFFFB4AB))
+                Text("Kartlar, kategoriler, mood ve su kayıtları bu iPhone ile hesabın arasında iki yönlü eşitlenir. İki tarafta da değişen bir kayıtta hesabındaki sürüm kullanılır.")
+                    .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
+                if cloud.lastError == nil && cloud.lastSuccess != nil {
+                    Text(cloud.issues.isEmpty ? "Bekleyen kayıt yok." : "\(cloud.issues.count) kayıt gönderilemedi · diğerleri eşitlendi")
+                        .font(RealFont.inter(13)).foregroundStyle(cloud.issues.isEmpty ? Color(argb: 0xFFA4A4AD) : Color(argb: 0xFFFFD27A))
+                }
+                if !cloud.issues.isEmpty {
+                    Button(showIssues ? "Ayrıntıları gizle" : "Sorunları göster") { withAnimation(.snappy) { showIssues.toggle() } }
+                        .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+                    if showIssues {
+                        ForEach(cloud.issues.prefix(issueLimit)) { issue in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(issue.title).font(RealFont.inter(13, .medium)).foregroundStyle(.white).lineLimit(1)
+                                Text(issue.reason).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA4A4AD)).fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.05)))
+                        }
+                        HStack {
+                            if cloud.issues.count > issueLimit { Button("Daha fazla göster") { issueLimit += 10 } }
+                            Spacer()
+                            Button(syncing ? "Deneniyor…" : "Tekrar dene") { syncNow() }.disabled(syncing)
+                        }
+                        .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+                    }
+                }
                 Text("Bu cihazdaki dosyalar: \(localSize)").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA4A4AD))
             }
             .padding(16)
@@ -781,6 +810,8 @@ struct AccountManageSheet: View {
             if let deleteError { Text(deleteError).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)) }
         }
         .padding(22)
+        }
+        .scrollBounceBehavior(.basedOnSize)
         .presentationDetents([.height(600), .large])
         .task { await measureLocal() }
         .confirmationDialog("Hesabın ve buluttaki tüm verilerin kalıcı olarak silinsin mi?", isPresented: $confirmDelete, titleVisibility: .visible) {

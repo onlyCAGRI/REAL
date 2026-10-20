@@ -326,7 +326,7 @@ private struct MusicDeck: View {
     @State private var prepared: [String: AVPlayer] = [:]
     /// The covers behind wait until the front one is on screen.
     @State private var frontReady = false
-    @State private var ambient: Color = Color(argb: 0xFF3A3530)
+    @State private var edgeColors: [Color] = []
     @Environment(\.scenePhase) private var scenePhase
     private let threshold: CGFloat = 85
 
@@ -338,13 +338,26 @@ private struct MusicDeck: View {
             let top = max(0, (avail - side) / 2)
             let visible = Array(cards.prefix(4))
             ZStack(alignment: .top) {
-                // The cover's own colours behind the deck, softly pulsing while the preview plays.
+                // PosterEdgeGlow.kt: six lights from the cover's left / right regions; while the preview plays they grow
+                // and brighten with the beat (nothing is drawn over the cover).
                 TimelineView(.animation(paused: playingId == nil)) { t in
-                    let wave = playingId == nil ? 0 : (sin(t.date.timeIntervalSinceReferenceDate * 3.2) * 0.5 + 0.5)
-                    RadialGradient(colors: [ambient.opacity(0.35 + 0.35 * wave), .clear], center: .center, startRadius: 0, endRadius: side * (0.62 + 0.12 * wave))
-                        .frame(width: geo.size.width, height: side * 1.3)
+                    let beat = playingId == nil ? 0 : Self.beat(t.date.timeIntervalSinceReferenceDate)
+                    Canvas { ctx, size in
+                        let radius = size.width * (0.47 + 0.14 * beat)
+                        let boost = 1 + 1.3 * beat
+                        for (region, color) in edgeColors.enumerated() {
+                            let center = CGPoint(x: size.width * (region % 2 == 0 ? 0.15 : 0.85), y: size.height * (0.16 + CGFloat(region / 2) * 0.34))
+                            let g = Gradient(stops: [.init(color: color.opacity(min(0.8, 0.32 * boost)), location: 0),
+                                                     .init(color: color.opacity(min(0.4, 0.12 * boost)), location: 0.5),
+                                                     .init(color: .clear, location: 1)])
+                            ctx.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
+                                     with: .radialGradient(g, center: center, startRadius: 0, endRadius: radius))
+                        }
+                    }
+                    .frame(width: geo.size.width + 28, height: side)
                 }
-                .offset(y: top - side * 0.15)
+                .offset(x: -14, y: top)
+                .allowsHitTesting(false)
                 ForEach(Array(visible.enumerated()).reversed(), id: \.element.id) { depth, item in
                     cover(item, depth: depth, side: side).offset(y: top)
                 }
@@ -362,8 +375,8 @@ private struct MusicDeck: View {
                 Task { for u in next { _ = try? await URLSession.shared.data(from: u) } }
             }
             guard let s = cards.first?.music.artworkUrl, let u = URL(string: s), let (d, _) = try? await URLSession.shared.data(from: u),
-                  let img = UIImage(data: d), let c = CoverPalette.dominant(img) else { return }
-            withAnimation(.easeOut(duration: 0.4)) { ambient = c }
+                  let img = UIImage(data: d), let c = CoverPalette.edgeRegions(img) else { edgeColors = []; return }
+            withAnimation(.easeOut(duration: 0.38)) { edgeColors = c }
         }
         .onDisappear { stop() }
     }
@@ -385,6 +398,12 @@ private struct MusicDeck: View {
     }
 
     private func stop() { player?.pause(); player = nil; playingId = nil }
+
+    /// MusicDiscoveryScreen.kt's sound pulse: a quick beat on a slow swell, 0…1.
+    private static func beat(_ t: Double) -> Double {
+        let b = pow(sin(t * 7) * 0.5 + 0.5, 2)
+        return min(1, max(0, 0.25 + 0.45 * b + 0.10 * sin(t * 2.3)))
+    }
 
     /// Keeps players for the next three previews; the rest are dropped.
     private func prepareNext() {
