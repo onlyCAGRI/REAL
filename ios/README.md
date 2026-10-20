@@ -32,3 +32,4 @@ cd ios && xcodegen generate && open Real.xcodeproj
 CI (`.github/workflows/ios.yml`) builds on macOS, runs the tests, launches the app in the simulator with
 `-REALDemo -REALScreen <home|category|builtin|detail|checklist|planner>` and uploads the screenshots and a
 simulator build as artifacts.
+<!-- build 4 -->
