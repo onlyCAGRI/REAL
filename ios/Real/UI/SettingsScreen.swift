@@ -668,6 +668,8 @@ struct AccountManageSheet: View {
     @State private var issueLimit = 5
     /// The choice waiting for "Onayla" (conflict id + choice).
     @State private var pendingChoice: (String, RealCloudSync.Choice)?
+    @State private var openConflicts: Set<String> = []
+    @State private var bulkConfirm = false
     @State private var localSize = "…"
     @Environment(ReminderStore.self) private var store
     @Environment(LifeStore.self) private var life
@@ -692,15 +694,32 @@ struct AccountManageSheet: View {
         switch choice {
         case .keepLocal: return "Bu iPhone'daki sürüm hesaba gönderilecek; hesaptaki sürüm değişecek."
         case .useAccount: return c.remote == nil ? "Kart bu iPhone'dan da kaldırılacak." : "Bu iPhone'da hesaptaki sürüm kullanılacak."
-        case .keepAsNewCard: return "Bu iPhone'daki içerik ayrı bir kartta korunacak; eski karta hesaptaki sürüm uygulanacak."
+        case .keepAsNewCard: return c.remote == nil
+            ? "Kart hesaba yeni bir kart olarak gönderilecek; bu iPhone'da içeriği aynen kalır."
+            : "Bu iPhone'daki içerik ayrı bir kartta korunacak; eski karta hesaptaki sürüm uygulanacak."
         }
     }
 
     @ViewBuilder private func conflictRow(_ c: RealCloudSync.ConflictInfo) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(c.remote == nil ? "Bu kart hesabında silinmiş" : (c.isCard ? "Kart sürümleri çakışıyor" : "Kayıt sürümleri çakışıyor"))
-                .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
-            Text(c.title).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA4A4AD)).lineLimit(1)
+            // One line per conflict; tapping it opens the versions and the choices.
+            Button {
+                withAnimation(.snappy) { if openConflicts.contains(c.id) { openConflicts.remove(c.id) } else { openConflicts.insert(c.id) } }
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(c.title).font(RealFont.inter(13, .medium)).foregroundStyle(.white).lineLimit(1)
+                        Text(c.remote == nil ? "Hesapta silinmiş" : (c.isCard ? "İki tarafta da değişti" : "Kayıt sürümleri çakışıyor"))
+                            .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFFFD27A))
+                    }
+                    Spacer()
+                    Image(systemName: openConflicts.contains(c.id) ? "chevron.up" : "chevron.down").font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(argb: 0xFF9A9AA4))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if openConflicts.contains(c.id) {
             Text(c.remote == nil ? "Başka bir cihazda silindi ama bu iPhone'da değişmişti. Ne olacağını sen seç."
                                  : "İki tarafta da değişti; hiçbiri ezilmedi. Karşılaştırıp seç.")
                 .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
@@ -721,11 +740,13 @@ struct AccountManageSheet: View {
                 .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
+                    if c.isCard && c.remote == nil { Button("Hesaba geri yükle") { pendingChoice = (c.id, .keepAsNewCard) } }
                     if c.remote != nil { Button("Bu iPhone'dakini koru") { pendingChoice = (c.id, .keepLocal) } }
-                    Button(c.remote == nil ? "Silmeyi uygula" : "Hesaptakini kullan") { pendingChoice = (c.id, .useAccount) }
-                    if c.isCard { Button("Yeni kart olarak sakla") { pendingChoice = (c.id, .keepAsNewCard) } }
+                    Button(c.remote == nil ? "Silmeyi uygula (bu iPhone'dan da kaldır)" : "Hesaptakini kullan") { pendingChoice = (c.id, .useAccount) }
+                    if c.isCard && c.remote != nil { Button("Yeni kart olarak sakla") { pendingChoice = (c.id, .keepAsNewCard) } }
                 }
                 .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
+            }
             }
         }
         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
@@ -841,7 +862,31 @@ struct AccountManageSheet: View {
                     Button(showIssues ? "Ayrıntıları gizle" : "Sorunları ve sürümleri göster") { withAnimation(.snappy) { showIssues.toggle() } }
                         .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                     if showIssues {
-                        ForEach(cloud.conflicts.prefix(issueLimit)) { conflict in conflictRow(conflict) }
+                        // Cards the account deleted while they changed here: one button for all of them.
+                        let deletedCards = cloud.conflicts.filter { $0.isCard && $0.remote == nil }
+                        if deletedCards.count > 1 {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Hesapta silinmiş \(deletedCards.count) kart").font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+                                Text("Bu kartlar bu iPhone'da duruyor ama hesabında silinmiş görünüyor. Geri yüklersen her biri hesaba yeni bir kart olarak gönderilir; bu iPhone'da hiçbir şey kaybolmaz.")
+                                    .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
+                                HStack(spacing: 14) {
+                                    if bulkConfirm {
+                                        Button("Onayla: \(deletedCards.count) kartı geri yükle") {
+                                            bulkConfirm = false
+                                            let ids = deletedCards.map(\.id)
+                                            act { for id in ids { await cloud.resolve(id, .keepAsNewCard, store, life) } }
+                                        }
+                                        Button("Vazgeç") { bulkConfirm = false }
+                                    } else {
+                                        Button("Hepsini hesaba geri yükle") { bulkConfirm = true }
+                                    }
+                                }
+                                .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
+                            }
+                            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.05)))
+                        }
+                        ForEach(Array((deletedCards + cloud.conflicts.filter { !($0.isCard && $0.remote == nil) }).prefix(issueLimit))) { conflict in conflictRow(conflict) }
                         ForEach(cloud.issues.prefix(issueLimit)) { issue in issueRow(issue) }
                         HStack {
                             if max(cloud.issues.count, cloud.conflicts.count) > issueLimit { Button("Daha fazla göster") { issueLimit += 10 } }

@@ -59,6 +59,9 @@ final class RealCloudSync {
         /// Records changed here AND in the account (or deleted there): nothing is applied or sent until the person
         /// chooses in Hesapları yönet → Eşitleme ("KIND/key" → both versions).
         var conflicts: [String: Conflict] = [:]
+        /// Account records this iPhone could not read (e.g. a field a newer Android added): never removed here and
+        /// never deleted from the account because they are "missing" on this iPhone.
+        var unreadable: Set<String> = []
 
         init() {}
         init(from decoder: Decoder) throws {
@@ -68,6 +71,7 @@ final class RealCloudSync {
             blobs = try c.decodeIfPresent([String: String].self, forKey: .blobs) ?? [:]
             planner = try c.decodeIfPresent([String: String].self, forKey: .planner) ?? [:]
             conflicts = try c.decodeIfPresent([String: Conflict].self, forKey: .conflicts) ?? [:]
+            unreadable = try c.decodeIfPresent(Set<String>.self, forKey: .unreadable) ?? []
         }
     }
     private struct Conflict: Codable {
@@ -383,11 +387,13 @@ final class RealCloudSync {
         // Everything this account had that is gone here is deleted (only kinds this iPhone writes).
         let written: Set<String> = ["CARD", "CATEGORY", "PLANNER", "MOOD", "DRINK"]
         var keys = Set(docs.keys)
-        for (k, rec) in st.records where rec.base != nil && written.contains(String(k.split(separator: "/").first ?? "")) { keys.insert(k) }
+        for (k, rec) in st.records where rec.base != nil && !st.unreadable.contains(k) && written.contains(String(k.split(separator: "/").first ?? "")) { keys.insert(k) }
 
         for docKey in keys.sorted(by: { Self.order($0) < Self.order($1) }) {
             // Waiting for the person's choice (Hesapları yönet → Eşitleme): neither side is touched.
             if st.conflicts[docKey] != nil { continue }
+            // Unreadable here: this iPhone's older copy must not overwrite (or delete) the account's newer one.
+            if st.unreadable.contains(docKey) { continue }
             var payload = docs[docKey]
             let rec = st.records[docKey]
             if payload.map(Self.canonical) == rec?.base { continue }
@@ -669,7 +675,9 @@ final class RealCloudSync {
         switch kind {
         case "CARD":
             guard let id = Int64(key) else { return }
-            guard let payload, var card = RealCloudRestore.decodeCard(payload, decoder) else { store.removeFromSync(id); return }
+            guard let payload else { st.unreadable.remove("CARD/\(key)"); store.removeFromSync(id); return }
+            guard var card = RealCloudRestore.decodeCard(payload, decoder) else { st.unreadable.insert("CARD/\(key)"); return }
+            st.unreadable.remove("CARD/\(key)")
             let existing = store.reminder(id)
             // Files this iPhone already has keep their local name; others download after the pull.
             card.attachments = card.attachments.compactMap { a in
@@ -702,7 +710,9 @@ final class RealCloudSync {
             store.putFromSync(card)
         case "CATEGORY":
             guard let id = Int64(key) else { return }
-            guard let payload, var c = RealCloudRestore.decodeCategory(payload, decoder) else { store.removeCategoryOnlyFromSync(id); return }
+            guard let payload else { st.unreadable.remove("CATEGORY/\(key)"); store.removeCategoryOnlyFromSync(id); return }
+            guard var c = RealCloudRestore.decodeCategory(payload, decoder) else { st.unreadable.insert("CATEGORY/\(key)"); return }
+            st.unreadable.remove("CATEGORY/\(key)")
             if let old = store.category(id) {
                 c.description = old.description; c.showInCalendar = old.showInCalendar
                 c.sharedId = old.sharedId; c.sharedRole = old.sharedRole; c.sharedOwnerName = old.sharedOwnerName
@@ -710,6 +720,8 @@ final class RealCloudSync {
             store.putCategoryFromSync(c)
         case "MOOD":
             guard let id = Int64(key) else { return }
+            if let payload, RealCloudRestore.decodeMood(payload, decoder) == nil { st.unreadable.insert("MOOD/\(key)"); return }
+            st.unreadable.remove("MOOD/\(key)")
             var moods = life.moods.filter { $0.id != id }
             if let payload, let m = RealCloudRestore.decodeMood(payload, decoder) { moods.append(m) }
             life.replaceAll(goal: life.goalMl, entries: life.entries, moods: moods.sorted { $0.id > $1.id })
