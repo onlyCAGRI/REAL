@@ -136,7 +136,7 @@ struct CardShareSheet: View {
                             VStack(spacing: 6) {
                                 ForEach(people.people) { p in
                                     HStack(spacing: 12) {
-                                        ProfileAvatar(name: p.name, size: 34)
+                                        ConnectionAvatar(name: p.name, key: p.uid, size: 34, pictureVersion: p.pictureVersion)
                                         Text(p.name).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
                                         Spacer()
                                         Button(sent.contains(p.uid) ? "Gönderildi" : "Gönder") { send(to: p.uid, shareId: link.id) }

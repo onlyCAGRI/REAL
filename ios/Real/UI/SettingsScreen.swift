@@ -101,6 +101,7 @@ struct AccountMenuOverlay: View {
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self), let img = UIImage(data: data) {
                     ProfilePhotoStore.save(img)
+                    await ProfilePictures.push()
                 }
             }
         }
@@ -163,6 +164,7 @@ enum ProfilePhotoStore {
 
 struct SettingsScreen: View {
     let onBack: () -> Void
+    @State private var sharePhoto = ProfilePictures.sharePhoto
     @Environment(LifeStore.self) private var life
     @Environment(ReminderStore.self) private var store
     @AppStorage("reduce_animations") private var reduceAnimations = false
@@ -308,6 +310,15 @@ struct SettingsScreen: View {
             SettingsActionRow(icon: .note, title: "Veri hakları ve talepler", subtitle: "Kopya, düzeltme, silme veya itiraz talebi") {
                 notice = "Hesap verilerin için kopya, düzeltme veya silme talebini şimdilik Android uygulamasından ya da gizlilik sayfasındaki adresten yapabilirsin. Bu iPhone'daki verileri uygulamayı silerek tamamen kaldırabilirsin."
             }
+            SettingsDivider()
+            // Off by default: the profile photo goes to Kişilerim and shared-category people only when this is on.
+            SettingsToggleRow(icon: .person, title: "Fotoğrafımı kişilerimle paylaş",
+                              subtitle: "Profil fotoğrafın Kişilerim'de ve ortak kategorilerde görünür",
+                              isOn: Binding(get: { sharePhoto }, set: { on in
+                                  sharePhoto = on
+                                  ProfilePictures.sharePhoto = on
+                                  Task { await ProfilePictures.push() }
+                              }))
         }
         SettingsSectionHeader(title: "HAKKINDA")
         SettingsGlassGroup {

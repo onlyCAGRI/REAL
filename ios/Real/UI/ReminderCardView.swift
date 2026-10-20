@@ -74,8 +74,20 @@ struct ReminderCardView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .opacity(Double(min(max(-dragX / 82, 0), 1)))
             }
-            card
-                .offset(x: dragX)
+            swipeable
+        }
+    }
+
+    /// iOS 18+: a UIKit pan that starts only for a sideways move, so the list's vertical scroll never waits on the
+    /// card (the SwiftUI DragGesture on every card made scrolling catch). iOS 17 keeps the SwiftUI gesture.
+    @ViewBuilder private var swipeable: some View {
+        if #available(iOS 18.0, *) {
+            card.offset(x: dragX)
+                .gesture(HorizontalSwipeGesture(enabled: swipeEnabled,
+                                                onChanged: { swipeChanged($0) },
+                                                onEnded: { swipeEnded($0, predicted: $1) }))
+        } else {
+            card.offset(x: dragX)
                 .simultaneousGesture(swipeGesture, including: swipeEnabled ? .all : .subviews)
         }
     }
@@ -273,29 +285,80 @@ struct ReminderCardView: View {
         DragGesture(minimumDistance: 18)
             .onChanged { value in
                 guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                let w = value.translation.width
-                let clamped = min(max(w, swipeLeftOn ? -.infinity : 0), swipeRightOn ? .infinity : 0)
-                if abs(clamped) >= 82 && abs(dragX) < 82 { UISelectionFeedbackGenerator().selectionChanged() }
-                dragX = clamped
+                swipeChanged(value.translation.width)
             }
             .onEnded { value in
-                let left = dragX < 0
-                let predicted = value.predictedEndTranslation.width
-                let commit = abs(dragX) >= 82 || (abs(predicted) > 300 && (predicted < 0) == left && abs(dragX) > 28)
-                if commit && !left && swipeRightKeepsCard {
-                    // Move to 24 hour keeps the card here: act, then it slides back in (no bounce).
-                    onSwipeTo24Hour?()
-                    withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.32)) { dragX = 0 }
-                    return
-                }
-                withAnimation(.spring(duration: 0.3)) { dragX = commit ? (left ? -900 : 900) : 0 }
-                if commit {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-                        if left { onSwipeDelete?() } else { onSwipeTo24Hour?() }
-                        dragX = 0
-                    }
-                }
+                // A vertical scroll never moved the card: nothing to settle.
+                guard dragX != 0 else { return }
+                swipeEnded(value.translation.width, predicted: value.predictedEndTranslation.width)
             }
+    }
+
+    private func swipeChanged(_ w: CGFloat) {
+        let clamped = min(max(w, swipeLeftOn ? -.infinity : 0), swipeRightOn ? .infinity : 0)
+        if abs(clamped) >= 82 && abs(dragX) < 82 { UISelectionFeedbackGenerator().selectionChanged() }
+        dragX = clamped
+    }
+
+    private func swipeEnded(_ w: CGFloat, predicted: CGFloat) {
+        let left = dragX < 0
+        let commit = abs(dragX) >= 82 || (abs(predicted) > 300 && (predicted < 0) == left && abs(dragX) > 28)
+        if commit && !left && swipeRightKeepsCard {
+            // Move to 24 hour keeps the card here: act, then it slides back in (no bounce).
+            onSwipeTo24Hour?()
+            withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.32)) { dragX = 0 }
+            return
+        }
+        withAnimation(.spring(duration: 0.3)) { dragX = commit ? (left ? -900 : 900) : 0 }
+        if commit {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                if left { onSwipeDelete?() } else { onSwipeTo24Hour?() }
+                dragX = 0
+            }
+        }
+    }
+}
+
+/// Sideways pan for list cards (iOS 18 UIGestureRecognizerRepresentable). It begins only when the finger moves more
+/// sideways than up/down; otherwise it fails at once and the scroll view keeps the touch.
+@available(iOS 18.0, *)
+struct HorizontalSwipeGesture: UIGestureRecognizerRepresentable {
+    var enabled: Bool
+    var onChanged: (CGFloat) -> Void
+    /// Translation and the predicted end translation (as SwiftUI's DragGesture gives it).
+    var onEnded: (CGFloat, CGFloat) -> Void
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var enabled = true
+        func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+            guard enabled, let pan = g as? UIPanGestureRecognizer, let view = pan.view else { return false }
+            let v = pan.velocity(in: view)
+            return abs(v.x) > abs(v.y) * 1.2
+        }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.delegate = context.coordinator
+        context.coordinator.enabled = enabled
+        return pan
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        context.coordinator.enabled = enabled
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        guard let view = recognizer.view else { return }
+        let t = recognizer.translation(in: view).x
+        switch recognizer.state {
+        case .began, .changed: onChanged(t)
+        case .ended: onEnded(t, t + recognizer.velocity(in: view).x * 0.25)
+        case .cancelled, .failed: onEnded(t, t)
+        default: break
+        }
     }
 }
 
@@ -317,6 +380,8 @@ struct CategoryTileView: View {
     var hero = false
     var extendUnderNext = false
     var isSelected = false
+    /// Home deck while categories are being picked (long press on a custom category, as on Android).
+    var selectionMode = false
     /// Hero tile on the category screen: progress ring + sort arrow next to the stacked pills (CategoryHeroActions).
     var heroActions: AnyView? = nil
 
@@ -353,6 +418,9 @@ struct CategoryTileView: View {
                         CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading)
                     }
                     Spacer()
+                    if selectionMode {
+                        Text(isSelected ? "✓ Seçili" : "○ Seç").font(RealFont.inter(13, .medium)).foregroundStyle(visual.foreground)
+                    }
                     RealSymbol(visual.symbol, size: 21.8).foregroundStyle(visual.foreground)
                 }
             }
@@ -362,7 +430,7 @@ struct CategoryTileView: View {
         .padding(.bottom, hero ? 36 : 46 + (extendUnderNext ? 40 : 0))
         .frame(maxWidth: .infinity, minHeight: hero ? 156 : 108, alignment: .topLeading)
         .background(shape.fill(Color(argb: 0xFF14151C)).overlay(shape.fill(visual.gradient)))
-        .overlay(shape.strokeBorder(isSelected ? RealColors.accentBlue.opacity(0.85) : .white.opacity(0.2), lineWidth: isSelected ? 2 : 0.75))
+        .overlay(shape.strokeBorder(isSelected ? Color(argb: 0xFF94B8F7).opacity(0.85) : .white.opacity(0.2), lineWidth: isSelected ? 2 : 0.75))
         .clipShape(shape)
     }
 }

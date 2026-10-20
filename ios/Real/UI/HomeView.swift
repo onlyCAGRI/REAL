@@ -99,8 +99,10 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showAccountMenu = false
     @State private var showCategoryOrder = false
-    @State private var confirmDelete = false
     @State private var showYasam = false
+    /// Custom categories picked with a long press on the deck (Android: selectedCategoryIds).
+    @State private var selectedCategoryIds: Set<Int64> = []
+    @State private var pressedTile: String?
     @State private var showPano = false
     @State private var contextTarget: ContextCardType?
     @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
@@ -181,7 +183,6 @@ struct HomeView: View {
                                      onOpen: { if !keyboard.consumeTap() { externalDetail = o } })
                         .padding(.horizontal, 16).padding(.bottom, 8)
                 }
-                let completedMore = completed.count > completedShown
                 if !completed.isEmpty {
                     SectionTitle(text: "Tamamlandı").padding(.top, 18)
                     let shown = Array(completed.prefix(completedShown))
@@ -193,8 +194,8 @@ struct HomeView: View {
                                 .blur(radius: 6)
                                 .opacity(0.5)
                                 .allowsHitTesting(false)
-                                .padding(.top, 4)
-                                .overlay(alignment: .top) {
+                                // "Daha fazla" in the middle of the card (it used to sit on its top edge, against the dock).
+                                .overlay {
                                     Button {
                                         withAnimation(.spring(duration: 0.35)) {
                                             completedShown = completedShown < 11 ? 11 : completedShown + 10
@@ -205,15 +206,14 @@ struct HomeView: View {
                                             .liquidGlass(Capsule(), role: .chrome)
                                     }
                                     .buttonStyle(.plain)
-                                    .offset(y: -6)
+                                    .padding(.bottom, 8)   // the card's own bottom gap
                                 }
-                                .padding(.bottom, -84)   // behind the dock
                         } else {
                             card(reminder, swipe: false)
                         }
                     }
                 }
-                if !completedMore { Color.clear.frame(height: 140) }
+                Color.clear.frame(height: 140)
             }
             .animation(.spring(duration: 0.35), value: active.map(\.id))
         }
@@ -221,7 +221,16 @@ struct HomeView: View {
         .hideBottomScrollEdgeEffect()
         .background(RealColors.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom) {
-            if selectedIds.isEmpty {
+            if !selectedCategoryIds.isEmpty {
+                // Categories picked with a long press (Android): delete them, their cards stay without a category.
+                SelectionBar(count: selectedCategoryIds.count, onStar: nil, onComplete: nil,
+                             onDelete: {
+                                 let ids = selectedCategoryIds
+                                 selectedCategoryIds = []
+                                 withAnimation(.spring(duration: 0.35)) { ids.forEach { store.deleteCategory($0, deleteReminders: false) } }
+                             },
+                             onCancel: { selectedCategoryIds = [] })
+            } else if selectedIds.isEmpty {
                 ComposerBar(defaultCategoryId: nil, isHome: true,
                             onOpenPlanner: { path.append(.planner) },
                             onOpenYasam: { withoutAnimation { showYasam = true } },
@@ -237,7 +246,8 @@ struct HomeView: View {
                                  selectedIds = []
                              },
                              onComplete: { selectedIds.forEach(store.toggleCompleted); selectedIds = [] },
-                             onDelete: { confirmDelete = true },
+                             // As on Android: delete at once, "N kart silindi · Geri al" brings them back.
+                             onDelete: { let ids = selectedIds; selectedIds = []; withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo(ids) } },
                              onCancel: { selectedIds = [] })
             }
         }
@@ -245,7 +255,12 @@ struct HomeView: View {
         .onChange(of: path) { _, now in
             if now.contains(where: { if case .detail = $0 { return false } else { return true } }) { completedShown = 4 }
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .background { completedShown = 4 } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { completedShown = 4 }
+            // Profile picture for connected people (only uploads when it, or the photo-sharing switch, changed).
+            if phase == .active { Task { await ProfilePictures.push() } }
+        }
+        .task { await ProfilePictures.push() }
         .sheet(item: $editingBuiltIn) { category in
             BuiltInCategoryColorSheet(category: category)
         }
@@ -284,10 +299,6 @@ struct HomeView: View {
             })
             .liftedTopSafeArea()
         }
-        .confirmationDialog("\(selectedIds.count) kart silinsin mi?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Sil", role: .destructive) { store.delete(selectedIds); selectedIds = [] }
-            Button("Vazgeç", role: .cancel) {}
-        }
         .sheet(item: $externalDetail) { ExternalCalendarEventDetail(event: $0) }
     }
 
@@ -322,26 +333,41 @@ struct HomeView: View {
 
     private var categoryDeck: some View {
         let order = store.homeCategoryOrder
-        let visible = expanded ? order : Array(order.prefix(previewCount))
+        let selecting = !selectedCategoryIds.isEmpty
+        let visible = expanded || selecting ? order : Array(order.prefix(previewCount))
         return VStack(spacing: 0) {
             VStack(spacing: -72) {
                 ForEach(Array(visible.enumerated()), id: \.element.id) { index, item in
-                    Button { if !keyboard.consumeTap() { open(item) } } label: {
-                        CategoryTileView(visual: visual(item), count: store.count(for: item) + calendarCount(item), description: description(item),
-                                         extendUnderNext: index < visible.count - 1)
-                    }
-                    .buttonStyle(PressScaleStyle())
-                    .zoomSource("cat-\(item.orderKey)", in: nav)
-                    .zIndex(Double(index))
-                    .modifier(StackPin(index: index, count: visible.count))
-                    .contextMenu {
-                        if case .builtIn(let c) = item {
-                            Button("Kategori rengini düzenle", systemImage: "paintpalette") { editingBuiltIn = c }
+                    let customId: Int64? = { if case .custom(let c) = item { return c.id } else { return nil } }()
+                    CategoryTileView(visual: visual(item), count: store.count(for: item) + calendarCount(item), description: description(item),
+                                     extendUnderNext: index < visible.count - 1,
+                                     isSelected: customId.map(selectedCategoryIds.contains) ?? false,
+                                     selectionMode: selecting && customId != nil)
+                        .scaleEffect(pressedTile == item.orderKey ? 0.985 : 1)
+                        .contentShape(Rectangle())
+                        // CollectionCategoryCard: tap opens (or picks while picking); long press edits a built-in
+                        // category's colour, or starts picking custom categories.
+                        .onTapGesture {
+                            if keyboard.consumeTap() { return }
+                            if selecting { if let customId { toggleCategory(customId) } } else { open(item) }
                         }
-                    }
+                        .onLongPressGesture(minimumDuration: 0.4, perform: {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            if let customId { selectedIds = []; toggleCategory(customId) }
+                            else if !selecting, case .builtIn(let c) = item { editingBuiltIn = c }
+                        }, onPressingChanged: { pressing in
+                            withAnimation(.spring(duration: 0.2)) { pressedTile = pressing ? item.orderKey : nil }
+                        })
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction(named: customId != nil ? "Kategorileri seç" : "Kategori rengini düzenle") {
+                            if let customId { toggleCategory(customId) } else if case .builtIn(let c) = item { editingBuiltIn = c }
+                        }
+                        .zoomSource("cat-\(item.orderKey)", in: nav)
+                        .zIndex(Double(index))
+                        .modifier(StackPin(index: index, count: visible.count))
                 }
             }
-            if expanded {
+            if expanded && !selecting {
                 Button { showNewCategory = true } label: {
                     Text("＋  Yeni kategori")
                         .font(RealFont.inter(15))
@@ -353,7 +379,7 @@ struct HomeView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 8)
             }
-            if (order.count > previewCount || !expanded) && !store.hiddenHomeKeys.contains(ReminderStore.showAllKey) {
+            if !selecting && (order.count > previewCount || !expanded) && !store.hiddenHomeKeys.contains(ReminderStore.showAllKey) {
                 Button(expanded ? "Daha az göster" : "Tümünü göster") {
                     withAnimation(.spring(duration: 0.4)) { expanded.toggle() }
                 }
@@ -406,6 +432,10 @@ struct HomeView: View {
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
+    private func toggleCategory(_ id: Int64) {
+        if selectedCategoryIds.contains(id) { selectedCategoryIds.remove(id) } else { selectedCategoryIds.insert(id) }
+    }
+
     private func toggleSelection(_ id: Int64) {
         if selectedIds.contains(id) { selectedIds.remove(id) } else { selectedIds.insert(id) }
     }
@@ -451,6 +481,43 @@ struct PressScaleStyle: ButtonStyle {
     }
 }
 
+/// ConnectionAvatar (ConnectionUi.kt): someone else's avatar — their initial on a soft colour picked from their uid
+/// (same colour as on Android). The profile photo is this phone's own and never shown for other people.
+struct ConnectionAvatar: View {
+    let name: String
+    let key: String
+    var size: CGFloat = 44
+    /// Their shared profile picture (avatar or photo); shown instead of the initial once it has loaded.
+    var pictureVersion: Int64? = nil
+    @State private var picture: UIImage?
+
+    private static let tones: [UInt32] = [0xFF6FD6FF, 0xFFFFB86F, 0xFFB59BFF, 0xFF7BE0A4, 0xFFFF8FB1, 0xFFF2E27A]
+
+    /// Java/Kotlin String.hashCode over UTF-16, so a person gets the same colour on both platforms.
+    private var tone: Color {
+        var h: Int32 = 0
+        for unit in key.utf16 { h = h &* 31 &+ Int32(unit) }
+        return Color(argb: Self.tones[Int(Int64(h) & 0x7fffffff) % Self.tones.count])
+    }
+
+    var body: some View {
+        let initial = name.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased(with: Locale(identifier: "tr_TR")) } ?? "R"
+        Circle()
+            .fill(LinearGradient(colors: [tone.opacity(0.38), tone.opacity(0.14)], startPoint: .topLeading, endPoint: .bottomTrailing))
+            .overlay(Circle().strokeBorder(tone.opacity(0.45), lineWidth: 1))
+            .overlay(Text(initial).font(RealFont.inter(size * 0.42, .semibold)).foregroundStyle(.white))
+            .overlay { if let picture { Image(uiImage: picture).resizable().scaledToFill() } }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .accessibilityHidden(true)
+            .task(id: pictureVersion) {
+                picture = nil
+                if let pictureVersion { picture = await ProfilePictures.load(uid: key, version: pictureVersion) }
+            }
+    }
+}
+
+/// This phone's own avatar (its profile photo, or initials). Only for the signed-in person; others get ConnectionAvatar.
 struct ProfileAvatar: View {
     let name: String
     var size: CGFloat = 44
@@ -484,8 +551,9 @@ struct ProfileAvatar: View {
 /// Multi-select actions (SelectionActionButtons.kt).
 struct SelectionBar: View {
     let count: Int
-    let onStar: () -> Void
-    let onComplete: () -> Void
+    /// nil while categories are selected: only delete (Android shows the same bar).
+    let onStar: (() -> Void)?
+    let onComplete: (() -> Void)?
     let onDelete: () -> Void
     let onCancel: () -> Void
 
@@ -494,8 +562,8 @@ struct SelectionBar: View {
             Button(action: onCancel) { ActionIcon(.close, size: 21) }
             Text("\(count) seçili").font(RealFont.inter(15, .medium))
             Spacer()
-            Button(action: onStar) { ActionIcon(.star, size: 21) }
-            Button(action: onComplete) { ActionIcon(.check, size: 21) }
+            if let onStar { Button(action: onStar) { ActionIcon(.star, size: 21) } }
+            if let onComplete { Button(action: onComplete) { ActionIcon(.check, size: 21) } }
             Button(action: onDelete) { ActionIcon(.delete, size: 21) }.tint(RealColors.overdue)
         }
         .font(.system(size: 18))

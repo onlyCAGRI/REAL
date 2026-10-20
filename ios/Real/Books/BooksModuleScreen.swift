@@ -46,6 +46,8 @@ struct BooksModuleScreen: View {
     @State private var editingTitle = false
     @State private var draftTitle = ""
     @State private var didResume = false
+    /// The detail panel is sliding away before the cover flies back (Android: leaving).
+    @State private var leaving = false
 
     var body: some View {
         GeometryReader { geo in
@@ -79,6 +81,7 @@ struct BooksModuleScreen: View {
         }
         .preferredColorScheme(store.theme.colorScheme)
         .statusBarHidden(false)
+        .edgeSwipeBack(enabled: !editingTitle) { back() }
         .onAppear {
             if documents == nil { documents = BookDocuments(store: store) }
             resumeIfNeeded()
@@ -103,6 +106,8 @@ struct BooksModuleScreen: View {
     // MARK: Navigation
 
     private func back() {
+        // As on Android: no back step while a cover is flying or a file is being prepared (it left a half state).
+        guard flight == nil, !busy, !leaving else { return }
         error = nil
         switch page {
         case .shelf:
@@ -110,7 +115,9 @@ struct BooksModuleScreen: View {
         case .detail:
             guard let b = selected else { page = .shelf; return }
             withAnimation(.easeIn(duration: 0.18)) { revealDetail = false }
+            leaving = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                leaving = false
                 if let from = lastShelfFrame[b.id], from != .zero {
                     flight = BookFlight(book: b, from: from, reverse: true)
                     flightProgress = 1

@@ -215,6 +215,7 @@ struct MusicDiscoveryScreen: View {
             selection = Set(music.snapshot.selection.filter { k in !MusicMood.all.contains { $0.key == k } })
             if startInList { list = true }
         }
+        .edgeSwipeBack { back() }
     }
 
     private func back() {

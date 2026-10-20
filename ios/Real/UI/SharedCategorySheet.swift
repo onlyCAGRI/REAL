@@ -78,7 +78,7 @@ struct SharedCategorySheet: View {
                                 }
                                 ForEach(candidates) { p in
                                     HStack {
-                                        ProfileAvatar(name: p.name, size: 36)
+                                        ConnectionAvatar(name: p.name, key: p.uid, size: 36, pictureVersion: p.pictureVersion)
                                         Text(p.name).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
                                         Spacer()
                                         Button("Ekle") { add(p.uid) }
@@ -112,7 +112,7 @@ struct SharedCategorySheet: View {
 
     private func memberRow(_ m: SharedMember) -> some View {
         HStack(spacing: 12) {
-            ProfileAvatar(name: m.name, size: 38)
+            ConnectionAvatar(name: m.name, key: m.uid, size: 38, pictureVersion: m.pictureVersion)
             Text(m.name).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
             Spacer()
             if m.isOwner {

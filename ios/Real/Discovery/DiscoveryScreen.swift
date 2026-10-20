@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum DiscoveryPage { case filters, discover, list }
 
@@ -53,6 +54,7 @@ struct DiscoveryScreen: View {
             if startInList { page = .list } else if startInDeck { page = .discover }
             withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.5).delay(0.3)) { entered = true }
         }
+        .edgeSwipeBack { back() }
         .alert("Öneriyi bildir", isPresented: $reportNotice) { Button("Tamam", role: .cancel) {} } message: {
             Text("Bildirim göndermek için REAL'e giriş yapman gerekiyor.")
         }
@@ -64,7 +66,7 @@ struct DiscoveryScreen: View {
     }
 
     private func back() {
-        if detail != nil { detail = nil; return }
+        if detail != nil { withAnimation(.easeOut(duration: 0.12)) { detail = nil }; return }
         // Inside the picker: the previous question. From the deck: straight back to Yaşam (the picker was done).
         if page == .filters && pickerStep > 0 { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32)) { pickerStep -= 1 }; return }
         if page == .filters || page == .discover || (startInList && page == .list) { onClose() }
@@ -450,25 +452,53 @@ struct PosterAmbient: View {
     }
 }
 
-/// Poster artwork with the Android fallback (video glyph + title) when there is no image.
+/// Posters kept in memory (Android: Coil's cache). AsyncImage starts empty on every new view, so each swipe showed
+/// the dark poster face under the deck until the image came back; a cached poster now shows at once.
+@MainActor
+enum PosterImageCache {
+    private static let cache: NSCache<NSString, UIImage> = { let c = NSCache<NSString, UIImage>(); c.countLimit = 80; return c }()
+
+    static func image(_ url: String) -> UIImage? { cache.object(forKey: url as NSString) }
+
+    static func load(_ url: String) async -> UIImage? {
+        if let hit = image(url) { return hit }
+        guard let u = URL(string: url), let fetched = try? await URLSession.shared.data(from: u),
+              let img = UIImage(data: fetched.0) else { return nil }
+        cache.setObject(img, forKey: url as NSString)
+        return img
+    }
+}
+
+/// Poster artwork. Like Android, the video glyph + title show only when there is no image (none, or it failed);
+/// while it loads the face stays plain.
 struct PosterArtwork: View {
     let media: MediaBlock
     var titleSize: CGFloat = 20
     /// false: the image is not requested yet (a deck poster waits for the front one).
     var load = true
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    private var url: String? { media.artworkUrl.flatMap { $0.isEmpty ? nil : $0 } }
+
     var body: some View {
+        let shown = image ?? url.flatMap { PosterImageCache.image($0) }
         ZStack {
             Color(argb: 0xFF1B1B20)
-            VStack(spacing: 14) {
-                RealSymbol("film", size: 50.6).foregroundStyle(Color(argb: 0xFFDDD4C6))
-                Text(media.title).font(RealFont.inter(titleSize)).foregroundStyle(.white).multilineTextAlignment(.center).lineLimit(4)
-            }
-            .padding(28)
-            if load, let s = media.artworkUrl, let u = URL(string: s) {
-                AsyncImage(url: u) { phase in
-                    if let img = phase.image { img.resizable().scaledToFill() }
+            if let shown {
+                // Sized by the container so the fill never grows the poster (or its touch area) past its frame.
+                Color.clear.overlay(Image(uiImage: shown).resizable().scaledToFill()).clipped()
+            } else if url == nil || failed {
+                VStack(spacing: 14) {
+                    RealSymbol("film", size: 50.6).foregroundStyle(Color(argb: 0xFFDDD4C6))
+                    Text(media.title).font(RealFont.inter(titleSize)).foregroundStyle(.white).multilineTextAlignment(.center).lineLimit(4)
                 }
+                .padding(28)
             }
+        }
+        .task(id: load ? url : nil) {
+            guard load, let url, image == nil else { return }
+            if let img = await PosterImageCache.load(url) { image = img } else { failed = true }
         }
     }
 }
@@ -520,11 +550,11 @@ private struct PosterDeck: View {
         // are fetched ahead so a swipe never shows an empty poster.
         .task(id: cards.first?.id) {
             if !frontReady {
-                if let s = cards.first?.media.artworkUrl, let u = URL(string: s) { _ = try? await URLSession.shared.data(from: u) }
+                if let s = cards.first?.media.artworkUrl { _ = await PosterImageCache.load(s) }
                 frontReady = true
             }
             for c in cards.dropFirst().prefix(6) {
-                if let s = c.media.artworkUrl, let u = URL(string: s) { _ = try? await URLSession.shared.data(from: u) }
+                if let s = c.media.artworkUrl { _ = await PosterImageCache.load(s) }
             }
         }
     }
@@ -557,6 +587,7 @@ private struct PosterDeck: View {
             .overlay(alignment: .topTrailing) { if front { rightLabels(item) } }
             .overlay { if front && busy { ProgressView().tint(.white) } }
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .accessibilityElement()
             .accessibilityLabel(item.media.title)
             .accessibilityAddTraits(front ? .isButton : [])

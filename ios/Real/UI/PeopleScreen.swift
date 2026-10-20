@@ -6,7 +6,7 @@ import SwiftUI
 @Observable
 final class RealConnections {
     static let shared = RealConnections()
-    struct Person: Identifiable, Hashable { let uid: String; let name: String; var id: String { uid } }
+    struct Person: Identifiable, Hashable { let uid: String; let name: String; var pictureVersion: Int64? = nil; var id: String { uid } }
     struct Invite: Identifiable, Hashable { let id: String; let expiresAt: EpochMillis }
 
     private(set) var people: [Person] = []
@@ -23,7 +23,7 @@ final class RealConnections {
             let data = try await RealBackend.request("/api/connections/v1/me")
             let o = (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
             people = ((o["connections"] as? [[String: Any]]) ?? []).compactMap { c in
-                (c["uid"] as? String).map { Person(uid: $0, name: c["name"] as? String ?? "REAL user") }
+                (c["uid"] as? String).map { Person(uid: $0, name: c["name"] as? String ?? "REAL user", pictureVersion: (c["pictureVersion"] as? NSNumber)?.int64Value) }
             }
             invites = ((o["invites"] as? [[String: Any]]) ?? []).compactMap { i in
                 (i["id"] as? String).map { Invite(id: $0, expiresAt: (i["expiresAt"] as? NSNumber)?.int64Value ?? 0) }
@@ -216,7 +216,7 @@ struct PeopleScreen: View {
                         }
                         ForEach(connections.people) { p in
                             HStack(spacing: 12) {
-                                ProfileAvatar(name: p.name, size: 40)
+                                ConnectionAvatar(name: p.name, key: p.uid, size: 40, pictureVersion: p.pictureVersion)
                                 Text(p.name).font(RealFont.inter(16)).foregroundStyle(.white).lineLimit(1)
                                 Spacer()
                                 Button { confirm = p } label: {

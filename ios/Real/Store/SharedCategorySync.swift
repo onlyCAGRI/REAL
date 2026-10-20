@@ -7,6 +7,8 @@ struct SharedMember: Identifiable, Hashable {
     let name: String
     let isOwner: Bool
     let access: String
+    /// The person's shared profile picture (nil = none; their initial is shown).
+    var pictureVersion: Int64? = nil
     var id: String { uid }
 }
 
@@ -237,7 +239,7 @@ final class SharedCategorySync {
         }
     }
 
-    private struct Summary { let id: String; let category: [String: Any]; let isOwner: Bool; let collab: Bool; let access: String }
+    private struct Summary { let id: String; let category: [String: Any]; let isOwner: Bool; let collab: Bool; let access: String; var description: String? = nil }
 
     private func summaries() async throws -> [Summary] {
         var out: [Summary] = []
@@ -248,7 +250,8 @@ final class SharedCategorySync {
                 guard let id = o["id"] as? String, let c = o["category"] as? [String: Any] else { continue }
                 let owner = o["isOwner"] as? Bool ?? false
                 out.append(Summary(id: id, category: c, isOwner: owner, collab: o["collab"] as? Bool ?? false,
-                                   access: (o["access"] as? String) ?? (owner ? "owner" : "full")))
+                                   access: (o["access"] as? String) ?? (owner ? "owner" : "full"),
+                                   description: o["description"] as? String))
             }
             after = page["next"] as? String
         } while after != nil
@@ -270,6 +273,8 @@ final class SharedCategorySync {
         mirror.customSolidColorArgb = (c["customSolidColorArgb"] as? NSNumber)?.intValue
         mirror.sharedId = s.id
         mirror.sharedRole = s.access
+        // The owner's description (members read it; only the owner edits it).
+        mirror.description = String((s.description ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(400))
         if mirror != existing { store.putCategoryFromSync(mirror) }
     }
 
@@ -462,7 +467,8 @@ final class SharedCategorySync {
             guard let uid = m["uid"] as? String else { return nil }
             let owner = m["isOwner"] as? Bool ?? false
             return SharedMember(uid: uid, name: m["name"] as? String ?? "REAL user", isOwner: owner,
-                                access: owner ? "owner" : ((m["access"] as? String) ?? "full"))
+                                access: owner ? "owner" : ((m["access"] as? String) ?? "full"),
+                                pictureVersion: (m["pictureVersion"] as? NSNumber)?.int64Value)
         }
     }
 
@@ -489,7 +495,8 @@ final class SharedCategorySync {
         let o = (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         return ((o["connections"] as? [[String: Any]]) ?? []).compactMap { c in
             guard let uid = c["uid"] as? String else { return nil }
-            return SharedMember(uid: uid, name: c["name"] as? String ?? "REAL user", isOwner: false, access: "")
+            return SharedMember(uid: uid, name: c["name"] as? String ?? "REAL user", isOwner: false, access: "",
+                                pictureVersion: (c["pictureVersion"] as? NSNumber)?.int64Value)
         }
     }
 }

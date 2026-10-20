@@ -282,9 +282,7 @@ struct ReminderDetailView: View {
                     .frame(width: 48, height: 48)
             }
             .accessibilityLabel("Geri")
-            Spacer()
-            FreshPastePill { providers in paste(providers) }
-                .padding(.trailing, 8)
+            Spacer(minLength: 8)
             if CalendarCardPublisher.shared.hasExternalTarget(r.id) {
                 let done = CalendarCardPublisher.shared.isPublished(r)
                 Button { CalendarCardPublisher.shared.offer(r.id) } label: {
@@ -298,26 +296,28 @@ struct ReminderDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Takvime web bağlantısı ekle")
-                .padding(.trailing, 8)
+                Spacer(minLength: 8)
             }
+            // Something copied in the last 30 s: the pill sits in the middle of the header (Android: SpaceBetween row).
+            FreshPastePill { providers in paste(providers) }
+            Spacer(minLength: 8)
             HStack(spacing: 0) {
-                // iOS counterpart of Android's Now Bar is the Dynamic Island (a Live Activity). That needs a widget
-                // extension that is not built yet, so the island mark is shown dimmed.
                 // Yapıştır (Android: in the Now Bar button's place). The system PasteButton: no "Allow paste?" prompt.
+                // It refuses a see-through tint (it then falls back to its own light fill), so it gets an opaque dark one.
+                // Long press: "Panodan ekle", collect several copies and add them one by one (as on Android).
                 PasteButton(supportedContentTypes: CardPaste.contentTypes) { providers in paste(providers) }
                     .labelStyle(.iconOnly)
                     .buttonBorderShape(.circle)
-                    .tint(Color.white.opacity(0.0))
+                    .tint(Color(argb: 0xFF26262B))
                     .frame(width: 48, height: 40)
-                // "Panodan ekle": collect several copies, add them one by one (Android: long press on Yapıştır).
-                Button { showClipboardTray = true } label: {
-                    Image(systemName: "list.clipboard").font(.system(size: 15)).foregroundStyle(Color(white: 0.79))
-                        .frame(width: 36, height: 40)
-                }
-                .accessibilityLabel("Panodan ekle")
-                .sheet(isPresented: $showClipboardTray) {
-                    ClipboardTraySheet(busy: trayBusy) { item in addFromTray(item) }
-                }
+                    .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        showClipboardTray = true
+                    })
+                    .accessibilityAction(named: "Panodan ekle") { showClipboardTray = true }
+                    .sheet(isPresented: $showClipboardTray) {
+                        ClipboardTraySheet(busy: trayBusy) { item in addFromTray(item) }
+                    }
                 Rectangle().fill(.white.opacity(0.13)).frame(width: 1, height: 18)
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -330,8 +330,8 @@ struct ReminderDetailView: View {
                 }
                 .accessibilityLabel(r.isImportant ? "Önemli işaretini kaldır" : "Önemli olarak işaretle")
             }
-            // Yapıştır 48 + Panodan ekle 36 + divider 1 + star 48.
-            .frame(width: 133, height: 40)
+            // Yapıştır 48 + divider 1 + star 48 (Android: 97 dp).
+            .frame(width: 97, height: 40)
             .liquidGlass(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
@@ -940,28 +940,40 @@ struct ReminderDetailView: View {
         let scoped = r.hasRepeat && occurrence != nil
         return VStack(alignment: .leading, spacing: 10) {
             Text(scoped ? "Tekrarlayan etkinlik silinsin mi?" : "Hatırlatıcı silinsin mi?")
-                .font(RealFont.inter(16, .semibold)).foregroundStyle(Color(argb: 0xFFF5F5F8))
+                .font(RealFont.inter(17, .semibold)).lineSpacing(6).foregroundStyle(Color(argb: 0xFFF5F5F8))
             Text(scoped ? "Yalnızca sıradaki tekrarı ya da sıradaki tekrardan itibaren tüm tekrarları silebilirsin. Önceki tekrarlar korunur. Bu işlem geri alınamaz."
                  : "Bu not listenden ve bildirim panelinden kaldırılacak. Bu işlem geri alınamaz.")
-                .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFB4B4BE))
+                .font(RealFont.inter(13)).lineSpacing(6).foregroundStyle(Color(argb: 0xFFBEBEC8))
+            // DeleteReminderPrompt.kt: 46pt pill buttons — red tint for deleting, a light one for Vazgeç.
             if scoped, let occurrence {
-                Button("Sadece sıradaki tekrarı sil") { deleting = false; store.deleteOccurrence(reminderId, occurrence: occurrence) }
-                    .font(RealFont.inter(14, .semibold)).foregroundStyle(Color(argb: 0xFFFFA4AA))
-                Button("Bu ve sonraki tüm tekrarları sil") { deleting = false; store.deleteThisAndFuture(reminderId, occurrence: occurrence) }
-                    .font(RealFont.inter(14, .semibold)).foregroundStyle(Color(argb: 0xFFFFA4AA))
-                Button("Vazgeç") { deleting = false }.font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFE9E9EF))
+                VStack(spacing: 8) {
+                    deletePill("Sadece sıradaki tekrarı sil", destructive: true) { deleting = false; store.deleteOccurrence(reminderId, occurrence: occurrence) }
+                    deletePill("Bu ve sonraki tüm tekrarları sil", destructive: true) { deleting = false; store.deleteThisAndFuture(reminderId, occurrence: occurrence) }
+                    deletePill("Vazgeç", destructive: false) { deleting = false }
+                }
+                .padding(.top, 4)
             } else {
-                HStack {
-                    Button("Vazgeç") { deleting = false }.font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFE9E9EF))
-                    Spacer()
-                    Button("Sil") { deleting = false; store.delete([reminderId]) }.font(RealFont.inter(14, .semibold)).foregroundStyle(Color(argb: 0xFFFFA4AA))
+                HStack(spacing: 10) {
+                    deletePill("Vazgeç", destructive: false) { deleting = false }
+                    deletePill("Sil", destructive: true) { deleting = false; store.delete([reminderId]) }
                 }
                 .padding(.top, 4)
             }
         }
-        .padding(18)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous), role: .sheet)
+    }
+
+    private func deletePill(_ title: String, destructive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(RealFont.inter(14, destructive ? .semibold : .regular))
+                .foregroundStyle(destructive ? Color(argb: 0xFFFFA4AA) : Color(argb: 0xFFE9E9EF))
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .background(Capsule().fill(destructive ? Color(argb: 0xFFFF858D).opacity(0.14) : Color.white.opacity(0.08)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressScaleStyle(scale: 0.97))
     }
 
     /// Edit dock: "Renk ve kategori" toggle + sort, then the one-by-one add buttons.

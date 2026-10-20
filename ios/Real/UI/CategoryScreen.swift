@@ -20,7 +20,6 @@ struct CategoryScreen: View {
     @State private var showEditor = false
     @State private var showColorSheet = false
     @State private var selectedIds: Set<Int64> = []
-    @State private var confirmDelete = false
     @State private var query = ""
     @State private var heroBottom: CGFloat = 1000
     @State private var showPeople = false
@@ -52,8 +51,8 @@ struct CategoryScreen: View {
                             stats: stats, showProgress: $showProgress, sort: sort, showSort: builtIn != .journalEntries,
                             onBack: { dismiss() },
                             onEdit: {
-                                if custom?.isSharedMirror == true { RealToast.shared.show("Bu kategoriyi sadece sahibi düzenleyebilir.") }
-                                else if custom != nil { showEditor = true } else { showColorSheet = true }
+                                // Members get the editor too, limited to the description (read only) and the hide switch.
+                                if custom != nil { showEditor = true } else { showColorSheet = true }
                             },
                             onFilter: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.2)) { filterMode = true } },
                             onSort: { changeSort() },
@@ -157,7 +156,8 @@ struct CategoryScreen: View {
                 SelectionBar(count: selectedIds.count,
                              onStar: { selectedIds.forEach { id in store.mutate(id) { $0.isImportant.toggle() } }; selectedIds = [] },
                              onComplete: { selectedIds.forEach { store.toggleCompleted($0) }; selectedIds = [] },
-                             onDelete: { confirmDelete = true },
+                             // As on Android: delete at once, "N kart silindi · Geri al" brings them back.
+                             onDelete: { let ids = selectedIds; selectedIds = []; withAnimation(.spring(duration: 0.3)) { store.deleteWithUndo(ids) } },
                              onCancel: { selectedIds = [] })
             } else if builtIn != .completed && builtIn != .journalEntries && custom?.isReadOnlyShared != true {
                 ComposerBar(defaultCategoryId: customId, defaultImportant: builtIn == .important,
@@ -171,9 +171,6 @@ struct CategoryScreen: View {
             if let custom { SharedCategorySheet(category: custom, calendarLinked: CalendarCategoryLinks.shared.hasCategory(custom.id)) }
         }
         .sheet(isPresented: $showColorSheet) { if let builtIn { BuiltInCategoryColorSheet(category: builtIn) } }
-        .confirmationDialog("\(selectedIds.count) kart silinsin mi?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Sil", role: .destructive) { store.delete(selectedIds); selectedIds = [] }
-        }
         .onChange(of: custom == nil && customId != nil) { _, gone in if gone { dismiss() } }
     }
 

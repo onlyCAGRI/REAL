@@ -117,7 +117,8 @@ struct FreshPastePill: View {
                 PasteButton(supportedContentTypes: CardPaste.contentTypes) { providers in onPaste(providers) }
                     .labelStyle(.titleAndIcon)
                     .buttonBorderShape(.capsule)
-                    .tint(Color.white.opacity(0.18))
+                    // Opaque: PasteButton ignores a see-through tint and turns light.
+                    .tint(Color(argb: 0xFF2E2E34))
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
             }
         }

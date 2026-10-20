@@ -47,7 +47,9 @@ extension View {
     @available(iOS 26.0, *)
     static func clearGlass(role: LiquidGlassRole, dim: Double) -> Glass {
         if role == .sheet { return Glass.regular.tint(.black.opacity(min(0.45 + dim, 0.85))) }
-        return Glass.clear.tint(.black.opacity(min(0.14 + dim, 0.85))).interactive()
+        // Not .interactive(): this glass sits inside Button labels, and interactive glass takes the touch for its own
+        // press bounce, so a tap often did not reach the button (water "+" needed several presses, back buttons too).
+        return Glass.clear.tint(.black.opacity(min(0.14 + dim, 0.85)))
     }
     #endif
 
