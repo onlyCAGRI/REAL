@@ -9,22 +9,21 @@ struct AvatarEditorView: View {
     @State private var failed = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                }
-                .liquidGlass(Circle(), role: .chrome)
-                .accessibilityLabel("Geri")
-                Text("Avatar").font(RealFont.inter(22, .semibold)).foregroundStyle(.white)
-                Spacer()
-            }
-            .padding(.horizontal, 14).padding(.vertical, 6)
+        // The page runs edge to edge (its avatar stage goes up behind the status bar); the glass back button sits on it.
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
             AvatarWebView(onSaved: { dismiss() }, onFailed: { failed = true })
-                .ignoresSafeArea(edges: .bottom)
+                .ignoresSafeArea()
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold)).foregroundStyle(.black)
+                    .frame(width: 44, height: 44)
+            }
+            .liquidGlass(Circle(), role: .chrome)
+            .accessibilityLabel("Geri")
+            .padding(.leading, 14).padding(.top, 6)
         }
-        .background(Color.black.ignoresSafeArea())
+        // Dark status-bar icons over the (usually light) avatar stage.
+        .preferredColorScheme(.light)
         .alert("Avatar kaydedilemedi", isPresented: $failed) { Button("Tamam", role: .cancel) {} }
     }
 }
@@ -52,12 +51,13 @@ private struct AvatarWebView: UIViewRepresentable {
         web.isOpaque = false
         web.backgroundColor = .black
         web.scrollView.backgroundColor = .black
+        web.scrollView.contentInsetAdjustmentBehavior = .never
         web.navigationDelegate = context.coordinator
         if let url = Bundle.main.url(forResource: "avatar-editor", withExtension: "html"),
            let html = try? String(contentsOf: url, encoding: .utf8) {
             let saved = Data(AvatarStore.stateJSON.utf8).base64EncodedString()
             // Same base URL as Android's WebView; the page loads Humation from jsDelivr.
-            web.loadHTMLString(html.replacingOccurrences(of: "__SAVED_STATE__", with: saved), baseURL: URL(string: "https://humation.app/"))
+            web.loadHTMLString(html.replacingOccurrences(of: "__SAVED_STATE__", with: saved).replacingOccurrences(of: "__TOP_INSET__", with: "0"), baseURL: URL(string: "https://humation.app/"))
         }
         return web
     }

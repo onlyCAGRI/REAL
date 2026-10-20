@@ -18,16 +18,19 @@
   --faint: #55555e;
   --avatar-bg: #F6F5F4;
   --font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --top: max(env(safe-area-inset-top, 0px), __TOP_INSET__px);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { overscroll-behavior-y: contain; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 var(--font); -webkit-font-smoothing: antialiased;
-  padding: 4px max(14px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+  padding: 0 max(14px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 .wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 
 /* Stage: the avatar large on its own colour */
-.stage { position: relative; height: min(44vh, 360px); min-height: 260px; border-radius: 38px; background: var(--avatar-bg); overflow: hidden;
+.stage { position: relative; height: calc(min(44vh, 360px) + var(--top)); min-height: calc(260px + var(--top)); padding-top: var(--top);
+  margin: 0 calc(-1 * max(14px, env(safe-area-inset-right))) 0 calc(-1 * max(14px, env(safe-area-inset-left)));
+  border-radius: 0 0 40px 40px; background: var(--avatar-bg); overflow: hidden;
   display: flex; align-items: flex-end; justify-content: center; transition: background .3s;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.4), inset 0 -40px 60px rgba(0,0,0,.06); }
 .stage .avatar { width: min(78%, 330px); aspect-ratio: 1; }
@@ -154,7 +157,7 @@ try {
   };
   const slots = [['head', 'Kafa'], ['body', 'Gövde'], ['item', 'Eşya'], ['glasses', 'Gözlük']];
   // Which colours belong to which tab (the background is always there).
-  const TONES = { head: [['hair', 'Saç'], ['skin', 'Ten']], body: [['clothes', 'Üst'], ['bottom', 'Alt']], item: [['stroke', 'Çizgi']], glasses: [['stroke', 'Çizgi']] };
+  const TONES = { head: [['hair', 'Saç'], ['skin', 'Ten']], body: [['clothes', 'Kıyafet']], item: [['stroke', 'Çizgi']], glasses: [['stroke', 'Çizgi']] };
   const PRESETS = {
     skin: ['FCE5D3', 'F6CFAE', 'EBB48D', 'D19A6A', 'A86E46', '7A4B2D', '4E3021'],
     hair: ['1C1714', '3F2A1E', '6B4226', 'A0693A', 'D6A45E', 'EADBB8', 'A9A9AF', 'C2412D', '3B5BDB', 'DE6D98'],
@@ -206,7 +209,7 @@ try {
   $('chips').addEventListener('click', (e) => { const t = e.target.closest('[data-chip],[data-act]'); if (!t) return; if (t.dataset.act === 'custom') openSheet(); else setColor(tone, t.dataset.chip); });
   $('randomize').onclick = () => {
     for (const [slot] of slots) { const list = getPartsForSlot(humation1, slot); if (list.length) state.selections[slot] = list[Math.floor(Math.random() * list.length)].name; }
-    for (const k of ['hair', 'skin', 'clothes', 'bottom']) { const p = PRESETS[k]; state.colors[k] = p[Math.floor(Math.random() * p.length)]; }
+    for (const k of ['hair', 'skin', 'clothes']) { const p = PRESETS[k]; state.colors[k] = p[Math.floor(Math.random() * p.length)]; }
     renderPreview(); renderTone(); renderParts();
   };
 
