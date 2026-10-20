@@ -141,7 +141,7 @@ struct CheckRequestSheet: View {
 
 extension ReminderStore {
     /// Kontrol ettir targets for the selected cards: yourself, plus the people of their one shared category.
-    func checkTargets(for ids: Set<Int64>) async -> [CheckTarget] {
+    @MainActor func checkTargets(for ids: Set<Int64>) async -> [CheckTarget] {
         let me = RealAuth.shared.account?.uid
         let categoryIds = Set(ids.compactMap { reminder($0) }.map(\.customCategoryId))
         guard categoryIds.count == 1, let only = categoryIds.first, let category = category(only), category.isShared, let me else {
@@ -153,7 +153,7 @@ extension ReminderStore {
     }
 
     /// Puts (or with nil takes off) a Kontrol ettir request on the cards.
-    func setCheckRequest(_ ids: Set<Int64>, target: String?, startEpochDay: EpochDay? = nil, color: Int? = nil) {
+    @MainActor func setCheckRequest(_ ids: Set<Int64>, target: String?, startEpochDay: EpochDay? = nil, color: Int? = nil) {
         let request = target.map { CheckRequest(to: [$0], from: RealAuth.shared.account?.uid, at: .now, startEpochDay: startEpochDay, color: color) }
         for id in ids where reminder(id)?.isDivider == false { mutate(id) { $0.checkRequest = request; $0.updatedAt = .now } }
     }
