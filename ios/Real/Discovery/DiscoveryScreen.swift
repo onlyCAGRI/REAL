@@ -438,14 +438,17 @@ struct DiscoveryHeadline: View {
 struct PosterAmbient: View {
     let url: String?
     var body: some View {
-        ZStack {
-            if let url, let u = URL(string: url) {
-                AsyncImage(url: u) { img in img.resizable().scaledToFill() } placeholder: { Color.clear }
-                    .blur(radius: 48).opacity(0.85)
+        // The poster goes in an overlay of a plain clear box: scaledToFill reports the poster's full (taller) size, which
+        // stretched the black fade over ~600pt, so the 210pt window cut it off halfway and left a hard dark rectangle.
+        Color.clear
+            .overlay {
+                if let url, let u = URL(string: url) {
+                    AsyncImage(url: u) { img in img.resizable().scaledToFill() } placeholder: { Color.clear }
+                        .blur(radius: 48).opacity(0.85)
+                }
             }
-            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-        }
-        .frame(height: 210).frame(maxWidth: .infinity).clipped()
+            .overlay { LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom) }
+            .frame(height: 210).frame(maxWidth: .infinity).clipped()
         .ignoresSafeArea(edges: .top)
         .animation(.easeInOut(duration: 0.45), value: url)
         .allowsHitTesting(false)
