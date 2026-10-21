@@ -161,8 +161,9 @@ struct ComposerBar: View {
             }
         }
         .padding(.horizontal, 16)
-        // Dock bottom edge ~20pt above the screen edge (34pt safe area − 14), just above the home indicator.
-        .padding(.bottom, expanded ? 8 : -14)
+        // Dock bottom edge on the safe area (~34pt above the screen edge), like Android's nav-bar inset + 12dp: a swipe
+        // starting on the dock stays clear of the home-indicator gesture, so it no longer sends people to the launcher.
+        .padding(.bottom, expanded ? 8 : 0)
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: expanded)
         .animation(.spring(response: 0.34, dampingFraction: 0.85), value: navExpanded)
         .highPriorityGesture(
