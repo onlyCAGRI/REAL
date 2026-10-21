@@ -142,7 +142,7 @@ struct BooksShelfScreen: View {
                 .accessibilityLabel("Kitap ekle")
                 // "+": yeni bölüm (raf) açar; kitaplar basılı tutup sürüklenerek oraya taşınır.
                 Button(action: onAddSection) {
-                    ActionIcon(glyph: .add, color: theme.chromeText, size: 22)
+                    ActionIcon(.add, color: theme.chromeText, size: 22)
                         .frame(width: 56, height: 56)
                         .background(theme.chrome, in: Circle())
                         .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 0.8))
