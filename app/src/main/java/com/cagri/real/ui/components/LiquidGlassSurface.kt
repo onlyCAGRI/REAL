@@ -126,42 +126,6 @@ fun LiquidGlassContentSurface(
     Box(modifier.clip(shape).background(LiquidGlassTokens.contentColor).border(0.6.dp, edge, shape), content = content)
 }
 
-@Composable
-fun LiquidGlassIconButton(
-    backdrop: GraphicsLayer,
-    backdropPosition: () -> Offset,
-    onClick: () -> Unit,
-    description: String,
-    modifier: Modifier = Modifier,
-    reduceDynamicBlur: Boolean = false,
-    content: @Composable () -> Unit
-) {
-    LiquidGlassSurface(backdrop, backdropPosition, modifier.size(48.dp), 24.dp, reduceDynamicBlur) {
-        IconButton(onClick = onClick, modifier = Modifier.matchParentSize().semantics { contentDescription = description }) { content() }
-    }
-}
-
-@Composable
-fun DesignIconButton(
-    backdrop: GraphicsLayer,
-    backdropPosition: () -> Offset,
-    designStyle: DesignStyle,
-    reduceDynamicBlur: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
-    content: @Composable () -> Unit
-) {
-    if (designStyle == DesignStyle.LiquidGlass) {
-        LiquidGlassSurface(backdrop, backdropPosition, modifier.size(48.dp), 24.dp, reduceDynamicBlur) {
-            IconButton(onClick = onClick, interactionSource = interactionSource, modifier = Modifier.matchParentSize()) { content() }
-        }
-    } else {
-        IconButton(onClick = onClick, modifier = modifier, interactionSource = interactionSource) { content() }
-    }
-}
-
-
 fun Modifier.liquidChrome(corners: Dp = 24.dp, selected: Boolean = false): Modifier {
     val shape = RoundedCornerShape(corners)
     return clip(shape)

@@ -56,6 +56,19 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import com.cagri.real.speech.VoiceUnderstandingText
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -98,11 +111,19 @@ fun VoiceListeningWindow(
     onDismissFeedback: () -> Unit = {},
     onLineCountChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    corners: Dp = 26.dp
+    corners: Dp = 26.dp,
+    /** "Doğru mu anladım?": the sentence with its unsure words underlined; null = not asking. */
+    understanding: VoiceUnderstandingText? = null,
+    onUnderstandingPick: (Int, String) -> Unit = { _, _ -> },
+    onUnderstandingConfirm: () -> Unit = {},
+    onUnderstandingCorrect: () -> Unit = {},
+    /** Non-null when the card has a place: "Yeri yaz" lets the person type it. */
+    onUnderstandingPlace: (() -> Unit)? = null
 ) {
     val listening = phase == VoicePhase.Listening
     val processing = phase == VoicePhase.Finishing || aiProcessing
-    val showingFeedback = !feedbackText.isNullOrBlank() && !listening && !processing
+    val checking = understanding != null && !listening && !processing
+    val showingFeedback = !checking && !feedbackText.isNullOrBlank() && !listening && !processing
     val displayText = if (showingFeedback) feedbackText.orEmpty() else text
     val feedbackReveal = remember { Animatable(1f) }
     val dismissProgress = remember { Animatable(1f) }
@@ -266,7 +287,7 @@ fun VoiceListeningWindow(
             ) {
                 if (!processing) {
                     Text(
-                        text = if (showingFeedback) "REAL" else if (listening && !feedbackText.isNullOrBlank()) feedbackText else "Dinleniyor…",
+                        text = if (checking) "Doğru mu anladım?" else if (showingFeedback) "REAL" else if (listening && !feedbackText.isNullOrBlank()) feedbackText else "Dinleniyor…",
                         color = VoiceBlueSoft.copy(alpha = 0.9f),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
@@ -277,10 +298,13 @@ fun VoiceListeningWindow(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .then(if (showingFeedback || rawSwipe) Modifier else Modifier.verticalScroll(scrollState)),
+                        .then(if (showingFeedback || rawSwipe || checking) Modifier else Modifier.verticalScroll(scrollState)),
                     contentAlignment = Alignment.CenterStart
                 ) {
-                    if (displayText.isEmpty()) {
+                    if (checking && understanding != null) {
+                        UnderstandingCheckContent(understanding, onUnderstandingPick, onUnderstandingConfirm,
+                            onUnderstandingCorrect, onLineCountChange, onUnderstandingPlace)
+                    } else if (displayText.isEmpty()) {
                         Text(
                             text = if (listening && !feedbackText.isNullOrBlank()) "Cevabını söyle…" else "Aklında ne var? Konuş…",
                             color = Color(0xFFA2C7FF),
@@ -319,7 +343,7 @@ fun VoiceListeningWindow(
 
             IconButton(
                 onClick = onMicClick,
-                enabled = listening || showingFeedback,
+                enabled = listening || showingFeedback || checking,
                 modifier = Modifier
                     .size(48.dp)
                     .semantics {
@@ -353,7 +377,21 @@ fun VoiceListeningWindow(
         }
     }
 
-    val feedbackGesture = if (showingFeedback || rawSwipe) Modifier.pointerInput(feedbackText, rawSwipe) {
+    val confirmUnderstanding by rememberUpdatedState(onUnderstandingConfirm)
+    val feedbackGesture = if (checking) Modifier.pointerInput(understanding) {
+        // Swipe up = "yes, that is what I said": save.
+        detectVerticalDragGestures(
+            onVerticalDrag = { change, amount ->
+                change.consume()
+                dragY = (dragY + amount).coerceIn(-dismissDistance * 2f, 0f)
+            },
+            onDragCancel = { dragY = 0f },
+            onDragEnd = {
+                if (dragY <= -dismissDistance) confirmUnderstanding()
+                dragY = 0f
+            }
+        )
+    } else if (showingFeedback || rawSwipe) Modifier.pointerInput(feedbackText, rawSwipe) {
         detectVerticalDragGestures(
             onVerticalDrag = { change, amount ->
                 change.consume()
@@ -408,4 +446,95 @@ fun VoiceListeningWindow(
             content = panelContent
         )
     }
+}
+
+private val CheckChipShape = RoundedCornerShape(50)
+
+/**
+ * The sentence REAL is not sure about. Unsure words are underlined; tapping one shows what it may be. "Doğru" (or a
+ * swipe up) saves, "Düzelt" opens the keyboard with the sentence.
+ */
+@Composable
+private fun UnderstandingCheckContent(
+    understanding: VoiceUnderstandingText,
+    onPick: (Int, String) -> Unit,
+    onConfirm: () -> Unit,
+    onCorrect: () -> Unit,
+    onLineCountChange: (Int) -> Unit,
+    onPlace: (() -> Unit)? = null
+) {
+    var selected by remember(understanding) { mutableStateOf<Int?>(null) }
+    val sentence = remember(understanding, selected) {
+        buildAnnotatedString {
+            var cursor = 0
+            understanding.spans.forEachIndexed { index, span ->
+                append(understanding.text.substring(cursor, span.start))
+                val style = SpanStyle(
+                    color = if (selected == index) VoiceText else VoiceBlue,
+                    textDecoration = TextDecoration.Underline,
+                    background = if (selected == index) VoiceBlueDeep.copy(alpha = 0.45f) else Color.Transparent
+                )
+                withLink(LinkAnnotation.Clickable("unsure_$index", TextLinkStyles(style)) {
+                    selected = if (selected == index) null else index
+                }) { append(understanding.text.substring(span.start, span.end)) }
+                cursor = span.end
+            }
+            append(understanding.text.substring(cursor))
+        }
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            sentence, color = VoiceText,
+            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, lineHeight = 22.sp),
+            onTextLayout = { onLineCountChange(it.lineCount) },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.size(8.dp))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val selectedIndex = selected
+            val span = selectedIndex?.let { understanding.spans.getOrNull(it) }
+            if (span != null && selectedIndex != null) {
+                // What the underlined word may be: the guess, what was heard, or type it.
+                span.options.forEach { option ->
+                    CheckChip(option, filled = option == understanding.text.substring(span.start, span.end)) {
+                        onPick(selectedIndex, option); selected = null
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
+                CheckChip("Kendim yazayım", filled = false, onClick = onCorrect)
+            } else {
+                CheckChip("Doğru", filled = true, onClick = onConfirm)
+                Spacer(Modifier.width(6.dp))
+                if (onPlace != null) {
+                    CheckChip("Yeri yaz", filled = false, onClick = onPlace)
+                    Spacer(Modifier.width(6.dp))
+                }
+                CheckChip("Düzelt", filled = false, onClick = onCorrect)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (understanding.spans.isEmpty()) "ya da yukarı kaydır" else "altı çizili kelimeye dokun · yukarı kaydır",
+                    color = VoiceBlueSoft.copy(alpha = 0.75f), fontSize = 12.sp, maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CheckChip(label: String, filled: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        color = if (filled) Color(0xFF0B1A33) else VoiceText,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(CheckChipShape)
+            .background(if (filled) VoiceBlueSoft else Color.White.copy(alpha = 0.12f))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp)
+    )
 }

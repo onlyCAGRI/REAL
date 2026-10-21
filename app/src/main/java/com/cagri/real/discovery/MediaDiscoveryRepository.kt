@@ -64,10 +64,14 @@ class MediaDiscoveryRepository(context: Context, uid: String) {
      * titles another round is asked for with those added to the exclude list, so the deck never ends up empty
      * just because the recommender repeated itself.
      */
-    suspend fun fetch(type: String, filters: Set<String>): Snapshot = withContext(Dispatchers.IO) {
+    /**
+     * [deckFilters]: the person's choice the deck belongs to. A widened request ([filters] with fewer keys, when the
+     * exact choice found too few titles) adds to that same deck.
+     */
+    suspend fun fetch(type: String, filters: Set<String>, deckFilters: Set<String> = filters): Snapshot = withContext(Dispatchers.IO) {
         require(type in setOf("BOTH", "MOVIE", "TV") && DiscoveryFilter.validSelection(filters))
         val prior = load()
-        val sameDeck = prior.type == type && prior.filters == filters
+        val sameDeck = prior.type == type && prior.filters == deckFilters
         val keep = if (sameDeck) prior.cards else emptyList()
         fun norm(t: String) = t.trim().lowercase(java.util.Locale.ROOT)
         // Watched titles are filtered here, in the app (the guarantee); only the latest few go into the request.
@@ -136,12 +140,15 @@ class MediaDiscoveryRepository(context: Context, uid: String) {
         }
         lock.withLock {
             val current = read()
-            val next = current.copy(type = type, filters = filters,
+            val next = current.copy(type = type, filters = deckFilters,
                 cards = (if (sameDeck) current.cards else emptyList()) + DiscoveryRanking.rank(fresh, filters))
             write(next); next
         }
     }
-    suspend fun act(card: DiscoveryCard, action: DiscoveryAction): Snapshot = withContext(Dispatchers.IO) { lock.withLock {
+    /** Settings "Önerileri sıfırla": passed titles can come back and the deck starts over; the saved list and "İzledim" stay. */
+    suspend fun resetSeen() = withContext(Dispatchers.IO) { lock.withLock { val s = read(); write(s.copy(cards = emptyList(), excluded = emptyList())) } }
+
+    suspend fun act(card: DiscoveryCard, action: DiscoveryAction): Snapshot = withContext(Dispatchers.IO) { com.cagri.real.updates.AppUpdateGate.requireWritable(); lock.withLock {
         val s = read()
         val queues = DiscoveryQueueTransitions.apply(DiscoveryQueues(s.cards, s.later, s.excluded), card, action)
         val watched = if (action == DiscoveryAction.WATCHED) s.watched.filterNot { it.key == card.key } + card else s.watched

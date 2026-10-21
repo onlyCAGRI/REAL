@@ -77,7 +77,24 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
     fun issues(scope: String): List<SyncBinaryIssue> = metadata(scope,"sync_issue:").map(::decodeIssue).filter {
         it.direction==SyncBinaryDirection.DOWNLOAD || row(scope,it.recordId)?.generation==it.generation
     }
-    fun health(scope: String) = SyncHealthSnapshot(scope,status(scope),issues(scope),conflicts(scope),meta(scope,"cloud_paused")=="1")
+    private fun rejectKey(id: String) = "sync_reject:$id"
+    /** Refused records whose local copy has not changed since (a new edit sends it again by itself). */
+    fun rejected(scope: String): List<SyncRejectedRecord> = metadata(scope,"sync_reject:").mapNotNull { v ->
+        val row=row(scope,v.getString("recordId")) ?: return@mapNotNull null
+        if(!row.dirty || row.generation!=v.getLong("generation")) return@mapNotNull null
+        SyncRejectedRecord(row.record.id,row.record.kind,row.record.key,v.optString("title"),v.getInt("status"),
+            v.stringOrNull("code"),row.generation,row.base!=null)
+    }
+    fun health(scope: String) = SyncHealthSnapshot(scope,status(scope),issues(scope),conflicts(scope),meta(scope,"cloud_paused")=="1",rejected(scope))
+    /** "Tekrar dene": the refused record goes up again on the next run. */
+    fun retryRejected(scope: String, id: String) = transaction { removeMeta(scope,rejectKey(id)) }
+    /** "Hesaptakini kullan": this device takes the account's copy back (none there: the record is removed here). */
+    fun useCloudForRejected(scope: String, id: String) = transaction {
+        val row=checkNotNull(row(scope,id)) { "Durum değişti; yeniden yükle." }
+        writableDatabase.execSQL("UPDATE records SET payload=?,generation=generation+1,dirty=0 WHERE scope=? AND id=?",arrayOf<Any?>(row.base,scope,id))
+        SyncProjection.applyRecord(this,scope,row.record.kind,row.record.key,row.base)
+        removeMeta(scope,rejectKey(id))
+    }
     fun retryIssue(scope: String, token: String) = transaction {
         val issue=issues(scope).firstOrNull { it.token==token } ?: error("Durum değişti; yeniden yükle.")
         if(issue.direction==SyncBinaryDirection.UPLOAD) {
@@ -223,7 +240,7 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
                     .put("choice", "FRESH_BACKUP_CURRENT_LOCAL").put("revision", conflict.revision).toString(), System.currentTimeMillis()))
         }
         for (table in listOf("records", "conflicts", "blobs")) writableDatabase.execSQL("DELETE FROM $table WHERE scope=?", arrayOf(scope))
-        writableDatabase.execSQL("DELETE FROM meta WHERE scope=? AND (key LIKE 'sync_issue:%' OR key LIKE 'sync_download:%')",arrayOf(scope))
+        writableDatabase.execSQL("DELETE FROM meta WHERE scope=? AND (key LIKE 'sync_issue:%' OR key LIKE 'sync_download:%' OR key LIKE 'sync_reject:%')",arrayOf(scope))
         // The failure markers are preserved: a broken URI must not suddenly enter a retry loop.
         meta(scope, "backup_epoch", epoch)
         meta(scope, "cursor", "0"); meta(scope, "restored", "0")
@@ -244,7 +261,8 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
             var localId=System.currentTimeMillis()
             while(rowByLogicalKey(scope,"CARD",localId.toString())!=null) localId++
             val key=localId.toString()
-            copy.put("id",localId).put("createdAt",localId).put("updatedAt",localId).put("notifiedAlertAt",JSONObject.NULL)
+            // notifiedAlertAt is device-local: the account refuses the key even as null (LOCAL_ONLY_FIELD).
+            copy.put("id",localId).put("createdAt",localId).put("updatedAt",localId).remove("notifiedAlertAt")
             var payload=copy.toString()
             for(id in blobIds(copy)) {
                 val old=checkNotNull(blob(scope,id)) { "Yerel ek bulunamadı; sürümler korundu." }
@@ -302,7 +320,18 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
             if(initialPullComplete)meta(scope,"restored","1")
         }
         override fun pending():List<PendingRecord> = synchronized(SyncLocal.lock) {
+            // Cards copied by "Yereli yeni kart olarak sakla" in the first version carried notifiedAlertAt (refused by the
+            // account): strip it once; the new generation sends them again by itself.
+            transaction {
+                rows(scope).filter { it.dirty && it.record.kind=="CARD" && it.record.payload?.contains("\"notifiedAlertAt\"")==true }.forEach { row ->
+                    val clean=JSONObject(row.record.payload!!).apply { remove("notifiedAlertAt") }
+                    writableDatabase.execSQL("UPDATE records SET payload=?,generation=generation+1 WHERE scope=? AND id=?",arrayOf<Any?>(canonical(clean),scope,row.record.id))
+                    removeMeta(scope,rejectKey(row.record.id))
+                }
+            }
             if(meta(scope,"restored")!="1") emptyList() else rows(scope).filter { it.dirty && !hasConflict(scope,it.record.id) && meta(scope,"sync_download:${it.record.id}")==null &&
+                    // Refused as it is now: wait for a new edit or the person's choice (not a failure every run).
+                    meta(scope,rejectKey(it.record.id))?.let { v -> JSONObject(v).getLong("generation")==it.generation } != true &&
                     meta(scope,issueKey(SyncBinaryDirection.UPLOAD,it.record.id))?.let { value ->
                         val issue=decodeIssue(JSONObject(value));issue.generation!=it.generation || issue.automaticRetry
                     } != false }
@@ -324,7 +353,18 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
         override fun blockUpload(pending:PendingRecord,failure:SyncBinaryFailure)=transaction {
             putIssue(scope,pending.record,pending.generation,SyncBinaryDirection.UPLOAD,failure)
         }
-        override fun clearUploadIssue(id:String)=transaction { removeMeta(scope,issueKey(SyncBinaryDirection.UPLOAD,id)) }
+        override fun clearUploadIssue(id:String)=transaction {
+            removeMeta(scope,issueKey(SyncBinaryDirection.UPLOAD,id)); removeMeta(scope,rejectKey(id))
+        }
+        override fun remoteDeleted(pending:PendingRecord)=transaction {
+            val row=row(scope,pending.record.id) ?: return@transaction
+            // The account no longer has this card: the person chooses (apply the deletion / keep it as a new card).
+            if(!hasConflict(scope,pending.record.id)) conflict(scope,pending.record.id,row.base,row.record.payload,null,row.record.revision)
+        }
+        override fun rejectUpload(pending:PendingRecord,failure:SyncRecordRejected)=transaction {
+            meta(scope,rejectKey(pending.record.id),JSONObject().put("recordId",pending.record.id).put("title",issueTitle(pending.record))
+                .put("status",failure.status).put("code",failure.code ?: JSONObject.NULL).put("generation",pending.generation).toString())
+        }
         override fun receive(record:SyncRecord,cursor:Long)=transaction {
             val deferred=meta(scope,"sync_download:${record.id}")?.let(::JSONObject)?.let(::decodeRecord)
             if(deferred!=null && deferred.revision>record.revision) return@transaction

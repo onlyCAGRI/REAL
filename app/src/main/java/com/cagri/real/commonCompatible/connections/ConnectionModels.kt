@@ -2,7 +2,9 @@ package com.cagri.real.connections
 
 import java.net.URI
 
-data class RealConnection(val uid: String, val name: String, val createdAt: Long, val updatedAt: Long, val acceptedAt: Long)
+/** [pictureVersion]: the person's shared profile picture (null = none; their initial is shown). */
+data class RealConnection(val uid: String, val name: String, val createdAt: Long, val updatedAt: Long, val acceptedAt: Long,
+    val pictureVersion: Long? = null)
 data class ConnectionInvitation(val id: String, val createdAt: Long, val expiresAt: Long)
 data class BlockedConnection(val uid: String, val name: String)
 data class ConnectionsSnapshot(

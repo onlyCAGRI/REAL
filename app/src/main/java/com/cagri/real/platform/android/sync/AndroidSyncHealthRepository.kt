@@ -9,4 +9,6 @@ class AndroidSyncHealthRepository(private val uid: String) {
     suspend fun refresh() = SyncLocal.readSyncHealth(uid)
     suspend fun retry(token: String) = SyncLocal.retrySyncIssue(uid, token)
     suspend fun choose(conflict: PersistedSyncConflict, choice: SyncConflictChoice) = SyncLocal.chooseSyncConflict(uid, conflict, choice)
+    suspend fun retryRejected(recordId: String) = SyncLocal.resolveRejectedRecord(uid, recordId, useCloud = false)
+    suspend fun useCloudForRejected(recordId: String) = SyncLocal.resolveRejectedRecord(uid, recordId, useCloud = true)
 }

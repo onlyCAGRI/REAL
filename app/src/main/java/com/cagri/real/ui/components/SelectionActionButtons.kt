@@ -33,7 +33,9 @@ fun SelectionActionButtons(
     backdropPosition: () -> Offset,
     reduceDynamicBlur: Boolean,
     designStyle: DesignStyle,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Kontrol ettir for the selected cards (null hides the middle button). */
+    onCheck: (() -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(29.dp)
     Row(
@@ -88,49 +90,34 @@ fun SelectionActionButtons(
             }
         }
 
-        if (designStyle == DesignStyle.LiquidGlass) {
-            LiquidGlassSurface(backdrop, backdropPosition, Modifier.weight(1f).fillMaxHeight(),
-                29.dp, reduceDynamicBlur, content = cancelContent)
-            LiquidGlassSurface(backdrop, backdropPosition, Modifier.weight(1f).fillMaxHeight(),
-                29.dp, reduceDynamicBlur, content = deleteContent)
-        } else if (designStyle == DesignStyle.Ice) {
-            IcePanel(
-                backdrop = backdrop,
-                backdropPosition = backdropPosition,
-                corners = 29.dp,
-                reduceDynamicBlur = reduceDynamicBlur,
-                blurRadius = 38.dp,
-                dense = false,
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                content = cancelContent
-            )
-            IcePanel(
-                backdrop = backdrop,
-                backdropPosition = backdropPosition,
-                corners = 29.dp,
-                reduceDynamicBlur = reduceDynamicBlur,
-                blurRadius = 38.dp,
-                dense = false,
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                content = deleteContent
-            )
-        } else {
-            GlassPanel(
-                backdrop = backdrop,
-                backdropPosition = backdropPosition,
-                corners = 29.dp,
-                reduceDynamicBlur = reduceDynamicBlur,
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                content = cancelContent
-            )
-            GlassPanel(
-                backdrop = backdrop,
-                backdropPosition = backdropPosition,
-                corners = 29.dp,
-                reduceDynamicBlur = reduceDynamicBlur,
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                content = deleteContent
-            )
+        val checkContent: @Composable BoxScope.() -> Unit = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(CheckRequests.OtherColor.copy(alpha = 0.12f), shape)
+                    .border(0.75.dp, CheckRequests.OtherColor.copy(alpha = 0.32f), shape)
+                    .clickable(role = Role.Button, enabled = enabled && selectedCount > 0, onClickLabel = "Kontrol ettir",
+                        onClick = { onCheck?.invoke() }),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Kontrol", color = if (selectedCount > 0) CheckRequests.OtherColor else Color(0xFF8E8E93),
+                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            }
+        }
+        val parts = listOfNotNull(cancelContent, if (onCheck != null) checkContent else null, deleteContent)
+        parts.forEach { content ->
+            when (designStyle) {
+                DesignStyle.LiquidGlass -> LiquidGlassSurface(backdrop, backdropPosition, Modifier.weight(1f).fillMaxHeight(),
+                    29.dp, reduceDynamicBlur, content = content)
+                DesignStyle.Ice -> IcePanel(
+                    backdrop = backdrop, backdropPosition = backdropPosition, corners = 29.dp, reduceDynamicBlur = reduceDynamicBlur,
+                    blurRadius = 38.dp, dense = false, modifier = Modifier.weight(1f).fillMaxHeight(), content = content
+                )
+                else -> GlassPanel(
+                    backdrop = backdrop, backdropPosition = backdropPosition, corners = 29.dp, reduceDynamicBlur = reduceDynamicBlur,
+                    modifier = Modifier.weight(1f).fillMaxHeight(), content = content
+                )
+            }
         }
     }
 }

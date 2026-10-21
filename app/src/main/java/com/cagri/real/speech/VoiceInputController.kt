@@ -14,9 +14,32 @@ import android.speech.SpeechRecognizer
 import java.util.Locale
 
 
+/**
+ * Words the recognizer should expect (category names, card titles, people): proper names and foreign titles are the
+ * words it mishears most. Set by the screen that owns the mic; read when a recognition round starts.
+ */
+object VoiceRecognitionHints {
+    @Volatile var phrases: List<String> = emptyList()
+        set(value) {
+            field = value.asSequence().map { it.trim() }.filter { it.length in 2..60 }
+                .distinctBy { it.lowercase(Locale.ROOT) }.take(MAX).toList()
+        }
+    private const val MAX = 100
+}
+
 internal object VoiceRecognitionAlternatives {
     private var primary: String = ""
     private var alternatives: List<String> = emptyList()
+    private var lowConfidence: List<String> = emptyList()
+
+    /** Words the recognizer itself marked as low confidence (Android 14+), for the "Doğru mu anladım?" underline. */
+    @Synchronized
+    fun publishLowConfidence(words: Collection<String>) {
+        lowConfidence = words.map { it.trim() }.filter { it.isNotBlank() }.distinctBy { it.lowercase(Locale.ROOT) }.take(12)
+    }
+
+    @Synchronized
+    fun consumeLowConfidence(): List<String> = lowConfidence.also { lowConfidence = emptyList() }
 
     @Synchronized
     fun publish(primaryTranscript: String, candidates: Collection<String>) {
@@ -42,6 +65,7 @@ internal object VoiceRecognitionAlternatives {
     fun clear() {
         primary = ""
         alternatives = emptyList()
+        lowConfidence = emptyList()
     }
 }
 
@@ -66,6 +90,7 @@ class VoiceInputController(
     private var languageSwitchEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
     private var hypotheses = VoiceHypotheses("")
     private var directSave = false
+    private val lowConfidenceWords = mutableListOf<String>()
 
     private fun notifyDraft() {
         val d = draft
@@ -88,6 +113,7 @@ class VoiceInputController(
         busyRetries = 0
         hypotheses = VoiceHypotheses(initialText)
         directSave = false
+        lowConfidenceWords.clear()
         VoiceRecognitionAlternatives.clear()
         languageSwitchEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
         phase = VoicePhase.Listening
@@ -120,7 +146,7 @@ class VoiceInputController(
         runCatching { recognizer?.stopListening() }.onFailure { fail("Ses tanıma bitirilemedi. Metin korundu.") }
     }
 
-    
+
     fun cancel() {
         if (phase != VoicePhase.Idle) draft?.text?.let(onText)
         reset()
@@ -165,6 +191,7 @@ class VoiceInputController(
                         return
                     }
                     hypotheses.append(candidates)
+                    lowConfidenceWords += lowConfidenceParts(results)
                     draft?.commitResult(primary)
                     notifyDraft()
                     releaseRecognizer()
@@ -216,8 +243,18 @@ class VoiceInputController(
                         RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH,
                         RecognizerIntent.LANGUAGE_SWITCH_QUICK_RESPONSE
                     )
+                    // Turkish and English both stay possible (a foreign title inside a Turkish sentence).
+                    val languages = arrayListOf(Locale.getDefault().toLanguageTag(), "tr-TR", "en-US").distinct()
+                    putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES, ArrayList(languages))
+                    putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES, ArrayList(languages))
+                    putExtra(RecognizerIntent.EXTRA_REQUEST_WORD_CONFIDENCE, true)
                 } else {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    VoiceRecognitionHints.phrases.takeIf { it.isNotEmpty() }?.let {
+                        putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, ArrayList(it))
+                    }
                 }
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
@@ -248,6 +285,20 @@ class VoiceInputController(
 
     private fun bestText(bundle: Bundle?): String? = recognitionTexts(bundle).firstOrNull()
 
+    /** Android 14+: the words of the best result the speech service was not sure about (empty when it does not say). */
+    private fun lowConfidenceParts(bundle: Bundle?): List<String> {
+        if (bundle == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return emptyList()
+        return runCatching {
+            bundle.getParcelableArrayList(SpeechRecognizer.RECOGNITION_PARTS, android.speech.RecognitionPart::class.java)
+                .orEmpty()
+                .filter {
+                    it.confidenceLevel == android.speech.RecognitionPart.CONFIDENCE_LEVEL_LOW ||
+                        it.confidenceLevel == android.speech.RecognitionPart.CONFIDENCE_LEVEL_MEDIUM_LOW
+                }
+                .mapNotNull { (it.formattedText ?: it.rawText).trim().takeIf { word -> word.isNotBlank() } }
+        }.getOrDefault(emptyList())
+    }
+
     private fun submitOnce() {
         if (phase != VoicePhase.Finishing) return
         val currentDraft = draft
@@ -258,6 +309,7 @@ class VoiceInputController(
         val text = currentDraft?.committed.orEmpty()
         val saveDirectly = directSave
         val alternatives = hypotheses.alternatives
+        val lowWords = lowConfidenceWords.toList()
         val hasSpoken = currentDraft?.hasSpokenText == true
         reset() 
         if (hasSpoken && text.isNotBlank()) {
@@ -266,6 +318,7 @@ class VoiceInputController(
                 onDirectSubmit(text)
             } else {
                 VoiceRecognitionAlternatives.publish(text, alternatives)
+                VoiceRecognitionAlternatives.publishLowConfidence(lowWords)
                 onSubmit(text)
             }
         } else {

@@ -782,38 +782,6 @@ private fun WelcomeWordmark(
     }
 }
 
-/** Yavaş hareket eden iki soluk ışık; siyah zemine derinlik verir. */
-@Composable
-private fun WelcomeAmbient(intensity: Float, animate: Boolean, modifier: Modifier = Modifier) {
-    val t = if (animate) {
-        rememberInfiniteTransition(label = "welcomeAmbient").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(14000, easing = LinearEasing), RepeatMode.Reverse),
-            label = "welcomeAmbientT"
-        ).value
-    } else 0.5f
-    Canvas(modifier) {
-        val a = intensity.coerceIn(0f, 1f)
-        val w = size.width
-        val h = size.height
-        drawRect(
-            Brush.radialGradient(
-                listOf(Color(0xFF9FB4FF).copy(alpha = 0.16f * a), Color.Transparent),
-                center = Offset(w * (0.25f + 0.35f * t), h * (0.22f + 0.06f * t)),
-                radius = w * 0.85f
-            )
-        )
-        drawRect(
-            Brush.radialGradient(
-                listOf(Color(0xFFC9A6FF).copy(alpha = 0.12f * a), Color.Transparent),
-                center = Offset(w * (0.8f - 0.35f * t), h * (0.78f - 0.06f * t)),
-                radius = w * 0.9f
-            )
-        )
-    }
-}
-
 @Composable
 private fun WelcomeLinkDot() {
     Text("·", color = Color.White.copy(alpha = .3f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 7.dp))

@@ -105,12 +105,34 @@ object GeminiVoiceIntentClient {
             }
 
             Result.success(
-                GeminiVoiceParseResult(intents = intents, newCategory = categoryRequest, edit = editPatch, action = action)
+                GeminiVoiceParseResult(intents = intents, newCategory = categoryRequest, edit = editPatch, action = action,
+                    heard = root.optJSONObject("heard")?.let { parseHeardObject(it, transcript) })
             )
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (error: Exception) {
             Result.failure(error)
         }
+    }
+
+    /** Unsure words are kept only when they really occur in the transcript, so they can be underlined. */
+    internal fun parseHeardObject(obj: JSONObject, transcript: String): VoiceHeard {
+        val lower = transcript.lowercase(Locale.forLanguageTag("tr"))
+        val unsure = buildList<VoiceUnsureWord> {
+            val array = obj.optJSONArray("unsure")
+            for (index in 0 until (array?.length() ?: 0)) {
+                val entry = array?.optJSONObject(index) ?: continue
+                val heard = entry.optString("heard", "").trim().take(80)
+                if (heard.isBlank() || !lower.contains(heard.lowercase(Locale.forLanguageTag("tr")))) continue
+                if (any { it.heard.equals(heard, ignoreCase = true) }) continue
+                add(VoiceUnsureWord(heard, entry.optString("meant", "").trim().take(80).takeIf { it.isNotBlank() && !it.equals(heard, true) }))
+                if (size >= 6) break
+            }
+        }
+        return VoiceHeard(
+            understood = obj.optString("understood", "").trim().take(2000),
+            unsure = unsure,
+            confident = unsure.isEmpty() && obj.optBoolean("confident", true)
+        )
     }
 
     /** MON..SUN -> bit0..bit6 (same layout as DayOfWeek.value - 1). */

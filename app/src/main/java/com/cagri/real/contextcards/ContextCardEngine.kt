@@ -5,7 +5,8 @@ import java.time.DayOfWeek
 import java.time.ZonedDateTime
 
 enum class ContextCardType(val key: String) {
-    WATER("water"), MOOD("mood"), BOOK("book"), MEDIA("media");
+    WATER("water"), MOOD("mood"), BOOK("book"), MEDIA("media"),
+    WATCH("watch"), LISTEN("listen"), PLAY("play"), JOURNAL("journal");
 
     companion object {
         fun fromKey(key: String?): ContextCardType? = entries.firstOrNull { it.key == key }
@@ -21,7 +22,14 @@ data class ContextCardSignals(
     val moodLoggedToday: Boolean = false,
     val lastMoodToday: JournalMood? = null,
     val unfinishedBookTitle: String? = null,
-    val unfinishedBookAuthor: String? = null
+    val unfinishedBookAuthor: String? = null,
+    /** When the app was first installed (epoch millis); null = unknown, no warm-up quiet. */
+    val installedAt: Long? = null,
+    /** The series rated most recently in "Puanlarım" and its last rated episode (season, number). */
+    val seriesInProgress: String? = null,
+    val lastEpisode: Pair<Int, Int>? = null,
+    /** null = journal data unknown -> the journal card is never shown. */
+    val journalWrittenToday: Boolean? = null
 )
 
 data class ContextCard(
@@ -44,25 +52,32 @@ data class ContextCardHistory(
     val epochDay: Long = Long.MIN_VALUE,
     val shownToday: Map<String, Int> = emptyMap(),
     val lastActivationAt: Long = 0L,
-    val activeType: String? = null,
-    val activeSince: Long = 0L,
+    /** Cards currently in the Home row: type key -> since when (epoch millis). */
+    val active: Map<String, Long> = emptyMap(),
     val lastType: String? = null,
     val snoozeUntil: Map<String, Long> = emptyMap(),
     val dismissStreak: Map<String, Int> = emptyMap(),
-    /** Test hook (Settings): show this card type right now, ignoring time/limit rules, until it is acted on. */
-    val forcedType: String? = null
+    /**
+     * Test hook (Settings): show this card type right now, ignoring time/limit rules, until it is acted on.
+     * [ContextCardEngine.FORCE_ALL] shows every type; [forcedDone] holds the ones already acted on.
+     */
+    val forcedType: String? = null,
+    val forcedDone: Set<String> = emptySet()
 ) {
     fun rolled(day: Long): ContextCardHistory =
         if (epochDay == day) this else copy(epochDay = day, shownToday = emptyMap())
 
-    fun activated(type: ContextCardType, nowMs: Long, day: Long): ContextCardHistory {
+    fun activated(type: ContextCardType, nowMs: Long, day: Long): ContextCardHistory = activated(listOf(type), nowMs, day)
+
+    /** A new batch of cards joins the Home row together; entries older than the active window are dropped. */
+    fun activated(types: List<ContextCardType>, nowMs: Long, day: Long): ContextCardHistory {
+        if (types.isEmpty()) return this
         val base = rolled(day)
         return base.copy(
-            shownToday = base.shownToday + (type.key to ((base.shownToday[type.key] ?: 0) + 1)),
+            shownToday = base.shownToday + types.map { it.key to ((base.shownToday[it.key] ?: 0) + 1) },
             lastActivationAt = nowMs,
-            activeType = type.key,
-            activeSince = nowMs,
-            lastType = type.key
+            active = base.active.filterValues { nowMs - it in 0 until ContextCardEngine.ACTIVE_WINDOW_MS } + types.map { it.key to nowMs },
+            lastType = types.first().key
         )
     }
 
@@ -70,38 +85,52 @@ data class ContextCardHistory(
     fun dismissed(type: ContextCardType, nowMs: Long): ContextCardHistory {
         val streak = (dismissStreak[type.key] ?: 0) + 1
         val limitHit = streak >= ContextCardEngine.STREAK_LIMIT
-        return copy(
-            activeType = if (activeType == type.key) null else activeType,
-            forcedType = if (forcedType == type.key) null else forcedType,
+        return actedOn(type).copy(
             dismissStreak = dismissStreak + (type.key to if (limitHit) 0 else streak),
             snoozeUntil = snoozeUntil + (type.key to nowMs + if (limitHit) ContextCardEngine.STREAK_SNOOZE_MS else ContextCardEngine.DISMISS_SNOOZE_MS)
         )
     }
 
     /** User acted on the card (opened the module / added water). */
-    fun completed(type: ContextCardType, nowMs: Long): ContextCardHistory = copy(
-        activeType = if (activeType == type.key) null else activeType,
-        forcedType = if (forcedType == type.key) null else forcedType,
+    fun completed(type: ContextCardType, nowMs: Long): ContextCardHistory = actedOn(type).copy(
         dismissStreak = dismissStreak + (type.key to 0),
         snoozeUntil = snoozeUntil + (type.key to nowMs + ContextCardEngine.COMPLETE_SNOOZE_MS)
     )
+
+    private fun actedOn(type: ContextCardType): ContextCardHistory = when (forcedType) {
+        type.key -> copy(active = active - type.key, forcedType = null, forcedDone = emptySet())
+        ContextCardEngine.FORCE_ALL -> {
+            val done = forcedDone + type.key
+            if (ContextCardType.entries.all { it.key in done }) copy(active = active - type.key, forcedType = null, forcedDone = emptySet())
+            else copy(active = active - type.key, forcedDone = done)
+        }
+        else -> copy(active = active - type.key)
+    }
 }
 
 object ContextCardEngine {
     private const val HOUR_MS = 3_600_000L
     const val ACTIVE_WINDOW_MS = 2 * HOUR_MS
+    /** A new card comes at most once per this gap. */
     const val MIN_GAP_MS = 3 * HOUR_MS
+    /** At most two cards a day, each on its own (never a batch). */
     const val MAX_PER_DAY = 2
+    const val MAX_VISIBLE = 1
     const val DISMISS_SNOOZE_MS = 4 * HOUR_MS
     const val COMPLETE_SNOOZE_MS = 12 * HOUR_MS
     const val STREAK_LIMIT = 3
     const val STREAK_SNOOZE_MS = 3 * 24 * HOUR_MS
+    /** A fresh install stays quiet for its first day: no "you haven't had water" on the very first open. */
+    const val INSTALL_QUIET_MS = 24 * HOUR_MS
+    const val FORCE_ALL = "all"
     private const val SAME_TYPE_PENALTY = 25
 
-    /** [card] is what to render; [activate] is set only when a brand-new card starts (caller must persist it). */
-    data class Decision(val card: ContextCard?, val activate: ContextCardType?)
+    /** [cards] is the row to render (best first); [activate] lists the cards that just started (caller must persist them). */
+    data class Decision(val cards: List<ContextCard>, val activate: List<ContextCardType>) {
+        val card: ContextCard? get() = cards.firstOrNull()
+    }
 
-    private val NONE = Decision(null, null)
+    private val NONE = Decision(emptyList(), emptyList())
     private val LOW_MOODS = setOf(
         JournalMood.TIRED, JournalMood.BORED, JournalMood.SAD, JournalMood.LOW,
         JournalMood.STRESSED, JournalMood.HARD, JournalMood.BAD
@@ -109,32 +138,39 @@ object ContextCardEngine {
 
     fun decide(signals: ContextCardSignals, history: ContextCardHistory): Decision {
         if (!history.enabled) return NONE
-        ContextCardType.fromKey(history.forcedType)?.let { return Decision(build(it, signals), null) }
+        if (history.forcedType == FORCE_ALL) {
+            return Decision(ContextCardType.entries.filter { it.key !in history.forcedDone }.map { build(it, signals) }, emptyList())
+        }
+        ContextCardType.fromKey(history.forcedType)?.let { return Decision(listOf(build(it, signals)), emptyList()) }
         val nowMs = signals.now.toInstant().toEpochMilli()
+        signals.installedAt?.let { if (nowMs - it in 0 until INSTALL_QUIET_MS) return NONE }
         val h = history.rolled(signals.now.toLocalDate().toEpochDay())
 
-        // 1) A card that is already on screen stays (sticky) until it is acted on, dismissed or expires.
-        val active = ContextCardType.fromKey(h.activeType)
-        if (active != null && (nowMs - h.activeSince) in 0 until ACTIVE_WINDOW_MS && isEligible(active, signals)) {
-            return Decision(build(active, signals), null)
-        }
+        // 1) Cards already in the row stay (sticky) until they are acted on, dismissed or expire.
+        val sticky = h.active
+            .filter { (_, since) -> nowMs - since in 0 until ACTIVE_WINDOW_MS }
+            .keys.mapNotNull { ContextCardType.fromKey(it) }
+            .filter { isEligible(it, signals) }
 
-        // 2) Otherwise decide whether a new card is allowed at all.
-        if (h.shownToday.values.sum() >= MAX_PER_DAY) return NONE
-        if ((nowMs - h.lastActivationAt) in 0 until MIN_GAP_MS) return NONE
-
-        val best = ContextCardType.entries
+        // 2) A new card only when the slot is free, within the daily budget and after the gap.
+        val room = minOf(MAX_VISIBLE - sticky.size, MAX_PER_DAY - h.shownToday.values.sum())
+        val fresh = if (room <= 0 || (nowMs - h.lastActivationAt) in 0 until MIN_GAP_MS) emptyList()
+        else ContextCardType.entries
+            .filter { it !in sticky }
             .filter { (h.shownToday[it.key] ?: 0) == 0 }
             .filter { (h.snoozeUntil[it.key] ?: 0L) <= nowMs }
             .filter { isEligible(it, signals) }
-            .maxByOrNull { score(it, signals) - if (it.key == h.lastType) SAME_TYPE_PENALTY else 0 }
-            ?: return NONE
-        return Decision(build(best, signals), best)
+            .sortedByDescending { score(it, signals) - if (it.key == h.lastType) SAME_TYPE_PENALTY else 0 }
+            .take(room)
+        val row = (sticky + fresh).sortedByDescending { score(it, signals) }
+        return Decision(row.map { build(it, signals) }, fresh)
     }
 
     private fun isLowMood(s: ContextCardSignals) = s.lastMoodToday?.let { it in LOW_MOODS } == true
 
     private fun minutes(s: ContextCardSignals) = s.now.hour * 60 + s.now.minute
+
+    private fun isWeekend(s: ContextCardSignals) = s.now.dayOfWeek in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)
 
     fun isEligible(type: ContextCardType, s: ContextCardSignals): Boolean {
         val m = minutes(s)
@@ -148,6 +184,11 @@ object ContextCardEngine {
             ContextCardType.MOOD -> !s.moodLoggedToday && m in (12 * 60) until (23 * 60)
             ContextCardType.BOOK -> s.unfinishedBookTitle != null && m in (20 * 60)..(23 * 60 + 30)
             ContextCardType.MEDIA -> m in (17 * 60)..(23 * 60 + 30) && (isWeekendEvening(s) || isLowMood(s))
+            ContextCardType.WATCH -> s.seriesInProgress != null && s.lastEpisode != null && m in (19 * 60)..(23 * 60 + 30)
+            // Commute hours: on the way in, on the way back.
+            ContextCardType.LISTEN -> m in (8 * 60) until (10 * 60) || m in (17 * 60) until (19 * 60 + 30)
+            ContextCardType.PLAY -> if (isWeekend(s)) m in (14 * 60) until (22 * 60) else m in (20 * 60 + 30) until (23 * 60)
+            ContextCardType.JOURNAL -> s.journalWrittenToday == false && m >= 21 * 60
         }
     }
 
@@ -162,6 +203,10 @@ object ContextCardEngine {
         ContextCardType.MOOD -> 55 + if (minutes(s) >= 18 * 60) 15 else 0
         ContextCardType.BOOK -> 50 + if (isLowMood(s)) 10 else 0
         ContextCardType.MEDIA -> 45 + if (isLowMood(s)) 20 else 0
+        ContextCardType.WATCH -> 58
+        ContextCardType.JOURNAL -> 52
+        ContextCardType.LISTEN -> 40
+        ContextCardType.PLAY -> 38 + if (isLowMood(s)) 10 else 0
     }
 
     fun build(type: ContextCardType, s: ContextCardSignals): ContextCard = when (type) {
@@ -196,6 +241,33 @@ object ContextCardEngine {
             message = if (isLowMood(s)) "Yorucu bir gün gibi. Hafif bir şey bulalım."
             else "Türünü seç, afişleri keşfet.",
             primaryLabel = "Keşfet"
+        )
+        ContextCardType.WATCH -> ContextCard(
+            type = type, eyebrow = "Akşam",
+            title = "Sıradaki bölüm",
+            message = s.seriesInProgress?.let { series ->
+                s.lastEpisode?.let { (season, number) -> "$series · $season. sezon ${number + 1}. bölüm seni bekliyor." }
+                    ?: "$series seni bekliyor."
+            } ?: "Yarım kalan dizin seni bekliyor.",
+            primaryLabel = "Puanlarım"
+        )
+        ContextCardType.LISTEN -> ContextCard(
+            type = type, eyebrow = if (minutes(s) < 12 * 60) "Sabah" else "Yolda",
+            title = "Ne dinlesek?",
+            message = "Türünü seç, kartları kaydır.",
+            primaryLabel = "Keşfet"
+        )
+        ContextCardType.PLAY -> ContextCard(
+            type = type, eyebrow = if (isWeekend(s)) "Hafta sonu" else "Akşam",
+            title = "Ne oynasak?",
+            message = if (isLowMood(s)) "Kafa dağıtacak hafif bir oyun bulalım." else "Bir tür seç, sana uyanları bulalım.",
+            primaryLabel = "Keşfet"
+        )
+        ContextCardType.JOURNAL -> ContextCard(
+            type = type, eyebrow = "Gece",
+            title = "Bugünü iki satırla yaz",
+            message = "Kısa bir not, yarına güzel bir iz bırakır.",
+            primaryLabel = "Yaz"
         )
     }
 }

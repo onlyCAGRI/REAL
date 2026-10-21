@@ -10,38 +10,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.cagri.real.platform.android.sync.SyncLocal
 import kotlinx.coroutines.awaitCancellation
 
-private const val DailyViewKey = "planner_daily_view"
 private const val ViewModeKey = "planner_view_mode"
-
-/** Uses REAL's existing appearance preference file; this choice is device-local like animation settings. */
-@Composable
-internal fun rememberPlannerDailyViewPreference(): Pair<PlannerDailyView, (PlannerDailyView) -> Unit> {
-    val context = LocalContext.current.applicationContext
-    val preferences = remember(context) { SyncLocal.preferences(context, "real_ui", Context.MODE_PRIVATE) }
-    val lifecycle = LocalLifecycleOwner.current
-    var value by remember(preferences) {
-        mutableStateOf(PlannerDailyView.fromPreference(preferences.getString(DailyViewKey, null)))
-    }
-    DisposableEffect(preferences) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == DailyViewKey) {
-                value = PlannerDailyView.fromPreference(preferences.getString(DailyViewKey, null))
-            }
-        }
-        preferences.registerOnSharedPreferenceChangeListener(listener)
-        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
-    }
-    LaunchedEffect(preferences, lifecycle) {
-        lifecycle.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            value = PlannerDailyView.fromPreference(preferences.getString(DailyViewKey, null))
-            awaitCancellation()
-        }
-    }
-    return value to { choice: PlannerDailyView ->
-        preferences.edit().putString(DailyViewKey, choice.preference).apply()
-        value = choice
-    }
-}
 
 /** Persists the last active Planner view mode (24 Hour, Daily, Monthly) in the existing device-local UI preferences. */
 @Composable

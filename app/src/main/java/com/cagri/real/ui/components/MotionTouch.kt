@@ -2,6 +2,10 @@ package com.cagri.real.ui.components
 
 import android.os.Build
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.provider.Settings
 import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -47,7 +51,7 @@ object RealHaptics {
     private var lastTickLogTime: Long? = null
 
     fun tick(view: View) {
-        perform(view, "PICKER_TICK", HapticFeedbackConstants.CLOCK_TICK, isFrequent = true)
+        perform(view, "PICKER_TICK", HapticFeedbackConstants.CLOCK_TICK, isFrequent = true, fallbackMillis = 30)
     }
 
     fun toggle(view: View, on: Boolean) {
@@ -56,7 +60,7 @@ object RealHaptics {
         } else {
             HapticFeedbackConstants.CONTEXT_CLICK
         }
-        perform(view, if (on) "TOGGLE_ON" else "TOGGLE_OFF", constant)
+        perform(view, if (on) "TOGGLE_ON" else "TOGGLE_OFF", constant, fallbackMillis = 38)
     }
 
     fun success(view: View) {
@@ -65,14 +69,38 @@ object RealHaptics {
         } else {
             HapticFeedbackConstants.CONTEXT_CLICK
         }
-        perform(view, "CONFIRM", constant)
+        perform(view, "CONFIRM", constant, fallbackMillis = 50)
     }
+
+    /**
+     * Phones whose motor has none of Android's light effects (tick / click; e.g. Galaxy A53: no supported effects or
+     * primitives) silently skip CLOCK_TICK, CONFIRM and TOGGLE — only LONG_PRESS, which has a built-in pattern, is felt.
+     * There REAL plays a short plain pulse of its own instead, still only when the phone's touch feedback is on.
+     */
+    private var plainMotor: Boolean? = null
+
+    private fun vibrator(view: View): Vibrator? = if (Build.VERSION.SDK_INT >= 31)
+        view.context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+    else @Suppress("DEPRECATION") view.context.getSystemService(Vibrator::class.java)
+
+    private fun needsPlainPulse(view: View): Boolean = plainMotor ?: run {
+        val v = vibrator(view)
+        val plain = v != null && v.hasVibrator() && (Build.VERSION.SDK_INT < 30 ||
+            v.areAllEffectsSupported(VibrationEffect.EFFECT_TICK, VibrationEffect.EFFECT_CLICK) != Vibrator.VIBRATION_EFFECT_SUPPORT_YES)
+        plainMotor = plain
+        plain
+    }
+
+    private fun touchFeedbackOn(view: View): Boolean = view.isHapticFeedbackEnabled &&
+        runCatching { @Suppress("DEPRECATION") Settings.System.getInt(view.context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0 }
+            .getOrDefault(true)
 
     private fun perform(
         view: View,
         actionName: String,
         constant: Int,
-        isFrequent: Boolean = false
+        isFrequent: Boolean = false,
+        fallbackMillis: Long = 24
     ) {
         // Ignore stale views during navigation. All UI callers run on the main thread.
         if (!view.isAttachedToWindow || !view.isShown || !view.hasWindowFocus()) return
@@ -85,7 +113,11 @@ object RealHaptics {
 
         // Let Android enforce the current view/system/user haptic settings. Do not gate
         // on the deprecated Settings key or bypass settings with IGNORE flags.
-        val performed = view.performHapticFeedback(constant)
+        val performed = if (needsPlainPulse(view)) {
+            touchFeedbackOn(view) && runCatching {
+                vibrator(view)?.vibrate(VibrationEffect.createOneShot(fallbackMillis, VibrationEffect.DEFAULT_AMPLITUDE))
+            }.isSuccess
+        } else view.performHapticFeedback(constant)
         val previousLog = lastTickLogTime
         if (BuildConfig.DEBUG && (!isFrequent || previousLog == null || now - previousLog >= 400L)) {
             if (isFrequent) lastTickLogTime = now

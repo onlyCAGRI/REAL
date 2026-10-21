@@ -19,7 +19,9 @@ internal class AndroidSyncBinaries(private val context:Context,private val db:Sy
         }
         try { cloud.create(record.id,CloudKind.CARD,resourceTitle) }
         catch(e:CloudHttpFailure) { if(e.status!=409)throw e }
-        check(cloud.get(record.id).deletedAt==null || record.payload==null) { "Cloud card is deleted" }
+        // The account restores a deleted resource of a card it still has (or never received); still deleted here
+        // means the card was deleted in the account: a conflict for this card only.
+        if(cloud.get(record.id).deletedAt!=null && record.payload!=null) throw SyncRemoteDeleted()
         for(id in record.payload?.let(::JSONObject)?.let(::blobIds).orEmpty()) {
             withBinaryFailure(id) {
             val b=synchronized(SyncLocal.lock) { db.blob(scope,id) }

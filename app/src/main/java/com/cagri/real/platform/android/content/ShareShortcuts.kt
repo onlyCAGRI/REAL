@@ -1,5 +1,6 @@
 package com.cagri.real.platform.android.content
 
+import com.cagri.real.data.withoutDividers
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -54,7 +55,8 @@ object ShareShortcuts {
     }
 
     /** Called when REAL opens and when the setting changes; does nothing when the result did not change. */
-    fun publish(context: Context, categories: List<CustomCategory>, reminders: List<ReminderItem>) = runCatching {
+    fun publish(context: Context, categories: List<CustomCategory>, allReminders: List<ReminderItem>) = runCatching {
+        val reminders = allReminders.withoutDividers()
         val app = context.applicationContext
         val ours = ShortcutManagerCompat.getDynamicShortcuts(app).map { it.id }.filter { it.startsWith(PREFIX) }
         val wanted = if (isEnabled(app)) chosen(app, categories, reminders)

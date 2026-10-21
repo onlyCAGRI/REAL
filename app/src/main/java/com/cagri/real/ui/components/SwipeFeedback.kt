@@ -49,8 +49,9 @@ internal val SwipeRemove = Color(0xFFFF4D6D)
  */
 @Composable
 internal fun BoxWithConstraintsScope.SwipeEdgeGlow(offset: () -> Offset, threshold: Float, listMode: Boolean, upColor: Color? = null) {
-    val right = if (listMode) SwipeNext else SwipeSave
-    val left = if (listMode) SwipeRemove else SwipePass
+    // In a saved list: right removes, left sends the poster to the back.
+    val right = if (listMode) SwipeRemove else SwipeSave
+    val left = if (listMode) SwipeNext else SwipePass
     val view = androidx.compose.ui.platform.LocalView.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     // Drawn in screen coordinates from inside the deck, so it covers the full screen, edge to edge.

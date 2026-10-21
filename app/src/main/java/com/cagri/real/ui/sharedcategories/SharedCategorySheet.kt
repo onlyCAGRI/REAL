@@ -114,7 +114,7 @@ internal fun SharedCategorySheet(
                         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White.copy(alpha = 0.05f))) {
                             list.forEach { m ->
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    ConnectionAvatar(m.name, key = m.uid, size = 38.dp)
+                                    ConnectionAvatar(m.name, key = m.uid, size = 38.dp, pictureVersion = m.pictureVersion)
                                     Text(m.name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f).padding(start = 12.dp))
                                     when {

@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -127,7 +128,9 @@ data class PlannerGoalUi(
     val caption: String = "",
     val done: Boolean = false,
     /** Optional 0..1 partial progress for the goal that is in progress (fills the rail under it). */
-    val progress: Float? = null
+    val progress: Float? = null,
+    /** Tamamlama notu left when it was completed. */
+    val note: String? = null
 )
 
 data class PlannerWeekActivityUi(
@@ -154,6 +157,8 @@ data class PlannerCategoryDetailUi(
     val weekHistory: List<PlannerWeekActivityUi> = emptyList(),
     /** Canonical REAL member display names; initials are drawn. */
     val members: List<String> = emptyList(),
+    /** Same people with their uid and shared picture (Manage avatars); falls back to [members] names when empty. */
+    val people: List<com.cagri.real.sharedcategories.SharedCategoryMember> = emptyList(),
     /** Text shown on the link page of the swipe card. */
     val linkText: String = "link yazılacak"
 )
@@ -313,6 +318,7 @@ internal fun plannerCategoryDetailUi(
     /** User-chosen goal order (ids). Goals not listed (new ones) follow, oldest first. */
     order: List<Long> = emptyList(),
     memberNames: List<String> = emptyList(),
+    people: List<com.cagri.real.sharedcategories.SharedCategoryMember> = emptyList(),
     context: Context? = null
 ): PlannerCategoryDetailUi {
     val position = order.withIndex().associate { it.value to it.index }
@@ -337,7 +343,8 @@ internal fun plannerCategoryDetailUi(
             title = r.text.trim().ifBlank { "Untitled" },
             caption = caption,
             done = r.isCompleted,
-            progress = if (!r.isCompleted && items.isNotEmpty() && checked > 0) checked / items.size.toFloat() else null
+            progress = if (!r.isCompleted && items.isNotEmpty() && checked > 0) checked / items.size.toFloat() else null,
+            note = r.completionNote
         )
     }
     val weekHistory = PlannerWeekHistoryStore.loadOrCreateWeekHistory(context, category, members, today, zone)
@@ -354,7 +361,8 @@ internal fun plannerCategoryDetailUi(
         weekActivity = currentWeekActivity,
         todayIndex = today.dayOfWeek.value - 1,
         weekHistory = weekHistory,
-        members = memberNames
+        members = memberNames,
+        people = people
     )
 }
 
@@ -468,6 +476,8 @@ fun PlannerCategoryDetailScreen(
     onSend: () -> Unit = {},
     /** Called once when a drag-reorder of the goals ends, with the new full id order. */
     onReorderGoals: (List<Long>) -> Unit = {},
+    /** Tamamlama notu: saved on the completed goal (null clears it). */
+    onSetCompletionNote: (Long, String?) -> Unit = { _, _ -> },
     categoryColorBackground: Boolean = false,
     /** Pastel currently used by this category (one of RealCalendarPastels). Null hides the color row. */
     selectedPastel: Color? = null,
@@ -685,11 +695,11 @@ fun PlannerCategoryDetailScreen(
                                 .border(1.dp, (if (categoryColorBackground) headerInk else Color.White).copy(alpha = 0.45f), CircleShape)
                                 .background(if (reorderMode) (if (categoryColorBackground) PlannerInk else Color.White) else Color.Transparent, CircleShape)
                                 .clickable(enabled = !readOnly, role = Role.Button) {
-                                    // While reordering, the badge is the "done" check; otherwise it opens the style popup.
-                                    if (reorderMode) reorderMode = false else stylePopupOpen = true
+                                    // Düzenle only reorders the goals; the badge then becomes the "done" check.
+                                    reorderMode = !reorderMode
                                 }
                                 .semantics {
-                                    contentDescription = if (reorderMode) "Finish reordering goals" else "Edit category style"
+                                    contentDescription = if (reorderMode) "Sıralamayı bitir" else "Hedefleri sırala"
                                 },
                             contentAlignment = Alignment.Center
                         ) {
@@ -734,7 +744,7 @@ fun PlannerCategoryDetailScreen(
                             else if (onPasteLink != null) showPasteLink = true else onShareLink()
                         },
                         onEditLink = if (onPasteLink != null) ({ showPasteLink = true }) else null,
-                        members = ui.members, onAddMember = onAddMember, onSend = onSend
+                        members = ui.members, people = ui.people, onAddMember = onAddMember, onSend = onSend
                     )
                 }
                 // Page dots under the swipe card (aligned with it, not with the progress tile).
@@ -862,6 +872,7 @@ fun PlannerCategoryDetailScreen(
                         .plannerIntro(intro, 520 + minOf(index, 6) * 55, 380, slideY = 10.dp),
                     readOnly = readOnly,
                     onToggle = { onToggleGoal(goal.id) }, onEdit = { onEditGoal(goal.id) },
+                    onSaveNote = { text -> onSetCompletionNote(goal.id, text) },
                     onOpen = { onOpenGoal(goal.id) },
                     onDragStart = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -1060,6 +1071,7 @@ private fun PlannerSwipeCard(
     nextTitle: String?, canStart: Boolean, onStart: () -> Unit,
     linkText: String, onShareLink: () -> Unit, onEditLink: (() -> Unit)? = null,
     members: List<String>, onAddMember: () -> Unit, onSend: () -> Unit,
+    people: List<com.cagri.real.sharedcategories.SharedCategoryMember> = emptyList(),
     ink: Color = Color.White, muted: Color = DetailMuted, line: Color = DetailLine
 ) {
     val shape = RoundedCornerShape(28.dp)
@@ -1102,7 +1114,12 @@ private fun PlannerSwipeCard(
                         Text("Members (${members.size})", color = muted, fontSize = 12.sp)
                         Spacer(Modifier.weight(1f))
                         Row(horizontalArrangement = Arrangement.spacedBy((-10).dp), verticalAlignment = Alignment.CenterVertically) {
-                            members.take(3).forEach { name ->
+                            // Real people (uid → colour and their shared picture); plain names only as a fallback.
+                            if (people.isNotEmpty()) people.take(3).forEach { p ->
+                                Box(Modifier.border(2.dp, DetailBlack, CircleShape).clip(CircleShape)) {
+                                    ConnectionAvatar(p.name, key = p.uid, size = 36.dp, pictureVersion = p.pictureVersion)
+                                }
+                            } else members.take(3).forEach { name ->
                                 Box(Modifier.border(2.dp, DetailBlack, CircleShape).clip(CircleShape)) {
                                     ConnectionAvatar(name, key = name, size = 36.dp)
                                 }
@@ -1154,8 +1171,23 @@ private fun PlannerGoalRow(
     dragging: Boolean, dragOffset: () -> Float, reorderMode: Boolean, modifier: Modifier = Modifier,
     readOnly: Boolean = false,
     onToggle: () -> Unit, onEdit: () -> Unit, onOpen: () -> Unit,
+    /** Tamamlama notu written in place (null removes it). */
+    onSaveNote: (String?) -> Unit = {},
     onDragStart: () -> Unit, onDrag: (Float) -> Unit, onDragEnd: () -> Unit
 ) {
+    // Pencil on a completed goal: its note is written right here, with the keyboard (no separate window).
+    var editingNote by remember(goal.id) { mutableStateOf(false) }
+    var noteDraft by remember(goal.id) { mutableStateOf("") }
+    val noteFocus = remember { FocusRequester() }
+    var noteHadFocus by remember(goal.id) { mutableStateOf(false) }
+    fun saveNote() {
+        if (!editingNote) return
+        editingNote = false
+        noteHadFocus = false
+        val text = noteDraft.trim().take(com.cagri.real.data.ReminderRepository.COMPLETION_NOTE_MAX)
+        if (text != goal.note.orEmpty()) onSaveNote(text.ifBlank { null })
+    }
+    fun startNote() { noteDraft = goal.note.orEmpty(); editingNote = true }
     val currentDragStart by rememberUpdatedState(onDragStart)
     val currentDrag by rememberUpdatedState(onDrag)
     val currentDragEnd by rememberUpdatedState(onDragEnd)
@@ -1245,7 +1277,7 @@ private fun PlannerGoalRow(
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f).padding(top = 2.dp, bottom = if (isLast) 14.dp else 30.dp)) {
             val caption = when {
-                goal.done -> "Done"
+                goal.done -> "Tamamlandı"
                 goal.caption.isNotBlank() -> goal.caption
                 state == GoalState.Active -> "In progress"
                 else -> "Up next"
@@ -1268,6 +1300,37 @@ private fun PlannerGoalRow(
                 style = titleStyle,
                 modifier = Modifier.padding(top = 4.dp).clickable(role = Role.Button, onClick = onOpen)
             )
+            // Tamamlama notu: under a completed goal. The pencil (or a tap on the note) writes it in place.
+            if (goal.done && editingNote) {
+                LaunchedEffect(Unit) { noteFocus.requestFocus() }
+                BasicTextField(
+                    value = noteDraft,
+                    onValueChange = { noteDraft = it.take(com.cagri.real.data.ReminderRepository.COMPLETION_NOTE_MAX) },
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFFE6E6EC), fontSize = 13.sp, lineHeight = 18.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(accent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { saveNote() }),
+                    decorationBox = { inner ->
+                        Box {
+                            if (noteDraft.isEmpty()) Text("Not yaz…", color = DetailFaint, fontSize = 13.sp, lineHeight = 18.sp)
+                            inner()
+                        }
+                    },
+                    modifier = Modifier.padding(top = 6.dp).fillMaxWidth().focusRequester(noteFocus)
+                        // Saves when the field loses the focus it had (the first report, before focus arrives, is skipped).
+                        .onFocusChanged { if (it.isFocused) noteHadFocus = true else if (noteHadFocus) saveNote() }
+                )
+            } else if (goal.done && goal.note != null) {
+                Text(
+                    goal.note,
+                    color = Color(0xFFB7B7C0), fontSize = 13.sp, lineHeight = 18.sp,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    modifier = Modifier.padding(top = 6.dp)
+                        .then(if (readOnly) Modifier else Modifier.clickable(role = Role.Button) { startNote() })
+                        .semantics { contentDescription = "Tamamlama notu: ${goal.note}" }
+                )
+            }
             goal.progress?.takeIf { !goal.done }?.let { p ->
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.width(120.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))) {
@@ -1304,8 +1367,9 @@ private fun PlannerGoalRow(
                 }
                 Spacer(Modifier.width(2.dp))
                 Box(
-                    Modifier.size(32.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onEdit)
-                        .semantics { contentDescription = "Edit goal" },
+                    Modifier.size(32.dp).clip(CircleShape)
+                        .clickable(role = Role.Button) { if (goal.done) startNote() else onEdit() }
+                        .semantics { contentDescription = if (goal.done) "Tamamlama notu yaz" else "Edit goal" },
                     contentAlignment = Alignment.Center
                 ) { PencilMark(Color(0xFF8C8C95), Modifier.size(18.dp)) }
                 Spacer(Modifier.weight(1f))
@@ -1322,44 +1386,6 @@ private fun PlannerGoalRow(
 }
 
 // ---------- demo (stateful, handy to see/tweak the screen before wiring real data) ----------
-
-@Composable
-fun PlannerCategoryDetailDemo(
-    accent: Color = Color(0xFFE3E9F7),
-    topPadding: Dp = 0.dp,
-    onBack: () -> Unit = {}
-) {
-    var goals by remember {
-        mutableStateOf(
-            listOf(
-                PlannerGoalUi(1, "Voice intent update", "Backend", done = true),
-                PlannerGoalUi(2, "Skip one repeat occurrence", "Voice", done = true),
-                PlannerGoalUi(3, "Bulk ops with confirmation chip", "Voice", done = true),
-                PlannerGoalUi(4, "Pano zoom out further", "Pano", done = true),
-                PlannerGoalUi(5, "Category detail screen", "Planner", progress = 0.45f),
-                PlannerGoalUi(6, "Stacked photo card block", "Pano"),
-                PlannerGoalUi(7, "Resizable location blocks", "Pano"),
-                PlannerGoalUi(8, "Board background picker", "Pano")
-            )
-        )
-    }
-    PlannerCategoryDetailScreen(
-        ui = PlannerCategoryDetailUi(
-            name = "Real development",
-            dateLabel = "Saturday, October 3 · 2026",
-            accent = accent,
-            goals = goals,
-            weekActivity = listOf(1, 0, 2, 3, 0, 1, 0),
-            todayIndex = 5
-        ),
-        topPadding = topPadding,
-        onBack = onBack,
-        onToggleGoal = { id ->
-            goals = goals.map { if (it.id == id) it.copy(done = !it.done, progress = null) else it }
-        }
-    )
-}
-
 
 // ---------- category style popup (pencil on the progress tile) ----------
 

@@ -121,6 +121,17 @@ data class VoiceParseResult<Date, Time>(
     val newCategory: VoiceNewCategoryRequest? = null,
     val edit: VoiceEditPatch<Date, Time>? = null,
     /** Null when the utterance only creates new cards (action NONE). */
-    val action: VoiceAction? = null
+    val action: VoiceAction? = null,
+    /** What the AI understood; null = not reported (local parse, older backend) and treated as understood. */
+    val heard: VoiceHeard? = null
 )
+
+/** A word of the transcript the AI could not resolve: [heard] occurs literally in the transcript, [meant] is its guess. */
+data class VoiceUnsureWord(val heard: String, val meant: String?)
+
+/**
+ * [understood]: the whole sentence as the AI read it (foreign words corrected). [confident] false = ask the person
+ * "Doğru mu anladım?" before saving anything.
+ */
+data class VoiceHeard(val understood: String, val unsure: List<VoiceUnsureWord>, val confident: Boolean)
 

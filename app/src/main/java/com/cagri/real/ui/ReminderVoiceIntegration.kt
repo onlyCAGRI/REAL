@@ -12,7 +12,9 @@ import kotlinx.coroutines.flow.first
 
 internal class ReminderVoiceFlow(
     val voice: VoiceInputHandle,
-    val saveRawText: (String) -> Unit
+    val saveRawText: (String) -> Unit,
+    /** Sends a typed correction back through the AI, without asking "Doğru mu anladım?" again. */
+    val resubmit: (String) -> Unit
 )
 
 /** Small Compose adapter; the command implementation is in ReminderVoiceCoordinator. */
@@ -47,6 +49,17 @@ internal fun rememberReminderVoiceFlow(
     var pendingVoiceMusicBlocks by voiceState.pendingVoiceMusicBlocks
     var pendingVoiceMediaBlocks by voiceState.pendingVoiceMediaBlocks
     val onVoiceFinalize = reminderVoiceFinalize(input, composerState, voiceState, callbacks, services, actions)
+    // Names the recognizer should expect: categories and short open card titles (where foreign titles live).
+    LaunchedEffect(reminders, customCategories) {
+        VoiceRecognitionHints.phrases = withContext(Dispatchers.Default) {
+            customCategories.map { it.name } + reminders.asSequence()
+                .filter { !it.isCompleted && it.text.isNotBlank() }
+                .sortedByDescending { it.updatedAt }
+                .map { it.text.lineSequence().first().trim() }
+                .filter { it.split(' ').size <= 4 }
+                .take(60).toList()
+        }
+    }
     val directVoiceSave = rememberDirectVoiceSave(
         onText = onDraftChange,
         onSave = { text ->
@@ -96,7 +109,12 @@ internal fun rememberReminderVoiceFlow(
     }
     val voice = rememberVoiceInput(draft, onDraftChange, onVoiceFinalize,
         observeLevel = !reduceAnimations, onDirectSubmit = saveRawText)
-    ReminderVoiceFlow(voice, saveRawText)
+    ReminderVoiceFlow(voice, saveRawText) { text ->
+        if (text.isNotBlank() && !saving) {
+            voiceState.skipNextUnderstandingCheck.value = true
+            onVoiceFinalize(text)
+        }
+    }
 } } }
 
 @Composable

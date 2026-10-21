@@ -98,10 +98,13 @@ fun MediaDiscoveryScreen(
     var page by rememberSaveable { mutableStateOf(if (startInWatchlist) DiscoveryPage.WATCHLIST else if (startInFilters) DiscoveryPage.FILTERS else DiscoveryPage.ENTRY) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // "İzledim" on a film asks for its score right away (optional; "Vazgeç" leaves it unrated in Puanlarım).
+    var rateWatched by remember { mutableStateOf<MediaBlock?>(null) }
+    val ratings = remember(context, uid) { uid?.let { com.cagri.real.discovery.MediaRatingRepository(context, it) } }
     fun back() {
         if (detailOpen) { detailOpen = false; return }
         if (page == DiscoveryPage.ENTRY || (startInWatchlist && page == DiscoveryPage.WATCHLIST) ||
-            (startInFilters && page == DiscoveryPage.FILTERS)) onDismiss()
+            (startInFilters && (page == DiscoveryPage.FILTERS || page == DiscoveryPage.DISCOVER))) onDismiss()
         else { page = if (startInFilters) DiscoveryPage.FILTERS else DiscoveryPage.ENTRY; error = null }
     }
     BackHandler(onBack = ::back)
@@ -127,7 +130,7 @@ fun MediaDiscoveryScreen(
         scope.launch {
             try {
                 if (!com.cagri.real.platform.android.access.ProAccess.allowed(com.cagri.real.access.RealFeature.MediaDiscovery)) return@launch
-                snapshot = repo.fetch(selectedType, selectedFilters)
+                snapshot = fetchWidening(repo, selectedType, selectedFilters)
                 // Back may have returned to the landing page while the request was running.
                 if (page == DiscoveryPage.FILTERS || page == DiscoveryPage.DISCOVER) page = DiscoveryPage.DISCOVER
             } catch (e: CancellationException) { throw e }
@@ -170,54 +173,30 @@ fun MediaDiscoveryScreen(
                     )
                 }
                 DiscoveryPage.FILTERS -> {
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                        if (filterHeader == null) DiscoveryHeadline("Ne izlesek", Modifier.padding(horizontal = 20.dp), TextAlign.Start)
-                        else filterHeader()
-                        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp).then(filterBodyModifier),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("BOTH" to "Film + Dizi", "MOVIE" to "Film", "TV" to "Dizi").forEach { (key, label) ->
-                                DiscoveryButton(label, selected = type == key, enabled = !loading, onClick = { type = key })
-                            }
-                        }
-                        @Composable
-                        fun filterChips(options: List<DiscoveryFilter>) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                options.forEach { filter ->
-                                    val selected = filter.key in filters
-                                    val groupCount = filters.count { DiscoveryFilter.fromKey(it)?.selectionGroup == filter.selectionGroup }
-                                    DiscoveryButton(filter.label, selected, !loading && (selected || groupCount < DiscoveryFilter.MAX_PER_GROUP), onClick = {
-                                        filters = ArrayList(if (selected) filters - filter.key else filters + filter.key)
-                                    })
+                    if (filterHeader == null) DiscoveryHeadline("Ne izlesek", Modifier.padding(horizontal = 20.dp), TextAlign.Start)
+                    else filterHeader()
+                    // One question at a time: 2 genres at most, then (optional) one theme and one feeling.
+                    val genreOptions = DiscoveryFilter.entries.filter { it.genre }.map { StepOption(it.key, it.label) }
+                    val themeGroups = DiscoveryFilter.entries.filter { it.themeGroup != null }.groupBy { it.themeGroup }
+                        .map { (name, options) -> name to options.map { StepOption(it.key, it.label) } }
+                    val feelingOptions = DiscoveryFilter.entries.filter { !it.genre && it.themeGroup == null }.map { StepOption(it.key, it.label) }
+                    DiscoveryStepper(
+                        steps = listOf(
+                            DiscoveryStep("Hangi türde bir şey olsun?", "En fazla 2 tür", 2, false, listOf(null to genreOptions)) {
+                                FlowRow(Modifier.padding(bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf("BOTH" to "Film + Dizi", "MOVIE" to "Film", "TV" to "Dizi").forEach { (key, label) ->
+                                        DiscoveryButton(label, selected = type == key, enabled = !loading, onClick = { type = key })
+                                    }
                                 }
-                            }
-                        }
-                        Text("Tür", style = RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
-                        val genrePages = listOf("Türler" to DiscoveryFilter.entries.filter { it.genre }) +
-                            DiscoveryFilter.entries.filter { it.themeGroup != null }.groupBy { it.themeGroup }.map { (name, options) -> name.orEmpty() to options }
-                        DiscoverySelectionPager(
-                            titles = genrePages.map { it.first },
-                            selectedCounts = genrePages.map { (_, options) -> options.count { it.key in filters } },
-                            reduceAnimations = reduceAnimations
-                        ) { index, _ ->
-                            filterChips(genrePages[index].second)
-                        }
-                        Text("Nasıl hissettirsin?", style = RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
-                        val feelingPages = DiscoveryFilter.entries.filter { !it.genre && it.themeGroup == null }.chunked(4)
-                        DiscoverySelectionPager(
-                            titles = feelingPages.mapIndexed { index, _ -> if (index == 0) "Hisler" else "Diğer hisler" },
-                            selectedCounts = feelingPages.map { options -> options.count { it.key in filters } },
-                            reduceAnimations = reduceAnimations
-                        ) { index, _ ->
-                            filterChips(feelingPages[index])
-                        }
-                        // Catalog credit only (TVmaze / TheTVDB attribution), small and quiet.
-                        Text("TVmaze · TheTVDB", color = Color(0xFF5E5E66), fontSize = 11.sp)
-                    }
-                    }
-                    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                        DiscoveryLoadingButton("Afişleri getir", loading, ready && repo != null, DiscoveryBlue, reduceAnimations) { discover() }
-                    }
+                            },
+                            DiscoveryStep("Konusu ne olsun?", "İstersen bir tane", 1, true, themeGroups),
+                            DiscoveryStep("Nasıl hissettirsin?", "İstersen bir tane", 1, true, listOf(null to feelingOptions)),
+                        ),
+                        selection = filters.toSet(), onSelection = { filters = ArrayList(it) },
+                        accent = DiscoveryBlue, loading = loading, enabled = ready && repo != null, reduceAnimations = reduceAnimations,
+                        doneLabel = "afişleri getir", modifier = Modifier.weight(1f).then(filterBodyModifier),
+                        rare = { chosen, key -> DiscoveryRarePairs.rare(DiscoveryRarePairs.film, chosen, key) }
+                    ) { discover() }
                 }
                 DiscoveryPage.DISCOVER, DiscoveryPage.WATCHLIST -> {
                     DiscoveryHeadline(if (watchlist) "İZLENECEK LİSTEM" else "SANA GÖRE",
@@ -234,6 +213,7 @@ fun MediaDiscoveryScreen(
                                     error = "Kart eklenemedi. Tekrar deneyebilirsin."; false
                                 } else {
                                     snapshot = repo?.act(card, action)
+                                    if (action == DiscoveryAction.WATCHED && card.media.type == com.cagri.real.data.MediaType.MOVIE) rateWatched = card.media
                                     true
                                 }
                             } catch (e: CancellationException) { throw e }
@@ -256,6 +236,33 @@ fun MediaDiscoveryScreen(
             selectedDetail?.let { MediaDiscoveryDetail(it, detailRepository, reduceAnimations) { detailOpen = false } }
         }
     }
+    rateWatched?.let { media ->
+        val film = rememberFilmReminder(ratings, media)
+        RatingSheet(media.title, listOfNotNull(media.year?.toString(), "İzledim").joinToString(" · "), film.text, null,
+            onDismiss = { rateWatched = null }, onRemove = null, reminderLoading = film.loading, onSkipLoading = film.skip) { v ->
+            rateWatched = null
+            scope.launch { runCatching { ratings?.rate(media, v, past = true) } }
+        }
+    }
+}
+
+/**
+ * The exact choice first; when it finds fewer than six titles the request widens quietly into the same deck: theme and
+ * feeling are let go, then each genre on its own.
+ */
+private suspend fun fetchWidening(repo: MediaDiscoveryRepository, type: String, filters: Set<String>): MediaDiscoveryRepository.Snapshot {
+    var first: Exception? = null
+    var snapshot = try { repo.fetch(type, filters) } catch (e: CancellationException) { throw e } catch (e: Exception) { first = e; null }
+    val genres = filters.filter { DiscoveryFilter.fromKey(it)?.genre == true }
+    val wider = buildList {
+        if (genres.isNotEmpty() && genres.size < filters.size) add(genres.toSet())
+        if (genres.size > 1) genres.forEach { add(setOf(it)) }
+    }
+    for (relaxed in wider) {
+        if ((snapshot?.cards?.size ?: 0) >= 6) break
+        snapshot = try { repo.fetch(type, relaxed, deckFilters = filters) } catch (e: CancellationException) { throw e } catch (_: Exception) { snapshot }
+    }
+    return snapshot ?: throw (first ?: java.io.IOException("Öneriler alınamadı."))
 }
 
 @Composable
@@ -314,6 +321,17 @@ private fun durationLabel(millis: Number?, series: Boolean): String? {
 private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceAnimations: Boolean, later: Boolean,
                        modifier: Modifier, onOpenDetails: (DiscoveryCard) -> Unit, onDecision: suspend (DiscoveryCard, DiscoveryAction) -> Boolean) {
     val card = cards.first()
+    // The front poster loads first; the ones behind it start once it is on screen.
+    // The deck's first front cover loads alone; after that the covers behind always load, and the next ones are
+    // fetched ahead so a swipe never shows an empty cover.
+    var frontReady by remember { mutableStateOf(card.media.artworkUrl.isNullOrBlank()) }
+    val prefetchContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(frontReady, cards.take(8).map { it.key }) {
+        if (!frontReady) return@LaunchedEffect
+        cards.drop(1).take(6).mapNotNull { it.media.artworkUrl }.forEach { u ->
+            coil.Coil.imageLoader(prefetchContext).enqueue(coil.request.ImageRequest.Builder(prefetchContext).data(u).build())
+        }
+    }
     val scope = rememberCoroutineScope()
     var offset by remember(card.key) { mutableStateOf(Offset.Zero) }
     var busy by remember { mutableStateOf(false) }
@@ -362,8 +380,8 @@ private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceA
                                 // Right = save (watchlist: keep, next) · left = pass (watchlist: remove) · up/down: nothing yet.
                                 if (!currentBusy) when {
                                     abs(offset.y) > abs(offset.x) -> settle()
-                                    offset.x > threshold -> decide(if (later) DiscoveryAction.BROWSE_WATCHLIST else DiscoveryAction.ADD_TO_WATCHLIST, Offset(threshold * 6, 0f))
-                                    offset.x < -threshold -> decide(if (later) DiscoveryAction.REMOVE_FROM_WATCHLIST else DiscoveryAction.SKIP, Offset(-threshold * 6, 0f))
+                                    offset.x > threshold -> decide(if (later) DiscoveryAction.REMOVE_FROM_WATCHLIST else DiscoveryAction.ADD_TO_WATCHLIST, Offset(threshold * 6, 0f))
+                                    offset.x < -threshold -> decide(if (later) DiscoveryAction.BROWSE_WATCHLIST else DiscoveryAction.SKIP, Offset(-threshold * 6, 0f))
                                     else -> settle()
                                 }
                             }) { change, delta -> change.consume(); if (!currentBusy) offset += delta }
@@ -388,7 +406,8 @@ private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceA
                 }.clip(shape).background(Color(0xFF1B1B20))) {
                     var artworkFailed by remember(item.media.artworkUrl) { mutableStateOf(false) }
                     val noArtwork = artworkFailed || item.media.artworkUrl.isNullOrBlank()
-                    AsyncImage(item.media.artworkUrl, item.media.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, onError = { artworkFailed = true })
+                    AsyncImage(if (depth == 0 || frontReady) item.media.artworkUrl else null, item.media.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                        onSuccess = { if (depth == 0) frontReady = true }, onError = { artworkFailed = true; if (depth == 0) frontReady = true })
                     if (noArtwork) Column(Modifier.align(Alignment.Center).padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         ActionIcon(ActionGlyph.Video, Modifier.size(52.dp), DiscoveryAccent)
@@ -416,7 +435,7 @@ private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceA
             onDone = { decide(DiscoveryAction.WATCHED, Offset(0f, -threshold * 9)) },
             onSave = { decide(if (later) DiscoveryAction.SAVE_WATCHLIST else DiscoveryAction.SAVE_DISCOVERY) },
             modifier = Modifier.align(Alignment.TopCenter).offset(y = posterHeight + 12.dp))
-        SwipeTutorial("film", "Kaydet", "Geç")
+        if (later) SwipeTutorial("film_list", "Kaldır", "Sona at") else SwipeTutorial("film", "Kaydet", "Geç")
     }
 }
 
@@ -440,14 +459,6 @@ internal fun DiscoveryActionBar(doneLabel: String?, busy: Boolean, onDone: () ->
             Spacer(Modifier.width(7.dp))
             Text(doneLabel, color = if (busy) Color(0xFF66666C) else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
-    }
-}
-
-@Composable
-private fun BarIconButton(glyph: ActionGlyph, description: String, enabled: Boolean, onClick: () -> Unit) {
-    Box(Modifier.size(48.dp).clip(CircleShape).semantics { contentDescription = description }
-        .clickable(enabled = enabled, role = Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
-        ActionIcon(glyph, Modifier.size(22.dp), if (enabled) Color.White.copy(alpha = .85f) else Color(0xFF66666C))
     }
 }
 

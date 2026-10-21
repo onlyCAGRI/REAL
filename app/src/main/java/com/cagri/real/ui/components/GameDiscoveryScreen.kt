@@ -103,7 +103,7 @@ fun GameDiscoveryScreen(
     fun back() {
         if (detailOpen) { detailOpen = false; return }
         if (page == GamePage.ENTRY || (startInList && page == GamePage.LIST) ||
-            (startInFilters && page == GamePage.FILTERS)) onDismiss()
+            (startInFilters && (page == GamePage.FILTERS || page == GamePage.DECK))) onDismiss()
         else { page = if (startInFilters) GamePage.FILTERS else GamePage.ENTRY; error = null }
     }
     BackHandler(onBack = ::back)
@@ -120,7 +120,7 @@ fun GameDiscoveryScreen(
         scope.launch {
             try {
                 if (!com.cagri.real.platform.android.access.ProAccess.allowed(com.cagri.real.access.RealFeature.GameDiscovery)) return@launch
-                snapshot = repo.fetch(f, p)
+                snapshot = fetchWideningGames(repo, f, p)
                 if (page == GamePage.FILTERS || page == GamePage.DECK) page = GamePage.DECK
             } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message ?: "Öneriler alınamadı." }
             finally { loading = false }
@@ -147,51 +147,25 @@ fun GameDiscoveryScreen(
                     onContinue = { page = GamePage.DECK; error = null },
                     onList = { page = GamePage.LIST; error = null }, modifier = Modifier.weight(1f))
                 GamePage.FILTERS -> {
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                        if (filterHeader == null) GameHeadline("Ne oynasak", Modifier.padding(horizontal = 20.dp), TextAlign.Start)
-                        else filterHeader()
-                        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp).then(filterBodyModifier),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text("Platform", style = RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            GamePlatformGroup.entries.forEach { g ->
-                                val on = g.key in platforms
-                                GameChip(g.label, on, !loading) { platforms = ArrayList(if (on) platforms - g.key else platforms + g.key) }
-                            }
-                        }
-                        @Composable fun chips(options: List<GameFilter>) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                options.forEach { f ->
-                                    val on = f.key in filters
-                                    val count = filters.count { GameFilter.fromKey(it)?.genre == f.genre }
-                                    GameChip(f.label, on, !loading && (on || count < GameFilter.MAX_PER_GROUP)) { filters = ArrayList(if (on) filters - f.key else filters + f.key) }
-                                }
-                            }
-                        }
-                        Text("Tür", style = RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
-                        val genrePages = GameFilter.entries.filter { it.genre }.chunked(8)
-                        DiscoverySelectionPager(
-                            titles = genrePages.mapIndexed { index, _ -> if (index == 0) "Türler" else "Diğer türler" },
-                            selectedCounts = genrePages.map { options -> options.count { it.key in filters } },
-                            reduceAnimations = reduceAnimations, accent = GameAccent
-                        ) { index, _ ->
-                            chips(genrePages[index])
-                        }
-                        Text("Nasıl hissettirsin?", style = RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
-                        val feelingPages = GameFilter.entries.filter { !it.genre }.chunked(4)
-                        DiscoverySelectionPager(
-                            titles = feelingPages.mapIndexed { index, _ -> if (index == 0) "Hisler" else "Diğer hisler" },
-                            selectedCounts = feelingPages.map { options -> options.count { it.key in filters } },
-                            reduceAnimations = reduceAnimations, accent = GameAccent
-                        ) { index, _ ->
-                            chips(feelingPages[index])
-                        }
-                        // Catalog credit only (IGDB attribution), small and quiet.
-                        Text("IGDB", color = Color(0xFF5E5E66), fontSize = 11.sp)
-                    }
-                    }
-                    DiscoveryLoadingButton("Oyunları getir", loading, ready && repo != null, GameAccent, reduceAnimations,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) { discover() }
+                    if (filterHeader == null) GameHeadline("Ne oynasak", Modifier.padding(horizontal = 20.dp), TextAlign.Start)
+                    else filterHeader()
+                    // One question at a time: 2 genres at most, then (optional) one feeling and one platform.
+                    val platformKeys = GamePlatformGroup.entries.map { it.key }.toSet()
+                    DiscoveryStepper(
+                        steps = listOf(
+                            DiscoveryStep("Hangi türde bir oyun?", "En fazla 2 tür", 2, false,
+                                listOf(null to GameFilter.entries.filter { it.genre }.map { StepOption(it.key, it.label) })),
+                            DiscoveryStep("Nasıl hissettirsin?", "İstersen bir tane", 1, true,
+                                listOf(null to GameFilter.entries.filter { !it.genre }.map { StepOption(it.key, it.label) })),
+                            DiscoveryStep("Nerede oynayacaksın?", "İstersen bir platform", 1, true,
+                                listOf(null to GamePlatformGroup.entries.map { StepOption(it.key, it.label) })),
+                        ),
+                        selection = filters.toSet() + platforms.toSet(),
+                        onSelection = { all -> filters = ArrayList(all.filter { it !in platformKeys }); platforms = ArrayList(all.filter { it in platformKeys }) },
+                        accent = GameAccent, loading = loading, enabled = ready && repo != null, reduceAnimations = reduceAnimations,
+                        doneLabel = "oyunları getir", modifier = Modifier.weight(1f).then(filterBodyModifier),
+                        rare = { chosen, key -> DiscoveryRarePairs.rare(DiscoveryRarePairs.game, chosen, key) }
+                    ) { discover() }
                 }
                 GamePage.DECK, GamePage.LIST -> {
                     GameHeadline(if (listMode) "OYNANACAK LİSTEM" else "SANA GÖRE", Modifier.padding(top = 2.dp, bottom = 6.dp), small = listMode)
@@ -312,13 +286,6 @@ private fun GameChip(label: String, selected: Boolean, enabled: Boolean, primary
 }
 
 @Composable
-private fun GameBarButton(glyph: ActionGlyph, description: String, enabled: Boolean, onClick: () -> Unit) {
-    Box(Modifier.size(48.dp).clip(CircleShape).semantics { contentDescription = description }.clickable(enabled = enabled, role = Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
-        ActionIcon(glyph, Modifier.size(22.dp), if (enabled) Color.White.copy(alpha = .85f) else Color(0xFF66666C))
-    }
-}
-
-@Composable
 private fun GameLabel(text: String) {
     Text(text, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1,
         modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(alpha = .85f)).border(.5.dp, Color.White.copy(alpha = .12f), RoundedCornerShape(20.dp)).padding(horizontal = 9.dp, vertical = 4.dp))
@@ -331,6 +298,17 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
                      onAddGame: suspend (com.cagri.real.data.CardGameBlock) -> Long?,
                      onOpen: (GameCard) -> Unit, onDecision: suspend (GameCard, GameAction) -> Boolean) {
     val card = cards.first()
+    // The front poster loads first; the ones behind it start once it is on screen.
+    // The deck's first front cover loads alone; after that the covers behind always load, and the next ones are
+    // fetched ahead so a swipe never shows an empty cover.
+    var frontReady by remember { mutableStateOf(card.game.artworkUrl.isNullOrBlank()) }
+    val prefetchContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(frontReady, cards.take(8).map { it.key }) {
+        if (!frontReady) return@LaunchedEffect
+        cards.drop(1).take(6).mapNotNull { bigCover(it.game.artworkUrl) }.forEach { u ->
+            coil.Coil.imageLoader(prefetchContext).enqueue(coil.request.ImageRequest.Builder(prefetchContext).data(u).build())
+        }
+    }
     val scope = rememberCoroutineScope()
     var offset by remember(card.key) { mutableStateOf(Offset.Zero) }
     var busy by remember { mutableStateOf(false) }
@@ -377,8 +355,8 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
                                 // Right = save to the list (list: keep, next) · left = pass (list: remove) · up/down: nothing yet.
                                 if (!currentBusy) when {
                                     abs(offset.y) > abs(offset.x) -> settle()
-                                    offset.x > threshold -> decide(if (listMode) GameAction.BROWSE_LIST else GameAction.ADD_TO_LIST, Offset(threshold * 6, 0f))
-                                    offset.x < -threshold -> decide(if (listMode) GameAction.REMOVE_FROM_LIST else GameAction.SKIP, Offset(-threshold * 6, 0f))
+                                    offset.x > threshold -> decide(if (listMode) GameAction.REMOVE_FROM_LIST else GameAction.ADD_TO_LIST, Offset(threshold * 6, 0f))
+                                    offset.x < -threshold -> decide(if (listMode) GameAction.BROWSE_LIST else GameAction.SKIP, Offset(-threshold * 6, 0f))
                                     else -> settle()
                                 }
                             }) { change, delta -> change.consume(); if (!currentBusy) offset += delta }
@@ -395,7 +373,8 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
                 }.clip(RoundedCornerShape(18.dp)).background(Color(0xFF1B1B20))) {
                     var failed by remember(item.game.artworkUrl) { mutableStateOf(false) }
                     val noCover = failed || item.game.artworkUrl.isNullOrBlank()
-                    AsyncImage(bigCover(item.game.artworkUrl), item.game.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, onError = { failed = true })
+                    AsyncImage(if (depth == 0 || frontReady) bigCover(item.game.artworkUrl) else null, item.game.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                        onSuccess = { if (depth == 0) frontReady = true }, onError = { failed = true; if (depth == 0) frontReady = true })
                     if (noCover) Column(Modifier.align(Alignment.Center).padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         ActionIcon(ActionGlyph.Play, Modifier.size(52.dp), GameAccent)
                         Text(item.game.title, color = Color.White, fontSize = 20.sp, lineHeight = 24.sp, textAlign = TextAlign.Center, maxLines = 4, overflow = TextOverflow.Ellipsis)
@@ -430,7 +409,7 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
                 }
             },
             modifier = Modifier.align(Alignment.TopCenter).offset(y = coverHeight + 12.dp), accent = GameAccent)
-        SwipeTutorial("game", "Kaydet", "Geç")
+        if (listMode) SwipeTutorial("game_list", "Kaldır", "Sona at") else SwipeTutorial("game", "Kaydet", "Geç")
     }
 }
 
@@ -472,9 +451,33 @@ private fun GameDetailPanel(card: GameCard, onClose: () -> Unit) {
                 Spacer(Modifier.height(18.dp))
                 Text(card.reason, color = GameAccent, fontSize = 14.sp, lineHeight = 20.sp)
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(20.dp))
+            GameMediaSection(g.providerId, GameAccent)
+            Spacer(Modifier.height(14.dp))
             Text("Kaynak: IGDB", color = Color(0xFF85858E), fontSize = 12.sp)
             Spacer(Modifier.height(32.dp))
         }
     }
+}
+
+/**
+ * The exact choice first; when it finds fewer than six games the request widens quietly into the same deck: the
+ * feeling goes, then the platform, then each genre on its own.
+ */
+private suspend fun fetchWideningGames(repo: com.cagri.real.discovery.GameDiscoveryRepository, filters: Set<String>,
+                                       platforms: Set<String>): com.cagri.real.discovery.GameDiscoveryRepository.Snapshot {
+    var first: Exception? = null
+    var snapshot = try { repo.fetch(filters, platforms) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { first = e; null }
+    val genres = filters.filter { com.cagri.real.discovery.GameFilter.fromKey(it)?.genre == true }.toSet()
+    val wider = buildList {
+        if (genres.isNotEmpty() && genres.size < filters.size) add(genres to platforms)
+        if (platforms.isNotEmpty() && genres.isNotEmpty()) add(genres to emptySet<String>())
+        if (genres.size > 1) genres.forEach { add(setOf(it) to emptySet<String>()) }
+    }
+    for ((f, p) in wider) {
+        if ((snapshot?.cards?.size ?: 0) >= 6) break
+        snapshot = try { repo.fetch(f, p, deckFilters = filters, deckPlatforms = platforms, append = snapshot != null) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { snapshot }
+    }
+    return snapshot ?: throw (first ?: java.io.IOException("Öneriler alınamadı."))
 }

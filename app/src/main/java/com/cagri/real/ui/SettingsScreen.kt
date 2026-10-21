@@ -60,8 +60,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import com.cagri.real.notifications.ReminderNotifications
 import com.cagri.real.ui.components.*
-import com.cagri.real.ui.components.planner.PlannerDailyView
-import com.cagri.real.ui.components.planner.rememberPlannerDailyViewPreference
 
 @Composable
 fun SettingsScreen(
@@ -85,8 +83,6 @@ fun SettingsScreen(
     widgetMoodEntries: List<com.cagri.real.data.MoodTrackerEntry> = emptyList(),
     onToggleWidgetReminder: ((Long) -> Unit)? = null
 ) {
-    val (dailyPlannerView, setDailyPlannerView) = rememberPlannerDailyViewPreference()
-    var showDailyPlannerChoice by rememberSaveable { mutableStateOf(false) }
     var showPetScenarios by remember { mutableStateOf(false) }
     var showLicensesDialog by remember { mutableStateOf(false) }
     var showClearMoodConfirm by remember { mutableStateOf(false) }
@@ -105,7 +101,7 @@ fun SettingsScreen(
         }
         return
     }
-    BackHandler(enabled = !showRealPro && !showDailyPlannerChoice && !showPetScenarios && !showLicensesDialog && !showClearMoodConfirm && !showAiPrivacy && !showDataUse && !showPrivacyRights && !showDataSources && !showDeveloperTools, onBack = onBack)
+    BackHandler(enabled = !showRealPro && !showPetScenarios && !showLicensesDialog && !showClearMoodConfirm && !showAiPrivacy && !showDataUse && !showPrivacyRights && !showDataSources && !showDeveloperTools, onBack = onBack)
 
     if (showRealPro) {
         com.cagri.real.ui.subscription.RealProRoute(reduceAnimations = reduceAnimations, onDismiss = { showRealPro = false })
@@ -144,37 +140,6 @@ fun SettingsScreen(
     val isChannelBlocked = reminderChannel != null && reminderChannel.importance == NotificationManager.IMPORTANCE_NONE
     val isChannelVibrationEnabled = reminderChannel != null && !isChannelBlocked && reminderChannel.shouldVibrate()
 
-    if (showDailyPlannerChoice) {
-        com.cagri.real.ui.components.RealAlertDialog(
-            onDismissRequest = { showDailyPlannerChoice = false },
-            title = { Text("Daily Planner View") },
-            text = {
-                Column {
-                    PlannerDailyView.entries.forEach { choice ->
-                        Row(
-                            Modifier.fillMaxWidth().selectable(
-                                selected = choice == dailyPlannerView,
-                                role = Role.RadioButton,
-                                onClick = {
-                                    setDailyPlannerView(choice)
-                                    showDailyPlannerChoice = false
-                                }
-                            ).padding(vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            androidx.compose.material3.RadioButton(
-                                selected = choice == dailyPlannerView,
-                                onClick = null
-                            )
-                            Text(choice.label, modifier = Modifier.padding(start = 10.dp))
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showDailyPlannerChoice = false }) { Text("Kapat") } }
-        )
-    }
-
     val contextCardStore = remember {
         com.cagri.real.contextcards.ContextCardStore(
             com.cagri.real.platform.android.sync.SyncLocal.preferences(
@@ -186,6 +151,7 @@ fun SettingsScreen(
     }
     var contextCardsEnabled by remember { mutableStateOf(contextCardStore.load().enabled) }
     var showWelcomePreview by remember { mutableStateOf(false) }
+    var showNumberTower by remember { mutableStateOf(false) }
 
     BackHandler(enabled = showDeveloperTools && !showClearMoodConfirm && !showPetScenarios) { showDeveloperTools = false }
 
@@ -202,8 +168,24 @@ fun SettingsScreen(
                         Triple(com.cagri.real.contextcards.ContextCardType.WATER, ActionGlyph.Bell, "Su kartını göster"),
                         Triple(com.cagri.real.contextcards.ContextCardType.MOOD, ActionGlyph.MoodNeutral, "Mood kartını göster"),
                         Triple(com.cagri.real.contextcards.ContextCardType.BOOK, ActionGlyph.Note, "Kitap kartını göster"),
-                        Triple(com.cagri.real.contextcards.ContextCardType.MEDIA, ActionGlyph.Video, "Film & dizi kartını göster")
+                        Triple(com.cagri.real.contextcards.ContextCardType.MEDIA, ActionGlyph.Video, "Film & dizi kartını göster"),
+                        Triple(com.cagri.real.contextcards.ContextCardType.WATCH, ActionGlyph.Play, "Sıradaki bölüm kartını göster"),
+                        Triple(com.cagri.real.contextcards.ContextCardType.LISTEN, ActionGlyph.Music, "Müzik kartını göster"),
+                        Triple(com.cagri.real.contextcards.ContextCardType.PLAY, ActionGlyph.Cards, "Oyun kartını göster"),
+                        Triple(com.cagri.real.contextcards.ContextCardType.JOURNAL, ActionGlyph.Edit, "Günlük kartını göster")
                     )
+                    SettingsActionRow(
+                        icon = ActionGlyph.Board,
+                        title = "Tüm kartları göster",
+                        subtitle = "Sadece test: bütün kart türleri altta yan yana dizilir (normalde tek kart gelir)",
+                        onClick = {
+                            contextCardStore.setEnabled(true)
+                            contextCardsEnabled = true
+                            contextCardStore.forceAll()
+                            com.cagri.real.ui.components.RealToast.show(context, "Ana ekranın en altına bak")
+                        }
+                    )
+                    SettingsDivider()
                     testCardTypes.forEachIndexed { index, (type, glyph, label) ->
                         if (index > 0) SettingsDivider()
                         SettingsActionRow(
@@ -235,6 +217,21 @@ fun SettingsScreen(
                         subtitle = "İlk açılış animasyonunu oynatır; hesabını ve ayarlarını değiştirmez",
                         onClick = { showWelcomePreview = true }
                     )
+                    SettingsDivider()
+                    SettingsActionRow(
+                        icon = ActionGlyph.Cards,
+                        title = "Sayı Kulesi",
+                        subtitle = "Mini oyun: gelen sayıyı 10 yuvaya küçükten büyüğe diz",
+                        onClick = { showNumberTower = true }
+                    )
+                }
+                if (showNumberTower) {
+                    androidx.compose.ui.window.Dialog(
+                        onDismissRequest = { showNumberTower = false },
+                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+                    ) {
+                        com.cagri.real.ui.components.YasamArcadeHost(reduceAnimations = reduceAnimations, onClose = { showNumberTower = false })
+                    }
                 }
                 if (showWelcomePreview) {
                     // Full-screen replay of the first-launch welcome; finishing or Back just closes it.
@@ -479,15 +476,6 @@ fun SettingsScreen(
 
                     SettingsActionRow(
                         icon = ActionGlyph.Calendar,
-                        title = "Daily Planner View",
-                        subtitle = dailyPlannerView.label,
-                        onClick = { showDailyPlannerChoice = true }
-                    )
-
-                    SettingsDivider()
-
-                    SettingsActionRow(
-                        icon = ActionGlyph.Calendar,
                         title = "Takvim bağlantısı",
                         subtitle = "Google / Samsung takvimlerini göster ve planlarını gönder",
                         onClick = onOpenCalendarConnection
@@ -529,6 +517,73 @@ fun SettingsScreen(
                             musicSource = next
                         }
                     )
+
+                    SettingsDivider()
+
+                    // Öneriler (müzik, film / dizi, oyun): geçilenler yeniden gelebilir, desteler baştan kurulur; kayıtlı listeler ve
+                    // İzledim / Oynadım kalır.
+                    var confirmMusicReset by remember { mutableStateOf(false) }
+                    SettingsActionRow(
+                        icon = ActionGlyph.Music,
+                        title = "Önerileri sıfırla",
+                        subtitle = "Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez",
+                        onClick = { confirmMusicReset = true }
+                    )
+                    if (confirmMusicReset) {
+                        val musicScope = rememberCoroutineScope()
+                        com.cagri.real.ui.components.RealAlertDialog(
+                            onDismissRequest = { confirmMusicReset = false },
+                            title = { Text("Önerileri sıfırlamak istediğine emin misin?") },
+                            text = { Text("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır.", color = Color(0xFFA5A5AF), fontSize = 14.sp) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    confirmMusicReset = false
+                                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "guest"
+                                    musicScope.launch {
+                                        val ok = runCatching {
+                                            com.cagri.real.discovery.MusicDiscoveryRepository(musicContext, uid).resetSeen()
+                                            if (uid != "guest") {
+                                                com.cagri.real.discovery.MediaDiscoveryRepository(musicContext, uid).resetSeen()
+                                                com.cagri.real.discovery.GameDiscoveryRepository(musicContext, uid).resetSeen()
+                                            }
+                                        }.isSuccess
+                                        com.cagri.real.ui.components.RealToast.show(musicContext, if (ok) "Öneriler sıfırlandı" else "Sıfırlanamadı")
+                                    }
+                                }) { Text("Sıfırla", color = Color(0xFFFF8A80)) }
+                            },
+                            dismissButton = { TextButton(onClick = { confirmMusicReset = false }) { Text("Vazgeç", color = Color.White) } }
+                        )
+                    }
+
+                    SettingsDivider()
+
+                    // Puanlarım: film / dizi / bölüm puanlarını siler (şimdilik test için).
+                    var confirmRatingReset by remember { mutableStateOf(false) }
+                    val ratingScope = rememberCoroutineScope()
+                    SettingsActionRow(
+                        icon = ActionGlyph.Delete,
+                        title = "Puanlarımı sıfırla",
+                        subtitle = "Film, dizi ve bölüm puanlarının hepsini siler",
+                        onClick = { confirmRatingReset = true }
+                    )
+                    if (confirmRatingReset) {
+                        com.cagri.real.ui.components.RealAlertDialog(
+                            onDismissRequest = { confirmRatingReset = false },
+                            title = { Text("Puanları sıfırlamak istediğine emin misin?") },
+                            text = { Text("Puanlarım listesi boşalır. Bu geri alınamaz.", color = Color(0xFFA5A5AF), fontSize = 14.sp) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    confirmRatingReset = false
+                                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                                    if (uid != null) ratingScope.launch {
+                                        val ok = runCatching { com.cagri.real.discovery.MediaRatingRepository(musicContext, uid).reset() }.isSuccess
+                                        com.cagri.real.ui.components.RealToast.show(musicContext, if (ok) "Puanlar sıfırlandı" else "Sıfırlanamadı")
+                                    }
+                                }) { Text("Sıfırla", color = Color(0xFFFF8A80)) }
+                            },
+                            dismissButton = { TextButton(onClick = { confirmRatingReset = false }) { Text("Vazgeç", color = Color.White) } }
+                        )
+                    }
 
                     SettingsDivider()
 
@@ -671,6 +726,22 @@ fun SettingsScreen(
                         title = androidx.compose.ui.res.stringResource(com.cagri.real.R.string.real_privacy_rights),
                         subtitle = androidx.compose.ui.res.stringResource(com.cagri.real.R.string.real_privacy_rights_subtitle),
                         onClick = { showPrivacyRights = true }
+                    )
+                    SettingsDivider()
+                    // Off by default: a real photo goes to Kişilerim and shared-category people only when this is on.
+                    // An avatar is always shared (it is not a photo of the person).
+                    var sharePhoto by remember { mutableStateOf(com.cagri.real.platform.android.connections.ProfilePictures.sharePhoto(context)) }
+                    val pictureScope = rememberCoroutineScope()
+                    SettingsRow(
+                        icon = ActionGlyph.Person,
+                        title = "Fotoğrafımı kişilerimle paylaş",
+                        subtitle = "Profil fotoğrafın Kişilerim'de ve ortak kategorilerde görünür. Avatar her zaman görünür.",
+                        checked = sharePhoto,
+                        onCheckedChange = { on ->
+                            sharePhoto = on
+                            com.cagri.real.platform.android.connections.ProfilePictures.setSharePhoto(context, on)
+                            pictureScope.launch { com.cagri.real.platform.android.connections.ProfilePictures.push(context.applicationContext) }
+                        }
                     )
                 }
 

@@ -8,8 +8,12 @@ class SyncBinaryFailure(val blobId: String, val code: SyncBinaryCode, val automa
 data class SyncBinaryIssue(val recordId: String, val key: String, val title: String,
     val blobId: String, val direction: SyncBinaryDirection, val code: SyncBinaryCode,
     val automaticRetry: Boolean, val generation: Long, val token: String)
+/** A record the account refused ([status] / [code]); it waits until it changes again or the person chooses. */
+data class SyncRejectedRecord(val recordId: String, val kind: String, val key: String, val title: String,
+    val status: Int, val code: String?, val generation: Long, val hasCloudCopy: Boolean)
 data class SyncHealthSnapshot(val workspace: String, val status: SyncStatus,
-    val issues: List<SyncBinaryIssue>, val conflicts: List<PersistedSyncConflict>, val paused: Boolean)
+    val issues: List<SyncBinaryIssue>, val conflicts: List<PersistedSyncConflict>, val paused: Boolean,
+    val rejected: List<SyncRejectedRecord> = emptyList())
 
 /** Returns the branch for the original ID. A copy must get a NEW identity in the store transaction. */
 fun conflictResolutionPayload(conflict: PersistedSyncConflict, expectedRevision: Long,

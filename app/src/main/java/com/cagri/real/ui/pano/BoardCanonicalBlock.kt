@@ -61,7 +61,7 @@ internal fun BoardCanonicalBlock(item: PanoItem, controller: PanoController, sty
                 }
                 if (editable) PanoPill("Edit") { editing = true }
             }
-            if (editing && editable) MoodV2FullScreen(draft, { draft = it }, { editing = false },
+            if (editing && editable) MoodV3FullScreen(draft, { draft = it }, { editing = false },
                 onSave = { value, d -> controller.content(item, BoardRealContent.moodPayload(value, d)); editing = false },
                 initialDetails = details, reduceAnimations = true)
         }

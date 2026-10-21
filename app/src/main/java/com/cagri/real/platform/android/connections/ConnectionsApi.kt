@@ -36,5 +36,11 @@ class ConnectionsApi(private val uid: String) : ConnectionsGateway {
     override suspend fun remove(person: String) { request("people/${encode(person)}", "DELETE") }
     override suspend fun block(person: String) { request("people/${encode(person)}/block", "POST") }
     override suspend fun unblock(person: String) { request("people/${encode(person)}/block", "DELETE") }
+    /** This account's picture for connected people / category co-members ("avatar" or "photo", base64 JPEG). */
+    suspend fun putPicture(kind: String, base64: String) { request("me/picture", "PUT", JSONObject().put("kind", kind).put("image", base64)) }
+    suspend fun deletePicture() { request("me/picture", "DELETE") }
+    /** Another person's picture as base64 (only when connected or sharing a category), or null when they have none. */
+    suspend fun picture(person: String): Pair<Long, String>? = runCatching { request("people/${encode(person)}/picture", "GET") }
+        .getOrNull()?.let { it.getLong("version") to it.getString("image") }
     private fun encode(uid: String) = URLEncoder.encode(uid, "UTF-8").replace("+", "%20")
 }

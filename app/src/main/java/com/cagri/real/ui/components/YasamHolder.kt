@@ -29,6 +29,9 @@ internal data class YasamWater(val todayMl: Int, val goalMl: Int, val yesterdayM
     val progress: Float get() = (todayMl.toFloat() / goalMl.coerceAtLeast(1)).coerceIn(0f, 1f)
 }
 
+/** Puanlarım satırı: ortalama (yoksa null) ve kısa özet cümlesi. */
+internal data class YasamRatings(val average: Double?, val line: String, val recent: List<Double> = emptyList())
+
 internal data class YasamBook(val book: Book, val percent: Int?)
 
 /** Mood ile ilgili, ekran başına bir kez hesaplanan türetilmiş değerler. */
@@ -58,6 +61,7 @@ internal class YasamHolder(context: Context, uid: String, private val scope: Cor
     private val mediaRepository = if (uid == "guest") null else MediaDiscoveryRepository(context, uid)
     private val gameRepository = if (uid == "guest") null else GameDiscoveryRepository(context, uid)
     private val musicRepository = com.cagri.real.discovery.MusicDiscoveryRepository(context, uid)
+    private val ratingRepository = if (uid == "guest") null else com.cagri.real.discovery.MediaRatingRepository(context, uid)
     private var adding = false
 
     var water by mutableStateOf<YasamWater?>(null)
@@ -71,6 +75,15 @@ internal class YasamHolder(context: Context, uid: String, private val scope: Cor
         private set
     var musicCount by mutableStateOf<Int?>(null)
         private set
+    var ratings by mutableStateOf<YasamRatings?>(null)
+        private set
+    /** Keşfet kutularındaki küçük kapaklar: listelerin ilk üç görseli. */
+    var watchArt by mutableStateOf<List<String>>(emptyList())
+        private set
+    var gameArt by mutableStateOf<List<String>>(emptyList())
+        private set
+    var musicArt by mutableStateOf<List<String>>(emptyList())
+        private set
 
     suspend fun load() {
         loadWater()
@@ -80,21 +93,40 @@ internal class YasamHolder(context: Context, uid: String, private val scope: Cor
 
     private suspend fun loadDiscoveryCounts() {
         watchlistCount = try {
-            mediaRepository?.load()?.later?.size
+            mediaRepository?.load()?.later?.also { l -> watchArt = l.mapNotNull { it.media.artworkUrl }.take(3) }?.size
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             null
         }
         musicCount = try {
-            musicRepository.load().list.size
+            musicRepository.load().list.also { l -> musicArt = l.asReversed().mapNotNull { it.music.artworkUrl }.take(3) }.size
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        ratings = try {
+            ratingRepository?.load()?.let { list ->
+                val values = list.mapNotNull { it.value }
+                val films = list.count { !it.series }
+                val series = list.size - films
+                val parts = listOfNotNull("$films film".takeIf { films > 0 }, "$series dizi".takeIf { series > 0 }).joinToString(", ")
+                YasamRatings(values.takeIf { it.isNotEmpty() }?.let { (it.average() * 10).roundToInt() / 10.0 },
+                    line = when {
+                        list.isEmpty() -> "İzlediklerine puan ver, zevkin ortaya çıksın"
+                        values.size < list.size -> "$parts · ${list.size - values.size} puan bekliyor"
+                        else -> parts
+                    },
+                    recent = list.sortedByDescending { it.addedAt ?: Long.MIN_VALUE }.mapNotNull { it.value }.take(6))
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             null
         }
         playlistCount = try {
-            gameRepository?.load()?.list?.size
+            gameRepository?.load()?.list?.also { l -> gameArt = l.mapNotNull { it.game.artworkUrl }.take(3) }?.size
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -104,7 +136,7 @@ internal class YasamHolder(context: Context, uid: String, private val scope: Cor
 
     /** Mevcut WaterTrackerRepository.add çağrısı; hedef/geçmiş mantığına dokunmaz. */
     fun addWater(amountMl: Int = 250) {
-        if (adding || water == null) return
+        if (adding || water == null || com.cagri.real.updates.AppUpdateGate.blocked()) return
         adding = true
         scope.launch {
             try {

@@ -147,6 +147,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.LaunchedEffect
@@ -203,7 +205,7 @@ import com.cagri.real.data.repeatSummary
 import com.cagri.real.data.descriptionFor
 import com.cagri.real.ui.components.ActionGlyph
 import com.cagri.real.ui.components.ActionIcon
-import com.cagri.real.ui.components.MoodV2FullScreen
+import com.cagri.real.ui.components.MoodV3FullScreen
 import com.cagri.real.ui.components.MoodV2Face
 import com.cagri.real.ui.components.moodV2Tint
 import com.cagri.real.ui.components.moodV2FamilyTitle
@@ -472,6 +474,9 @@ internal fun ReminderDetailScreen(
     LaunchedEffect(reminder.id) {
         plannerDetails = plannerRepo.load()[reminder.id]
     }
+    // Kontrol ettir: opening the card puts its light out for this viewer.
+    val checkContext = LocalContext.current
+    LaunchedEffect(reminder.id, reminder.checkRequest?.at) { com.cagri.real.ui.components.CheckRequests.markSeen(checkContext, reminder) }
     LaunchedEffect(plannerRepo, reminder.id) {
         com.cagri.real.data.ReminderRepository.updates.collect {
             plannerDetails = plannerRepo.load()[reminder.id]
@@ -529,13 +534,22 @@ internal fun ReminderDetailScreen(
         onDispose { clipboard?.removePrimaryClipChangedListener(listener); pasteLifecycle.lifecycle.removeObserver(observer) }
     }
     var pasting by remember { mutableStateOf(false) }
-    /** Adds the clipboard's content to the card: into the draft while editing, otherwise saved right away. */
-    fun pasteIntoCard() {
+    // Long press on Yapıştır: "Panodan ekle", items taken from the keyboard's own clipboard.
+    var clipboardTrayOpen by remember { mutableStateOf(false) }
+    suspend fun trayPasted(item: com.cagri.real.ui.components.TrayItem): ClipboardPaste.Pasted? = when (item) {
+        is com.cagri.real.ui.components.TrayItem.Text -> ClipboardPaste.fromText(item.text)
+        is com.cagri.real.ui.components.TrayItem.Image -> ClipboardPaste.fromUri(context, item.uri)
+    }
+    /**
+     * Adds [source] (default: the clipboard) to the card: into the draft while editing, otherwise saved right away.
+     * [afterwards] runs once it is in the card (the tray opens "Sırala" to place it in between).
+     */
+    fun pasteIntoCard(source: (suspend () -> ClipboardPaste.Pasted?)? = null, afterwards: () -> Unit = {}) {
         if (pasting) return
         pasting = true
         coroutineScope.launch {
             try {
-                val pasted = ClipboardPaste.read(context)
+                val pasted = source?.invoke() ?: if (source == null) ClipboardPaste.read(context) else null
                 if (pasted == null || (pasted.content.isEmpty && pasted.location == null)) {
                     com.cagri.real.ui.components.RealToast.show(context, "Yapıştırılacak bir şey bulunamadı")
                     return@launch
@@ -575,6 +589,7 @@ internal fun ReminderDetailScreen(
                     } finally { savingDetail = false }
                 }
                 com.cagri.real.ui.components.RealToast.show(context, "Yapıştırıldı · ${pasted.label}")
+                afterwards()
             } catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, "Yapıştırılamadı") }
             finally { pasting = false }
@@ -1016,20 +1031,39 @@ internal fun ReminderDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        if (!nowBarEnabled) IconButton(
-                            onClick = { pasteIntoCard() },
-                            enabled = pasteKind != null && !pasting,
-                            interactionSource = nowBarInteractionSource,
-                            modifier = Modifier
+                        if (!nowBarEnabled) Box(
+                            Modifier
                                 .size(48.dp)
-                                .pressScale(nowBarInteractionSource, enabled = pasteKind != null, reduceAnimations = reduceAnimations, targetScale = 0.95f)
+                                .pressScale(nowBarInteractionSource, enabled = !pasting, reduceAnimations = reduceAnimations, targetScale = 0.95f)
+                                .clip(CircleShape)
+                                .combinedClickable(
+                                    interactionSource = nowBarInteractionSource,
+                                    indication = androidx.compose.material3.ripple(bounded = false),
+                                    enabled = !pasting,
+                                    role = Role.Button,
+                                    onClickLabel = "Yapıştır",
+                                    onLongClickLabel = "Panodan ekle",
+                                    onLongClick = { clipboardTrayOpen = true },
+                                    // Always lit: an empty clipboard opens "Panodan ekle" instead.
+                                    onClick = {
+                                        pasteKind = ClipboardPaste.peek(context)
+                                        if (pasteKind != null) pasteIntoCard() else clipboardTrayOpen = true
+                                    }
+                                )
                                 .semantics {
-                                    contentDescription = pasteKind?.let { "Yapıştır: ${it.label}" } ?: "Panoda yapıştırılacak bir şey yok"
-                                }
+                                    contentDescription = pasteKind?.let { "Yapıştır: ${it.label}" } ?: "Yapıştır"
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
                             if (pasting) com.cagri.real.ui.components.RealSpinner(Modifier.size(18.dp), color = Color.White, strokeWidth = 1.5.dp)
-                            else ActionIcon(ActionGlyph.Paste, Modifier.size(20.dp),
-                                if (pasteKind != null) Color(0xFFC9CBD3) else Color(0xFF55555E))
+                            else ActionIcon(ActionGlyph.Paste, Modifier.size(20.dp), Color(0xFFC9CBD3))
+                            com.cagri.real.ui.components.ClipboardTray(
+                                visible = clipboardTrayOpen,
+                                busy = pasting,
+                                reduceAnimations = reduceAnimations,
+                                onAppend = { item -> pasteIntoCard(source = { trayPasted(item) }) },
+                                onDismiss = { clipboardTrayOpen = false }
+                            )
                         } else IconButton(
                             onClick = {
                                 if (nowBarAvailable) {
@@ -1643,6 +1677,10 @@ internal fun ReminderDetailScreen(
                     }
                 }
                 if (heroKey == null) Spacer(Modifier.height(12.dp))
+                // Opening from a list, the card always grows into the TOP of the detail: the cover when there is one,
+                // otherwise the highest block (the title may have been moved further down in "Sırala").
+                val sharedTopKey = heroKey ?: visibleBlocks.withIndex()
+                    .minByOrNull { (index, key) -> displayedLayout[key]?.top ?: (index * 100_000) }?.value ?: "text"
 
                 // Block renderer shared by the grid and the full-bleed hero at the top of the detail.
                 val detailBlockContent: @Composable (String, Int) -> Unit = { blockKey, blockIndex ->
@@ -1674,7 +1712,7 @@ internal fun ReminderDetailScreen(
                             Box(Modifier.fillMaxWidth()) {
                             Column(
                                 Modifier
-                                    .then(sharedCardModifier)
+                                    .then(if (sharedTopKey == "text") sharedCardModifier else Modifier)
                                     .fillMaxWidth()
                                     .then(if (titleHeight > 0) Modifier.height(titleHeight.dp + heroInset) else Modifier)
                                     .cardBlockSurface()
@@ -1785,14 +1823,16 @@ internal fun ReminderDetailScreen(
                                                                 Text("•", color = Color(0xFF6B6B75), style = RealType.detailBlockMetaSecondary)
                                                                 Text(detailReminderDate(reminder.alertAt), color = dateColor, style = RealType.detailBlockLabel)
                                                             }
-                                                            Row(
+                                                            // Only what the card has: no duration / end = no row (never "null").
+                                                            val shownEnd = reminder.endAt?.let { com.cagri.real.ui.components.planner.formatTimeAmPm(it, ZoneId.systemDefault()) } ?: endTimeStr
+                                                            if (dur != null || shownEnd != null) Row(
                                                                 verticalAlignment = Alignment.CenterVertically,
                                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                                 modifier = Modifier.padding(top = 2.dp)
                                                             ) {
-                                                                Text("Süre: $dur dk", color = Color(0xFFA5A5B0), style = RealType.detailBlockMetaSecondary)
-                                                                Text("•", color = Color(0xFF6B6B75), style = RealType.detailBlockMetaSecondary)
-                                                                Text("Bitiş: $endTimeStr", color = Color(0xFFA5A5B0), style = RealType.detailBlockMetaSecondary)
+                                                                if (dur != null) Text("Süre: $dur dk", color = Color(0xFFA5A5B0), style = RealType.detailBlockMetaSecondary)
+                                                                if (dur != null && shownEnd != null) Text("•", color = Color(0xFF6B6B75), style = RealType.detailBlockMetaSecondary)
+                                                                if (shownEnd != null) Text("Bitiş: $shownEnd", color = Color(0xFFA5A5B0), style = RealType.detailBlockMetaSecondary)
                                                             }
                                                             val repeatText = reminder.repeatRule.repeatSummary(reminder.anchorAlertAt ?: reminder.alertAt)
                                                             if (repeatText != null) {
@@ -2111,15 +2151,23 @@ internal fun ReminderDetailScreen(
                                         try { stackBringRequester.bringIntoView() } catch (_: Exception) { }
                                     }
                                 }
+                                // As the card's cover the stack sits below the status bar on a full-bleed dark ground.
+                                val stackHeroInset = LocalDetailHeroInset.current
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .then(if (stackHeroInset > 0.dp) Modifier
+                                            .height(LocalCardBlockHeight.current)
+                                            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+                                            .background(Brush.verticalGradient(listOf(Color(0xFF16161A), Color(0xFF0D0D0F))))
+                                            .padding(start = 16.dp, end = 16.dp, top = stackHeroInset + 8.dp, bottom = 16.dp) else Modifier)
                                         .bringIntoViewRequester(stackBringRequester)
                                         .then(if (blockKey == inlineCardStackKey) Modifier.bringIntoViewRequester(cardStackBringIntoViewRequester) else Modifier)
                                 ) {
                                     CardStackContentSection(
                                         block = stack,
-                                        heightOverride = displayedLayout[blockKey]?.minHeight?.takeIf { it > 0 }?.dp,
+                                        heightOverride = if (stackHeroInset > 0.dp) (LocalCardBlockHeight.current - stackHeroInset - 24.dp)
+                                            else displayedLayout[blockKey]?.minHeight?.takeIf { it > 0 }?.dp,
                                         designStyle = designStyle,
                                         editing = editing && !savingDetail,
                                         inlineTextEditing = inlineCardStackEditing && inlineCardStackKey == blockKey && !savingDetail,
@@ -2425,7 +2473,7 @@ internal fun ReminderDetailScreen(
                             layout(constraints.maxWidth, (placeable.height - up).coerceAtLeast(0)) {
                                 placeable.place(-extraWidth / 2, -up)
                             }
-                        },
+                        }.then(if (sharedTopKey == heroKey && heroKey != "text") sharedCardModifier else Modifier),
                         propagateMinConstraints = true
                     ) {
                         CompositionLocalProvider(
@@ -2452,7 +2500,11 @@ internal fun ReminderDetailScreen(
                         else contentBlockCoordinates.remove(key)
                     },
                     compactKeys = widgetKeys,
-                    content = detailBlockContent
+                    content = { key, index ->
+                        if (key == sharedTopKey && key != "text") {
+                            Box(sharedCardModifier, propagateMinConstraints = true) { detailBlockContent(key, index) }
+                        } else detailBlockContent(key, index)
+                    }
                 )
 
                 if (musicSearchOpen && editing) {
@@ -3421,7 +3473,7 @@ internal fun ReminderDetailScreen(
             exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(160, easing = RealMotion.Exit)) + scaleOut(tween(160), targetScale = 0.96f),
             modifier = Modifier.fillMaxSize().zIndex(100f)
         ) {
-            MoodV2FullScreen(
+            MoodV3FullScreen(
                 selectedMood = standaloneMoodDraft,
                 onMoodSelected = { standaloneMoodDraft = it },
                 onDismiss = { showMoodFullscreen = false },

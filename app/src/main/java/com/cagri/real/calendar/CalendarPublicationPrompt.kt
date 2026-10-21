@@ -77,37 +77,3 @@ internal fun CalendarPublicationPrompt(state: CalendarConnectionState, reminders
         )
     }
 }
-
-@Composable
-private fun PublishDivider() {
-    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(Color.White.copy(alpha = 0.08f)))
-}
-
-@Composable
-private fun PublishChoice(
-    label: String,
-    checked: Boolean,
-    enabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).toggleable(
-            value = checked,
-            enabled = enabled,
-            role = Role.Checkbox,
-            onValueChange = onCheckedChange
-        ).padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(
-            checked = checked, enabled = enabled, onCheckedChange = null,
-            colors = CheckboxDefaults.colors(
-                checkedColor = CalendarAccent, checkmarkColor = Color.Black,
-                uncheckedColor = CalendarMuted, disabledCheckedColor = CalendarAccent.copy(alpha = 0.4f),
-                disabledUncheckedColor = CalendarMuted.copy(alpha = 0.4f)
-            )
-        )
-        Text(label, color = if (enabled) Color.White else Color.White.copy(alpha = 0.5f), fontSize = 15.sp,
-            modifier = Modifier.weight(1f).padding(start = 8.dp))
-    }
-}

@@ -54,13 +54,24 @@ internal object ClipboardPaste {
         val clip = runCatching { manager(context)?.primaryClip }.getOrNull() ?: return@withContext null
         val item = clip.getItemAt(0) ?: return@withContext null
         val uri = item.uri?.takeIf { it.scheme == "content" }
-        if (uri != null) {
-            val attachment = runCatching { AttachmentStorage.importUri(context, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }.getOrNull()
-                ?: return@withContext null
-            return@withContext Pasted(IncomingContent(attachments = listOf(attachment)), null,
-                if (attachment.type == AttachmentType.IMAGE) "Fotoğraf" else "Dosya")
-        }
+        if (uri != null) return@withContext fromUri(context, uri)
         val text = item.coerceToText(context)?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@withContext null
+        fromText(text)
+    }
+
+    /** A photo or file (the clipboard's, or one the keyboard sent to "Panodan ekle") as a card attachment. */
+    suspend fun fromUri(context: Context, uri: android.net.Uri): Pasted? = withContext(Dispatchers.IO) {
+        val attachment = runCatching {
+            // "Panodan ekle" keeps keyboard images as REAL's own cache files; each card gets its own copy.
+            if (uri.scheme == "file") AttachmentStorage.importCameraPhoto(context, java.io.File(requireNotNull(uri.path)))
+            else AttachmentStorage.importUri(context, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }.getOrNull() ?: return@withContext null
+        Pasted(IncomingContent(attachments = listOf(attachment)), null,
+            if (attachment.type == AttachmentType.IMAGE) "Fotoğraf" else "Dosya")
+    }
+
+    /** Converts copied text into the right block (the clipboard's, or one taken from the keyboard's clipboard). */
+    suspend fun fromText(text: String): Pasted = withContext(Dispatchers.IO) {
         GoogleMapsShareParser.sharedUrl(text)?.let { maps ->
             runCatching { GoogleMapsShareParser.parse(maps) }.getOrNull()?.let { place ->
                 return@withContext Pasted(IncomingContent(), place, "Konum")

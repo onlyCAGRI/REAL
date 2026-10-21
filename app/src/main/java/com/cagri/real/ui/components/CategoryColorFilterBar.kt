@@ -140,47 +140,6 @@ fun CategoryEditButton(
 }
 
 @Composable
-fun CategoryLiquidActionGroup(
-    hasFilter: Boolean,
-    selectedColorIndex: Int?,
-    onFilterClick: () -> Unit,
-    onEditClick: () -> Unit,
-    editContentDescription: String,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .width(112.dp)
-            .height(48.dp)
-            .liquidChrome(corners = 24.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-        CategoryColorFilterButton(
-            hasFilter = hasFilter,
-            selectedColorIndex = selectedColorIndex,
-            onClick = onFilterClick,
-            modifier = Modifier.size(55.dp, 48.dp),
-            applyLiquidChrome = false
-        )
-        Box(Modifier.width(1.dp).height(26.dp).background(Color.White.copy(alpha = 0.13f)))
-        CategoryEditButton(
-            onClick = onEditClick,
-            contentDescription = editContentDescription,
-            modifier = Modifier.size(55.dp, 48.dp),
-            applyLiquidChrome = false
-        )
-    }
-}
-
-
-
-
-
-
-
-
-@Composable
 fun CategoryColorSelectorHeader(
     selectedColorFilter: Int?,
     onSelectColor: (Int?) -> Unit,

@@ -28,6 +28,21 @@ data class ReminderJournal(
     val updatedAt: Long = createdAt
 )
 
+/**
+ * Kontrol ettir. [to]: who should look — uids in a shared category, [ME] for your own cards, [EVERYONE] = all members
+ * but [from]. [at] identifies the request (a new one lights the card again); [startEpochDay]: it glows from that day;
+ * [colorArgb]: null = automatic (blue for yourself, amber for someone else).
+ */
+data class CheckRequest(val to: List<String>, val from: String?, val at: Long, val startEpochDay: Long? = null, val colorArgb: Int? = null) {
+    companion object {
+        const val ME = "me"
+        const val EVERYONE = "*"
+    }
+}
+
+/** Real cards only: dividers (Ayraç) stay out of lists, counts and pickers; only a category's own list draws them. */
+fun List<ReminderItem>.withoutDividers(): List<ReminderItem> = if (none { it.isDivider }) this else filterNot { it.isDivider }
+
 data class ReminderItem(
     val id: Long,
     val text: String,
@@ -91,6 +106,15 @@ data class ReminderItem(
     val endAt: Long? = null,
     /** Early warning ("Erken uyarı"): a heads-up this many minutes before [alertAt]. Null = none. */
     val earlyAlertMinutes: Int? = null,
+    /**
+     * Ayraç: not a card but a divider line in its category's list, [text] being its title (may be empty). It sits at
+     * its [createdAt] among the cards and is left out of every other list, count, alert and share.
+     */
+    val isDivider: Boolean = false,
+    /** Tamamlama notu: a short line left when the card was completed ("test edilecek"); shown under "Tamamlandı". */
+    val completionNote: String? = null,
+    /** Kontrol ettir: someone (or you) asked for this card to be looked at; it glows for them until they open it. */
+    val checkRequest: CheckRequest? = null,
     /**
      * Ortak kategori: the server id of this card when it lives in a shared category. Such cards are kept on the device
      * like any other card but never enter personal sync; SharedCategorySync carries them.
@@ -160,6 +184,22 @@ fun ReminderItem.isIn24HourWindow(
     return CategoryRules.isIn24HourWindow(
         isCompleted, alertAt, plannedDateEpochDay, quick24HourUntilAt, nowMillis, today
     )
+}
+
+/**
+ * Where each Ayraç sits in a category's sorted [cards]: index → dividers drawn before cards[index] (index == size: after
+ * the last card). A divider marks the moment it was added, so it only shows in the added-time orders.
+ */
+fun dividerSlots(cards: List<ReminderItem>, dividers: List<ReminderItem>, sort: ReminderSortOrder): Map<Int, List<ReminderItem>> {
+    if (dividers.isEmpty() || (sort != ReminderSortOrder.RECENTLY_ADDED && sort != ReminderSortOrder.OLDEST_FIRST)) return emptyMap()
+    val newestFirst = sort == ReminderSortOrder.RECENTLY_ADDED
+    val ordered = if (newestFirst) dividers.sortedByDescending { it.createdAt } else dividers.sortedBy { it.createdAt }
+    val out = linkedMapOf<Int, MutableList<ReminderItem>>()
+    for (d in ordered) {
+        val index = cards.indexOfFirst { c -> c.id >= 0 && if (newestFirst) c.createdAt < d.createdAt else c.createdAt > d.createdAt }
+        out.getOrPut(if (index < 0) cards.size else index) { mutableListOf() } += d
+    }
+    return out
 }
 
 enum class ReminderSortOrder {

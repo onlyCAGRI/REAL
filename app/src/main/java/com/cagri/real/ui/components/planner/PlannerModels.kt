@@ -111,8 +111,6 @@ internal fun PlannerEvent.lastDay(zone: ZoneId): LocalDate {
 internal fun PlannerEvent.isMultiDay(zone: ZoneId): Boolean = lastDay(zone) > day(zone)
 internal fun plannerMonthLabel(day: LocalDate): String = day.format(DateTimeFormatter.ofPattern("MMM", PlannerLocale)).uppercase(PlannerLocale)
 internal fun plannerDayLabel(day: LocalDate): String = day.format(DateTimeFormatter.ofPattern("EEEE", PlannerLocale))
-internal fun plannerInitials(name: String): String = name.trim().split(Regex("\\s+"))
-    .filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1).uppercase(PlannerLocale) }
 
 /** External device events are transient presentation data, never persisted as REAL reminders. */
 internal fun externalPlannerEvents(

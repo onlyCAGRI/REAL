@@ -108,11 +108,11 @@ internal val MoodFamiliesV2 = listOf(
 )
 
 
-private data class MoodDescriptorOption(val key: String, val label: String)
-private data class MoodFactorOption(val key: String, val label: String)
-private data class MoodFactorGroup(val title: String, val options: List<MoodFactorOption>)
+internal data class MoodDescriptorOption(val key: String, val label: String)
+internal data class MoodFactorOption(val key: String, val label: String)
+internal data class MoodFactorGroup(val title: String, val options: List<MoodFactorOption>)
 
-private val MoodDescriptorsV2: Map<Int, List<MoodDescriptorOption>> = mapOf(
+internal val MoodDescriptorsV2: Map<Int, List<MoodDescriptorOption>> = mapOf(
     0 to listOf(
         MoodDescriptorOption("sad", "Üzgün"),
         MoodDescriptorOption("angry", "Sinirli"),
@@ -186,7 +186,7 @@ private val MoodDescriptorsV2: Map<Int, List<MoodDescriptorOption>> = mapOf(
     )
 )
 
-private val MoodFactorGroupsV2 = listOf(
+internal val MoodFactorGroupsV2 = listOf(
     MoodFactorGroup(
         "Kendim",
         listOf(
@@ -318,7 +318,7 @@ private fun moodV2LerpColor(progress: Float): Color {
     return androidx.compose.ui.graphics.lerp(MoodFamiliesV2[left].tint, MoodFamiliesV2[right].tint, fraction)
 }
 
-private data class FaceV2Params(
+internal data class FaceV2Params(
     val eyeWidth: Float,
     val eyeHeight: Float,
     val eyeY: Float,
@@ -346,7 +346,7 @@ private val FaceAnchorsV2 = listOf(
 
 private fun Float.mix(other: Float, t: Float): Float = this + (other - this) * t
 
-private fun faceParamsAtV2(progress: Float, selectedMood: JournalMood?): FaceV2Params {
+internal fun faceParamsAtV2(progress: Float, selectedMood: JournalMood?): FaceV2Params {
     val clamped = progress.coerceIn(0f, 4f)
     val left = floor(clamped).toInt().coerceIn(0, 4)
     val right = (left + 1).coerceAtMost(4)
@@ -1161,298 +1161,5 @@ private fun MoodSliderV2(
                 .background(Color(0xFFF4F4F6))
                 .border(3.dp, ambient.copy(alpha = 0.80f), CircleShape)
         )
-    }
-}
-
-@Composable
-fun MoodV2Selector(
-    selectedMood: JournalMood?,
-    onMoodSelected: (JournalMood?) -> Unit,
-    modifier: Modifier = Modifier,
-    reduceAnimations: Boolean = false,
-    immersive: Boolean = false
-) {
-    if (immersive) {
-        MoodV2FullScreen(
-            selectedMood = selectedMood ?: JournalMood.NEUTRAL,
-            onMoodSelected = { onMoodSelected(it) },
-            onDismiss = {},
-            onSave = { _, _ -> },
-            reduceAnimations = reduceAnimations
-        )
-        return
-    }
-
-    val initialFamily = selectedMood?.familyIndexV2() ?: 2
-    var progress by remember { mutableFloatStateOf(initialFamily.toFloat()) }
-    var isDragging by remember { mutableStateOf(false) }
-    var trackWidthPx by remember { mutableFloatStateOf(1f) }
-    var lastHapticFamily by remember { mutableIntStateOf(initialFamily) }
-    val view = LocalView.current
-
-    LaunchedEffect(selectedMood) {
-        if (!isDragging) {
-            val family = selectedMood?.familyIndexV2() ?: 2
-            progress = family.toFloat()
-            lastHapticFamily = family
-        }
-    }
-
-    val displayProgress by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = progress,
-        animationSpec = if (isDragging || reduceAnimations) snap() else tween(190),
-        label = "moodV2Progress"
-    )
-    val nearestFamilyIndex = displayProgress.roundToInt().coerceIn(0, 4)
-    val family = MoodFamiliesV2[nearestFamilyIndex]
-    val ambientTarget = moodV2LerpColor(displayProgress)
-    val ambient by animateColorAsState(
-        targetValue = ambientTarget,
-        animationSpec = if (reduceAnimations) snap() else tween(120),
-        label = "moodV2Ambient"
-    )
-    val faceParams = faceParamsAtV2(displayProgress, if (isDragging) null else selectedMood)
-
-    fun updateProgressFromX(x: Float, finish: Boolean) {
-        val next = ((x / trackWidthPx.coerceAtLeast(1f)) * 4f).coerceIn(0f, 4f)
-        progress = next
-        val anchor = next.roundToInt().coerceIn(0, 4)
-        if (anchor != lastHapticFamily) {
-            lastHapticFamily = anchor
-            RealHaptics.tick(view)
-        }
-        if (finish) {
-            progress = anchor.toFloat()
-            val current = selectedMood
-            val targetFamily = MoodFamiliesV2[anchor]
-            if (current == null || current !in targetFamily.moods) {
-                onMoodSelected(targetFamily.defaultMood)
-            }
-        }
-    }
-
-    val selectorModifier = modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(20.dp))
-        .background(
-            Brush.verticalGradient(
-                listOf(
-                    ambient.copy(alpha = 0.22f),
-                    Color(0xFF17171B).copy(alpha = 0.98f),
-                    Color(0xFF121214).copy(alpha = 0.98f)
-                )
-            )
-        )
-        .border(0.8.dp, ambient.copy(alpha = 0.46f), RoundedCornerShape(20.dp))
-        .padding(horizontal = 14.dp, vertical = 16.dp)
-
-    Column(
-        modifier = selectorModifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Canvas(
-            modifier = Modifier
-                .size(116.dp)
-                .semantics { contentDescription = "${family.title} mood yüzü" }
-        ) {
-            val w = size.width
-            val h = size.height
-            val stroke = w * 0.052f
-            val eyeW = w * faceParams.eyeWidth
-            val eyeH = h * faceParams.eyeHeight
-            val eyeY = h * faceParams.eyeY
-            val spacing = w * faceParams.eyeSpacing
-            val centerX = w / 2f
-            val ink = Color(0xFFF5F5F7)
-            val softInk = ambient.copy(alpha = 0.96f)
-
-            fun drawEye(cx: Float) {
-                drawRoundRect(
-                    color = ink,
-                    topLeft = Offset(cx - eyeW / 2f, eyeY - eyeH / 2f),
-                    size = Size(eyeW, eyeH),
-                    cornerRadius = CornerRadius(eyeH / 2f, eyeH / 2f)
-                )
-            }
-
-            drawEye(centerX - spacing / 2f)
-            drawEye(centerX + spacing / 2f)
-
-            if (faceParams.browStrength > 0.05f) {
-                val browY = eyeY - eyeH * 1.15f
-                val browHalf = eyeW * 0.52f
-                val tilt = eyeH * 0.75f * faceParams.browStrength
-                drawLine(
-                    color = softInk,
-                    start = Offset(centerX - spacing / 2f - browHalf, browY - tilt),
-                    end = Offset(centerX - spacing / 2f + browHalf, browY + tilt),
-                    strokeWidth = stroke * 0.55f
-                )
-                drawLine(
-                    color = softInk,
-                    start = Offset(centerX + spacing / 2f - browHalf, browY + tilt),
-                    end = Offset(centerX + spacing / 2f + browHalf, browY - tilt),
-                    strokeWidth = stroke * 0.55f
-                )
-            }
-
-            val mouthCenterY = h * faceParams.mouthY
-            val mouthHalfW = w * faceParams.mouthWidth / 2f
-            val curve = h * 0.12f * faceParams.mouthCurve
-            val mouth = Path().apply {
-                moveTo(centerX - mouthHalfW, mouthCenterY)
-                cubicTo(
-                    centerX - mouthHalfW * 0.45f,
-                    mouthCenterY + curve,
-                    centerX + mouthHalfW * 0.45f,
-                    mouthCenterY + curve,
-                    centerX + mouthHalfW,
-                    mouthCenterY
-                )
-            }
-            drawPath(
-                path = mouth,
-                color = ink,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = stroke,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round
-                )
-            )
-        }
-
-        Text(
-            text = family.title.uppercase(),
-            color = ambient,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.6.sp
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp)
-                .onSizeChanged { trackWidthPx = it.width.toFloat().coerceAtLeast(1f) }
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        isDragging = false
-                        updateProgressFromX(offset.x, finish = true)
-                    }
-                }
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { offset ->
-                            isDragging = true
-                            updateProgressFromX(offset.x, finish = false)
-                        },
-                        onDragCancel = {
-                            isDragging = false
-                            updateProgressFromX((progress / 4f) * trackWidthPx, finish = true)
-                        },
-                        onDragEnd = {
-                            isDragging = false
-                            updateProgressFromX((progress / 4f) * trackWidthPx, finish = true)
-                        },
-                        onHorizontalDrag = { change, dragAmount ->
-                            change.consume()
-                            val next = progress + (dragAmount / trackWidthPx.coerceAtLeast(1f)) * 4f
-                            progress = next.coerceIn(0f, 4f)
-                            val anchor = progress.roundToInt().coerceIn(0, 4)
-                            if (anchor != lastHapticFamily) {
-                                lastHapticFamily = anchor
-                                RealHaptics.tick(view)
-                            }
-                        }
-                    )
-                }
-        ) {
-            val thumbSize = 28.dp
-            val usableWidth = maxWidth - thumbSize
-            val thumbX = usableWidth * (displayProgress / 4f)
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .align(Alignment.Center)
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(Brush.horizontalGradient(MoodFamiliesV2.map { it.tint.copy(alpha = 0.68f) }))
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth().align(Alignment.Center),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                MoodFamiliesV2.forEachIndexed { index, anchorFamily ->
-                    val active = index == nearestFamilyIndex
-                    Box(
-                        modifier = Modifier
-                            .size(if (active) 8.dp else 5.dp)
-                            .clip(CircleShape)
-                            .background(if (active) Color.White else anchorFamily.tint.copy(alpha = 0.72f))
-                    )
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .offset(x = thumbX)
-                    .size(thumbSize)
-                    .align(Alignment.CenterStart)
-                    .clip(CircleShape)
-                    .background(Color(0xFFF4F4F6))
-                    .border(3.dp, ambient.copy(alpha = 0.80f), CircleShape)
-            )
-        }
-
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Daha spesifik istersen",
-            color = Color(0xFF777780),
-            fontSize = 11.sp,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Start
-        )
-        Spacer(Modifier.height(7.dp))
-
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            family.moods.forEach { mood ->
-                val selected = selectedMood == mood
-                val shape = RoundedCornerShape(99.dp)
-                Row(
-                    modifier = Modifier
-                        .clip(shape)
-                        .background(if (selected) ambient.copy(alpha = 0.22f) else Color(0xFF1D1D21))
-                        .border(
-                            width = 0.8.dp,
-                            color = if (selected) ambient.copy(alpha = 0.66f) else Color(0xFF303037),
-                            shape = shape
-                        )
-                        .clickable {
-                            onMoodSelected(mood)
-                            RealHaptics.tick(view)
-                        }
-                        .semantics { contentDescription = journalMoodLabel(mood) }
-                        .padding(horizontal = 11.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    MoodGlyph(mood, 14.dp, if (selected) ambient else Color(0xFFA1A1AA))
-                    Text(
-                        text = journalMoodLabel(mood),
-                        color = if (selected) Color(0xFFF3F3F5) else Color(0xFFA1A1AA),
-                        fontSize = 12.sp,
-                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
-                    )
-                }
-            }
-        }
     }
 }

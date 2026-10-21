@@ -73,7 +73,7 @@ internal fun PanoContentFlow(request: ContentRequest, style: DesignStyle, onDism
     when (type) {
         BoardBlockType.MUSIC -> MusicSearchSheet(style, ::dismiss) { value -> submit({ BoardRealContent.musicPayload(value) }) }
         BoardBlockType.MEDIA -> MediaSearchSheet(style, ::dismiss) { value -> submit({ BoardRealContent.mediaPayload(value) }) }
-        BoardBlockType.MOOD -> MoodV2FullScreen(mood, { mood = it }, ::dismiss,
+        BoardBlockType.MOOD -> MoodV3FullScreen(mood, { mood = it }, ::dismiss,
             onSave = { value, details -> submit({ BoardRealContent.moodPayload(value, details) }) }, reduceAnimations = true)
         BoardBlockType.VOICE -> ModalBottomSheet(onDismissRequest = ::dismiss) {
             VoiceRecorderInline(emptyList(), onRecorded = { recording ->

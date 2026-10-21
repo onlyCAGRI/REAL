@@ -120,6 +120,7 @@ class AndroidAuthUiController(
     }
 
     override suspend fun signOut(): Result<Unit> {
+        com.cagri.real.platform.android.boards.PanoPush.releaseToken(activity)
         repository.signOut()
         return runCatching {
             credentialManager.clearCredentialState(ClearCredentialStateRequest())

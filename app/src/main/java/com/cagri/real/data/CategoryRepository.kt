@@ -41,7 +41,8 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                             createdAt = item.optLong("createdAt", System.currentTimeMillis()),
                             sharedId = item.optString("sharedId", "").takeIf { it.isNotBlank() && it != "null" },
                             sharedRole = item.optString("sharedRole", "").takeIf { it.isNotBlank() && it != "null" },
-                            sharedOwnerName = item.optString("sharedOwnerName", "").takeIf { it.isNotBlank() && it != "null" }
+                            sharedOwnerName = item.optString("sharedOwnerName", "").takeIf { it.isNotBlank() && it != "null" },
+                            sharedDescription = item.optString("sharedDescription", "").takeIf { !item.isNull("sharedDescription") && it.isNotBlank() }
                         )
                     )
                 }
@@ -149,6 +150,7 @@ class CategoryRepository(private val preferences: SharedPreferences) {
                         category.sharedId?.let { put("sharedId", it) }
                         category.sharedRole?.let { put("sharedRole", it) }
                         category.sharedOwnerName?.let { put("sharedOwnerName", it) }
+                        category.sharedDescription?.let { put("sharedDescription", it) }
                     }
             )
         }

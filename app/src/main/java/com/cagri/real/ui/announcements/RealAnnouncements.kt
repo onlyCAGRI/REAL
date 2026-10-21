@@ -42,20 +42,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 
-/** Application inbox, not Android push notifications. Fetches once per foreground, or on explicit refresh. */
-@Composable
-fun RealAnnouncementsButton(reduceAnimations: Boolean, onAdd: suspend (String) -> Long?) {
-    val auth = remember { FirebaseAuth.getInstance() }
-    var uid by remember { mutableStateOf(auth.currentUser?.uid) }
-    DisposableEffect(auth) {
-        val listener = FirebaseAuth.AuthStateListener { uid = it.currentUser?.uid }
-        auth.addAuthStateListener(listener)
-        onDispose { auth.removeAuthStateListener(listener) }
-    }
-    val account = uid ?: return
-    key(account) { Inbox(account, reduceAnimations, onAdd) }
-}
-
 @Composable
 private fun Inbox(uid: String, reduceAnimations: Boolean, onAdd: suspend (String) -> Long?) {
     val context = LocalContext.current

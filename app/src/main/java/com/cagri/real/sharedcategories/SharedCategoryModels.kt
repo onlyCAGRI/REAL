@@ -5,7 +5,7 @@ import com.cagri.real.data.ReminderItem
 import org.json.JSONObject
 
 data class SharedCategory(val id: String, val category: CustomCategory, val isOwner: Boolean, val link: String, val revision: Int)
-data class SharedCategoryMember(val uid: String, val name: String, val isOwner: Boolean)
+data class SharedCategoryMember(val uid: String, val name: String, val isOwner: Boolean, val pictureVersion: Long? = null)
 data class SharedCategoryGoal(val recordId: String, val card: ReminderItem, val raw: String)
 data class SharedCategoryDetail(val item: SharedCategory, val members: List<SharedCategoryMember>, val goals: List<SharedCategoryGoal>)
 

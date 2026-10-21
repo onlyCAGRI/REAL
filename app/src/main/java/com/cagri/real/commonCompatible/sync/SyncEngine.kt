@@ -41,12 +41,20 @@ interface SyncStore {
     fun deferredDownloads(): List<SyncRecord> = emptyList()
     fun blockUpload(pending: PendingRecord, failure: SyncBinaryFailure) { throw failure }
     fun clearUploadIssue(id: String) {}
+    /** The account deleted this card while it changed here: keep it as a conflict (the person chooses), never fail the run. */
+    fun remoteDeleted(pending: PendingRecord) { throw SyncRemoteDeleted() }
+    /** The account refused this record ([code]): park it with its reason until it changes again or the person chooses. */
+    fun rejectUpload(pending: PendingRecord, failure: SyncRecordRejected) { throw failure }
 }
 interface SyncBinaries {
     suspend fun prepareUpload(record: SyncRecord)
     suspend fun prepareDownload(record: SyncRecord)
 }
 class SyncRevisionConflict : Exception()
+/** The card's cloud resource is deleted (and the account would not restore it). */
+class SyncRemoteDeleted : Exception("Cloud card is deleted")
+/** A 4xx answer that belongs to this one record (invalid field, too large…); [code] is the worker's error code. */
+class SyncRecordRejected(val status: Int, val code: String?) : Exception("Rejected $status ${code.orEmpty()}".trim())
 
 /** One run per UID at a time is supplied by the platform scheduler. Pull before any push. */
 class SyncEngine(private val remote: SyncRemote, private val store: SyncStore,
@@ -97,6 +105,13 @@ class SyncEngine(private val remote: SyncRemote, private val store: SyncStore,
             } catch (failure: SyncBinaryFailure) {
                 ensureAccount()
                 store.blockUpload(pending, failure)
+            } catch (deleted: SyncRemoteDeleted) {
+                // One card, not the whole run: it waits as a conflict (apply the deletion / keep it as a new card).
+                ensureAccount()
+                store.remoteDeleted(pending)
+            } catch (rejected: SyncRecordRejected) {
+                ensureAccount()
+                store.rejectUpload(pending, rejected)
             } catch (conflict: SyncRevisionConflict) {
                 try {
                     restore(remote.get(pending.record.id), store.cursor())

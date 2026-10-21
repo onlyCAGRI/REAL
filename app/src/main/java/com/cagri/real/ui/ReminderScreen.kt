@@ -20,6 +20,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import com.cagri.real.data.ReminderAttachment
+import com.cagri.real.data.dividerSlots
 import com.cagri.real.data.ReminderLocation
 import com.cagri.real.data.MusicBlock
 import com.cagri.real.data.MediaBlock
@@ -201,7 +202,7 @@ import com.cagri.real.ui.components.YasamJournalSheet
 import com.cagri.real.ui.components.HomeDockExtraBottomSpace
 import com.cagri.real.ui.components.DateSuggestionType
 import com.cagri.real.ui.components.detectDateSuggestion
-import com.cagri.real.ui.components.MoodV2FullScreen
+import com.cagri.real.ui.components.MoodV3FullScreen
 import com.cagri.real.ui.components.MoodTrackerHistoryScreen
 import com.cagri.real.ui.components.MoodSuggestionsScreen
 import com.cagri.real.ui.components.planner.PlannerScreen
@@ -278,6 +279,15 @@ internal data class ReminderRoute(val category: ReminderCategory?, val customCat
 @Composable
 fun ReminderScreen(
     reminders: List<ReminderItem>,
+    /** Ayraçlar: dividers drawn only in their own category's list. */
+    dividers: List<ReminderItem> = emptyList(),
+    onAddDivider: (Long, String) -> Unit = { _, _ -> },
+    onEditDivider: (Long, String) -> Unit = { _, _ -> },
+    onDeleteDivider: (Long) -> Unit = {},
+    /** Tamamlama notu on a completed goal (category goal screen). */
+    onSetCompletionNote: (Long, String?) -> Unit = { _, _ -> },
+    /** Kontrol ettir on the selected cards (null takes it off). */
+    onSetCheckRequest: (Set<Long>, com.cagri.real.data.CheckRequest?) -> Unit = { _, _ -> },
     onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>, List<ReminderVoiceRecording>, ReminderLocation?, Long?, Long?, List<MusicBlock>, List<MediaBlock>) -> Long?,
     onAddSuggestedReal: suspend (String, MusicBlock?, MediaBlock?, CardStackBlock?) -> Long? = { _, _, _, _ -> null },
     onUndoSuggestedReal: suspend (Long) -> Boolean = { false },
@@ -760,6 +770,9 @@ fun ReminderScreen(
                                     onPanoLocationHandled = onPanoLocationHandled,
                                     reminders = reminders, category = route.category,
                                     customCategory = currentCustomCategory,
+                                    dividers = currentCustomCategory?.let { c -> dividers.filter { it.customCategoryId == c.id } }.orEmpty(),
+                                    onAddDivider = onAddDivider, onEditDivider = onEditDivider, onDeleteDivider = onDeleteDivider,
+                                    onSetCompletionNote = onSetCompletionNote, onSetCheckRequest = onSetCheckRequest,
                                     categoryColorFilter = currentCategoryKey?.let { categoryColorFilters[it] },
                                     onCategoryColorFilterChange = { selected ->
                                         if (currentCategoryKey != null) {
@@ -941,6 +954,14 @@ enum class PendingNotificationAction {
 private fun ReminderListScreen(
     pendingPanoBoardId: String? = null, onPanoLocationHandled: () -> Unit = {},
     reminders: List<ReminderItem>, category: ReminderCategory?, draft: String,
+    dividers: List<ReminderItem> = emptyList(),
+    onAddDivider: (Long, String) -> Unit = { _, _ -> },
+    onEditDivider: (Long, String) -> Unit = { _, _ -> },
+    onDeleteDivider: (Long) -> Unit = {},
+    /** Tamamlama notu on a completed goal (category goal screen). */
+    onSetCompletionNote: (Long, String?) -> Unit = { _, _ -> },
+    /** Kontrol ettir on the selected cards (null takes it off). */
+    onSetCheckRequest: (Set<Long>, com.cagri.real.data.CheckRequest?) -> Unit = { _, _ -> },
     alertAt: Long?, repeatRule: RecurrenceRule, onAlertChange: (Long?, RecurrenceRule) -> Unit,
     exactAlarmsAllowed: Boolean, onRequestExactAlarms: () -> Unit,
     onDraftChange: (String) -> Unit, onBack: () -> Unit,
@@ -1001,7 +1022,8 @@ private fun ReminderListScreen(
     val voiceState = rememberReminderVoiceState()
     var editing by composerState.editing
     val latestEditing = rememberUpdatedState(editing)
-    val plainHomeCards = category == null && customCategory == null && com.cagri.real.ui.components.HomeCardStyle.isPlain(LocalContext.current)
+    // Sade kartlar (Ayarlar): home and every category, not the journal list.
+    val plainHomeCards = category != ReminderCategory.JournalEntries && com.cagri.real.ui.components.HomeCardStyle.isPlain(LocalContext.current)
     var editingBuiltInCategory by rememberSaveable { mutableStateOf<ReminderCategory?>(null) }
     var isChecklistMode by composerState.isChecklistMode
     var isVoiceDraft by composerState.isVoiceDraft
@@ -1035,6 +1057,8 @@ private fun ReminderListScreen(
     var returnToHomeWidgetsAfterMood by rememberSaveable { mutableStateOf(false) }
     // Yaşam ⊕ ile açılan mood ekleme: geri Yaşam'a döner (geçmiş açılmaz). Kayıt/dönüşte false olur.
     var moodAddFromYasam by rememberSaveable { mutableStateOf(false) }
+    /** Yaşam comes back after a mood flow it opened: no opening animation. */
+    var yasamQuickReturn by rememberSaveable { mutableStateOf(false) }
     // Yaşam > Günlüklerim'den bir günlük kartının detayı açıldı: detay kapanınca Yaşam aynı modda geri gelir.
     var returnToYasamJournals by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { if (returnToYasamJournals) showHomeWidgets = true }
@@ -1131,6 +1155,20 @@ private fun ReminderListScreen(
             }
         )
     }
+    // Ayraç: "Ayraç ekle" in the ••• menu, or a long press on one → title dialog.
+    var dividerAdding by remember { mutableStateOf(false) }
+    var dividerEditing by remember { mutableStateOf<ReminderItem?>(null) }
+    if (dividerAdding || dividerEditing != null) {
+        com.cagri.real.ui.components.DividerTitleDialog(
+            initial = dividerEditing?.text.orEmpty(), editing = dividerEditing != null,
+            onDismiss = { dividerAdding = false; dividerEditing = null },
+            onSave = { title ->
+                val editing = dividerEditing
+                if (editing != null) onEditDivider(editing.id, title) else customCategory?.let { onAddDivider(it.id, title) }
+                dividerAdding = false; dividerEditing = null
+            }
+        )
+    }
     // Category screens have their own 3-way sort (newest on top / newest at the bottom / nearest date).
     var categorySortOrder by rememberSaveable {
         mutableStateOf(
@@ -1168,6 +1206,9 @@ private fun ReminderListScreen(
     var showCategoryProgress by rememberSaveable(category?.name, customCategory?.id) { mutableStateOf(false) }
     /** "Bu kategoride ara" in the category header: filters the category's cards while typing. */
     var categoryQuery by rememberSaveable(category?.name, customCategory?.id) { mutableStateOf("") }
+    /** Home: "Kartlarım" swiped left searches the cards (HomeCardsSearchTitle); the categories step aside meanwhile. */
+    var homeSearchOpen by rememberSaveable { mutableStateOf(false) }
+    var homeQuery by rememberSaveable { mutableStateOf("") }
     var saving by composerState.saving
     val whatsAppConsentRepo = remember { WhatsAppConsentRepository(context) }
     val whatsAppRecipientRepo = remember { WhatsAppRecipientRepository(context) }
@@ -1258,6 +1299,34 @@ private fun ReminderListScreen(
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var selectedCategoryIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     val isSelectionMode = selectedIds.isNotEmpty()
+    // Kontrol ettir: people to ask (members of the selected cards' one shared category, else only yourself).
+    var checkTargets by remember { mutableStateOf<List<com.cagri.real.ui.components.CheckTarget>?>(null) }
+    val checkScope = rememberCoroutineScope()
+    fun openCheckSheet() {
+        val me = com.cagri.real.platform.android.auth.AndroidBackend.auth.currentUser()?.takeIf { !it.isAnonymous }?.id
+        val categories = reminders.filter { it.id in selectedIds }.map { it.customCategoryId }.toSet()
+        val shared = categories.singleOrNull()?.let { id -> customCategories.firstOrNull { it.id == id } ?: customCategory?.takeIf { it.id == id } }?.takeIf { it.sharedId != null }
+        val self = com.cagri.real.ui.components.CheckTarget(if (shared != null && me != null) me else com.cagri.real.data.CheckRequest.ME, "Kendime")
+        if (shared == null || me == null) { checkTargets = listOf(self); return }
+        checkScope.launch {
+            val others = runCatching { com.cagri.real.sharedcategories.SharedCategorySync.members(shared) }.getOrDefault(emptyList())
+                .filter { it.uid != me }.map { com.cagri.real.ui.components.CheckTarget(it.uid, it.name) }
+            checkTargets = listOf(self) + others + if (others.size > 1) listOf(com.cagri.real.ui.components.CheckTarget(com.cagri.real.data.CheckRequest.EVERYONE, "Herkes")) else emptyList()
+        }
+    }
+    checkTargets?.let { targets ->
+        com.cagri.real.ui.components.CheckRequestSheet(
+            targets = targets,
+            canClear = reminders.any { it.id in selectedIds && it.checkRequest != null },
+            onDismiss = { checkTargets = null },
+            onSave = { target, startDay, color ->
+                val me = com.cagri.real.platform.android.auth.AndroidBackend.auth.currentUser()?.takeIf { !it.isAnonymous }?.id
+                onSetCheckRequest(selectedIds, com.cagri.real.data.CheckRequest(listOf(target), me, System.currentTimeMillis(), startDay, color))
+                checkTargets = null; selectedIds = emptySet()
+            },
+            onClear = { onSetCheckRequest(selectedIds, null); checkTargets = null; selectedIds = emptySet() }
+        )
+    }
     val isCategorySelectionMode = category == null && customCategory == null && selectedCategoryIds.isNotEmpty()
 
     val composerInput = ReminderComposerSnapshot(draft, alertAt, repeatRule, category, customCategory,
@@ -1284,12 +1353,16 @@ private fun ReminderListScreen(
     // Home screen: dictation lives in its own liquid-glass window instead of the Add to REAL composer.
     val voiceOnHome = category == null && customCategory == null
     val voiceFeedback by voiceState.feedbackText
-    val voiceWindowVisible = !voiceFeedback.isNullOrBlank() || ((voiceOnHome || voiceState.timeFollowUp.value != null) &&
+    val understandingCheck by voiceState.understandingCheck
+    // The person's picks for the underlined words; a new check starts from the AI's reading again.
+    var understandingText by remember(understandingCheck) { mutableStateOf(understandingCheck?.initial) }
+    val voiceWindowVisible = understandingCheck != null || !voiceFeedback.isNullOrBlank() || ((voiceOnHome || voiceState.timeFollowUp.value != null) &&
         (voice.phase != VoicePhase.Idle || voiceAiParsing || pendingAutoSubmit))
     ReminderVoiceEffects(voice, voiceState, composerState, voiceOnHome, draft, submit)
     var textLineCount by remember { mutableIntStateOf(1) }
     LaunchedEffect(draft) {
         if (draft.isEmpty()) {
+            voiceState.resubmitTypedCorrection.value = false
             textLineCount = 1
         }
     }
@@ -1330,6 +1403,10 @@ private fun ReminderListScreen(
     val aiThinkingExtraHeight = if (expanded && voiceAiParsing) 10.dp else 0.dp
 
     val targetComposerHeight = when {
+        understandingCheck != null && voice.phase == VoicePhase.Idle -> {
+            val extraLines = (voiceLineCount - 1).coerceIn(0, 3)
+            (156 + extraLines * 22).dp
+        }
         voiceWindowVisible -> {
             val extraLines = (voiceLineCount - 1).coerceIn(0, 3)
             (118 + extraLines * 27).dp
@@ -1380,6 +1457,9 @@ private fun ReminderListScreen(
         }
     }
     val anySelectionMode = isSelectionMode || isCategorySelectionMode
+    BackHandler(enabled = homeSearchOpen && category == null && customCategory == null && !anySelectionMode) {
+        homeSearchOpen = false; homeQuery = ""; focusManager.clearFocus(); keyboard?.hide()
+    }
     BackHandler(enabled = isLabsOpen && !anySelectionMode) { isLabsOpen = false }
     BackHandler(enabled = isColorFilterExpanded && !anySelectionMode) { isColorFilterExpanded = false }
     BackHandler(enabled = isCategorySelectionMode) { selectedCategoryIds = emptySet() }
@@ -1482,6 +1562,12 @@ private fun ReminderListScreen(
     val generalReminders = remember(reminders) { reminders.filterNot { it.isStandaloneJournal() } }
     // Yaşam > Günlüklerim: bağımsız günlükler dahil günlüğü olan tüm kartlar.
     val journalReminders = remember(reminders) { reminders.filter { it.journal != null } }
+    val journalWrittenToday = remember(journalReminders) {
+        val today = java.time.LocalDate.now()
+        journalReminders.any { r ->
+            r.journal?.let { java.time.Instant.ofEpochMilli(it.updatedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() == today } == true
+        }
+    }
     val lists = rememberReminderListProjection(
         if (category == ReminderCategory.JournalEntries) reminders else generalReminders,
         category, customCategory, customCategories, categoryColorFilter, effectiveSortOrder)
@@ -1492,9 +1578,14 @@ private fun ReminderListScreen(
     val baseCompleted = lists.baseCompleted
     val categorySearch = categoryQuery.trim().lowercase(java.util.Locale.forLanguageTag("tr"))
     val searchingCategory = categorySearch.isNotEmpty() && (category != null || customCategory != null)
+    val homeSearch = if (homeSearchOpen && category == null && customCategory == null) homeQuery.trim().lowercase(java.util.Locale.forLanguageTag("tr")) else ""
+    val searchingHome = homeSearch.isNotEmpty()
+    val searchText = if (searchingCategory) categorySearch else homeSearch
     fun matchesCategorySearch(r: ReminderItem): Boolean {
         val tr = java.util.Locale.forLanguageTag("tr")
-        return r.text.lowercase(tr).contains(categorySearch) || r.checklistItems.any { it.text.lowercase(tr).contains(categorySearch) }
+        return r.text.lowercase(tr).contains(searchText) || r.checklistItems.any { it.text.lowercase(tr).contains(searchText) } ||
+            // On Home a category's name finds its cards too ("iş" → the İş cards).
+            (searchingHome && r.customCategoryId?.let { customCategoriesById[it] }?.name?.lowercase(tr)?.contains(searchText) == true)
     }
     // Phone-calendar events filed under this category ("Kategorize et") join its cards, read-only (negative ids).
     // Home reads them too, for the category counts.
@@ -1533,10 +1624,15 @@ private fun ReminderListScreen(
             item.customCategoryId?.let { customCategoriesById[it] }?.hideFromGeneralLists != true
         }
     }
-    val active = (if (searchingCategory) lists.active.filter(::matchesCategorySearch) else lists.active) +
+    val searching = searchingCategory || searchingHome
+    // Home search also reaches the categories kept off Home ("Yalnızca kategori içinde göster").
+    val searchPoolActive = if (searchingHome) filterAndSortReminders(generalReminders.filter { !it.isCompleted }, null, effectiveSortOrder) else lists.active
+    val searchPoolCompleted = if (searchingHome) filterAndSortReminders(
+        generalReminders.inCategory(ReminderCategory.Completed).sortedByDescending { it.completedAt ?: it.createdAt }, null, effectiveSortOrder) else lists.completed
+    val active = (if (searching) searchPoolActive.filter(::matchesCategorySearch) else lists.active) +
         (if (searchingCategory) categoryCalendarItems.filter(::matchesCategorySearch) else categoryCalendarItems) +
-        homeCalendarItems
-    val completed = if (searchingCategory) lists.completed.filter(::matchesCategorySearch) else lists.completed
+        (if (searchingHome) calendarCategoryCards.within(homeCalendarDays).filter(::matchesCategorySearch) else homeCalendarItems)
+    val completed = if (searching) searchPoolCompleted.filter(::matchesCategorySearch) else lists.completed
     val journalGroups = lists.journalGroups
     val isHome = category == null && customCategory == null
     val realPetHomeSurfaceActive = isHome &&
@@ -1579,18 +1675,18 @@ private fun ReminderListScreen(
             }
         }
     }
-    // Home "Tamamlandı": 3 cards (the 3rd fades under glass) until "Daha fazla" opens 10, then 10 more each time.
+    // Home "Tamamlandı": 2 cards + a 3rd under glass (so the list stops there) until "Daha fazla" opens 10, then 10 more each time.
     // Leaving Home (category, planner, Pano, Yaşam) or the app brings it back to 3.
-    var homeCompletedShown by remember { mutableIntStateOf(4) }
-    // Category screens use the same 3 + "Daha fazla" list (not "Tamamlananlar" itself, where everything is completed).
+    var homeCompletedShown by remember { mutableIntStateOf(3) }
+    // Category screens use the same 2 + 1 under glass + "Daha fazla" list (not "Tamamlananlar" itself, where everything is completed).
     val limitCompleted = category != ReminderCategory.Completed
     LaunchedEffect(isHome, category, customCategory?.id, showPlanner, showPano, showHomeWidgets) {
-        homeCompletedShown = 4
+        homeCompletedShown = 3
     }
     val homeLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(homeLifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) homeCompletedShown = 4
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) homeCompletedShown = 3
         }
         homeLifecycle.addObserver(observer)
         onDispose { homeLifecycle.removeObserver(observer) }
@@ -1629,16 +1725,30 @@ private fun ReminderListScreen(
         com.cagri.real.contextcards.HomeContextCard(
                         moodEntries = allMoodTrackerEntries,
                         reduceAnimations = reduceAnimations,
-                        onOpenWater = { widgetDestination = "water"; showHomeWidgets = true },
-                        onOpenMood = {
-                            homeMoodSelection = JournalMood.NEUTRAL
-                            moodOpenedFromContextCard = true
-                            showHomeMood = true
+                        onOpen = { type ->
+                            when (type) {
+                                com.cagri.real.contextcards.ContextCardType.MOOD -> {
+                                    homeMoodSelection = JournalMood.NEUTRAL
+                                    moodOpenedFromContextCard = true
+                                    showHomeMood = true
+                                }
+                                com.cagri.real.contextcards.ContextCardType.JOURNAL -> showYasamJournal = true
+                                else -> {
+                                    widgetDestination = when (type) {
+                                        com.cagri.real.contextcards.ContextCardType.WATER -> "water"
+                                        com.cagri.real.contextcards.ContextCardType.BOOK -> "books"
+                                        com.cagri.real.contextcards.ContextCardType.WATCH -> "ratings"
+                                        com.cagri.real.contextcards.ContextCardType.LISTEN -> "music"
+                                        com.cagri.real.contextcards.ContextCardType.PLAY -> "games"
+                                        else -> "media"
+                                    }
+                                    showHomeWidgets = true
+                                }
+                            }
                         },
-                        onOpenBooks = { widgetDestination = "books"; showHomeWidgets = true },
-                        onOpenMedia = { widgetDestination = "media"; showHomeWidgets = true },
+                        journalWrittenToday = journalWrittenToday,
                         active = isHome
-                    ) { activeContextType, renderContextCard ->
+                    ) { activeContextTypes, renderContextCard ->
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize()
@@ -1675,8 +1785,8 @@ private fun ReminderListScreen(
                     }
                 },
             contentPadding = com.cagri.real.ui.components.DeferredBottomPaddingValues(statusHeight) {
-                if (homeCompletedMore && completed.isNotEmpty() && category != ReminderCategory.JournalEntries) 0.dp
-                else if (showComposer) composerHeightState.value + bottomGapState.value + 24.dp +
+                // The card under glass stays above the dock (it used to slide under it), so "Daha fazla" sits on its middle.
+                if (showComposer) composerHeightState.value + bottomGapState.value + 24.dp +
                     (if (isHome) HomeDockExtraBottomSpace else 0.dp) else 24.dp
             }
         ) {
@@ -1779,10 +1889,11 @@ private fun ReminderListScreen(
                             hasFilter = categoryColorFilter != null,
                             onFilter = { isColorFilterExpanded = true },
                             onEdit = {
-                                if (customCategory?.isSharedMirror == true) com.cagri.real.ui.components.RealToast.show(context, "Bu kategoriyi sadece sahibi düzenleyebilir.")
-                                else if (customCategory != null) showEditCategoryDialog = true else editingBuiltInCategory = category
+                                // Members get the editor too, limited to the description (read only) and hide switch.
+                                if (customCategory != null) showEditCategoryDialog = true else editingBuiltInCategory = category
                             },
                             onPeople = customCategory?.let { { showPeopleSheet = true } },
+                            onAddDivider = customCategory?.takeIf { !it.isReadOnlyShared }?.let { { dividerAdding = true } },
                             editLabel = if (customCategory != null) "Kategoriyi düzenle" else "Kategori rengini düzenle",
                             onGoals = customCategory?.let { c -> { plannerGoalCategoryId = c.id; showPlanner = true } },
                             sharedTransitionScope = if (categorySharedTransitionsEnabled) sharedTransitionScope else null,
@@ -1838,6 +1949,12 @@ private fun ReminderListScreen(
             }
             if (category == null && customCategory == null) {
                 item(key = "categories") {
+                    AnimatedVisibility(
+                        visible = !homeSearchOpen,
+                        enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(220)) + expandVertically(tween(300)),
+                        exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(160)) + shrinkVertically(tween(300))
+                    ) {
+                    Column {
                     CategoryCollections(
                         sharedTransitionScope = if (categorySharedTransitionsEnabled) sharedTransitionScope else null,
                         animatedVisibilityScope = if (categorySharedTransitionsEnabled) animatedVisibilityScope else null,
@@ -1878,24 +1995,29 @@ private fun ReminderListScreen(
                         reduceAnimations = reduceAnimations
                     )
                     Spacer(Modifier.height(24.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 18.dp, end = 6.dp, bottom = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "Kartlarım",
-                            color = Color(0xFFF2F2F4),
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                            activeContextType?.let { type ->
-                                Box(Modifier.size(7.dp).background(type.accent(), CircleShape))
+                    }
+                    }
+                    com.cagri.real.ui.components.HomeCardsSearchTitle(
+                        open = homeSearchOpen,
+                        query = homeQuery,
+                        onQueryChange = { homeQuery = it },
+                        onOpen = {
+                            voice.cancel()
+                            homeSearchOpen = true
+                            scope.launch { listState.animateScrollToItem(0) }
+                        },
+                        onClose = { homeSearchOpen = false; homeQuery = ""; focusManager.clearFocus() },
+                        reduceAnimations = reduceAnimations,
+                        modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 6.dp, bottom = 12.dp),
+                        titleAccessory = {
+                            // One dot per context card waiting at the bottom of the list, right beside the title.
+                            if (activeContextTypes.isNotEmpty()) Row(Modifier.padding(start = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                activeContextTypes.take(5).forEach { type ->
+                                    Box(Modifier.size(7.dp).background(type.accent(), CircleShape))
+                                }
                             }
                         }
+                    ) {
                         // The category screen's sort arrow: newest on top → newest at the bottom → nearest date.
                         com.cagri.real.ui.components.CategoryHeroActions(
                             sortOrder = sortOrder,
@@ -1950,6 +2072,7 @@ private fun ReminderListScreen(
                     Box(Modifier.fillMaxWidth().height(104.dp).padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
                         val emptyMsg = when {
                             category == ReminderCategory.JournalEntries -> "Henüz günlük eklenmemiş"
+                            searchingHome -> "Bununla eşleşen kart yok"
                             (category != null || customCategory != null) && categoryColorFilter != null -> "Bu renkte hatırlatıcı yok"
                             customCategory != null -> "Bu kategoride henüz hatırlatıcı yok"
                             category != null -> category.emptyMessage
@@ -2006,7 +2129,28 @@ private fun ReminderListScreen(
                     }
                 }
             } else {
-                items(active, key = { it.id }, contentType = { "reminder" }) { reminder ->
+                // The context card sits on top of the cards, like one of them (swipe left to put it away).
+                if (isHome && !searchingHome) {
+                    item(key = "context_card") {
+                        Box(if (reduceAnimations) Modifier else Modifier.animateItem()) { renderContextCard() }
+                    }
+                }
+                // Ayraçlar sit between the cards at the moment they were added (category screens, added-time orders).
+                val slots = if (customCategory != null && !searching) dividerSlots(active, dividers, effectiveSortOrder) else emptyMap()
+                val canEditDividers = customCategory?.isReadOnlyShared != true
+                fun androidx.compose.foundation.lazy.LazyListScope.dividerRows(at: Int) = slots[at]?.forEach { d ->
+                    item(key = "divider_${d.id}", contentType = "divider") {
+                        com.cagri.real.ui.components.CategoryDividerRow(
+                            title = d.text, editable = canEditDividers,
+                            onEdit = { dividerEditing = d }, onDelete = { onDeleteDivider(d.id) },
+                            modifier = if (reduceAnimations) Modifier else Modifier.animateItem(
+                                placementSpec = RealMotion.smooth<IntOffset>(0.35f), fadeInSpec = tween(180), fadeOutSpec = tween(180))
+                        )
+                    }
+                }
+                active.forEachIndexed { index, reminder ->
+                    dividerRows(index)
+                    item(key = reminder.id, contentType = "reminder") {
                     val isSelected = reminder.id in selectedIds
                     val isNewlyCreated = entryTracker.isAnimating(reminder.id)
                     // A phone-calendar event card: opens the event window; no completing, swiping or selecting.
@@ -2034,6 +2178,7 @@ private fun ReminderListScreen(
                         customCategory = reminderCategory,
                         showVoiceSummary = false,
                         showCategoryStripes = category == null && customCategory == null,
+                        categoryLabel = if (searchingHome) reminderCategory else null,
                         onLongClick = {
                             if (!isCategorySelectionMode && !viewOnly) {
                                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
@@ -2050,7 +2195,7 @@ private fun ReminderListScreen(
                             category != ReminderCategory.Today -> ({ scope.launch { onMoveTo24Hour(reminder.id) } })
                             else -> null
                         },
-                        swipeRightLabel = if (plainHomeCards) "Tamamla" else "Move 24 hour",
+                        swipeRightLabel = if (!plainHomeCards) "Move 24 hour" else if (reminder.isCompleted) "Geri aç" else "Tamamla",
                         // A completed card leaves the list; a repeating one stays (it moves to its next time).
                         swipeRightKeepsCard = !plainHomeCards || reminder.hasRepeat,
                         plainStyle = plainHomeCards,
@@ -2063,12 +2208,9 @@ private fun ReminderListScreen(
                             ))
                             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                     )
+                    }
                 }
-            }
-            if (isHome && homeCompletedMore) {
-                item(key = "context_card") {
-                    renderContextCard()
-                }
+                dividerRows(active.size)
             }
             if (completed.isNotEmpty() && category != ReminderCategory.JournalEntries) {
                 item(key = "completed_heading") {
@@ -2099,8 +2241,7 @@ private fun ReminderListScreen(
                                         }
                                         // The last card shown, while more remain, sits "under glass": blurred, faded, with "Daha fazla" on it.
                                         val underGlass = homeCompletedMore && index == completedPreview.lastIndex
-                                        // The card under glass leaves room above it for "Daha fazla", just over the dock.
-                                        Box(Modifier.fillMaxWidth().then(if (underGlass) Modifier.padding(top = 4.dp) else Modifier)) {
+                                        Box(Modifier.fillMaxWidth()) {
                                         ReminderCard(
                                             reminder, onToggle = { onToggleCompleted(reminder.id) },
                                             onOpen = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); onOpenReminder(reminder.id) },
@@ -2138,7 +2279,8 @@ private fun ReminderListScreen(
                                             Text(
                                                 "Daha fazla",
                                                 color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                                                modifier = Modifier.align(Alignment.TopCenter)
+                                                // In the middle of the card (its 8 dp bottom gap left out).
+                                                modifier = Modifier.align(Alignment.Center).padding(bottom = 8.dp)
                                                     .clip(RoundedCornerShape(50))
                                                     .background(Color(0xCC1C1D22))
                                                     .border(0.7.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
@@ -2193,11 +2335,6 @@ private fun ReminderListScreen(
                                 .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                         )
                     }
-                }
-            }
-            if (isHome && !homeCompletedMore) {
-                item(key = "context_card") {
-                    renderContextCard()
                 }
             }
         }
@@ -2427,7 +2564,13 @@ private fun ReminderListScreen(
                 designStyle = designStyle,
                 reduceDynamicBlur = reduceDynamicBlur,
                 reduceAnimations = reduceAnimations,
-                onMicClick = { if (!saving) onComposerMicClick() },
+                onMicClick = {
+                    if (!saving) {
+                        // A new sentence replaces the one being checked.
+                        understandingCheck?.cancel?.invoke()
+                        onComposerMicClick()
+                    }
+                },
                 feedbackText = voiceFeedback,
                 canSaveRawText = !saving && !copyingPhotos && draft.isNotBlank(),
                 onSaveRawText = {
@@ -2439,7 +2582,22 @@ private fun ReminderListScreen(
                 },
                 onDismissFeedback = { voiceState.feedbackText.value = null; voiceState.requestTimeListening.value = false },
                 onLineCountChange = { voiceLineCount = it },
-                modifier = Modifier.fillMaxWidth().deferredHeight { composerHeightState.value }
+                modifier = Modifier.fillMaxWidth().deferredHeight { composerHeightState.value },
+                understanding = understandingText,
+                onUnderstandingPick = { index, option ->
+                    understandingText = understandingText?.let { com.cagri.real.speech.VoiceUnderstanding.pick(it, index, option) }
+                },
+                onUnderstandingConfirm = {
+                    val check = understandingCheck
+                    val finalText = understandingText?.text
+                    if (check != null && finalText != null) check.confirm(finalText)
+                },
+                onUnderstandingCorrect = {
+                    val check = understandingCheck
+                    val finalText = understandingText?.text
+                    if (check != null && finalText != null) check.correct(finalText)
+                },
+                onUnderstandingPlace = understandingCheck?.takeIf { it.place != null }?.let { check -> { check.fixPlace() } }
             )
             } else {
             GlassComposer(
@@ -2476,7 +2634,14 @@ private fun ReminderListScreen(
             onPickAttachment = handlePickComposerAttachment,
             draftAttachments = draftAttachments,
             onRemoveDraftAttachment = handleRemoveDraftAttachment,
-            onSubmit = { if (voice.phase == VoicePhase.Idle) submit(draft) else voice.finish() },
+            onSubmit = {
+                if (voice.phase != VoicePhase.Idle) voice.finish()
+                // "Yeri yaz": the typed place gets its address and the card is saved.
+                else if (voiceState.placeFix.value != null && draft.isNotBlank()) voiceState.placeFix.value?.invoke(draft)
+                // A sentence corrected by hand after "Doğru mu anladım?" goes back through the AI.
+                else if (voiceState.resubmitTypedCorrection.value && draft.isNotBlank()) voiceFlow.resubmit(draft)
+                else submit(draft)
+            },
             expanded = expanded, onFocusChanged = { editing = it }, focusRequester = inputFocus,
             backdrop = scene, backdropPosition = { scenePosition },
             voicePhase = voice.phase, voiceLevel = voice.level,
@@ -2630,6 +2795,7 @@ private fun ReminderListScreen(
                     }
                 },
                 enabled = isSelectionMode || isCategorySelectionMode,
+                onCheck = if (isCategorySelectionMode) null else ({ openCheckSheet() }),
                 backdrop = scene,
                 backdropPosition = { scenePosition },
                 reduceDynamicBlur = reduceDynamicBlur,
@@ -2822,7 +2988,10 @@ private fun ReminderListScreen(
                 backdropPosition = { scenePosition },
                 onDismiss = { showEditCategoryDialog = false },
                 onSaveCustomCategory = { name, iconKey, start, end, hide, useDarkText, blendFraction, customSolidColorArgb, _ ->
-                    onEditCategory(customCategory.id, name, iconKey, start, end, hide, useDarkText, blendFraction, customSolidColorArgb)
+                    val c = customCategory
+                    // A member changes only this phone's hide switch; the rest is the owner's (sync keeps it in step).
+                    if (c.isSharedMirror) onEditCategory(c.id, c.name, c.iconKey, c.accentStart, c.accentEnd, hide, c.useDarkText, c.gradientBlendFraction, c.customSolidColorArgb)
+                    else onEditCategory(c.id, name, iconKey, start, end, hide, useDarkText, blendFraction, customSolidColorArgb)
                     showEditCategoryDialog = false
                 },
                 onDeleteCustomCategory = { deleteReminders ->
@@ -2844,7 +3013,7 @@ private fun ReminderListScreen(
         }
         com.cagri.real.ui.motion.RealModuleTransition(
             visible = showHomeWidgets,
-            reduceMotion = reduceAnimations,
+            reduceMotion = reduceAnimations || yasamQuickReturn,
             modifier = Modifier.zIndex(80f)
         ) {
             HomeWidgetScreen(
@@ -2861,6 +3030,8 @@ private fun ReminderListScreen(
                 },
                 startInJournals = returnToYasamJournals,
                 onStartInJournalsConsumed = { returnToYasamJournals = false },
+                quickReturn = yasamQuickReturn,
+                onQuickReturnConsumed = { yasamQuickReturn = false },
                 designStyle = designStyle,
                 journalColor = builtInCategoryColors[ReminderCategory.JournalEntries],
                 onDismiss = { showHomeWidgets = false },
@@ -2929,6 +3100,7 @@ private fun ReminderListScreen(
                 },
                 onSetReminderAlert = onPlannerSetAlert,
                 onToggleReminder = onToggleCompleted,
+                onSetCompletionNote = onSetCompletionNote,
                 // Pencil popup on the category screen: a picked pastel is saved as the category's solid color.
                 onUpdateCategoryColor = { categoryId, argb ->
                     customCategories.firstOrNull { it.id == categoryId }?.let { c ->
@@ -2973,6 +3145,7 @@ private fun ReminderListScreen(
                 onDismiss = {
                     showMoodTrackerHistory = false
                     if (returnToHomeWidgetsAfterMood) {
+                        yasamQuickReturn = true
                         showHomeWidgets = true
                         returnToHomeWidgetsAfterMood = false
                     }
@@ -2986,13 +3159,14 @@ private fun ReminderListScreen(
             )
         }
         if (showHomeMood) {
-            MoodV2FullScreen(
+            MoodV3FullScreen(
                 selectedMood = homeMoodSelection,
                 onMoodSelected = { homeMoodSelection = it },
                 onDismiss = {
                     showHomeMood = false
                     if (moodAddFromYasam) {
                         // Yaşam ⊕: geri doğrudan Yaşam'a; mood geçmişi açılmaz.
+                        yasamQuickReturn = true
                         showHomeWidgets = true
                         returnToHomeWidgetsAfterMood = false
                         moodAddFromYasam = false
@@ -3022,6 +3196,7 @@ private fun ReminderListScreen(
                 showMoodTrackerHistory = false
                 showHomeMood = false
                 if (returnToHomeWidgetsAfterMood) {
+                    yasamQuickReturn = true
                     showHomeWidgets = true
                     returnToHomeWidgetsAfterMood = false
                 }

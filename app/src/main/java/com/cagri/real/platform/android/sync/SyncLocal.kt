@@ -47,6 +47,19 @@ object SyncLocal {
         }
         requestSync()
     }
+    /** A refused record (Eşitleme): send it again, or take the account's copy back on this phone. */
+    suspend fun resolveRejectedRecord(uid: String, recordId: String, useCloud: Boolean) = withContext(Dispatchers.IO) {
+        awaitInitialized()
+        runLock.withLock {
+            synchronized(lock) {
+                check(active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid && !cloudPaused) { "Eşitleme bu hesap için kapalı." }
+                if (useCloud) database.useCloudForRejected(active, recordId) else database.retryRejected(active, recordId)
+            }
+            publishHealth()
+        }
+        if (useCloud) main.post { if (active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid) ReminderRepository.notifyChanged() }
+        requestSync()
+    }
     suspend fun chooseSyncConflict(uid: String, conflict: com.cagri.real.sync.PersistedSyncConflict,
         choice: com.cagri.real.sync.SyncConflictChoice) = withContext(Dispatchers.IO) {
         awaitInitialized()
@@ -366,7 +379,9 @@ object SyncLocal {
                 return@withLock
             }
             startup.failed(startupGeneration)
-            synchronized(lock) { database.meta(account,"last_error",failure.javaClass.simpleName) }
+            // Kind and message (e.g. "IllegalStateException: Cloud card is deleted"), shown in Hesapları yönet → Eşitleme.
+            synchronized(lock) { database.meta(account,"last_error",
+                listOfNotNull(failure.javaClass.simpleName, failure.message?.take(160)).joinToString(": ")) }
             throw failure
         } finally {
             publishHealth()

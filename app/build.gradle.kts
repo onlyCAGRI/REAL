@@ -31,8 +31,8 @@ android {
         applicationId = "com.cagri.real"
         minSdk = 26
         targetSdk = 36
-        versionCode = 57
-        versionName = "0.8.13"
+        versionCode = 62
+        versionName = "0.9.4"
 
     }
 
@@ -69,7 +69,7 @@ android {
     // Only tester builds merge the install permission. Main/store manifest has none.
     if (testerUpdatesEnabled) {
         sourceSets {
-            getByName("debug").manifest.srcFile("src/tester/AndroidManifest.xml")
+            getByName("debug").manifest.srcFile("src/debug/AndroidManifest.xml")
             getByName("release").manifest.srcFile("src/tester/AndroidManifest.xml")
             getByName("optimized").manifest.srcFile("src/tester/AndroidManifest.xml")
         }

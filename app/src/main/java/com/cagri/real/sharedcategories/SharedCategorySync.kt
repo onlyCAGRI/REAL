@@ -241,7 +241,8 @@ object SharedCategorySync {
             useDarkText = c.optBoolean("useDarkText"),
             gradientBlendFraction = if (c.isNull("gradientBlendFraction")) null else c.optDouble("gradientBlendFraction").toFloat(),
             customSolidColorArgb = if (c.isNull("customSolidColorArgb")) null else c.optInt("customSolidColorArgb"),
-            sharedId = s.id, sharedRole = s.access
+            sharedId = s.id, sharedRole = s.access,
+            sharedDescription = s.description?.let { com.cagri.real.ui.components.limitCategoryDescription(it).trim() }?.takeIf { it.isNotEmpty() }
         )
         if (mirror != existing) saveCategory(repo, mirror)
     }
@@ -288,7 +289,12 @@ object SharedCategorySync {
                 val cardId = card.getString("id")
                 val entry = st.card(cardId)
                 val localId = entry?.optLong("localId") ?: localIdFor(cardId)
-                val current = ReminderRepository(context).load().firstOrNull { it.id == localId || it.sharedCardId == cardId }
+                val cards = ReminderRepository(context).load()
+                // An adopted card is linked to the owner's personal copy restored from the account (fresh install):
+                // without this the copy looked new and went up again as a duplicate.
+                val sourceKey = card.optString("sourceKey").takeIf { it.isNotBlank() && it != "null" }
+                val current = cards.firstOrNull { it.id == localId || it.sharedCardId == cardId }
+                    ?: sourceKey?.let { key -> cards.firstOrNull { it.sharedCardId == null && it.customCategoryId == category.id && it.id.toString() == key } }
                 if (card.optBoolean("deleted")) {
                     if (current != null) { remove(context, current.id); changed = true }
                     st.removeCard(cardId); continue

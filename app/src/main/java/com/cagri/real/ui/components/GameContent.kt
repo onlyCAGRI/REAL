@@ -44,6 +44,20 @@ fun GameContentSection(
         key(block.id) {
             if (display != CatalogCardDisplay.FULL) {
                 CatalogCompactContent(block.title, display, 3f / 4f, editing, { onRemove(block.id) }) { modifier -> GameCover(block, modifier) }
+            } else if (isDetailHero() && !editing) {
+                // The card's cover: game art on top, title, year · genres, platforms, then "Oyun sayfasını aç".
+                var ambience by remember(block.id) { mutableStateOf(Color.Transparent) }
+                CatalogHeroCover(
+                    imageUrl = block.artworkUrl?.replace("t_cover_big", "t_cover_big_2x"), posterAspect = 3f / 4f, title = block.title,
+                    subtitle = listOfNotNull(block.year?.toString(), block.genres.take(2).joinToString(" · ") { GameGenres.label(it) }.takeIf { it.isNotBlank() }).joinToString(" · "),
+                    placeholder = ActionGlyph.Play, ambience = ambience, onAmbience = { ambience = it },
+                    description = block.platforms.take(6).joinToString(" · ")
+                ) {
+                    if (showActions) HeroOpenRow("Oyun sayfasını aç ↗", onOpen = {
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(block.providerUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            .onFailure { RealToast.show(context, "Oyun sayfası açılamadı") }
+                    }) { Text(block.provider, color = Color(0xFF8E8E98), fontSize = 12.sp) }
+                }
             } else {
                 TimelineContent(designStyle, GameBlockTone.copy(alpha = .6f)) {
                     if (editing) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

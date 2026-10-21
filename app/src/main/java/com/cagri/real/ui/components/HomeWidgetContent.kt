@@ -109,7 +109,7 @@ fun HomeWidgetScreen(
     onAddMusic: suspend (com.cagri.real.data.MusicBlock) -> Long? = { null },
     onAddGame: suspend (com.cagri.real.data.CardGameBlock) -> Long? = { null },
     onBooksOpenChange: (Boolean) -> Unit = {},
-    /** Deep link from the Home context card: "books", "media" or "water". Opens that module directly. */
+    /** Deep link from the Home context card: "books", "media", "music", "games", "ratings" or "water". Opens that module directly. */
     initialDestination: String? = null,
     onInitialDestinationConsumed: () -> Unit = {},
     /** Mood ⊕ butonu: doğrudan mood kayıt akışı. Verilmezse mood geçmişi açılır. */
@@ -123,6 +123,9 @@ fun HomeWidgetScreen(
     /** Detaydan dönüşte Yaşam doğrudan Günlüklerim modunda açılır. */
     startInJournals: Boolean = false,
     onStartInJournalsConsumed: () -> Unit = {},
+    /** Coming back from a flow opened from Yaşam (mood): no opening animation, Yaşam is simply there again. */
+    quickReturn: Boolean = false,
+    onQuickReturnConsumed: () -> Unit = {},
     /** Mikrofon butonu; sesli komut altyapısına sonradan bağlanacak. */
     onMicClick: () -> Unit = {},
     /** Alt mikrofonun cam stili (Home dock ile aynı). */
@@ -130,7 +133,13 @@ fun HomeWidgetScreen(
 ) {
     val directKind = remember { initialDestination }
     // Keşif hedefi: film önerisi, izlenecek listem, oyun önerisi, oynanacak listem. "media" deep link'i Film'e gider.
-    var discovery by rememberSaveable { mutableStateOf<YasamDiscoveryTarget?>(if (initialDestination == "media") YasamDiscoveryTarget.Film else null) }
+    var discovery by rememberSaveable { mutableStateOf<YasamDiscoveryTarget?>(when (initialDestination) {
+        "media" -> YasamDiscoveryTarget.Film
+        "music" -> YasamDiscoveryTarget.Music
+        "games" -> YasamDiscoveryTarget.Game
+        "ratings" -> YasamDiscoveryTarget.Ratings
+        else -> null
+    }) }
     // Yaşam'ın modu. Early return'lerden ÖNCE tutulur ki Kitap/Medya/Su dönüşünde aynı modda kalsın.
     var section by rememberSaveable { mutableStateOf(if (startInJournals) YasamSection.Journals else YasamSection.Home) }
     var showBooks by rememberSaveable { mutableStateOf(initialDestination == "books") }
@@ -139,10 +148,11 @@ fun HomeWidgetScreen(
     var tab by rememberSaveable { mutableIntStateOf(0) }
     // İlk açılış animasyonu (mikrofondan dairesel açılış) bir kez oynar; Kitap/Medya dönüşünde tekrarlanmaz.
     // Günlük detayından dönüşte dairesel açılış tekrarlanmaz.
-    var opened by rememberSaveable { mutableStateOf(startInJournals) }
+    var opened by rememberSaveable { mutableStateOf(startInJournals || quickReturn) }
+    val quickStart = remember { quickReturn }
     var widgetContentGeneration by remember { mutableIntStateOf(0) }
     val holder = rememberYasamHolder()
-    LaunchedEffect(Unit) { onInitialDestinationConsumed(); onStartInJournalsConsumed() }
+    LaunchedEffect(Unit) { onInitialDestinationConsumed(); onStartInJournalsConsumed(); onQuickReturnConsumed() }
     // Üst ekran, kitap açıkken navigation bar boşluğunu bırakır (kitap alta kadar çizilsin diye).
     LaunchedEffect(showBooks) { onBooksOpenChange(showBooks) }
     DisposableEffect(Unit) { onDispose { onBooksOpenChange(false) } }
@@ -169,7 +179,7 @@ fun HomeWidgetScreen(
     LaunchedEffect(Unit) { delay(1000); opened = true }
     // İlk açılışta içerik, daire ekranı açarken hazır beklesin diye 250 ms gecikir.
     val baseMs = if (playOpen && widgetContentGeneration == 0) 250 else 0
-    val entrance = rememberRealEntrance(reduceAnimations, identity = widgetContentGeneration, totalMs = 1800)
+    val entrance = rememberRealEntrance(reduceAnimations || (quickStart && widgetContentGeneration == 0), identity = widgetContentGeneration, totalMs = 1800)
     // Cümle konusu her açılışta (ve modül dönüşünde) değişir.
     val appContext = LocalContext.current.applicationContext
     // rememberSaveable: dönme/süreç yeniden kurulmasında cümle konusu değişmesin; son konu ayrıca kalıcı tutulur.
@@ -209,6 +219,7 @@ fun HomeWidgetScreen(
         openGameList = { discovery = YasamDiscoveryTarget.GameList },
         openMusic = { if (pendingDiscovery == null) pendingDiscovery = YasamDiscoveryTarget.Music },
         openMusicList = { discovery = YasamDiscoveryTarget.MusicList },
+        openRatings = { discovery = YasamDiscoveryTarget.Ratings },
         openJournals = { section = YasamSection.Journals },
         newJournal = onNewJournal ?: { section = YasamSection.Journals }
     )
@@ -324,7 +335,7 @@ fun HomeWidgetScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             key(discoveryTarget) {
-                val closeDiscovery = { discovery = null; if (directKind == "media") onDismiss() }
+                val closeDiscovery = { discovery = null; if (directKind in setOf("media", "music", "games", "ratings")) onDismiss() }
                 val film = discoveryTarget == YasamDiscoveryTarget.Film || discoveryTarget == YasamDiscoveryTarget.FilmList
                 val music = discoveryTarget == YasamDiscoveryTarget.Music || discoveryTarget == YasamDiscoveryTarget.MusicList
                 val filterEntrance = rememberRealEntrance(reduceAnimations, totalMs = 1800)
@@ -339,7 +350,9 @@ fun HomeWidgetScreen(
                         onBack = closeDiscovery
                     )
                 }
-                if (music) MusicDiscoveryScreen(
+                if (discoveryTarget == YasamDiscoveryTarget.Ratings) RatingsScreen(
+                    reduceAnimations, onDismiss = closeDiscovery, designStyle = designStyle
+                ) else if (music) MusicDiscoveryScreen(
                     reduceAnimations, onDismiss = closeDiscovery, onAddMusic = onAddMusic,
                     reduceDynamicBlur = reduceDynamicBlur,
                     startInList = discoveryTarget == YasamDiscoveryTarget.MusicList,
@@ -400,7 +413,7 @@ private fun yasamMoodView(entries: List<MoodTrackerEntry>) = YasamMoodView(
 internal enum class YasamSection { Home, Journals }
 
 /** "Öneri al" hedefleri: film tür seçimi, kayıtlı izlenecek listesi, oyun tür seçimi, kayıtlı oynanacak listesi. */
-internal enum class YasamDiscoveryTarget { Film, FilmList, Game, GameList, Music, MusicList }
+internal enum class YasamDiscoveryTarget { Film, FilmList, Game, GameList, Music, MusicList, Ratings }
 
 @Composable
 private fun YasamScrollContent(
@@ -503,10 +516,9 @@ private fun YasamScrollContent(
                 mediaPrompt = mediaPrompt,
                 reduceAnimations = reduceAnimations, actions = actions,
                 moodEntries = moodEntries,
-                watchlistCount = holder.watchlistCount, playlistCount = holder.playlistCount, musicCount = holder.musicCount,
+                watchlistCount = holder.watchlistCount, playlistCount = holder.playlistCount, musicCount = holder.musicCount, ratings = holder.ratings, watchArt = holder.watchArt, gameArt = holder.gameArt, musicArt = holder.musicArt,
                 leave = rowDeparture
             )
-
         }
         // Son kutu mikrofonun altında kalmasın.
         Spacer(Modifier.height(130.dp))

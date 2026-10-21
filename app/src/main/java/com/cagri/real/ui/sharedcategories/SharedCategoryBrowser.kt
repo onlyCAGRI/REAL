@@ -30,7 +30,6 @@ import java.util.Locale
 /** Shared view is isolated from MainActivity reminders and from the owner's local numeric IDs. */
 @Composable
 fun SharedCategoryBrowser(reduceAnimations: Boolean, onDismiss: () -> Unit) {
-    val (dailyView, _) = rememberPlannerDailyViewPreference()
     val context = LocalContext.current
     val user = currentConnectionsUser()
     val api = remember(user?.id) { user?.let { SharedCategoryApi(context.applicationContext, it.id) } }
@@ -100,7 +99,7 @@ fun SharedCategoryBrowser(reduceAnimations: Boolean, onDismiss: () -> Unit) {
                     )
                 }
                 PlannerCategoryDetailScreen(ui = ui, reduceAnimations = reduceAnimations, readOnly = true,
-                    categoryColorBackground = dailyView == PlannerDailyView.NewPlus,
+                    categoryColorBackground = false,
                     onBack = { detail = null }, onDone = { detail = null },
                     icon = { m, c -> CategoryIconGlyph(CategoryIcon.fromKey(current.item.category.iconKey), m, c) },
                     onOpenGoal = { id -> card = current.goals.firstOrNull { it.card.id == id } },

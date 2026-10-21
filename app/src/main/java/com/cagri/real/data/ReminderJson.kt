@@ -104,6 +104,14 @@ object ReminderJson {
                             sharedAuthorUid = item.optString("sharedAuthorUid", "").takeIf { it.isNotBlank() && it != "null" },
                             sharedAuthorName = item.optString("sharedAuthorName", "").takeIf { it.isNotBlank() && it != "null" },
                             earlyAlertMinutes = item.optInt("earlyAlertMinutes", 0).takeIf { it in 1..MAX_EARLY_ALERT_MINUTES },
+                            isDivider = item.optBoolean("isDivider", false),
+                            completionNote = item.optString("completionNote", "").takeIf { !item.isNull("completionNote") && it.isNotBlank() },
+                            checkRequest = item.optJSONObject("checkRequest")?.let { c ->
+                                val to = c.optJSONArray("to")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf(String::isNotBlank) } }.orEmpty()
+                                if (to.isEmpty() || !c.has("at")) null else CheckRequest(to, c.optString("from", "").takeIf { !c.isNull("from") && it.isNotBlank() },
+                                    c.getLong("at"), if (c.isNull("startEpochDay") || !c.has("startEpochDay")) null else c.getLong("startEpochDay"),
+                                    if (c.isNull("color") || !c.has("color")) null else c.getInt("color"))
+                            },
                             customCategoryId = item.optionalTimestamp("customCategoryId"),
                             isChecklist = isChecklist,
                             checklistItems = checklistItems,
@@ -173,6 +181,10 @@ object ReminderJson {
                         }
                         reminder.endAt?.let { obj.put("endAt", it) }
                         reminder.earlyAlertMinutes?.let { obj.put("earlyAlertMinutes", it) }
+                        if (reminder.isDivider) obj.put("isDivider", true)
+                        reminder.completionNote?.let { obj.put("completionNote", it) }
+                        reminder.checkRequest?.let { c -> obj.put("checkRequest", JSONObject().put("to", org.json.JSONArray(c.to)).put("at", c.at)
+                            .apply { c.from?.let { put("from", it) }; c.startEpochDay?.let { put("startEpochDay", it) }; c.colorArgb?.let { put("color", it) } }) }
                         // Ortak kategori (device-local bookkeeping; stripped before personal sync).
                         reminder.sharedCardId?.let { obj.put("sharedCardId", it) }
                         reminder.sharedAuthorUid?.let { obj.put("sharedAuthorUid", it) }

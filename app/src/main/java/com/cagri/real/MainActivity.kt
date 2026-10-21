@@ -36,6 +36,7 @@ import com.cagri.real.ui.components.categoryDescriptionKey
 import com.cagri.real.ui.components.saveCategoryDescription
 import com.cagri.real.ui.theme.RealTheme
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.Locale
@@ -156,8 +157,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             RealTheme {
                 val pendingDeletes = pendingDeleteIds
+                // Ayraçlar (category dividers) go only to the category list; every other screen sees real cards.
+                val visibleDividers = remember(reminders, pendingDeletes) { reminders.filter { it.isDivider && it.id !in pendingDeletes } }
                 val visibleReminders = remember(reminders, pendingDeletes) {
-                    (if (pendingDeletes.isEmpty()) reminders else reminders.filterNot { it.id in pendingDeletes }).map { r ->
+                    (if (pendingDeletes.isEmpty()) reminders else reminders.filterNot { it.id in pendingDeletes }).withoutDividers().map { r ->
                         // Black or white text follows the card's colour automatically (no manual switch any more).
                         val dark = com.cagri.real.ui.components.autoCardDarkText(r.accentStart, r.accentEnd, r.customSolidColorArgb)
                         if (r.useDarkText == dark) r else r.copy(useDarkText = dark)
@@ -207,6 +210,24 @@ class MainActivity : ComponentActivity() {
                     preferences.getInt("home_category_preview_count_v1", 4).coerceIn(1, 12)
                 }
                 val startupBlocksHome = startup.blocksHome(localWorkspaceToken, reminders.isNotEmpty(), loadedStartupRevision)
+                // A failed first sync stays behind the startup skeleton: REAL retries quietly (1.5 s, 3 s, 4.5 s) and
+                // only shows "Yeniden dene" when it is still failing after that and the phone has no cards to show.
+                var startupOfflineVisible by remember { mutableStateOf(false) }
+                LaunchedEffect(startup.generation) {
+                    startupOfflineVisible = false
+                    var failures = 0
+                    while (true) {
+                        val state = com.cagri.real.platform.android.sync.SyncLocal.startup.state.first {
+                            it.phase == com.cagri.real.startup.StartupPhase.READY || it.phase == com.cagri.real.startup.StartupPhase.ERROR_OFFLINE
+                        }
+                        if (state.phase == com.cagri.real.startup.StartupPhase.READY) break
+                        failures++
+                        if (failures > 3) { startupOfflineVisible = true; break }
+                        delay(1_500L * failures)
+                        com.cagri.real.platform.android.sync.SyncLocal.retryStartup()
+                    }
+                }
+                val startupOfflineShown = startup.phase == com.cagri.real.startup.StartupPhase.ERROR_OFFLINE && startupOfflineVisible
                 val showWelcome = startup.showWelcome(hasCompletedOnboarding)
 
 
@@ -244,11 +265,10 @@ class MainActivity : ComponentActivity() {
                                 hasCompletedOnboarding = true
                             }
                         )
-                    } else if (!skeletonPreviewFinished && !loadFailed &&
-                        startup.phase != com.cagri.real.startup.StartupPhase.ERROR_OFFLINE) {
+                    } else if (!skeletonPreviewFinished && !loadFailed && !startupOfflineShown) {
                         Surface(Modifier.fillMaxSize(), color = Color.Black) {}
                     } else if (startupBlocksHome && !loadFailed) {
-                        if (startup.phase == com.cagri.real.startup.StartupPhase.ERROR_OFFLINE) {
+                        if (startupOfflineShown) {
                             StartupLoadingScreen(
                                 offline = true,
                                 onRetry = { com.cagri.real.platform.android.sync.SyncLocal.retryStartup() },
@@ -269,6 +289,12 @@ class MainActivity : ComponentActivity() {
                     } else {
                         ReminderScreen(
                             reminders = visibleReminders,
+                            dividers = visibleDividers,
+                            onAddDivider = { categoryId, title -> mutate { repository.addDivider(categoryId, title) } },
+                            onEditDivider = { id, title -> mutate { repository.setDividerTitle(id, title) } },
+                            onDeleteDivider = { id -> mutate { repository.delete(id) } },
+                            onSetCompletionNote = { id, note -> mutate { repository.setCompletionNote(id, note) } },
+                            onSetCheckRequest = { ids, request -> mutate { repository.setCheckRequest(ids, request) } },
                             onAddReminder = { text, alertAt, repeatRule, customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl, attachments, voiceRecordings, location, plannedDateEpochDay, quick24HourUntilAt, musicBlocks, mediaBlocks ->
                                 var createdId: Long? = null
                                 val success = perform(warnIfBlocked = true) {
@@ -574,8 +600,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                    if (!showWelcome && !loadFailed &&
-                        startup.phase != com.cagri.real.startup.StartupPhase.ERROR_OFFLINE) {
+                    if (!showWelcome && !loadFailed && !startupOfflineShown) {
                         key(localWorkspaceToken) {
                             StartupSkeletonReveal(
                                 readyToReveal = skeletonPreviewFinished && !startupBlocksHome && ready &&
@@ -587,6 +612,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     com.cagri.real.ui.ai.AiConsentHost(authUser?.id)
+                    com.cagri.real.updates.RequiredUpdateHost(authUser?.id)
                     com.cagri.real.ui.subscription.ProAccessHost(authUser?.id)
 
                     if (!showWelcome && !startupBlocksHome && ready && realPetEnabled) {
@@ -671,6 +697,8 @@ class MainActivity : ComponentActivity() {
         notificationsAllowed = NotificationManagerCompat.from(this).areNotificationsEnabled()
         if (::repository.isInitialized) lifecycleScope.launch { perform(reloadRelated = true) }
         com.cagri.real.sharedcategories.SharedCategorySync.request(this, 300)
+        // Profile picture for connected people (only uploads when it, or the photo-sharing switch, changed).
+        lifecycleScope.launch { com.cagri.real.platform.android.connections.ProfilePictures.push(applicationContext) }
         // Direct Share: category shortcuts in the share menu (Ayarlar → Paylaş menüsü kısayolları).
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
@@ -737,9 +765,11 @@ class MainActivity : ComponentActivity() {
         if (query.isBlank()) return location
 
         return try {
-            val match = Geocoder(applicationContext, Locale.getDefault())
-                .getFromLocationName(query, 1)
-                ?.firstOrNull()
+            val geocoder = Geocoder(applicationContext, Locale.getDefault())
+            // A voice place is "When Kitchen, Ordu": when the venue itself is unknown, at least show the city.
+            val match = geocoder.getFromLocationName(query, 1)?.firstOrNull()
+                ?: query.substringAfterLast(',', "").trim().takeIf { it.length >= 2 }
+                    ?.let { city -> geocoder.getFromLocationName(city, 1)?.firstOrNull() }
                 ?: return location
             if (!match.latitude.isFinite() || !match.longitude.isFinite() ||
                 match.latitude !in -90.0..90.0 || match.longitude !in -180.0..180.0) return location
@@ -921,6 +951,8 @@ class MainActivity : ComponentActivity() {
     private suspend fun perform(
         warnIfBlocked: Boolean = false, reloadRelated: Boolean = false, action: (() -> Unit)? = null
     ): Boolean {
+        // An app version below the minimum may only look: no card, category or mood change.
+        if (action != null && com.cagri.real.updates.AppUpdateGate.blocked()) return false
         val requestedGeneration = refreshGeneration
         return operations.withLock {
         val preferenceRevision = com.cagri.real.platform.android.sync.SyncLocal.preferenceRevision()

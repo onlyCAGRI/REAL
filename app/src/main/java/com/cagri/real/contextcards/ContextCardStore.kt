@@ -27,7 +27,10 @@ class ContextCardStore(private val preferences: SharedPreferences) {
     }
 
     /** Settings test buttons. */
-    fun force(type: ContextCardType?) { update { it.copy(forcedType = type?.key) } }
+    fun force(type: ContextCardType?) { update { it.copy(forcedType = type?.key, forcedDone = emptySet()) } }
+
+    /** Settings test button: the whole row at once. */
+    fun forceAll() { update { it.copy(forcedType = ContextCardEngine.FORCE_ALL, forcedDone = emptySet()) } }
 
     /** Clears limits, snoozes and the forced card; keeps the on/off switch. */
     fun resetHistory() { update { ContextCardHistory(enabled = it.enabled) } }
@@ -43,28 +46,31 @@ class ContextCardStore(private val preferences: SharedPreferences) {
                 epochDay = o.optLong("epochDay", Long.MIN_VALUE),
                 shownToday = o.optJSONObject("shownToday").toIntMap(),
                 lastActivationAt = o.optLong("lastActivationAt", 0L),
-                activeType = o.optString("activeType").takeIf { it.isNotBlank() },
-                activeSince = o.optLong("activeSince", 0L),
+                // schemaVersion 1 kept a single card in activeType/activeSince.
+                active = o.optJSONObject("active")?.toLongMap()
+                    ?: o.optString("activeType").takeIf { it.isNotBlank() }?.let { mapOf(it to o.optLong("activeSince", 0L)) }
+                    ?: emptyMap(),
                 lastType = o.optString("lastType").takeIf { it.isNotBlank() },
                 snoozeUntil = o.optJSONObject("snoozeUntil").toLongMap(),
                 dismissStreak = o.optJSONObject("dismissStreak").toIntMap(),
-                forcedType = o.optString("forcedType").takeIf { it.isNotBlank() }
+                forcedType = o.optString("forcedType").takeIf { it.isNotBlank() },
+                forcedDone = o.optJSONArray("forcedDone")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
             )
         }.getOrDefault(ContextCardHistory())
     }
 
     private fun write(h: ContextCardHistory): String = JSONObject()
-        .put("schemaVersion", 1)
+        .put("schemaVersion", 2)
         .put("enabled", h.enabled)
         .put("epochDay", h.epochDay)
         .put("shownToday", JSONObject(h.shownToday))
         .put("lastActivationAt", h.lastActivationAt)
-        .put("activeType", h.activeType ?: "")
-        .put("activeSince", h.activeSince)
+        .put("active", JSONObject(h.active))
         .put("lastType", h.lastType ?: "")
         .put("snoozeUntil", JSONObject(h.snoozeUntil))
         .put("dismissStreak", JSONObject(h.dismissStreak))
         .put("forcedType", h.forcedType ?: "")
+        .put("forcedDone", org.json.JSONArray(h.forcedDone.toList()))
         .toString()
 
     private fun JSONObject?.toIntMap(): Map<String, Int> =

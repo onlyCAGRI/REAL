@@ -110,7 +110,7 @@ fun SharedCategoryMembersDialog(
                                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                ConnectionAvatar(member.name, key = member.uid, size = 42.dp)
+                                ConnectionAvatar(member.name, key = member.uid, size = 42.dp, pictureVersion = member.pictureVersion)
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(member.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)

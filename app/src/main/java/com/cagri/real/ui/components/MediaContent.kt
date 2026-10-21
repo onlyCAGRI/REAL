@@ -206,6 +206,20 @@ fun MediaContentSection(
                 CatalogCompactContent(block.title, display, 2f / 3f, editing, { onRemove(block.id) }) { modifier ->
                     MediaArtwork(block, modifier)
                 }
+            } else if (isDetailHero() && !editing) {
+                // The card's cover: poster on top, title, year · type · genre, the story, then "…'de aç".
+                val context = LocalContext.current
+                val typeLabel = if (block.type == MediaType.MOVIE) "Film" else "Dizi"
+                CatalogHeroCover(
+                    imageUrl = block.artworkUrl, posterAspect = 2f / 3f, title = block.title,
+                    subtitle = listOfNotNull(block.year?.toString(), typeLabel, block.genre).joinToString(" • "),
+                    placeholder = ActionGlyph.Video, ambience = visibleAmbience, onAmbience = { ambience = it },
+                    description = block.description
+                ) {
+                    if (showActions) HeroOpenRow(mediaOpenLabel(block), onOpen = { openMediaBlock(context, block) }) {
+                        Text(mediaProviderName(block), color = Color(0xFF8E8E98), fontSize = 12.sp)
+                    }
+                }
             } else {
                 TimelineContent(designStyle, visibleAmbience) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -354,12 +368,7 @@ fun MediaTrackCard(
         }
 
         if (showActions) {
-            val openButtonText = when (block.provider.trim().lowercase()) {
-                "tvmaze" -> "TVmaze'de aç ↗"
-                "thetvdb" -> "TheTVDB'de aç ↗"
-                "apple" -> "Apple TV'de aç ↗"
-                else -> "${block.provider}'de aç ↗"
-            }
+            val openButtonText = mediaOpenLabel(block)
             TextButton(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -381,4 +390,21 @@ fun MediaTrackCard(
             }
         }
     }
+}
+
+internal fun mediaProviderName(block: MediaBlock): String = when (block.provider.trim().lowercase()) {
+    "tvmaze" -> "TVmaze"
+    "thetvdb" -> "TheTVDB"
+    "apple" -> "Apple TV"
+    else -> block.provider
+}
+
+internal fun mediaOpenLabel(block: MediaBlock): String = "${mediaProviderName(block)}'de aç ↗"
+
+internal fun openMediaBlock(context: android.content.Context, block: MediaBlock) {
+    val uri = runCatching { Uri.parse(block.providerUrl) }.getOrNull()
+    if (uri?.scheme in listOf("http", "https")) {
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            .onFailure { RealToast.show(context, "Bağlantı açılamadı") }
+    } else RealToast.show(context, "Bağlantı kullanılamıyor")
 }

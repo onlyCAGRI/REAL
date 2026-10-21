@@ -90,6 +90,30 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         newItem
     }
 
+    /** Ayraç: a divider in [categoryId]'s list at this moment; [title] may be empty. */
+    fun addDivider(categoryId: Long, title: String): ReminderItem = synchronized(mutationLock) {
+        val now = System.currentTimeMillis()
+        val previous = load()
+        val item = ReminderItem(id = maxOf(now, (previous.maxOfOrNull { it.id } ?: 0L) + 1L), text = title.trim().take(DIVIDER_TITLE_MAX),
+            createdAt = now, customCategoryId = categoryId, sendImmediateNotification = false, isDivider = true)
+        save(listOf(item) + previous)
+        item
+    }
+
+    /** Kontrol ettir on several cards at once; null takes the request off. */
+    fun setCheckRequest(ids: Set<Long>, request: CheckRequest?): List<ReminderItem> = synchronized(mutationLock) {
+        val now = System.currentTimeMillis()
+        load().map { if (it.id in ids && !it.isDivider) it.copy(checkRequest = request, updatedAt = now) else it }.also(::save)
+    }
+
+    fun setCompletionNote(id: Long, note: String?): List<ReminderItem> = update(id) {
+        it.copy(completionNote = note?.trim()?.take(COMPLETION_NOTE_MAX)?.takeIf(String::isNotEmpty), updatedAt = System.currentTimeMillis())
+    }
+
+    fun setDividerTitle(id: Long, title: String): List<ReminderItem> = update(id) {
+        if (it.isDivider) it.copy(text = title.trim().take(DIVIDER_TITLE_MAX), updatedAt = System.currentTimeMillis()) else it
+    }
+
     fun addGameBlock(reminderId: Long, block: CardGameBlock): List<ReminderItem> = update(reminderId) { reminder ->
         if (reminder.gameBlocks.any { it.providerId == block.providerId }) reminder
         else reminder.copy(gameBlocks = reminder.gameBlocks + block, updatedAt = System.currentTimeMillis())
@@ -733,6 +757,8 @@ class ReminderRepository(private val preferences: SharedPreferences) {
     }
 
     companion object {
+    const val DIVIDER_TITLE_MAX = 40
+    const val COMPLETION_NOTE_MAX = 140
     /** A card shows at most 3 photos; the rest of a shared batch is kept as files instead of failing the whole share. */
     fun limitPhotos(attachments: List<ReminderAttachment>, existingPhotos: Int): List<ReminderAttachment> {
         var room = (3 - existingPhotos).coerceAtLeast(0)

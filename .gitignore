@@ -23,3 +23,21 @@ gradle-dist/
 
 *.log
 *.tmp
+
+# Secrets and private data: never commit (the repository is public)
+google-services.json
+GoogleService-Info.plist
+keystore/
+keystore.properties
+*adminsdk*.json
+firebase-web-config.json
+*.sql
+*.jks
+*.keystore
+
+# Local tooling and large artefacts
+graphify-out/
+.scratch/
+*.zip
+*.mp4
+*.bin

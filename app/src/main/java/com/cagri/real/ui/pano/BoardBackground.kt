@@ -54,31 +54,6 @@ internal fun BoardBackground(viewport: BoardViewport, look: BoardLook) {
     }
 }
 
-@Composable
-internal fun BoardBackgroundPicker(initial: BoardLook, onDismiss: () -> Unit, onSave: (BoardLook) -> Unit) {
-    var look by remember(initial) { mutableStateOf(initial.supported()) }
-    com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = onDismiss, title = { Text("Board background") }, text = {
-        Column {
-            Text("Color")
-            listOf(BoardBackgroundColor.BLACK, BoardBackgroundColor.GRAY).forEach { color ->
-                Row {
-                    RadioButton(selected = look.color == color, onClick = { look = look.copy(color = color) })
-                    TextButton(onClick = { look = look.copy(color = color) }) { Text(color.name.lowercase().replaceFirstChar { it.uppercase() }) }
-                }
-            }
-            Text("Pattern")
-            Row {
-                listOf(BoardBackgroundPattern.DOTS, BoardBackgroundPattern.GRID).forEach { pattern ->
-                    TextButton(onClick = { look = look.copy(pattern = pattern) }) {
-                        Text((if (look.pattern == pattern) "✓ " else "") + pattern.name.lowercase().replaceFirstChar { it.uppercase() })
-                    }
-                }
-            }
-        }
-    }, confirmButton = { TextButton(onClick = { onSave(look); onDismiss() }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
-}
-
 /** Inline picker used in the People sheet: visual tiles for the same black/gray + dots/grid options. */
 @Composable
 internal fun BoardLookSelector(look: BoardLook, onChange: (BoardLook) -> Unit) {

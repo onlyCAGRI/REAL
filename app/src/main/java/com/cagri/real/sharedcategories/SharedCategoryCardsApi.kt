@@ -18,9 +18,9 @@ internal data class SharedCardsPage(val cards: List<JSONObject>, val cursor: Lon
 internal class SharedCardHttp(val status: Int, val body: JSONObject)
 
 internal data class SharedCategorySummary(val id: String, val category: JSONObject, val isOwner: Boolean, val collab: Boolean,
-    val access: String, val ownerName: String?)
+    val access: String, val ownerName: String?, val description: String? = null)
 
-data class SharedMember(val uid: String, val name: String, val isOwner: Boolean, val access: String)
+data class SharedMember(val uid: String, val name: String, val isOwner: Boolean, val access: String, val pictureVersion: Long? = null)
 
 /** Ortak kategori card store client: /api/categories/v1/shared/{id}/cards, adopt, assets, access, release. */
 internal class SharedCategoryCardsApi(val uid: String) {
@@ -51,7 +51,8 @@ internal class SharedCategoryCardsApi(val uid: String) {
             for (i in 0 until items.length()) {
                 val o = items.getJSONObject(i)
                 out += SharedCategorySummary(o.getString("id"), o.getJSONObject("category"), o.getBoolean("isOwner"),
-                    o.optBoolean("collab"), o.optString("access").ifBlank { if (o.getBoolean("isOwner")) "owner" else "full" }, null)
+                    o.optBoolean("collab"), o.optString("access").ifBlank { if (o.getBoolean("isOwner")) "owner" else "full" }, null,
+                    o.optString("description", "").takeIf { !o.isNull("description") && it.isNotBlank() })
             }
             after = if (page.isNull("next")) null else page.getString("next")
             check(after == null || (uuid.matches(after!!) && seen.add(after!!))) { "Kategori listesi okunamadı." }
@@ -62,7 +63,8 @@ internal class SharedCategoryCardsApi(val uid: String) {
         val m = ok("shared/${checkId(id)}").getJSONArray("members")
         return (0 until m.length()).map { i -> val p = m.getJSONObject(i)
             SharedMember(p.getString("uid"), p.optString("name", "REAL user"), p.optBoolean("isOwner"),
-                if (p.optBoolean("isOwner")) "owner" else p.optString("access", "full")) }
+                if (p.optBoolean("isOwner")) "owner" else p.optString("access", "full"),
+                p.optLong("pictureVersion", 0L).takeIf { it > 0 && !p.isNull("pictureVersion") }) }
     }
     suspend fun collab(id: String) { ok("shared/${checkId(id)}/collab", "POST") }
     /** (owner's personal card key, shared card) pairs, and the cursor for the next page. */

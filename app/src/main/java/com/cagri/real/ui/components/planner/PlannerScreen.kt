@@ -108,6 +108,7 @@ fun PlannerScreen(
     onSetReminderAlert: (Long, Long, RecurrenceRule) -> Unit = { _, _, _ -> },
     onOpenCategory: (ReminderCategory?, Long?) -> Unit = { _, _ -> },
     onToggleReminder: (Long) -> Unit = {},
+    onSetCompletionNote: (Long, String?) -> Unit = { _, _ -> },
     /** Category pastel picked in the category screen's pencil popup: (categoryId, ARGB). */
     onUpdateCategoryColor: (Long, Int) -> Unit = { _, _ -> },
     /** (reminderId, tapped occurrence start for repeating events or null, close) */
@@ -149,7 +150,7 @@ fun PlannerScreen(
         updatePersistedViewMode(viewMode)
     }
     val calendar = viewMode != PlannerViewMode.Hours24
-    val (dailyView, _) = rememberPlannerDailyViewPreference()
+    val dailyView = PlannerDailyView.New
     var selectedDayEpoch by rememberSaveable { mutableLongStateOf(today.toEpochDay()) }
     val selectedDay = LocalDate.ofEpochDay(selectedDayEpoch)
     var monthKey by rememberSaveable { mutableStateOf(YearMonth.from(today).toString()) }
@@ -270,7 +271,8 @@ fun PlannerScreen(
     }
     LaunchedEffect(detailCategoryId, sharedCategoryApi, sharedCategoryCatalog) {
         val selected = customCategories.firstOrNull { it.id == detailCategoryId } ?: return@LaunchedEffect
-        val shared = sharedCategoryCatalog.firstOrNull { it.isOwner && it.category.id == selected.id && it.category.createdAt == selected.createdAt } ?: return@LaunchedEffect
+        val shared = sharedCategoryCatalog.firstOrNull { it.id == selected.sharedId ||
+            (it.isOwner && it.category.id == selected.id && it.category.createdAt == selected.createdAt) } ?: return@LaunchedEffect
         try {
             val loaded = sharedCategoryApi?.metadata(shared.id) ?: return@LaunchedEffect
             sharedCategoryDetails = sharedCategoryDetails + (shared.id to loaded)
@@ -771,61 +773,6 @@ fun PlannerScreen(
                                     topPadding = chromeInset(visibleMode),
                                     ownerName = ownerName
                                 )
-                            } else if (dailyView.usesNewLayout) {
-                                PlannerNewDailyView(
-                                    selectedDay = selectedDay,
-                                    today = today,
-                                    events = events,
-                                    zone = zone,
-                                    ownerName = ownerName,
-                                    customCategories = customCategories,
-                                    categoryCardCategories = calendarCategories,
-                                    topPadding = chromeInset(visibleMode),
-                                    ready = ready,
-                                    reduceAnimations = reduceAnimations,
-                                    now = now,
-                                    onSelectDay = { day ->
-                                        selectedDayEpoch = day.toEpochDay()
-                                        monthKey = YearMonth.from(day).toString()
-                                    },
-                                    onOpen = { id, at -> openOccurrence(id, at) },
-                                    onAdd = ::add,
-                                    reminders = calendarReminders,
-                                    categoryShapes = categoryShapes,
-                                    revealOrigin = revealOrigin,
-                                    onOpenCategory = { builtIn, customId ->
-                                        if (customId != null) {
-                                            proGoals {
-                                                detailLastCategoryId = customId
-                                                detailCategoryId = customId
-                                            }
-                                        } else onOpenCategory(builtIn, customId)
-                                    }
-                                )
-                            } else {
-                                LazyColumn(
-                                    Modifier.fillMaxSize(),
-                                    state = dayListState,
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    contentPadding = PaddingValues(top = chromeInset(visibleMode), bottom = 20.dp)
-                                ) {
-                                    items(days, key = { it.toEpochDay() }) { day ->
-                                        PlannerDayCard(
-                                            day = day,
-                                            events = eventsByDay[day].orEmpty(),
-                                            zone = zone,
-                                            onOpen = { id, at -> openOccurrence(id, at) },
-                                            onAdd = ::add,
-                                            categoryColors = categoryColors,
-                                            customCategories = customCategories,
-                                            today = today,
-                                            now = now,
-                                            ready = ready,
-                                            reduceAnimations = reduceAnimations,
-                                            modifier = sharedDayModifier(day)
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
@@ -1185,12 +1132,16 @@ fun PlannerScreen(
                             ?.split(',')?.mapNotNull { it.trim().toLongOrNull() }.orEmpty()
                     }
                     val goalOrder = goalOrders[shownCategory.id] ?: storedOrder
-                    val sharedCategory = sharedCategoryCatalog.firstOrNull { it.isOwner && it.category.id == shownCategory.id && it.category.createdAt == shownCategory.createdAt }
+                    // Owner: matched by the category itself; member: by the shared id on the mirror (it was owner-only, so a
+                    // member's Manage showed nobody).
+                    val sharedCategory = sharedCategoryCatalog.firstOrNull { it.id == shownCategory.sharedId ||
+                        (it.isOwner && it.category.id == shownCategory.id && it.category.createdAt == shownCategory.createdAt) }
                     val sharedMetadata = sharedCategory?.let { sharedCategoryDetails[it.id] }
                     val detailUi = remember(shownCategory, reminders, today, zone, goalOrder, ownerName, categoryPlannerRevision, sharedMetadata) {
                         plannerCategoryDetailUi(
                             shownCategory, reminders, today, zone, goalOrder,
                             memberNames = sharedMetadata?.members?.map { it.name } ?: listOfNotNull(ownerName.trim().takeIf { it.isNotEmpty() }),
+                            people = sharedMetadata?.members.orEmpty(),
                             context = context
                         ).copy(linkText = categoryPlannerPreferences.link(categoryPlannerKey(null, shownCategory)!!))
                     }
@@ -1255,6 +1206,7 @@ fun PlannerScreen(
                             onCreateGoal = { title -> proGoals { scope.launch { onCreateGoal(title, shownCategory.id) } } },
                             onStartNext = ::open,
                             onToggleGoal = onToggleReminder,
+                            onSetCompletionNote = onSetCompletionNote,
                             onReorderGoals = { ids ->
                                 goalOrders = goalOrders + (shownCategory.id to ids)
                                 goalOrderPrefs.edit().putString("cat_${shownCategory.id}", ids.joinToString(",")).apply()
@@ -1454,57 +1406,6 @@ private fun PlannerInlineEventEditor(
 }
 
 @Composable
-private fun PlannerQuick24Card(
-    reminder: ReminderItem,
-    details: PlannerEventDetails?,
-    durationExpanded: Boolean,
-    onOpen: () -> Unit,
-    onPickTime: () -> Unit,
-    onToggleDuration: () -> Unit,
-    onPickDuration: (Int) -> Unit
-) {
-    Column(
-        Modifier.fillMaxWidth().background(Color(0xFF121214)).padding(horizontal = 6.dp, vertical = 3.dp)
-            .clip(RoundedCornerShape(22.dp)).background(Color(0xFFB4BEC0))
-            .clickable(role = Role.Button, onClick = onOpen).padding(18.dp)
-    ) {
-        Text(
-            reminder.text,
-            color = PlannerInk,
-            fontSize = 21.sp,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PlannerSchedulePill(
-                label = "Saat",
-                value = "Saat ekle",
-                glyph = ActionGlyph.Calendar,
-                onClick = onPickTime
-            )
-            PlannerSchedulePill(
-                label = "Süre",
-                value = details?.durationMinutes?.let { "${it} dk" } ?: "Süre ekle",
-                glyph = ActionGlyph.Note,
-                onClick = onToggleDuration
-            )
-        }
-        AnimatedVisibility(
-            visible = durationExpanded,
-            enter = fadeIn(tween(150)) + expandVertically(tween(220)),
-            exit = fadeOut(tween(100)) + shrinkVertically(tween(180))
-        ) {
-            PlannerDurationChoices(
-                selected = details?.durationMinutes,
-                dark = false,
-                onPick = onPickDuration
-            )
-        }
-    }
-}
-
-@Composable
 private fun PlannerSchedulePill(
     label: String,
     value: String,
@@ -1608,27 +1509,4 @@ private fun Modifier.plannerSafeGlass(corners: Dp): Modifier {
     return clip(shape)
         .background(Color(0x66131518))
         .border(0.8.dp, Color.White.copy(alpha = 0.16f), shape)
-}
-
-@Composable
-private fun PlannerTab(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier.height(42.dp).clip(RoundedCornerShape(26.dp))
-            .background(if (selected) Color.White else Color.Black)
-            .border(0.8.dp, if (selected) Color.White else Color(0xFF414143), RoundedCornerShape(26.dp))
-            .clickable(role = Role.Tab, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(label, color = if (selected) Color.Black else Color(0xFFD0D0D0), fontSize = 13.sp)
-    }
-}
-
-@Composable
-private fun PlannerEmpty(text: String) {
-    Text(
-        text,
-        color = Color(0xFFAAAAAA),
-        fontSize = 15.sp,
-        modifier = Modifier.fillMaxWidth().background(Color(0xFF121214)).padding(24.dp)
-    )
 }

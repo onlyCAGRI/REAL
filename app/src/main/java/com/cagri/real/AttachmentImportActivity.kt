@@ -127,7 +127,7 @@ internal class AttachmentImportModel(
                     }
                 }
                 withContext(Dispatchers.IO) {
-                    reminders = repository.load()
+                    reminders = repository.load().withoutDividers()
                     categories = CategoryRepository(context).load().filter { !it.isReadOnlyShared }
                 }
                 boards = runCatching { withContext(Dispatchers.IO) { loadBoards() } }.getOrDefault(emptyList())
@@ -242,7 +242,7 @@ internal class AttachmentImportModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 error = e.message ?: "Kaydedilemedi"
-                reminders = withContext(Dispatchers.IO) { repository.load() }
+                reminders = withContext(Dispatchers.IO) { repository.load().withoutDividers() }
             }
             finally { busy = false }
         }

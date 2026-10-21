@@ -136,6 +136,8 @@ fun ReminderCard(
     plainStyle: Boolean = false,
     /** Swipe left: delete (the caller shows "Geri al"). */
     onSwipeLeftDelete: (() -> Unit)? = null,
+    /** Home search results: the card's category name in a small pill (like the category descriptions). */
+    categoryLabel: CustomCategory? = null,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -398,6 +400,11 @@ fun ReminderCard(
                 }
             )
             .then(if (isSelected) Modifier.background(selectionOverlay) else Modifier)
+            // Kontrol ettir: a slow light from the right edge until this viewer opens the card.
+            .checkGlow(CheckRequests.glow(androidx.compose.ui.platform.LocalContext.current, reminder,
+                com.cagri.real.platform.android.auth.AndroidBackend.auth.currentUser()?.id,
+                categoryColor = customCategory?.takeIf { it.id == reminder.customCategoryId }
+                    ?.let { cat -> cat.customSolidColorArgb?.let { Color(it) } ?: resolveCategoryStripeColors(cat).first }), reduceAnimations)
             .border(borderWidth, borderColor, shape)
             .combinedClickable(
                 interactionSource = cardInteractionSource,
@@ -695,6 +702,12 @@ fun ReminderCard(
                 reminder.completedAt?.let {
                     Text("Tamamlandı: ${reminderDate(it)}", color = if (useDark) Color(0xFF55555E) else Color(0xFF92929A), style = RealType.cardMetaSecondary,
                         modifier = Modifier.padding(top = 5.dp))
+                }
+                categoryLabel?.let { c ->
+                    // The category colour, lifted a little so dark ones stay readable on the card.
+                    val tint = if (useDark) textColor else androidx.compose.ui.graphics.lerp(
+                        ReminderColorChoices.getOrNull(c.accentStart)?.color ?: Color(0xFFA5A5B0), Color.White, 0.3f)
+                    CategoryPill(c.name, tint, Modifier.padding(top = 8.dp).widthIn(max = 200.dp))
                 }
             }
         }

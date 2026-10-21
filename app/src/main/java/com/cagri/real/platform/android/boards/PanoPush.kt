@@ -54,6 +54,19 @@ object PanoPush {
         }
     }
 
+    /**
+     * Before signing out: this device's token is released from the account, so the next account that signs in here
+     * can register it (the server never moves a token from one account to another). Best effort, a few seconds at most.
+     */
+    suspend fun releaseToken(context: Context) {
+        val uid = AndroidBackend.auth.currentUser()?.id ?: return
+        kotlinx.coroutines.withTimeoutOrNull(4_000) {
+            val token = fcmToken() ?: return@withTimeoutOrNull
+            runCatching { BoardClient(uid).request("push-token", "DELETE", JSONObject().put("token", token)) }
+        }
+        context.applicationContext.getSharedPreferences("pano_push", Context.MODE_PRIVATE).edit().remove("sent").apply()
+    }
+
     @SuppressLint("MissingPermission")
     fun show(context: Context, boardId: String, title: String, by: String) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
@@ -76,7 +89,8 @@ class PanoMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) = PanoPush.registerToken(applicationContext, token)
     override fun onMessageReceived(message: RemoteMessage) {
         // A card was sent to this account: pull the share inbox now (the sync shows the notification).
-        if (message.data["type"] == "share_inbox") {
+        // "sync": a timed card was saved on REAL Web; pull it now so its reminder is set. "share_inbox": a card was sent.
+        if (message.data["type"] == "share_inbox" || message.data["type"] == "sync") {
             com.cagri.real.platform.android.sync.SyncLocal.requestSync()
             return
         }

@@ -15,7 +15,9 @@ data class CustomCategory(
     val sharedId: String? = null,
     /** "owner", "full" (add / edit / complete / delete) or "view" (read only). */
     val sharedRole: String? = null,
-    val sharedOwnerName: String? = null
+    val sharedOwnerName: String? = null,
+    /** Mirror only: the owner's description (read only here; the owner edits it). */
+    val sharedDescription: String? = null
 ) {
     val isShared: Boolean get() = sharedId != null
     /** Someone else's category on this phone (it never enters this account's personal sync). */

@@ -134,25 +134,10 @@ private fun ArrowGlyph(color: Color, size: Dp = 22.dp) = Canvas(Modifier.size(si
 }
 
 @Composable
-private fun BackGlyph(color: Color, size: Dp = 22.dp) = Canvas(Modifier.size(size)) {
-    val s = this.size.width; val w = 2.6.dp.toPx()
-    drawLine(color, Offset(s * .88f, s * .5f), Offset(s * .12f, s * .5f), w, StrokeCap.Round)
-    drawLine(color, Offset(s * .45f, s * .15f), Offset(s * .10f, s * .5f), w, StrokeCap.Round)
-    drawLine(color, Offset(s * .45f, s * .85f), Offset(s * .10f, s * .5f), w, StrokeCap.Round)
-}
-
-@Composable
 private fun CrossGlyph(color: Color, size: Dp = 12.dp) = Canvas(Modifier.size(size)) {
     val s = this.size.width; val w = 2.2.dp.toPx()
     drawLine(color, Offset(0f, 0f), Offset(s, s), w, StrokeCap.Round)
     drawLine(color, Offset(s, 0f), Offset(0f, s), w, StrokeCap.Round)
-}
-
-@Composable
-private fun TickGlyph(color: Color, size: Dp = 14.dp) = Canvas(Modifier.size(size)) {
-    val s = this.size.width; val w = 2.2.dp.toPx()
-    drawLine(color, Offset(s * .08f, s * .55f), Offset(s * .38f, s * .85f), w, StrokeCap.Round)
-    drawLine(color, Offset(s * .38f, s * .85f), Offset(s * .95f, s * .15f), w, StrokeCap.Round)
 }
 
 /* ----------------------------------------- header ---------------------------------------- */

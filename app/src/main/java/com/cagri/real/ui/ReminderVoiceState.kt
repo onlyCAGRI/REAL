@@ -25,7 +25,15 @@ internal class ReminderVoiceState(
     val retryVoiceCreation: MutableState<(() -> Unit)?>,
     val feedbackText: MutableState<String?>,
     val timeFollowUp: MutableState<VoiceTimeFollowUp?>,
-    val requestTimeListening: MutableState<Boolean>
+    val requestTimeListening: MutableState<Boolean>,
+    /** "Doğru mu anladım?": shown instead of saving while it is set. */
+    val understandingCheck: MutableState<VoiceUnderstandingCheck?> = mutableStateOf(null),
+    /** The next finalize is a corrected sentence: do not ask again. */
+    val skipNextUnderstandingCheck: MutableState<Boolean> = mutableStateOf(false),
+    /** The composer holds a sentence the person is correcting by hand: sending it goes back through the AI. */
+    val resubmitTypedCorrection: MutableState<Boolean> = mutableStateOf(false),
+    /** "Yeri yaz": the composer holds the place; sending it finds the address and saves the card. */
+    val placeFix: MutableState<((String) -> Unit)?> = mutableStateOf(null)
 )
 
 @Composable
@@ -49,8 +57,13 @@ internal fun rememberReminderVoiceState(): ReminderVoiceState {
     val feedbackText = remember { mutableStateOf<String?>(null) }
     val timeFollowUp = remember { mutableStateOf<VoiceTimeFollowUp?>(null) }
     val requestTimeListening = remember { mutableStateOf(false) }
+    val understandingCheck = remember { mutableStateOf<VoiceUnderstandingCheck?>(null) }
+    val skipNextUnderstandingCheck = remember { mutableStateOf(false) }
+    val resubmitTypedCorrection = remember { mutableStateOf(false) }
+    val placeFix = remember { mutableStateOf<((String) -> Unit)?>(null) }
     return remember(voiceAiParsing, voiceAiRequestSerial, pendingAutoSubmit, pendingVoiceDurationMinutes, pendingVoicePeople, pendingVoiceLocation, pendingVoiceRepeatMask, pendingVoiceRepeatUntil, lastVoiceCardId, lastVoiceCardAt, pendingBulkPlan, pendingVoiceMusicBlocks, pendingVoiceMediaBlocks, voiceLineCount) {
-        ReminderVoiceState(voiceAiParsing, voiceAiRequestSerial, pendingAutoSubmit, pendingVoiceDurationMinutes, pendingVoicePeople, pendingVoiceLocation, pendingVoiceRepeatMask, pendingVoiceRepeatUntil, lastVoiceCardId, lastVoiceCardAt, pendingBulkPlan, pendingVoiceMusicBlocks, pendingVoiceMediaBlocks, voiceLineCount, pendingDeletePlan, retryVoiceCreation, feedbackText, timeFollowUp, requestTimeListening)
+        ReminderVoiceState(voiceAiParsing, voiceAiRequestSerial, pendingAutoSubmit, pendingVoiceDurationMinutes, pendingVoicePeople, pendingVoiceLocation, pendingVoiceRepeatMask, pendingVoiceRepeatUntil, lastVoiceCardId, lastVoiceCardAt, pendingBulkPlan, pendingVoiceMusicBlocks, pendingVoiceMediaBlocks, voiceLineCount, pendingDeletePlan, retryVoiceCreation, feedbackText, timeFollowUp, requestTimeListening,
+            understandingCheck, skipNextUnderstandingCheck, resubmitTypedCorrection, placeFix)
     }
 }
 
@@ -58,6 +71,20 @@ internal fun rememberReminderVoiceState(): ReminderVoiceState {
 internal fun showVoiceFeedback(state: ReminderVoiceState, message: String) {
     state.feedbackText.value = message.takeIf { it.isNotBlank() }
 }
+
+/**
+ * The sentence the AI was unsure about, waiting for the person: [confirm] saves with the final text (unchanged =
+ * the AI's own reading), [correct] puts it into the composer to type the fix.
+ */
+internal data class VoiceUnderstandingCheck(
+    val initial: VoiceUnderstandingText,
+    val confirm: (String) -> Unit,
+    val correct: (String) -> Unit,
+    val cancel: () -> Unit,
+    /** The card's place, when it has one: "Yeri yaz" lets the person type it instead. */
+    val place: String? = null,
+    val fixPlace: () -> Unit = {}
+)
 
 /** Native pending card/content retained while a short clock reply is dictated. */
 internal data class VoiceTimeFollowUp(

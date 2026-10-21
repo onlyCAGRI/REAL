@@ -52,6 +52,9 @@ internal fun reminderVoiceFinalize(
         return draftCategoryId ?: customCategory?.id
     }
 
+    /** The place of a voice card with its address and map position (the phone's geocoder; name only if unknown). */
+    suspend fun voiceLocation(intent: GeminiVoiceIntent): ReminderLocation? =
+        intent.locationName?.trim()?.takeIf { it.isNotBlank() }?.let { VoicePlaceLookup.resolve(context, it) }
     suspend fun saveVoiceIntentDirect(prepared: PreparedVoiceIntent, createdCategory: CustomCategory?): Long? {
         val intent = prepared.intent
         val now = System.currentTimeMillis()
@@ -60,7 +63,7 @@ internal fun reminderVoiceFinalize(
             category == ReminderCategory.Today && exactAlertAt == null && intent.date == null
         ) now + ROLLING_24_HOURS_MILLIS else null
         val plannedDateEpochDay = if (quick24HourUntilAt == null) prepared.schedule.plannedEpochDay else null
-        val location = voiceIntentLocation(intent)
+        val location = voiceLocation(intent)
         val musicBlocks = prepared.musicBlocks
         val mediaBlocks = prepared.mediaBlocks
         val checklistItems = if (intent.isChecklist) {
@@ -240,7 +243,7 @@ internal fun reminderVoiceFinalize(
         onDraftChange(intent.title.ifBlank { input.draft })
         pendingVoiceDurationMinutes = intent.durationMinutes
         pendingVoicePeople = intent.people
-        pendingVoiceLocation = voiceIntentLocation(intent)
+        pendingVoiceLocation = voiceLocation(intent)
         pendingVoiceRepeatMask = intent.weekdaysMask
         pendingVoiceRepeatUntil = intent.repeatUntil?.toEpochDay()
         pendingVoiceMusicBlocks = musicBlocks
@@ -284,13 +287,23 @@ internal fun reminderVoiceFinalize(
         if (autoSave && !requiresTimeSelection) pendingAutoSubmit = true
     }
 
-    val onVoiceFinalize: (String) -> Unit = { rawVoiceText ->
+    lateinit var onVoiceFinalize: (String) -> Unit
+    onVoiceFinalize = { rawVoiceText ->
         val transcript = rawVoiceText.trim()
         val transcriptAlternatives = VoiceRecognitionAlternatives.consume(transcript)
+        val lowConfidenceWords = VoiceRecognitionAlternatives.consumeLowConfidence()
+        // A corrected sentence (picked or typed by the person) is not questioned again.
+        val skipUnderstandingCheck = voiceState.skipNextUnderstandingCheck.value
+        voiceState.skipNextUnderstandingCheck.value = false
+        voiceState.understandingCheck.value = null
+        voiceState.resubmitTypedCorrection.value = false
+        voiceState.placeFix.value = null
         if (transcript.isNotBlank() && !composerState.saving.value) {
             val timeFollowUp = voiceState.timeFollowUp.value
             voiceState.requestTimeListening.value = false
             val cancelledTimeReply = timeFollowUp != null && voiceNameKey(transcript) in setOf("iptal", "vazgec", "bosver")
+            // "Saat kaçta olsun?" -> "bilmiyorum / belirsiz / fark etmez": keep the day, no clock, stop asking.
+            val noClockReply = timeFollowUp != null && !cancelledTimeReply && isNoClockReply(transcript)
             // On the home screen the voice window is the only UI: save automatically after the AI answer.
             val autoSave = category == null && customCategory == null
             // Keep the recognized words visible immediately; AI only restructures them.
@@ -311,6 +324,29 @@ internal fun reminderVoiceFinalize(
             val requestSerial = voiceAiRequestSerial
 
             scope.launch {
+                if (noClockReply && timeFollowUp != null) {
+                    voiceState.timeFollowUp.value = null
+                    voiceState.requestTimeListening.value = false
+                    val pending = timeFollowUp.prepared.intent
+                    val repeating = pending.recurrence != com.cagri.real.data.RecurrenceRule.NONE || pending.weekdaysMask != 0
+                    val dayOnly = pending.copy(time = null, requiresTimeSelection = false, timeOfDay = null,
+                        hasSchedule = true, date = pending.date ?: java.time.LocalDate.now())
+                    val prepared = if (repeating) null else runCatching {
+                        timeFollowUp.prepared.copy(intent = dayOnly,
+                            schedule = resolveVoiceCreationSchedule(dayOnly, System.currentTimeMillis()))
+                    }.getOrNull()
+                    if (prepared == null) {
+                        // A repeat needs a clock for its alarm; leave the choice to the picker.
+                        voiceAiParsing = false
+                        onDraftChange(pending.title)
+                        editing = true
+                        showVoiceFeedback(voiceState, "Tekrar eden kart için saat gerekiyor. Saati elle seçebilirsin.")
+                        return@launch
+                    }
+                    applyCreation(GeminiVoiceParseResult(intents = listOf(dayOnly)), timeFollowUp.autoSave, requestSerial,
+                        timeFollowUp.createdCategory, listOf(prepared))
+                    return@launch
+                }
                 if (cancelledTimeReply && timeFollowUp != null) {
                     voiceState.timeFollowUp.value = null
                     voiceState.requestTimeListening.value = false
@@ -422,58 +458,150 @@ internal fun reminderVoiceFinalize(
                     return@launch
                 }
 
-                val action = parsed.action
-                val editRequest = parsed.edit
-                if (action != null || (editRequest != null && editTarget != null)) {
-                    val liveCards = liveReminders?.invoke() ?: reminders
-                    val targetId = action?.targetId ?: editTarget?.id
-                    val original = reminders.firstOrNull { it.id == targetId }
-                    val current = liveCards.firstOrNull { it.id == targetId }
-                    if (targetId != null && (current == null || original?.updatedAt != current.updatedAt)) {
-                        voiceAiParsing = false; pendingAutoSubmit = false
-                        onDraftChange(""); isVoiceDraft = false
-                        showVoiceFeedback(voiceState, "Kart bu sırada değişmiş. Komutu yeniden söyle; işlem yapılmadı.")
-                        return@launch
-                    }
-                    voiceAiParsing = false
-                    pendingAutoSubmit = false
-                    onDraftChange("")
-                    isVoiceDraft = false
-                    requiresTimeSelection = false
-                    focusManager.clearFocus()
-                    keyboard?.hide()
-                    val outcome = runVoiceCardAction(
-                        action = action,
-                        editRequest = editRequest,
-                        editTarget = current ?: editTarget,
-                        reminders = liveCards,
-                        categories = customCategories,
-                        callbacks = voiceCardCallbacks,
-                        onEdit = onVoiceEdit,
-                        onToggleCompleted = onToggleCompleted,
-                        onPlan = { pendingBulkPlan = it },
-                        onDeletePlan = { voiceState.pendingDeletePlan.value = it },
-                        onFollowUp = { id ->
-                            lastVoiceCardId = id
-                            lastVoiceCardAt = System.currentTimeMillis()
+                suspend fun proceed(parsed: GeminiVoiceParseResult) {
+                    val action = parsed.action
+                    val editRequest = parsed.edit
+                    if (action != null || (editRequest != null && editTarget != null)) {
+                        val liveCards = liveReminders?.invoke() ?: reminders
+                        val targetId = action?.targetId ?: editTarget?.id
+                        val original = reminders.firstOrNull { it.id == targetId }
+                        val current = liveCards.firstOrNull { it.id == targetId }
+                        if (targetId != null && (current == null || original?.updatedAt != current.updatedAt)) {
+                            voiceAiParsing = false; pendingAutoSubmit = false
+                            onDraftChange(""); isVoiceDraft = false
+                            showVoiceFeedback(voiceState, "Kart bu sırada değişmiş. Komutu yeniden söyle; işlem yapılmadı.")
+                            return
                         }
-                    )
-                    if (outcome.success) RealHaptics.success(view)
-                    if (outcome.message.isNotBlank()) showVoiceFeedback(voiceState, outcome.message)
-                    return@launch
+                        voiceAiParsing = false
+                        pendingAutoSubmit = false
+                        onDraftChange("")
+                        isVoiceDraft = false
+                        requiresTimeSelection = false
+                        focusManager.clearFocus()
+                        keyboard?.hide()
+                        val outcome = runVoiceCardAction(
+                            action = action,
+                            editRequest = editRequest,
+                            editTarget = current ?: editTarget,
+                            reminders = liveCards,
+                            categories = customCategories,
+                            callbacks = voiceCardCallbacks,
+                            onEdit = onVoiceEdit,
+                            onToggleCompleted = onToggleCompleted,
+                            onPlan = { pendingBulkPlan = it },
+                            onDeletePlan = { voiceState.pendingDeletePlan.value = it },
+                            onFollowUp = { id ->
+                                lastVoiceCardId = id
+                                lastVoiceCardAt = System.currentTimeMillis()
+                            }
+                        )
+                        if (outcome.success) RealHaptics.success(view)
+                        if (outcome.message.isNotBlank()) showVoiceFeedback(voiceState, outcome.message)
+                        return
+                    }
+
+                    try { applyCreation(parsed, autoSave, requestSerial) }
+                    catch (error: CancellationException) { throw error }
+                    catch (error: Exception) {
+                        if (voiceAiRequestSerial == requestSerial) {
+                            voiceAiParsing = false; pendingAutoSubmit = false; editing = true
+                            showVoiceFeedback(voiceState, error.message ?: "Kartlar kaydedilemedi; metin korundu.")
+                        }
+                    }
                 }
 
-                try { applyCreation(parsed, autoSave, requestSerial) }
-                catch (error: CancellationException) { throw error }
-                catch (error: Exception) {
-                    if (voiceAiRequestSerial == requestSerial) {
-                        voiceAiParsing = false; pendingAutoSubmit = false; editing = true
-                        showVoiceFeedback(voiceState, error.message ?: "Kartlar kaydedilemedi; metin korundu.")
-                    }
+                // "Doğru mu anladım?": the AI is not sure what it heard. Nothing is saved or changed until the person
+                // confirms (swipe up), picks another word, or types the fix.
+                val heard = parsed.heard
+                // Even a confident AI is asked about: names on the card that were never said (a misheard
+                // foreign word turned into "When Kitchen"), shown underlined for a yes / fix.
+                val substituted = if (skipUnderstandingCheck || parsed.action != null) emptyList()
+                    else VoiceSubstitutions.names(transcript, transcriptAlternatives, parsed.intents)
+                val shown = when {
+                    skipUnderstandingCheck -> null
+                    heard != null && !heard.confident -> VoiceUnderstanding.build(transcript, heard, lowConfidenceWords)
+                    substituted.isNotEmpty() -> VoiceSubstitutions.text(
+                        heard?.understood?.takeIf { u -> substituted.all { u.contains(it, ignoreCase = true) } }
+                            ?: parsed.intents.joinToString(" · ") { listOfNotNull(it.title, it.locationName).joinToString(" — ") },
+                        substituted)
+                    else -> null
                 }
+                if (shown != null) {
+                    voiceAiParsing = false
+                    pendingAutoSubmit = false
+                    voiceState.understandingCheck.value = VoiceUnderstandingCheck(
+                        initial = shown,
+                        confirm = { finalText ->
+                            voiceState.understandingCheck.value = null
+                            if (finalText.trim() == shown.text.trim() && voiceAiRequestSerial == requestSerial) {
+                                voiceAiParsing = true
+                                scope.launch { proceed(parsed) }
+                            } else if (finalText.isNotBlank()) {
+                                voiceState.skipNextUnderstandingCheck.value = true
+                                onVoiceFinalize(finalText)
+                            }
+                        },
+                        correct = { text ->
+                            voiceState.understandingCheck.value = null
+                            voiceAiRequestSerial += 1L
+                            onDraftChange(text)
+                            isVoiceDraft = true
+                            editing = true
+                            voiceState.resubmitTypedCorrection.value = true
+                        },
+                        cancel = {
+                            voiceState.understandingCheck.value = null
+                            voiceAiRequestSerial += 1L
+                            onDraftChange("")
+                            isVoiceDraft = false
+                        },
+                        place = parsed.intents.firstNotNullOfOrNull { it.locationName?.takeIf(String::isNotBlank) },
+                        fixPlace = {
+                            // The phone could not hear the place: the person types it, REAL finds the address and
+                            // saves the same card with that place (no second AI call).
+                            val oldPlace = parsed.intents.firstNotNullOfOrNull { it.locationName?.takeIf(String::isNotBlank) }.orEmpty()
+                            voiceState.understandingCheck.value = null
+                            onDraftChange(oldPlace)
+                            isVoiceDraft = true
+                            editing = true
+                            voiceState.placeFix.value = { typed ->
+                                val place = typed.trim()
+                                voiceState.placeFix.value = null
+                                if (place.isNotBlank() && voiceAiRequestSerial == requestSerial) {
+                                    val oldName = oldPlace.substringBefore(',').trim()
+                                    val newName = place.substringBefore(',').trim()
+                                    val fixed = parsed.copy(intents = parsed.intents.map { intent ->
+                                        if (intent.locationName.isNullOrBlank()) intent
+                                        else intent.copy(locationName = place,
+                                            title = if (oldName.length >= 2) intent.title.replace(oldName, newName, ignoreCase = true) else intent.title)
+                                    })
+                                    voiceAiParsing = true
+                                    focusManager.clearFocus()
+                                    keyboard?.hide()
+                                    scope.launch { proceed(fixed) }
+                                }
+                            }
+                        }
+                    )
+                    return@launch
+                }
+                proceed(parsed)
 
             }
         }
     }
     onVoiceFinalize
 } } } }
+
+
+/** Answers to "Saat kaçta olsun?" that mean "no particular time". */
+internal fun isNoClockReply(transcript: String): Boolean {
+    val key = voiceNameKey(transcript)
+    return NoClockReply.containsMatchIn(key)
+}
+
+private val NoClockReply = Regex(
+    "\\b(bilmiyorum|bilmem|bilemiyorum|belirsiz|belli degil|belli olmaz|fark etmez|farketmez|farketmiyor|" +
+        "fark etmiyor|saat yok|saatsiz|saat olmasin|onemli degil|sonra bakarim|sonra belli olur|bakariz|gun yeter|" +
+        "sadece gun|i don'?t know|dont know|no time|any time|whenever|not sure)\\b"
+)

@@ -32,44 +32,6 @@ import com.cagri.real.data.MoodTrackerEntry
 import com.cagri.real.data.ReminderItem
 import com.cagri.real.ui.theme.RealFont
 
-/**
- * Android launcher widget'ı olacak tasarımların kapalı kutusu. Kapalıyken içerik hiç compose edilmez
- * (AnimatedVisibility çıkış bitince içeriği composition'dan kaldırır): animasyon / veri yükü yok.
- */
-@Composable
-internal fun YasamLauncherBox(
-    reminders: List<ReminderItem>,
-    moodEntries: List<MoodTrackerEntry>,
-    reduceAnimations: Boolean,
-    onToggleReminder: ((Long) -> Unit)?
-) {
-    var open by rememberSaveable { mutableStateOf(false) }
-    Column(
-        Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp).fillMaxWidth().yasamGlass(24.dp)
-    ) {
-        Row(
-            Modifier.fillMaxWidth()
-                .clickable(role = Role.Button, onClick = { open = !open })
-                .semantics { stateDescription = if (open) "Açık" else "Kapalı" }
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Launcher widget tasarımları", color = Color.White, fontSize = 15.sp,
-                fontWeight = FontWeight.Medium, fontFamily = RealFont, modifier = Modifier.weight(1f)
-            )
-            YasamIcon(if (open) YasamGlyph.ChevronUp else YasamGlyph.ChevronDown, YasamMuted, 16.dp)
-        }
-        AnimatedVisibility(
-            visible = open,
-            enter = if (reduceAnimations) EnterTransition.None else expandVertically() + fadeIn(),
-            exit = if (reduceAnimations) ExitTransition.None else shrinkVertically() + fadeOut()
-        ) {
-            YasamLauncherCards(reminders, moodEntries, reduceAnimations, onToggleReminder)
-        }
-    }
-}
-
 @Composable
 internal fun YasamLauncherCards(
     reminders: List<ReminderItem>,

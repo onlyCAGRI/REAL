@@ -10,7 +10,9 @@ fun interface AppCheckTokenProvider {
 class BackendCredentials(
     private val auth: AuthRepository,
     private val appCheck: AppCheckTokenProvider,
-    private val extraHeaders: suspend (String) -> Map<String, String> = { emptyMap() }
+    private val extraHeaders: suspend (String) -> Map<String, String> = { emptyMap() },
+    /** "android/60": the server keeps each person's app version and may ask an old one to update. */
+    private val clientTag: String? = null
 ) {
     suspend fun headers(expectedUid: String? = null): Map<String, String> {
         val user = checkNotNull(auth.currentUser()) { "Sign-in required" }
@@ -26,7 +28,7 @@ class BackendCredentials(
         return extra + mapOf(
             "Authorization" to "Bearer $bearer",
             "X-Firebase-AppCheck" to attestation
-        )
+        ) + (clientTag?.let { mapOf("X-REAL-Client" to it) } ?: emptyMap())
     }
 }
 
@@ -42,8 +44,15 @@ class AuthenticatedTransport(
         val clean = request.headers.filterKeys {
             !it.equals("Authorization", true) && !it.equals("X-API-Key", true) && !it.equals("X-Firebase-AppCheck", true) && !it.equals("X-REAL-Cloud-Epoch", true)
         }
-        return delegate.execute(request.copy(headers = clean + credentials.headers(expectedUid)))
+        val response = delegate.execute(request.copy(headers = clean + credentials.headers(expectedUid)))
+        if (response.statusCode == 426) ClientUpdateSignal.onUpdateRequired?.invoke()
+        return response
     }
+}
+
+/** The server answered 426 UPDATE_REQUIRED: this app version may only read until it is updated. */
+object ClientUpdateSignal {
+    @Volatile var onUpdateRequired: (() -> Unit)? = null
 }
 
 /** Prevents a queued operation/response being used under another signed-in account. */

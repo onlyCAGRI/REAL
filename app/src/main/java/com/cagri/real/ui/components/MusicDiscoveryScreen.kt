@@ -82,11 +82,14 @@ fun MusicDiscoveryScreen(
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     fun back() {
-        if (page == MusicPage.FILTERS || (startInList && page == MusicPage.LIST)) onDismiss() else { page = MusicPage.FILTERS; error = null }
+        // From the deck straight back to Yaşam; the picker was already done.
+        if (page == MusicPage.FILTERS || page == MusicPage.DISCOVER || (startInList && page == MusicPage.LIST)) onDismiss()
+        else { page = MusicPage.FILTERS; error = null }
     }
     BackHandler(onBack = ::back)
     LaunchedEffect(repo) {
-        runCatching { repo.load() }.onSuccess { snapshot = it; if (selection.isEmpty()) selection = ArrayList(it.selection) }
+        runCatching { repo.load() }.onSuccess { snapshot = it; if (selection.isEmpty()) selection = ArrayList(it.selection.filter { k -> MusicMood.fromKey(k) == null }
+            .let { keys -> keys.filter { k -> MusicGenre.fromKey(k) == null } + keys.filter { k -> MusicGenre.fromKey(k) != null }.take(2) }) }
     }
     fun discover() {
         if (loading) return
@@ -117,33 +120,23 @@ fun MusicDiscoveryScreen(
             }
             when (page) {
                 MusicPage.FILTERS -> {
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                        if (filterHeader == null) DiscoveryHeadline("Ne dinlesek", Modifier.padding(horizontal = 20.dp), TextAlign.Start)
-                        else filterHeader()
-                        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp).then(filterBodyModifier),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            Text("Tür", style = com.cagri.real.ui.theme.RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                MusicGenre.entries.forEach { g ->
-                                    val on = g.key in selection
-                                    DiscoveryButton(g.label, on, !loading && (on || selection.size < 6),
-                                        onClick = { selection = ArrayList(if (on) selection - g.key else selection + g.key) })
-                                }
-                            }
-                            Text("Nasıl hissettirsin?", style = com.cagri.real.ui.theme.RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                MusicMood.entries.forEach { m ->
-                                    val on = m.key in selection
-                                    DiscoveryButton(m.label, on, !loading && (on || selection.size < 6),
-                                        onClick = { selection = ArrayList(if (on) selection - m.key else selection + m.key) })
-                                }
-                            }
-                            Text("Apple Music · ${MusicCatalog.storefrontName()} listeleri", color = Color(0xFF5E5E66), fontSize = 11.sp)
-                        }
-                    }
-                    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-                        DiscoveryLoadingButton("Şarkıları getir", loading, true, MusicTone, reduceAnimations) { discover() }
-                    }
+                    if (filterHeader == null) DiscoveryHeadline("Ne dinlesek", Modifier.padding(horizontal = 20.dp), TextAlign.Start)
+                    else filterHeader()
+                    // One question at a time: 2 genres at most, then (optional) one era.
+                    DiscoveryStepper(
+                        steps = listOf(
+                            DiscoveryStep("Hangi türde müzik?", "En fazla 2 tür", 2, false,
+                                listOf(null to MusicGenre.entries.map { StepOption(it.key, it.label) })),
+                            DiscoveryStep("Hangi dönemden?", "İstersen bir dönem · Apple Music ${MusicCatalog.storefrontName()} listeleri", 1, true,
+                                listOf(null to (listOf(StepOption(AllErasKey, "Hepsi")) + MusicEra.entries.map { StepOption(it.key, it.label) }))),
+                        ),
+                        // "Hepsi" is shown chosen when no era is; picking it clears the era.
+                        selection = selection.toSet().let { s -> if (MusicEra.of(s) == null) s + AllErasKey else s },
+                        onSelection = { selection = ArrayList(it - AllErasKey) },
+                        accent = MusicTone, loading = loading, enabled = true, reduceAnimations = reduceAnimations,
+                        doneLabel = "şarkıları getir", modifier = Modifier.weight(1f).then(filterBodyModifier),
+                        rare = { chosen, key -> DiscoveryRarePairs.rare(DiscoveryRarePairs.music, chosen, key) }
+                    ) { discover() }
                 }
                 MusicPage.DISCOVER, MusicPage.LIST -> {
                     DiscoveryHeadline(if (listMode) "MÜZİK LİSTEM" else "SANA GÖRE", Modifier.padding(top = 2.dp, bottom = 6.dp), small = listMode)
@@ -168,21 +161,8 @@ fun MusicDiscoveryScreen(
     }
 }
 
-/** Opens the song in the person's music app: Apple Music exactly, Spotify by searching "title artist". */
-internal fun openInPreferredMusicApp(context: android.content.Context, music: MusicBlock) {
-    if (MusicSource.saved(context) == MusicSource.Spotify) {
-        val query = listOf(music.title, music.artist).filter { it.isNotBlank() }.joinToString(" ")
-        val attempts = listOf(
-            Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:" + Uri.encode(query))).setPackage("com.spotify.music"),
-            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/search/" + Uri.encode(query)))
-        )
-        for (intent in attempts) {
-            try { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return }
-            catch (_: android.content.ActivityNotFoundException) {}
-        }
-        RealToast.show(context, "Spotify açılamadı")
-    } else openMusicBlock(context, music)
-}
+/** Opens the song in the person's music app (Ayarlar → Müzik uygulaması): Apple Music, or a Spotify search. */
+internal fun openInPreferredMusicApp(context: android.content.Context, music: MusicBlock) = openMusicBlock(context, music)
 
 @Composable
 private fun MusicDeck(
@@ -191,6 +171,17 @@ private fun MusicDeck(
 ) {
     val context = LocalContext.current
     val card = cards.first()
+    // The front poster loads first; the ones behind it start once it is on screen.
+    // The deck's first front cover loads alone; after that the covers behind always load, and the next ones are
+    // fetched ahead so a swipe never shows an empty cover.
+    var frontReady by remember { mutableStateOf(card.music.artworkUrl.isNullOrBlank()) }
+    val prefetchContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(frontReady, cards.take(8).map { it.key }) {
+        if (!frontReady) return@LaunchedEffect
+        cards.drop(1).take(6).mapNotNull { it.music.artworkUrl }.forEach { u ->
+            coil.Coil.imageLoader(prefetchContext).enqueue(coil.request.ImageRequest.Builder(prefetchContext).data(u).build())
+        }
+    }
     val scope = rememberCoroutineScope()
     var offset by remember(card.key) { mutableStateOf(Offset.Zero) }
     var busy by remember { mutableStateOf(false) }
@@ -214,20 +205,19 @@ private fun MusicDeck(
         onDispose { lifecycle.lifecycle.removeObserver(observer) }
     }
     val previewUrl = card.music.previewUrl?.takeIf { it.startsWith("https://") }
+    // The next songs' previews are prepared in the background, so a swipe starts the next one at once.
+    val preloader = remember { PreviewPreloader() }
+    DisposableEffect(Unit) { onDispose { preloader.releaseAll() } }
+    val upcoming = cards.take(3).mapNotNull { it.music.previewUrl?.takeIf { u -> u.startsWith("https://") } }
+    LaunchedEffect(upcoming) {
+        preloader.keepOnly(upcoming.toSet())
+        upcoming.forEach { preloader.prefetch(it) }
+    }
     LaunchedEffect(card.key, paused, lifecycleActive, busy) {
         level = 0f
         if (previewUrl == null || paused || !lifecycleActive || busy) return@LaunchedEffect
-        val player = MediaPlayer()
+        val player = preloader.take(previewUrl) ?: return@LaunchedEffect
         try {
-            player.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-            player.isLooping = true
-            player.setDataSource(previewUrl)
-            val prepared = kotlinx.coroutines.CompletableDeferred<Unit>()
-            player.setOnPreparedListener { prepared.complete(Unit) }
-            player.setOnErrorListener { _, _, _ -> prepared.completeExceptionally(IllegalStateException()); true }
-            player.prepareAsync()
-            prepared.await()
             player.start()
             var t = 0.0
             while (true) {
@@ -278,8 +268,8 @@ private fun MusicDeck(
                                     // Up: open the song in your music app (Ayarlar → Müzik uygulaması).
                                     -offset.y > threshold && -offset.y > abs(offset.x) -> { settle(); paused = true; openInPreferredMusicApp(context, card.music) }
                                     abs(offset.y) > abs(offset.x) -> settle()
-                                    offset.x > threshold -> decide(if (listMode) MusicDiscoveryRepository.Action.KEEP else MusicDiscoveryRepository.Action.SAVE, Offset(threshold * 6, 0f))
-                                    offset.x < -threshold -> decide(if (listMode) MusicDiscoveryRepository.Action.REMOVE else MusicDiscoveryRepository.Action.SKIP, Offset(-threshold * 6, 0f))
+                                    offset.x > threshold -> decide(if (listMode) MusicDiscoveryRepository.Action.REMOVE else MusicDiscoveryRepository.Action.SAVE, Offset(threshold * 6, 0f))
+                                    offset.x < -threshold -> decide(if (listMode) MusicDiscoveryRepository.Action.KEEP else MusicDiscoveryRepository.Action.SKIP, Offset(-threshold * 6, 0f))
                                     else -> settle()
                                 }
                             }) { change, delta -> change.consume(); if (!currentBusy) offset += delta }
@@ -296,7 +286,8 @@ private fun MusicDeck(
                     }
                 }.clip(RoundedCornerShape(18.dp)).background(Color(0xFF1B1B20))
                 ) {
-                    AsyncImage(item.music.artworkUrl, item.music.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    AsyncImage(if (depth == 0 || frontReady) item.music.artworkUrl else null, item.music.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                        onSuccess = { if (depth == 0) frontReady = true }, onError = { if (depth == 0) frontReady = true })
                     if (depth == 0) {
                         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(side * .42f)
                             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .82f)))))
@@ -304,7 +295,7 @@ private fun MusicDeck(
                             Text(item.music.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(item.music.artist, color = Color.White.copy(alpha = .75f), fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        MusicSourceLogo(item.music.provider, 20.dp, Modifier.align(Alignment.TopEnd).padding(14.dp))
+                        MusicSourceLogo(musicOpensIn(LocalContext.current, item.music), 20.dp, Modifier.align(Alignment.TopEnd).padding(14.dp))
                         if (previewUrl == null) Text("Önizleme yok", color = Color.White.copy(alpha = .7f), fontSize = 11.sp,
                             modifier = Modifier.align(Alignment.TopStart).padding(14.dp).clip(RoundedCornerShape(20.dp))
                                 .background(Color.Black.copy(alpha = .7f)).padding(horizontal = 9.dp, vertical = 4.dp))
@@ -324,7 +315,47 @@ private fun MusicDeck(
                     } finally { busy = false }
                 }
             },
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = top + side + 12.dp))
-        SwipeTutorial("music", "Kaydet", "Geç", upLabel = "Uygulamada aç")
+            // Same place as on the film / game screens.
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = (maxHeight - 64.dp).coerceAtLeast(top + side + 12.dp)))
+        if (listMode) SwipeTutorial("music_list", "Kaldır", "Sona at", upLabel = "Uygulamada aç")
+        else SwipeTutorial("music", "Kaydet", "Geç", upLabel = "Uygulamada aç")
     }
 }
+
+/** Prepared MediaPlayers for the next previews (at most 3); handed over once, released when no longer needed. */
+private class PreviewPreloader {
+    private val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()
+    private val players = LinkedHashMap<String, Pair<MediaPlayer, kotlinx.coroutines.CompletableDeferred<Boolean>>>()
+
+    fun prefetch(url: String) {
+        if (players.containsKey(url)) return
+        val player = MediaPlayer()
+        val ready = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        try {
+            player.setAudioAttributes(attributes)
+            player.isLooping = true
+            player.setDataSource(url)
+            player.setOnPreparedListener { ready.complete(true) }
+            player.setOnErrorListener { _, _, _ -> ready.complete(false); true }
+            player.prepareAsync()
+        } catch (_: Exception) { player.release(); return }
+        players[url] = player to ready
+        while (players.size > 3) players.remove(players.keys.first())?.first?.release()
+    }
+
+    /** The prepared player for [url] (waits if it is still preparing); the caller releases it. */
+    suspend fun take(url: String): MediaPlayer? {
+        prefetch(url)
+        val (player, ready) = players.remove(url) ?: return null
+        val ok = try { ready.await() } catch (e: CancellationException) { player.release(); throw e }
+        return if (ok) player else { player.release(); null }
+    }
+
+    fun keepOnly(urls: Set<String>) { players.keys.filter { it !in urls }.forEach { players.remove(it)?.first?.release() } }
+
+    fun releaseAll() { players.values.forEach { it.first.release() }; players.clear() }
+}
+
+/** Stepper key for "Hepsi" in the era question; never saved. */
+private const val AllErasKey = "era_all"

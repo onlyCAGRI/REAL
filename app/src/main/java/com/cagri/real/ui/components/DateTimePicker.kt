@@ -798,7 +798,7 @@ private fun EarlyAlertSelectionScreen(
                     if (next == amount) return
                     amounts[unit] = next
                     onSelect(next * unit.minutes)
-                    view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                    RealHaptics.tick(view)
                 }
                 val stepPx = with(density) { 18.dp.toPx() }
                 val arrowAlpha by animateFloatAsState(if (isActive) 0.55f else 0f, tween(180), label = "earlyArrows")
@@ -821,7 +821,7 @@ private fun EarlyAlertSelectionScreen(
                                         if (next != current) {
                                             amounts[unit] = next
                                             onSelect(next * unit.minutes)
-                                            view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                                            RealHaptics.tick(view)
                                         }
                                     }
                                 }
@@ -945,6 +945,13 @@ private fun NumberWheel(
     }
 
     val view = LocalView.current
+    // Every number that passes the middle ticks (day, month and year), so a fast flick ticks in quick succession;
+    // RealHaptics paces them.
+    LaunchedEffect(state) {
+        snapshotFlow { centered }.distinctUntilChanged().collect {
+            if (initialScrollDone && state.isScrollInProgress) RealHaptics.tick(view)
+        }
+    }
     LaunchedEffect(state, values) {
         var wasMoving = false
         snapshotFlow { state.isScrollInProgress }.distinctUntilChanged().collect { scrolling ->
@@ -954,7 +961,6 @@ private fun NumberWheel(
                     if (settled == suppressSettleHapticValue) {
                         suppressSettleHapticValue = null
                     } else if (settled != latestValue) {
-                        if (label != "Yıl") RealHaptics.tick(view)
                         latestOnValue(settled)
                     }
                 }
@@ -1004,7 +1010,7 @@ private fun NumberWheel(
                     .height(rowHeight)
                     .clickable {
                         if (item != latestValue) {
-                            if (label != "Yıl") RealHaptics.tick(view)
+                            RealHaptics.tick(view)
                             suppressSettleHapticValue = item
                             onValue(item)
                         }

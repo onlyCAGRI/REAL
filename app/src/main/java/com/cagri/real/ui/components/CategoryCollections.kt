@@ -428,7 +428,8 @@ fun CollectionCategoryCard(
     onClick: (() -> Unit)? = null, onLongClick: (() -> Unit)? = null
 ) {
     val savedDescription by rememberCategoryDescription(categoryDescriptionKey(category, customCategory))
-    val description = limitCategoryDescription(descriptionPreview ?: savedDescription)
+    val description = limitCategoryDescription(descriptionPreview
+        ?: customCategory?.takeIf { it.isSharedMirror }?.sharedDescription.orEmpty().ifEmpty { savedDescription })
     val defaults = (category ?: ReminderCategory.NoAlert).defaultStyle()
     val startIndex = customCategory?.accentStart ?: override?.start
     val endIndex = customCategory?.accentEnd ?: override?.end

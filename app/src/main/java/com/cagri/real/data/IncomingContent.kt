@@ -99,7 +99,8 @@ object IncomingContentParser {
             require(clip.itemCount <= MAX_STREAMS) { "Bir seferde en fazla 20 dosya paylaşabilirsin" }
             for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let(uris::add)
         }
-        val result = uris.distinct()
+        // Another app could hand REAL a link to REAL's own private files; those are left out.
+        val result = uris.distinct().filterNot { it.authority?.startsWith(com.cagri.real.BuildConfig.APPLICATION_ID) == true }
         require(result.size <= MAX_STREAMS) { "Bir seferde en fazla 20 dosya paylaşabilirsin" }
         require(result.all { it.scheme == "content" }) { "Yalnızca güvenli içerik bağlantıları desteklenir" }
         return result

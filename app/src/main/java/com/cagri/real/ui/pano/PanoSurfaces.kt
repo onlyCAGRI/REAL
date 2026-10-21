@@ -53,35 +53,6 @@ internal fun PanoInfoBox(modifier: Modifier = Modifier, content: @Composable Col
         verticalArrangement = Arrangement.spacedBy(4.dp), content = content)
 }
 
-/** Single-field box. A normal inner box with the text written inside it; no leading circle. */
-@Composable
-internal fun PanoFieldBox(
-    value: String, onValue: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier,
-    singleLine: Boolean = false, strike: Boolean = false, onDone: (() -> Unit)? = null,
-    trailing: @Composable RowScope.() -> Unit = {}
-) {
-    Row(modifier.fillMaxWidth().panoSurface(14.dp).padding(start = 14.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
-            if (value.isEmpty()) Text(placeholder, color = Color(0xFF6E6E76), fontSize = 16.sp)
-            BasicTextField(value, onValue, modifier = Modifier.fillMaxWidth(), singleLine = singleLine,
-                textStyle = TextStyle(color = if (strike) PanoMuted else Color.White, fontSize = 16.sp,
-                    textDecoration = if (strike) TextDecoration.LineThrough else TextDecoration.None),
-                cursorBrush = SolidColor(Color.White),
-                keyboardOptions = KeyboardOptions(imeAction = if (onDone != null) ImeAction.Done else ImeAction.Default),
-                keyboardActions = KeyboardActions(onDone = { onDone?.invoke() }))
-        }
-        trailing()
-    }
-}
-
-@Composable
-internal fun PanoIconButton(glyph: ActionGlyph, description: String, tint: Color = Color.White, size: Dp = 32.dp, onClick: () -> Unit) {
-    Box(Modifier.size(size).clip(CircleShape).semantics { contentDescription = description }
-        .clickable(role = Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
-        ActionIcon(glyph, Modifier.size(15.dp), color = tint)
-    }
-}
-
 /** Round glass button used by the floating top controls (pencil / done). */
 @Composable
 internal fun PanoGlassButton(glyph: ActionGlyph, description: String, tint: Color = Color.White, onClick: () -> Unit) {

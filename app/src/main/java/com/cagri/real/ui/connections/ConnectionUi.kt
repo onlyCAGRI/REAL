@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -36,14 +38,21 @@ internal object ConnectionPalette {
     fun toneFor(key: String): Color = avatarTones[(key.hashCode().toLong() and 0x7fffffffL).toInt() % avatarTones.size]
 }
 
-/** İsmin baş harfi, kişiye özgü yumuşak renkte yuvarlak avatar. */
+/** İsmin baş harfi, kişiye özgü yumuşak renkte yuvarlak avatar; kişi profil resmini paylaştıysa ([pictureVersion]) o resim. */
 @Composable
-internal fun ConnectionAvatar(name: String, key: String, size: Dp = 44.dp) {
+internal fun ConnectionAvatar(name: String, key: String, size: Dp = 44.dp, pictureVersion: Long? = null) {
     val tone = ConnectionPalette.toneFor(key)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val picture by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, key, pictureVersion) {
+        value = pictureVersion?.let { com.cagri.real.platform.android.connections.ProfilePictures.load(context, key, it) }
+    }
     Box(Modifier.size(size).clip(CircleShape)
         .background(Brush.linearGradient(listOf(tone.copy(alpha = .38f), tone.copy(alpha = .14f))))
         .border(1.dp, tone.copy(alpha = .45f), CircleShape), contentAlignment = Alignment.Center) {
-        Text(name.trim().firstOrNull()?.uppercase() ?: "R", color = Color.White,
+        val bitmap = picture
+        if (bitmap != null) androidx.compose.foundation.Image(bitmap.asImageBitmap(), contentDescription = null,
+            modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+        else Text(name.trim().firstOrNull()?.uppercase() ?: "R", color = Color.White,
             fontSize = (size.value * .42f).sp, fontWeight = FontWeight.SemiBold)
     }
 }

@@ -108,6 +108,8 @@ internal class YasamActions(
     val openMusic: () -> Unit = {},
     /** Müzik listem: sağa kaydırılan şarkılar. */
     val openMusicList: () -> Unit = {},
+    /** Puanlarım: izlenen film ve dizilerin puanları. */
+    val openRatings: () -> Unit = {},
     /** Yaşam içinde Günlüklerim moduna geçer (ayrı ekran açmaz). */
     val openJournals: () -> Unit,
     val newJournal: () -> Unit
@@ -170,6 +172,10 @@ internal fun YasamTiles(
     watchlistCount: Int? = null,
     playlistCount: Int? = null,
     musicCount: Int? = null,
+    ratings: YasamRatings? = null,
+    watchArt: List<String> = emptyList(),
+    gameArt: List<String> = emptyList(),
+    musicArt: List<String> = emptyList(),
     /** Bölüm değişiminde (Home → Journals) satırların kademeli çıkış saati (ms); null = çıkış yok. */
     leave: Animatable<Float, AnimationVector1D>? = null
 ) {
@@ -280,30 +286,13 @@ internal fun YasamTiles(
                 )
                 if (book != null) YasamTextAction("RAFI AÇ  ›", YasamMuted, actions.openBooks)
             }
-            YasamRow(
-                "FİLM & DİZİ · OYUN · MÜZİK", "Öneri al",
-                open == "media", reduceAnimations, rowEnter(entrance, baseMs, 4).rowLeave(leave, 5), { toggle("media") },
-                preview = {
-                    Text(mediaPrompt, color = Color.White, fontSize = 19.sp, lineHeight = 25.sp, fontWeight = FontWeight.Light, fontFamily = YasamThin)
-                }
-            ) {
-                YasamTextAction("FİLM / DİZİ ÖNERİ AL  ›", YasamMediaTone, actions.openFilm)
-                YasamTextAction(
-                    "İZLENECEK LİSTEM" + (watchlistCount?.let { " · $it" } ?: "") + "  ›", YasamMuted, actions.openFilmList
-                )
-                Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(YasamHairline))
-                YasamTextAction("OYUN ÖNERİ AL  ›", YasamMediaTone, actions.openGame)
-                YasamTextAction(
-                    "OYNANACAK LİSTEM" + (playlistCount?.let { " · $it" } ?: "") + "  ›", YasamMuted, actions.openGameList
-                )
-                Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(YasamHairline))
-                YasamTextAction("MÜZİK ÖNERİ AL  ›", YasamMediaTone, actions.openMusic)
-                YasamTextAction(
-                    "MÜZİK LİSTEM" + (musicCount?.let { " · $it" } ?: "") + "  ›", YasamMuted, actions.openMusicList
-                )
-            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(YasamHairline).rowLeave(leave, 5))
+            YasamDiscoverGrid(
+                actions, watchlistCount, playlistCount, musicCount, watchArt, gameArt, musicArt, ratings,
+                rowEnter(entrance, baseMs, 4).rowLeave(leave, 6)
+            )
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(YasamHairline).rowLeave(leave, 6))
+        if (!showFun) Box(Modifier.fillMaxWidth().height(1.dp).background(YasamHairline).rowLeave(leave, 7))
     }
 }
 

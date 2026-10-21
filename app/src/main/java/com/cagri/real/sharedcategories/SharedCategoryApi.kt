@@ -76,7 +76,8 @@ class SharedCategoryApi(private val context: Context, val uid: String) {
         val meta = request("shared/$id")
         val m = meta.getJSONArray("members")
         val people = (0 until m.length()).map { val p = m.getJSONObject(it)
-            SharedCategoryMember(p.getString("uid"), p.getString("name"), p.getBoolean("isOwner")) }
+            SharedCategoryMember(p.getString("uid"), p.getString("name"), p.getBoolean("isOwner"),
+                p.optLong("pictureVersion", 0L).takeIf { it > 0 && !p.isNull("pictureVersion") }) }
         return SharedCategoryDetail(decodeSharedCategory(meta.getJSONObject("item")), people, emptyList())
     }
     suspend fun detail(id: String): SharedCategoryDetail = withContext(Dispatchers.IO) {

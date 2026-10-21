@@ -162,6 +162,8 @@ internal fun CategoryFullHero(
     onGoals: (() -> Unit)? = null,
     /** Ortak kategori: the people in this category (friend button in the ••• menu). */
     onPeople: (() -> Unit)? = null,
+    /** Ayraç ekle (owner and full members of a shared category; null hides it). */
+    onAddDivider: (() -> Unit)? = null,
     /** Home → category: the tapped category card grows into this header (same key as the home card). */
     sharedTransitionScope: androidx.compose.animation.SharedTransitionScope? = null,
     animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null
@@ -183,7 +185,8 @@ internal fun CategoryFullHero(
     val palette = remember(category, customCategory, override) { categoryPalette(category, customCategory, override) }
     val fg = palette.foreground
     val savedDescription by rememberCategoryDescription(categoryDescriptionKey(category, customCategory))
-    val description = limitCategoryDescription(savedDescription)
+    // A shared category from someone else shows its owner's description.
+    val description = limitCategoryDescription(customCategory?.takeIf { it.isSharedMirror }?.sharedDescription.orEmpty().ifEmpty { savedDescription })
     val title = customCategory?.name ?: category?.title.orEmpty()
     val focus = LocalFocusManager.current
     Column(
@@ -250,7 +253,7 @@ internal fun CategoryFullHero(
                         properties = PopupProperties(focusable = true)
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            (listOf(0, 1) + listOfNotNull(if (onGoals != null) 2 else null, if (onPeople != null) 3 else null)).forEach { index ->
+                            (listOf(0, 1) + listOfNotNull(if (onGoals != null) 2 else null, if (onPeople != null) 3 else null, if (onAddDivider != null) 4 else null)).forEach { index ->
                                 AnimatedVisibility(
                                     visibleState = shown,
                                     enter = if (reduceAnimations) fadeIn(tween(0)) else
@@ -260,13 +263,20 @@ internal fun CategoryFullHero(
                                     // Over the header colour: same glass, a touch more opaque so it reads on the cards too.
                                     Box(Modifier.size(40.dp).clip(CircleShape).background(palette.accent).background(glassFill(fg))) {
                                         HeroRoundButton(
-                                            fg, when (index) { 0 -> editLabel; 2 -> "Hedefler"; 3 -> "Kişiler"; else -> if (hasFilter) "Renk filtresi (açık)" else "Renge göre filtrele" },
-                                            onClick = { menuOpen = false; when (index) { 0 -> onEdit(); 2 -> onGoals?.invoke(); 3 -> onPeople?.invoke(); else -> onFilter() } }
+                                            fg, when (index) { 0 -> editLabel; 2 -> "Hedefler"; 3 -> "Kişiler"; 4 -> "Ayraç ekle"; else -> if (hasFilter) "Renk filtresi (açık)" else "Renge göre filtrele" },
+                                            onClick = { menuOpen = false; when (index) { 0 -> onEdit(); 2 -> onGoals?.invoke(); 3 -> onPeople?.invoke(); 4 -> onAddDivider?.invoke(); else -> onFilter() } }
                                         ) {
                                             when (index) {
                                                 0 -> ActionIcon(ActionGlyph.Edit, Modifier.size(18.dp), fg)
                                                 2 -> GoalTargetGlyph(fg)
                                                 3 -> CategoryIconGlyph(CategoryIcon.FRIENDS, Modifier.size(18.dp), color = fg)
+                                                // Ayraç: a line broken by a short title mark.
+                                                4 -> androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
+                                                    val y = size.height / 2; val w = 1.6.dp.toPx()
+                                                    drawLine(fg, Offset(0f, y), Offset(size.width * 0.28f, y), w)
+                                                    drawLine(fg, Offset(size.width * 0.72f, y), Offset(size.width, y), w)
+                                                    drawLine(fg, Offset(size.width * 0.4f, y), Offset(size.width * 0.6f, y), w * 2.2f)
+                                                }
                                                 else -> FilterGlyph(fg, hasFilter)
                                             }
                                         }
@@ -307,6 +317,14 @@ internal fun CategoryFullHero(
                 color = fg.copy(alpha = 0.9f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
+            // Ortak kategori: the friend mark left of the progress ring; a tap opens Kişiler.
+            if (customCategory?.isShared == true) {
+                Box(Modifier.size(34.dp).clip(CircleShape).clickable(enabled = onPeople != null) { onPeople?.invoke() }
+                    .semantics { contentDescription = "Ortak kategori · Kişiler" }, contentAlignment = Alignment.Center) {
+                    CategoryIconGlyph(CategoryIcon.FRIENDS, Modifier.size(19.dp), color = fg)
+                }
+                Spacer(Modifier.width(4.dp))
+            }
             actions(fg)
         }
         AnimatedVisibility(

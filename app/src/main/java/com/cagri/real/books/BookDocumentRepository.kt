@@ -76,6 +76,7 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PdfRunningHeaders.Snapshot>?): Boolean = size > 24
     }
     suspend fun importFile(uri: Uri): Book = withContext(Dispatchers.IO) {
+        if (com.cagri.real.updates.AppUpdateGate.blocked()) throw IOException(com.cagri.real.updates.AppUpdateGate.BLOCKED_MESSAGE)
         store.directory.mkdirs()
         val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
@@ -97,7 +98,7 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
             context.contentResolver.openInputStream(uri)?.use { input -> temp.outputStream().use { output ->
                 val buffer = ByteArray(8192); var total = 0
                 while (true) { coroutineContext.ensureActive(); val n = input.read(buffer); if (n < 0) break
-                    total += n; if (total > 50 * 1024 * 1024) throw IOException("Dosya en fazla 50 MB olabilir.")
+                    total += n; if (total > 100 * 1024 * 1024) throw IOException("Dosya en fazla 100 MB olabilir.")
                     hash.update(buffer, 0, n); output.write(buffer, 0, n) }
             } } ?: throw IOException("Dosya açılamadı.")
             val id = "local_" + hash.digest().joinToString("") { "%02x".format(it) }

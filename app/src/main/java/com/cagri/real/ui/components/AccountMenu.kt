@@ -80,6 +80,8 @@ fun AccountMenuOverlay(
     var showAddAccount by remember { mutableStateOf(false) }
     var showManageAccounts by remember { mutableStateOf(false) }
     val syncHealth by com.cagri.real.platform.android.sync.SyncLocal.health.collectAsState()
+    // Signed in: no "Hesap ekle" (another account comes after signing out, from Hesapları yönet).
+    val signedIn = com.cagri.real.platform.android.sync.SyncLocal.startup.state.collectAsState().value.uid != null
 
     LaunchedEffect(Unit) {
         if (!reduceAnimations) {
@@ -146,10 +148,12 @@ fun AccountMenuOverlay(
                     label = androidx.compose.ui.res.stringResource(com.cagri.real.R.string.real_pro_title),
                     onClick = { showRealPro = true })
                 Spacer(Modifier.height(3.dp))
-                AccountMenuItem(icon = ActionGlyph.Add, label = "Hesap ekle", onClick = {
-                    showAddAccount = true
-                })
-                Spacer(Modifier.height(3.dp))
+                if (!signedIn) {
+                    AccountMenuItem(icon = ActionGlyph.Add, label = "Hesap ekle", onClick = {
+                        showAddAccount = true
+                    })
+                    Spacer(Modifier.height(3.dp))
+                }
                 AccountMenuItem(icon = ActionGlyph.Manage, label = syncHealth?.let { val count = it.issues.size + it.conflicts.size; if (count > 0) "Hesapları yönet · $count eşitleme sorunu" else "Hesapları yönet" } ?: "Hesapları yönet", onClick = {
                     showManageAccounts = true
                 })
@@ -283,20 +287,6 @@ fun ProfileAvatar(
                 color = Color(0xFFF1F1F5)
             )
         }
-    }
-}
-
-@Composable
-fun GuestAvatar(modifier: Modifier = Modifier) {
-    Box(
-        modifier.background(Color.White.copy(alpha = 0.11f), CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        ActionIcon(
-            glyph = ActionGlyph.Person,
-            modifier = Modifier.size(21.dp),
-            color = Color(0xFFF1F1F5)
-        )
     }
 }
 

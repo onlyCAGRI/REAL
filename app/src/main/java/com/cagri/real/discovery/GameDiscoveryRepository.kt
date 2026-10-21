@@ -35,7 +35,12 @@ class GameDiscoveryRepository(context: Context, uid: String) {
     }
     suspend fun load(): Snapshot = withContext(Dispatchers.IO) { lock.withLock { read() } }
 
-    suspend fun fetch(filters: Set<String>, platforms: Set<String>): Snapshot = withContext(Dispatchers.IO) {
+    /**
+     * [deckFilters] / [deckPlatforms]: the person's choice the deck belongs to; with [append] a widened request (fewer
+     * keys, when the exact choice found too few games) adds to the deck instead of replacing it.
+     */
+    suspend fun fetch(filters: Set<String>, platforms: Set<String>, deckFilters: Set<String> = filters,
+                      deckPlatforms: Set<String> = platforms, append: Boolean = false): Snapshot = withContext(Dispatchers.IO) {
         require(GameFilter.validSelection(filters))
         val prior = load()
         fun body(f: Set<String>, p: Set<String>) = JSONObject().put("filters", JSONArray(f.toList())).put("platforms", JSONArray(p.toList()))
@@ -60,14 +65,17 @@ class GameDiscoveryRepository(context: Context, uid: String) {
             // Played games are filtered here in the app, by id and by title.
             val skip = cur.excluded.toSet() + cur.list.map { it.game.title } + cur.played.map { it.game.title }
             val playedKeys = cur.played.map { it.key }.toSet()
-            val next = cur.copy(filters = filters, platforms = platforms,
-                cards = resolved.filter { it.game.title !in skip && it.key !in playedKeys }.distinctBy { it.key }
-                    .sortedByDescending { c -> filters.count { it in c.tags } })
+            val fresh = resolved.filter { it.game.title !in skip && it.key !in playedKeys }.sortedByDescending { c -> deckFilters.count { it in c.tags } }
+            val next = cur.copy(filters = deckFilters, platforms = deckPlatforms,
+                cards = ((if (append) cur.cards else emptyList()) + fresh).distinctBy { it.key })
             write(next); next
         }
     }
 
-    suspend fun act(card: GameCard, action: GameAction): Snapshot = withContext(Dispatchers.IO) { lock.withLock {
+    /** Settings "Önerileri sıfırla": passed titles can come back and the deck starts over; the saved list and "Oynadım" stay. */
+    suspend fun resetSeen() = withContext(Dispatchers.IO) { lock.withLock { val s = read(); write(s.copy(cards = emptyList(), excluded = emptyList())) } }
+
+    suspend fun act(card: GameCard, action: GameAction): Snapshot = withContext(Dispatchers.IO) { com.cagri.real.updates.AppUpdateGate.requireWritable(); lock.withLock {
         val s = read()
         val q = GameQueueTransitions.apply(GameQueues(s.cards, s.list, s.excluded), card, action)
         val played = if (action == GameAction.PLAYED) s.played.filterNot { it.key == card.key } + card else s.played

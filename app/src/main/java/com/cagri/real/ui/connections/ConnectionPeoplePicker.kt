@@ -141,7 +141,7 @@ fun ConnectionPeoplePicker(enabled: Boolean = true, actionLabel: String, onSelec
             snapshot.people.forEach { person ->
                 ConnectionCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ConnectionAvatar(person.name, person.uid)
+                        ConnectionAvatar(person.name, person.uid, pictureVersion = person.pictureVersion)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(person.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium,

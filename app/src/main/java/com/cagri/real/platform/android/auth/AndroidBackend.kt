@@ -27,7 +27,8 @@ object AndroidBackend {
         }
     }
     private val credentials by lazy {
-        BackendCredentials(auth, attestation, com.cagri.real.platform.android.account.CloudBackupEpochStore::headers)
+        BackendCredentials(auth, attestation, com.cagri.real.platform.android.account.CloudBackupEpochStore::headers,
+            clientTag = "android/${com.cagri.real.BuildConfig.VERSION_CODE}")
     }
     val workerTransport: HttpTransport by lazy {
         com.cagri.real.platform.android.ai.AiConsentTransport(

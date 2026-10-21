@@ -109,8 +109,14 @@ fun CategoryEditor(
         com.cagri.real.platform.android.sync.SyncLocal.preferences(descriptionContext, "real_category_descriptions", android.content.Context.MODE_PRIVATE)
     }
     val descriptionKey = categoryDescriptionKey(builtInCategory, customCategory)
-    var description by rememberSaveable(descriptionKey) {
-        mutableStateOf(limitCategoryDescription(descriptionKey?.let { descriptionPreferences.getString(it, "") }.orEmpty()))
+    // Someone else's shared category (full or limited member): only the owner's description (read only) and this
+    // phone's "Yalnızca kategori içinde göster" switch. Name, colour, icon and delete stay with the owner.
+    val memberMode = customCategory?.isSharedMirror == true
+    var description by rememberSaveable(descriptionKey, memberMode) {
+        mutableStateOf(
+            if (memberMode) customCategory?.sharedDescription.orEmpty()
+            else limitCategoryDescription(descriptionKey?.let { descriptionPreferences.getString(it, "") }.orEmpty())
+        )
     }
     val (plannerPreferences, _) = rememberCategoryPlannerPreferences()
     val plannerKey = categoryPlannerKey(builtInCategory, customCategory)
@@ -216,7 +222,7 @@ fun CategoryEditor(
         if (canSave) {
             plannerKey?.let { plannerPreferences.setVisible(it, visibleInCalendar) }
             val trimmedDescription = limitCategoryDescription(description).trim().takeIf { it.isNotEmpty() }
-            descriptionKey?.let { key ->
+            if (!memberMode) descriptionKey?.let { key ->
                 descriptionPreferences.edit().apply {
                     if (trimmedDescription == null) remove(key) else putString(key, trimmedDescription)
                 }.apply()
@@ -335,7 +341,7 @@ fun CategoryEditor(
                     verticalArrangement = Arrangement.spacedBy(22.dp)
                 ) {
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!isBuiltIn) {
+                    if (!isBuiltIn && !memberMode) {
                         EditorSection(title = "AD") {
                             EditorGroup {
                                 Row(
@@ -367,7 +373,19 @@ fun CategoryEditor(
                         }
                     }
 
-                    EditorSection(
+                    if (memberMode) EditorSection(
+                        title = "AÇIKLAMA",
+                        footer = "Açıklamayı yalnızca kategori sahibi değiştirebilir."
+                    ) {
+                        EditorGroup {
+                            Text(
+                                description.ifEmpty { "Kategori sahibi henüz açıklama yazmadı." },
+                                color = if (description.isEmpty()) Color(0xFF6F6F78) else Color(0xFFF3F3F5),
+                                fontSize = 15.sp, lineHeight = 20.sp,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)
+                            )
+                        }
+                    } else EditorSection(
                         title = "AÇIKLAMA",
                         footer = "Boş bırakırsan açıklama kutusu kaldırılır · ${categoryDescriptionWordCount(description)}/30 kelime"
                     ) {
@@ -391,7 +409,7 @@ fun CategoryEditor(
                     }
                     }
 
-                    EditorSection(title = "RENK") {
+                    if (!memberMode) EditorSection(title = "RENK") {
                         EditorGroup {
                             val isColor2Enabled = !(isBuiltIn && selectedColor1 == null)
 
@@ -499,7 +517,7 @@ fun CategoryEditor(
                         }
                     }
 
-                    if (!isBuiltIn) {
+                    if (!isBuiltIn && !memberMode) {
                         EditorSection(title = "İKON") {
                             EditorGroup {
                                 val selectableIcons = remember { CategoryIcon.selectableEntries }
@@ -570,7 +588,7 @@ fun CategoryEditor(
                         }
                     }
 
-                    if (isCustomEdit && onDeleteCustomCategory != null) {
+                    if (isCustomEdit && onDeleteCustomCategory != null && !memberMode) {
                         EditorGroup {
                             if (showDeleteConfirm) {
                                 Column(
@@ -873,129 +891,4 @@ private fun CategoryEditorColorRow(
             }
         }
     }
-}
-
-@Composable
-private fun LiveCategoryPreview(
-    builtInCategory: ReminderCategory?,
-    customName: String,
-    selectedIcon: CategoryIcon,
-    selectedColor1: Int?,
-    selectedColor2: Int?,
-    modifier: Modifier = Modifier
-) {
-    val shape = RoundedCornerShape(18.dp)
-
-    val (baseColor, upperColor, lowerColor) = when {
-        builtInCategory != null && selectedColor1 == null -> {
-            val style = builtInCategory.defaultStyle()
-            Triple(style.base, style.upper, style.lower)
-        }
-        selectedColor1 != null -> {
-            val startColor = ReminderColorChoices.getOrNull(selectedColor1)?.color ?: ReminderColorChoices[0].color
-            val endColor = selectedColor2?.let { ReminderColorChoices.getOrNull(it)?.color } ?: startColor
-            Triple(
-                Color(0xFF14151C),
-                startColor.copy(alpha = 0.85f),
-                endColor.copy(alpha = if (selectedColor2 != null) 0.70f else 0.60f)
-            )
-        }
-        else -> {
-            val c = ReminderColorChoices[0].color
-            Triple(Color(0xFF14151C), c.copy(alpha = 0.85f), c.copy(alpha = 0.60f))
-        }
-    }
-
-    val displayName = when {
-        builtInCategory != null -> builtInCategory.title
-        customName.isNotBlank() -> customName
-        else -> "Önizleme"
-    }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.width(104.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .width(104.dp)
-                .height(82.dp)
-                .clip(shape)
-                .drawWithCache {
-                    val topLight = Brush.radialGradient(
-                        colors = listOf(upperColor, Color.Transparent),
-                        center = Offset(size.width * 0.95f, -size.height * 0.1f),
-                        radius = size.width * 1.12f
-                    )
-                    val bottomLight = Brush.radialGradient(
-                        colors = listOf(lowerColor, Color.Transparent),
-                        center = Offset(-size.width * 0.05f, size.height * 1.1f),
-                        radius = size.width * 1.15f
-                    )
-                    onDrawBehind {
-                        drawRect(baseColor)
-                        drawRect(topLight)
-                        drawRect(bottomLight)
-                    }
-                }
-                .border(0.75.dp, Color.White.copy(alpha = 0.12f), shape),
-            contentAlignment = Alignment.Center
-        ) {
-            if (builtInCategory != null) {
-                CategoryGlyph(
-                    glyph = builtInCategory.glyph(),
-                    modifier = Modifier.size(32.dp)
-                )
-            } else {
-                CategoryIconGlyph(
-                    icon = selectedIcon,
-                    modifier = Modifier.size(32.dp),
-                    color = Color.White
-                )
-            }
-        }
-        Spacer(Modifier.height(7.dp))
-        Text(
-            text = displayName,
-            color = if (builtInCategory != null || customName.isNotBlank()) Color(0xFFE7E7EB) else Color(0xFF7A7A85),
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@OptIn(ExperimentalSharedTransitionApi::class)
-@Composable
-fun CreateCategoryDialog(
-    initialCategory: CustomCategory? = null,
-    backdrop: GraphicsLayer,
-    backdropPosition: () -> Offset,
-    onDismiss: () -> Unit,
-    onSave: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean, useDarkText: Boolean, gradientBlendFraction: Float?, customSolidColorArgb: Int?) -> Unit,
-    onDelete: ((deleteReminders: Boolean) -> Unit)? = null,
-    modifier: Modifier = Modifier,
-    designStyle: DesignStyle = DesignStyle.Glass,
-    reduceDynamicBlur: Boolean = false,
-    reduceAnimations: Boolean = false,
-    onCreate: (name: String, iconKey: String, accentStart: Int, accentEnd: Int?, hideFromGeneralLists: Boolean, useDarkText: Boolean, gradientBlendFraction: Float?, customSolidColorArgb: Int?) -> Unit = onSave
-) {
-    CategoryEditor(
-        customCategory = initialCategory,
-        backdrop = backdrop,
-        backdropPosition = backdropPosition,
-        onDismiss = onDismiss,
-        onSaveCustomCategory = { name, iconKey, accentStart, accentEnd, hide, useDarkText, gradientBlendFraction, customSolidColorArgb, _ ->
-            onSave(name, iconKey, accentStart, accentEnd, hide, useDarkText, gradientBlendFraction, customSolidColorArgb)
-        },
-        onDeleteCustomCategory = onDelete,
-        modifier = modifier,
-        designStyle = designStyle,
-        reduceDynamicBlur = reduceDynamicBlur,
-        reduceAnimations = reduceAnimations
-    )
 }

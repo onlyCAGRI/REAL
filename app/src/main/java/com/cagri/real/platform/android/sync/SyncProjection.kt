@@ -49,7 +49,7 @@ internal object SyncProjection {
             // Someone else's shared category is a mirror on this phone; the owner's own one stays (minus the bookkeeping).
             val role=it.optString("sharedRole","")
             if(it.has("sharedId") && role!="owner") return@forEach
-            it.remove("sharedId");it.remove("sharedRole");it.remove("sharedOwnerName")
+            it.remove("sharedId");it.remove("sharedRole");it.remove("sharedOwnerName");it.remove("sharedDescription")
             add("CATEGORY",it.getLong("id").toString(),it)
         }
         rows(MOODS,"entries_v1").forEach { add("MOOD",it.getLong("id").toString(),it) }
@@ -109,7 +109,10 @@ internal object SyncProjection {
             set(file,k,JSONArray(rows).toString())
         }
         when(kind) {
-            "CARD"->array(CARDS,"reminders","id") {
+            // An Ortak kategori card lives in the shared store: a personal record with the same id (its copy from before
+            // it was shared) must not overwrite it, or it loses its link and goes up to the category again.
+            "CARD"->if(string(CARDS,"reminders")?.let(::JSONArray)?.objects()?.any { row->row.getLong("id").toString()==key && row.has("sharedCardId") && !row.isNull("sharedCardId") } == true) Unit
+            else array(CARDS,"reminders","id") {
                 transformBinaries(db,scope,it,false)
                 // Notification delivery is device-local; restore never claims another device notified it.
                 val old=string(CARDS,"reminders")?.let(::JSONArray)?.objects()?.find { row->row.getLong("id").toString()==key }
