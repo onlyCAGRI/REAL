@@ -184,7 +184,15 @@ struct ComposerBar: View {
                 focus = .title
             })
         }
-        .realOverlay(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
+        .realOverlay(isPresented: $showDateSheet) {
+            ScheduleSheet(draft: $schedule, alarm: Binding(get: { alarm }, set: { on in
+                if on && !alarm, #available(iOS 26.0, *), !RealAlarmKit.authorized {
+                    // First alarm: the system's permission prompt; once allowed, alarm cards move to AlarmKit.
+                    Task { if await RealAlarmKit.requestAuthorization() { NotificationScheduler.reschedule(store.reminders) } }
+                }
+                alarm = on
+            }))
+        }
         .realOverlay(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId) }
         .realOverlay(isPresented: $showLocationChoice) {
             PermissionSheet(title: "Konum",
@@ -363,49 +371,25 @@ struct ComposerBar: View {
 
     /// Calendar / category / attachment / checklist / bell, Android icon order.
     private var toolRow: some View {
-        HStack(spacing: 4) {
-            // Tools scroll sideways when they do not fit (a long date chip); the bell stays pinned at the right.
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) { tools }
-            }
-            bellButton
+        // Tools scroll sideways when they do not fit (a long date chip); the bell is the last of them.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) { tools; bellButton }
         }
         .padding(.horizontal, 14).padding(.top, 2).padding(.bottom, 4)
     }
 
-    /// One tap = notification, again = alarm (with its label), again = back. A timed card always notifies,
-    /// so for it the bell only switches notification ↔ alarm.
+    /// Notification on/off (an undated card notifies right away). The alarm is picked in the date sheet
+    /// (Saat pushed right), so the bell has no alarm state.
     private var bellButton: some View {
-        let timed = schedule.alertAt != nil
-        let on = alarm || timed || sendImmediate
-        let tone = alarm ? Self.alarmTone : (on ? RealColors.accentBlue : Color(argb: 0xFFBABAC3))
-        return Button {
-            if alarm {
-                alarm = false
-                if !timed { sendImmediate = false }
-            } else if timed || sendImmediate {
-                alarm = true
-                if #available(iOS 26.0, *), !RealAlarmKit.authorized {
-                    // First alarm: the system's permission prompt; once allowed, alarm cards move to AlarmKit.
-                    Task { if await RealAlarmKit.requestAuthorization() { NotificationScheduler.reschedule(store.reminders) } }
-                }
-                // An alarm needs a clock time: without one the date sheet opens right away.
-                if !timed { withoutAnimation { showDateSheet = true } }
-            } else {
-                sendImmediate = true
-            }
-        } label: {
-            HStack(spacing: 6) {
-                RealSymbol(on ? "bell" : "bell.slash", size: 20).foregroundStyle(tone)
-                if alarm { Text("Alarm").font(RealFont.inter(13, .medium)).foregroundStyle(tone) }
-            }
-            .padding(.horizontal, alarm ? 10 : 0)
-            .frame(minWidth: 40, minHeight: 40)
-            .background(RoundedRectangle(cornerRadius: 14).fill(alarm ? Self.alarmTone.opacity(0.16) : .clear))
-            .contentShape(Rectangle())
+        let on = schedule.alertAt != nil || sendImmediate
+        return Button { sendImmediate.toggle() } label: {
+            RealSymbol(on ? "bell" : "bell.slash", size: 20)
+                .foregroundStyle(on ? RealColors.accentBlue : Color(argb: 0xFFBABAC3))
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(alarm ? "Alarm açık" : (on ? "Bildirim açık" : "Bildirim kapalı"))
+        .accessibilityLabel(on ? "Bildirim açık" : "Bildirim kapalı")
     }
 
     static let alarmTone = Color(argb: 0xFFFF8A5B)
@@ -414,13 +398,14 @@ struct ComposerBar: View {
             if !schedule.isEmpty {
                 Button { withoutAnimation { showDateSheet = true } } label: {
                     HStack(spacing: 6) {
-                        RealSymbol("calendar", size: 16.1).foregroundStyle(RealColors.accentBlue)
+                        // An alarm card shows the alarm clock instead of the calendar.
+                        RealSymbol(alarm ? "alarm" : "calendar", size: 16.1).foregroundStyle(RealColors.accentBlue)
                         Text(schedule.summary).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFE2E8F0))
                     }
                     .padding(.horizontal, 9).padding(.vertical, 5)
                     .background(RoundedRectangle(cornerRadius: 12).fill(RealColors.accentBlue.opacity(0.14)))
                 }
-                Button { schedule = ScheduleDraft() } label: {
+                Button { schedule = ScheduleDraft(); alarm = false } label: {
                     RealSymbol("xmark", size: 12.6).foregroundStyle(Color(argb: 0xFFAAAAB4)).frame(width: 36, height: 40)
                 }
                 .accessibilityLabel("Tarihi kaldır")

@@ -59,6 +59,11 @@ struct ScheduleSheet: View {
     var initialTimeTab = false
     /// Offer "Erken uyarı" and "Bitiş" (off for pickers that only choose a time, like an end time).
     var showTiming = true
+    /// When set, Saat can be pushed right to "Alarm"; written on "Bitti".
+    var alarm: Binding<Bool>? = nil
+    @State private var alarmOn = false
+    @State private var alarmHint = false
+    @State private var alarmNudged = false
     @State private var timeTab = false
     @State private var repeatRule: RecurrenceRule = .none
     @State private var showRepeat = false
@@ -133,7 +138,19 @@ struct ScheduleSheet: View {
             .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.22), value: showRepeat)
             .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.22), value: showEarly)
         }
-        .onAppear { load(); if initialTimeTab { timeTab = true } }
+        .onAppear { load(); if initialTimeTab { timeTab = true }; maybeNudgeAlarm() }
+        .onChange(of: timeTab) { _, _ in maybeNudgeAlarm() }
+    }
+
+    /// First three sheets that show Saat: the thumb is pushed once towards the alarm with a short hint.
+    private func maybeNudgeAlarm() {
+        guard alarm != nil, timeTab, !alarmOn, !alarmNudged else { return }
+        alarmNudged = true
+        let seen = UserDefaults.standard.integer(forKey: "realAlarmNudge")
+        guard seen < 3 else { return }
+        UserDefaults.standard.set(seen + 1, forKey: "realAlarmNudge")
+        withAnimation(.easeOut(duration: 0.26)) { alarmHint = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) { withAnimation(.easeOut(duration: 0.36)) { alarmHint = false } }
     }
 
     private func load() {
@@ -148,6 +165,7 @@ struct ScheduleSheet: View {
         earlyMinutes = draft.earlyAlertMinutes
         hasEnd = draft.endAt != nil
         seedEnd(draft.endAt ?? seed.addingTimeInterval(3600))
+        alarmOn = alarm?.wrappedValue ?? false
     }
 
     private func seedEnd(_ date: Date) {
@@ -177,8 +195,10 @@ struct ScheduleSheet: View {
         VStack(spacing: 0) {
             Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3)
             HStack(spacing: 4) {
+                // An alarm warms the start time a little, in the glow's colour.
                 Text(startText).font(RealFont.inter(13, !editingEnd && hasEnd ? .semibold : .medium))
-                    .foregroundStyle(editingEnd ? Color(argb: 0xFFD9D9DE).opacity(0.5) : Color(argb: 0xFFF2F2F5)).lineLimit(1)
+                    .foregroundStyle(editingEnd ? Color(argb: 0xFFD9D9DE).opacity(0.5) : (alarmOn ? Color(argb: 0xFFFFCFBA) : Color(argb: 0xFFF2F2F5))).lineLimit(1)
+                    .animation(.easeOut(duration: 0.32), value: alarmOn)
                     .padding(.horizontal, 4).padding(.vertical, 4).contentShape(Rectangle())
                     .onTapGesture { editingEnd = false }
                 if showTiming {
@@ -200,7 +220,17 @@ struct ScheduleSheet: View {
                 }
             }
             .padding(.vertical, 18)
-            LiquidSegmentedControl(labels: ["Tarih", "Saat"], selected: Binding(get: { timeTab ? 1 : 0 }, set: { timeTab = $0 == 1 }))
+            if alarm != nil {
+                DateTimeAlarmSegment(timeTab: $timeTab, alarm: Binding(get: { alarmOn }, set: { on in
+                    withAnimation(.easeOut(duration: 0.3)) { alarmOn = on; if on { alarmHint = false } }
+                }), nudge: alarmHint)
+            } else {
+                LiquidSegmentedControl(labels: ["Tarih", "Saat"], selected: Binding(get: { timeTab ? 1 : 0 }, set: { timeTab = $0 == 1 }))
+            }
+            // The hint sits in the gap under the control, so nothing below moves.
+            Text("Alarm için Saat'i sağa it").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF9A9AA3))
+                .lineLimit(1).opacity(alarmHint ? 1 : 0)
+                .frame(height: 18)
             ZStack {
                 if timeTab {
                     HStack(spacing: 4) {
@@ -214,17 +244,18 @@ struct ScheduleSheet: View {
                         NumberWheel(values: Array(1...daysInMonth), value: wDay, format: { "\($0)" })
                         NumberWheel(values: Array(1...12), value: wMonth, format: { Self.months[$0 - 1] })
                         if includeYear && !editingEnd {
+                            // "Yıl gir" grows the year column in from the right (and back out) instead of popping it.
                             NumberWheel(values: Array(currentYear...(currentYear + 30)), value: $year, format: { "\($0)" }, fontSize: 26)
-                                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                                .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .trailing)).combined(with: .scale(scale: 0.85, anchor: .leading)),
+                                                        removal: .opacity.combined(with: .scale(scale: 0.85, anchor: .leading))))
                         }
                     }
                     .transition(.opacity.combined(with: .offset(x: -12)))
                 }
             }
             .id(editingEnd) // fresh wheels when switching between start and end
-            .padding(.top, 18)
             .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.18), value: timeTab)
-            .animation(.easeOut(duration: 0.2), value: includeYear)
+            .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.32), value: includeYear)
             .onChange(of: month) { _, _ in day = min(day, daysInMonth) }
             .onChange(of: endMonth) { _, _ in endDay = min(endDay, daysInMonth) }
             HStack(spacing: 0) {
@@ -252,11 +283,12 @@ struct ScheduleSheet: View {
             .liquidGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .chrome)
             .padding(.top, 12)
             if draft.date != nil {
-                Button("Tarih ve saati kaldır") { draft = ScheduleDraft(); close() }
+                Button("Tarih ve saati kaldır") { draft = ScheduleDraft(); alarm?.wrappedValue = false; close() }
                     .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFA4AA))
                     .padding(.top, 12)
             }
         }
+        .background(AlarmBreathGlow(active: alarm != nil && alarmOn).padding(-20))
     }
 
     /// Selected options read white, like the rest of the sheet (no blue).
@@ -334,6 +366,7 @@ struct ScheduleSheet: View {
             result.endAt = endDate
         }
         draft = result
+        alarm?.wrappedValue = alarmOn
         close()
     }
 }
