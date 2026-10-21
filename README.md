@@ -11,7 +11,7 @@ One repository for every REAL app.
 ## Working on it
 
 - New work goes on a short branch (for example `feature/pano-dock`) and is merged into `main` when done.
-- Releases are tags, for example `android-0.8.11` or `ios-0.8.11`.
+- Releases are tags, for example `android-0.9.4` or `ios-0.9.4`.
 
 ## Secrets
 
