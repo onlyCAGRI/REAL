@@ -43,6 +43,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.cagri.real
         PRODUCT_NAME: REAL
         INFOPLIST_FILE: Real/Info.plist
+        # Empty for Xcode's automatic signing; the TestFlight CI sets REAL_PROFILE to the App Store profile. Set here
+        # (not on the command line) so the Swift package targets never see a provisioning profile.
+        PROVISIONING_PROFILE_SPECIFIER: "$(REAL_PROFILE)"
         # CODE_SIGN_ENTITLEMENTS: Real/Real.entitlements    # SHARE
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

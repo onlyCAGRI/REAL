@@ -166,21 +166,38 @@ jobs:
           path: REAL-simulator.zip
 
       - name: Archive and upload to TestFlight
-        # "testflight" runs only. Signing is automatic through the App Store Connect API key (Admin): Xcode creates the
-        # distribution certificate and profile itself. The key comes from repository secrets and is deleted afterwards.
+        # "testflight" runs only. Manual signing with the team's Apple Distribution certificate (.p12) and the "REAL App
+        # Store" profile from repository secrets: every runner is a fresh Mac, so certificates Xcode creates on its own
+        # lose their private key with the machine. The App Store Connect API key only uploads. All are deleted afterwards.
         # Build number = workflow run number, so every upload is higher than the last (the update gate reads it too).
         if: success() && (inputs.mode == 'testflight' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[testflight]')))
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          DIST_P12: ${{ secrets.IOS_DIST_P12 }}
+          DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          APPSTORE_PROFILE: ${{ secrets.IOS_APPSTORE_PROFILE }}
           TEAM_ID: VW6K9YCWLJ
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
           mkdir -p build
           KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
           printf '%s\n' "$ASC_KEY_P8" > "$KEY"
-          AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          # Signing identity in a throwaway keychain, the profile where Xcode looks for it.
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"; KC_PASS=$(uuidgen)
+          printf '%s' "$DIST_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" -P "$DIST_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -k "$KC_PASS" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/dist.p12"
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"; printf '%s' "$APPSTORE_PROFILE" | base64 --decode > "$dir/real-appstore.mobileprovision"
+          done
+          echo "::warning title=signing identities::$(security find-identity -v -p codesigning "$KEYCHAIN" | head -3 | tr '\n' ' ')"
           cat > build/ExportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -188,15 +205,18 @@ jobs:
             <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>export</string>
             <key>teamID</key><string>$TEAM_ID</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key><dict><key>com.cagri.real</key><string>REAL App Store</string></dict>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict></plist>
           EOF
           set +e
           xcodebuild archive -project Real.xcodeproj -scheme Real -configuration Release \
             -destination "generic/platform=iOS" -archivePath build/REAL.xcarchive \
-            DEVELOPMENT_TEAM=$TEAM_ID CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION=$BUILD_NUMBER \
-            $AUTH > build/archive.log 2>&1
+            DEVELOPMENT_TEAM=$TEAM_ID CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" \
+            REAL_PROFILE="REAL App Store" OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
+            CURRENT_PROJECT_VERSION=$BUILD_NUMBER > build/archive.log 2>&1
           status=$?
           grep -E "error:|\*\* ARCHIVE" build/archive.log | sort -u | head -80
           if [ $status -ne 0 ]; then rm -f "$KEY"; tail -60 build/archive.log; exit $status; fi
@@ -206,7 +226,7 @@ jobs:
           # Export (re-signs for App Store with the distribution certificate), check, then upload separately, so a
           # failure says which of the two went wrong.
           xcodebuild -exportArchive -archivePath build/REAL.xcarchive -exportOptionsPlist build/ExportOptions.plist \
-            -exportPath build/export $AUTH > build/export.log 2>&1
+            -exportPath build/export > build/export.log 2>&1
           status=$?
           grep -E "error|EXPORT" build/export.log | tail -40
           if [ $status -ne 0 ]; then rm -f "$KEY"; echo "::error title=export::$(grep -m3 'error' build/export.log | tr '\n' ' ')"; exit $status; fi
@@ -219,6 +239,7 @@ jobs:
           xcrun altool --upload-app -f "$IPA" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" > build/upload.log 2>&1
           status=$?
           rm -f "$KEY" ~/.appstoreconnect/private_keys/AuthKey_*.p8
+          security delete-keychain "$KEYCHAIN" || true
           tail -30 build/upload.log
           if [ $status -ne 0 ]; then echo "::error title=upload::$(grep -m3 -iE 'error|invalid' build/upload.log | tr '\n' ' ')"; exit $status; fi
           echo "Uploaded build $BUILD_NUMBER"
