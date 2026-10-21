@@ -396,7 +396,7 @@ struct ReaderCircleButton<Label: View>: View {
         Button(action: action) {
             Group {
                 if glass {
-                    label().foregroundStyle(.white).frame(width: size, height: size).liquidGlass(Circle(), role: .chrome)
+                    label().foregroundStyle(.white).frame(width: size, height: size).liquidGlass(Circle(), role: .chrome).contentShape(Circle())
                 } else {
                     label().foregroundStyle(theme.chromeText).frame(width: size, height: size).background(theme.chrome, in: Circle())
                 }

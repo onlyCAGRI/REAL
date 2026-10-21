@@ -108,6 +108,8 @@ struct ComposerBar: View {
     @State private var showDateSheet = false
     @State private var showCategoryPicker = false
     @State private var showPhotoPicker = false
+    @State private var showLocationEditor = false
+    @State private var location: ReminderLocation?
     @State private var navExpanded = false
     @State private var voice = VoiceInput()
     @Namespace private var dockNS
@@ -177,6 +179,9 @@ struct ComposerBar: View {
         }
         .realOverlay(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
         .realOverlay(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId) }
+        .sheet(isPresented: $showLocationEditor) {
+            LocationEditor(initial: location) { location = $0 }.presentationDetents([.medium, .large])
+        }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
         .onChange(of: photoItems) { _, items in importPhotos(items) }
     }
@@ -358,10 +363,15 @@ struct ComposerBar: View {
                 checklistMode.toggle()
                 if checklistMode { checklistItems = [""]; focus = text.isEmpty ? .title : .item(0) }
             }
+            // Konum: the card detail's map editor; the pin is saved with the new card.
+            toolButton("mappin", location.map { "Konum: \($0.placeName)" } ?? "Konum ekle", active: location != nil) {
+                focus = nil
+                showLocationEditor = true
+            }
+            Spacer(minLength: 0)
             if schedule.alertAt == nil {
                 toolButton(sendImmediate ? "bell" : "bell.slash", "Bildirim", active: sendImmediate) { sendImmediate.toggle() }
             }
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14).padding(.top, 2).padding(.bottom, 4)
     }
@@ -533,11 +543,13 @@ struct ComposerBar: View {
         let draft = schedule
         let files = attachments
         let notify = sendImmediate
+        let place = location
         store.addReminder(text: title, alertAt: draft.alertAt, plannedDay: draft.plannedDay, repeatRule: draft.repeatRule,
                           categoryId: categoryId, isImportant: important, checklist: items) { item in
             draft.apply(to: &item)
             item.attachments = files
             item.sendImmediateNotification = notify
+            if let place { item.location = place }
         }
         if draft.alertAt != nil { NotificationScheduler.requestAuthorization() }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -558,6 +570,7 @@ struct ComposerBar: View {
         checklistItems = [""]
         attachments = []
         sendImmediate = false
+        location = nil
     }
 }
 

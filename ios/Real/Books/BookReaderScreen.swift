@@ -32,7 +32,10 @@ struct BookReaderScreen: View {
         let theme = store.theme
         ZStack {
             theme.background.ignoresSafeArea()
-            if horizontal { horizontalReader } else { verticalReader }
+            Group { if horizontal { horizontalReader } else { verticalReader } }
+                .simultaneousGesture(TapGesture().onEnded {
+                    if !chromeVisible { withAnimation(.easeOut(duration: 0.14)) { chromeVisible = true } }
+                })
             GlassEdgesOverlay(background: theme.background)
             chrome
         }
@@ -98,6 +101,9 @@ struct BookReaderScreen: View {
         }
         .onPreferenceChange(ReaderOffsetKey.self) { y in
             let dy = y - lastOffset
+            // Restoring the saved position jumps the offset in one go; that is not the reader scrolling down,
+            // and hiding the chrome there left the book with no visible back button.
+            if abs(dy) > 400 { lastOffset = y; return }
             if dy < -8 { if chromeVisible { withAnimation(.easeOut(duration: 0.1)) { chromeVisible = false; showTextTools = false } } }
             else if dy > 8 { if !chromeVisible { withAnimation(.easeOut(duration: 0.14)) { chromeVisible = true } } }
             if abs(dy) > 8 { lastOffset = y }

@@ -69,6 +69,10 @@ struct EdgeSwipeBack: UIViewRepresentable {
 
         func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool { enabled }
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { false }
+        /// A paging scroll view (the horizontal book reader) otherwise takes the edge swipe as a page turn.
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            other.view is UIScrollView && other is UIPanGestureRecognizer
+        }
     }
 }
 

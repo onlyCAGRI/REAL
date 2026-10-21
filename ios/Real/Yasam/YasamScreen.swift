@@ -869,7 +869,7 @@ struct YasamMoodHistory: View {
                                     VStack(spacing: 2) {
                                         Text(YasamText.whenLabel(e.details.loggedAt).components(separatedBy: " · ").first ?? "")
                                             .font(.system(size: 10, design: .monospaced)).foregroundStyle(YasamTone.muted).lineLimit(1)
-                                        Text(e.mood.label).font(.system(size: 11, design: .monospaced)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                                        Text(e.mood.label).font(.system(size: 11, design: .monospaced)).foregroundStyle(MoodV2.tint(e.mood)).lineLimit(1)
                                     }
                                     .frame(maxWidth: .infinity)
                                 }
@@ -905,13 +905,18 @@ extension YasamMoodHistory {
         ctx.stroke(base, with: .color(Color.white.opacity(0.1)), lineWidth: 1)
         if n > 1 {
             let path = YasamSpark.curve(pts).trimmedPath(from: 0, to: drawn)
-            ctx.stroke(path, with: .color(Color.white.opacity(0.55)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            // The line carries each point's mood family tint and blends into the next one in between.
+            let stops = pts.enumerated().map { i, p in Gradient.Stop(color: MoodV2.tint(points[i].mood), location: p.x / size.width) }
+            ctx.opacity = 0.85
+            ctx.stroke(path, with: .linearGradient(Gradient(stops: stops), startPoint: .zero, endPoint: CGPoint(x: size.width, y: 0)),
+                       style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            ctx.opacity = 1
         }
         for i in 0..<n {
             let reach: CGFloat = CGFloat(i) / CGFloat(max(n - 1, 1))
             guard reach <= drawn + 0.01 else { continue }
             let rect = CGRect(x: pts[i].x - 3.5, y: pts[i].y - 3.5, width: 7, height: 7)
-            ctx.fill(Path(ellipseIn: rect), with: .color(YasamTone.mood(points[i].mood)))
+            ctx.fill(Path(ellipseIn: rect), with: .color(MoodV2.tint(points[i].mood)))
         }
     }
 }

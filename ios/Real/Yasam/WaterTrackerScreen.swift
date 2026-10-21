@@ -49,7 +49,7 @@ struct WaterTrackerScreen: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Button { close() } label: {
                             RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
-                                .frame(width: 44, height: 44).liquidGlass(Circle(), role: .chrome)
+                                .frame(width: 44, height: 44).liquidGlass(Circle(), role: .chrome).contentShape(Circle())
                         }
                         .accessibilityLabel("İçecek ekranını kapat")
                         Text(beverage.label).font(RealFont.inter(34, .medium)).foregroundStyle(.white).padding(.top, 16)
@@ -83,6 +83,9 @@ struct WaterTrackerScreen: View {
                                 .padding(.horizontal, 18)
                                 .frame(maxWidth: .infinity, minHeight: 50)
                                 .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                                // The glass is not hit-testable: without this only the text took the tap and the rest
+                                // of the capsule fell through to the liquid's drag gesture.
+                                .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
                                 .accessibilityLabel("\(amountText(amount)) \(beverage.label) ekle")
                             }
                             .buttonStyle(PressScaleStyle(scale: 0.96))
