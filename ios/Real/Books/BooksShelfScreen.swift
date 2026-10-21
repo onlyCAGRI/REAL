@@ -78,6 +78,10 @@ struct BooksShelfScreen: View {
     let onAdd: () -> Void
     let onBack: () -> Void
     let onTheme: () -> Void
+    var onAddSection: () -> Void = {}
+    var onRenameSection: (String) -> Void = { _ in }
+    var onDeleteSection: (String) -> Void = { _ in }
+    var onMoveBook: (String, String) -> Void = { _, _ in }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -90,7 +94,9 @@ struct BooksShelfScreen: View {
                             .foregroundStyle(theme.text)
                             .padding(.top, 26).padding(.bottom, 34)
                         ForEach(shelves) { shelf in
-                            ShelfSection(shelf: shelf, theme: theme, hiddenId: hiddenId, focusId: focusId, onBookTap: onBookTap)
+                            ShelfSection(shelf: shelf, theme: theme, hiddenId: hiddenId, focusId: focusId, onBookTap: onBookTap,
+                                         onRename: { onRenameSection(shelf.name) }, onDelete: { onDeleteSection(shelf.name) },
+                                         onDropBook: { id in onMoveBook(id, shelf.name) })
                                 .id(shelf.name)
                                 .padding(.bottom, 36)
                         }
@@ -125,15 +131,26 @@ struct BooksShelfScreen: View {
             }
         }
         .overlay(alignment: .bottom) {
-            Button(action: onAdd) {
-                Text("Kitap Ekle").font(RealFont.inter(17, .medium)).foregroundStyle(theme.chromeText)
-                    .frame(width: 172, height: 56)
-                    .background(theme.chrome, in: Capsule())
-                    .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.8))
+            HStack(spacing: 10) {
+                Button(action: onAdd) {
+                    Text("Kitap Ekle").font(RealFont.inter(17, .medium)).foregroundStyle(theme.chromeText)
+                        .frame(width: 172, height: 56)
+                        .background(theme.chrome, in: Capsule())
+                        .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.8))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Kitap ekle")
+                // "+": yeni bölüm (raf) açar; kitaplar basılı tutup sürüklenerek oraya taşınır.
+                Button(action: onAddSection) {
+                    ActionIcon(glyph: .add, color: theme.chromeText, size: 22)
+                        .frame(width: 56, height: 56)
+                        .background(theme.chrome, in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 0.8))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Bölüm ekle")
             }
-            .buttonStyle(.plain)
             .padding(.bottom, 18)
-            .accessibilityLabel("Kitap ekle")
         }
     }
 }
@@ -160,9 +177,13 @@ private struct ShelfSection: View {
     let hiddenId: String?
     let focusId: String?
     let onBookTap: (Book, CGRect) -> Void
+    let onRename: () -> Void
+    let onDelete: () -> Void
+    let onDropBook: (String) -> Void
 
     @State private var selectedId: String = ""
     @State private var dragAccum: CGFloat = 0
+    @State private var dropHere = false
 
     private var totalWidth: CGFloat {
         let n = CGFloat(shelf.books.count)
@@ -171,16 +192,49 @@ private struct ShelfSection: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Bölüm başlığı: basılı tutunca menü; üstüne kitap sürüklenince çizgiler parlar.
             HStack(spacing: 14) {
-                Rectangle().fill(theme.text.opacity(0.28)).frame(height: 0.7)
+                Rectangle().fill(theme.text.opacity(dropHere ? 0.8 : 0.28)).frame(height: 0.7)
                 Text(shelf.name.uppercased(with: Locale(identifier: "tr_TR")))
                     .font(.system(size: 12, design: .serif)).kerning(1.2)
                     .foregroundStyle(theme.text.opacity(0.85)).lineLimit(1).fixedSize()
-                Rectangle().fill(theme.text.opacity(0.28)).frame(height: 0.7)
+                Rectangle().fill(theme.text.opacity(dropHere ? 0.8 : 0.28)).frame(height: 0.7)
             }
+            .animation(.easeOut(duration: 0.16), value: dropHere)
             .padding(.horizontal, 40)
-            .padding(.bottom, 22)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+            .contextMenu {
+                Button("Yeniden adlandır", action: onRename)
+                if shelf.name != BookStore.defaultSection {
+                    Button("Bölümü sil", role: .destructive, action: onDelete)
+                }
+            }
+            .padding(.bottom, 16)
 
+            if shelf.books.isEmpty {
+                Text("Kitapları buraya sürükle")
+                    .font(RealFont.inter(14)).foregroundStyle(theme.text.opacity(0.45))
+                    .frame(maxWidth: .infinity).frame(height: BookShelfMetrics.coverH * 0.6)
+                    .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(theme.text.opacity(dropHere ? 0.6 : 0.18),
+                                                                             style: StrokeStyle(lineWidth: 1, dash: [5, 5])))
+                    .padding(.horizontal, 40)
+            } else {
+                shelfRow
+            }
+        }
+        .contentShape(Rectangle())
+        .dropDestination(for: String.self) { ids, _ in
+            guard let id = ids.first else { return false }
+            if !shelf.books.contains(where: { $0.id == id }) { onDropBook(id) }
+            return true
+        } isTargeted: { dropHere = $0 }
+        .onAppear {
+            if selectedId.isEmpty { selectedId = shelf.books.first(where: { $0.id == focusId })?.id ?? shelf.books.first?.id ?? "" }
+        }
+    }
+
+    private var shelfRow: some View {
             GeometryReader { geo in
                 let fits = totalWidth <= geo.size.width - 24
                 ScrollViewReader { proxy in
@@ -212,17 +266,18 @@ private struct ShelfSection: View {
                 guard abs(delta) >= 44 else { return }
                 dragAccum = v.translation.width
                 let books = shelf.books
+                guard !books.isEmpty else { return }
                 let cur = books.firstIndex { $0.id == current } ?? 0
                 let next = min(max(cur + (delta < 0 ? 1 : -1), 0), books.count - 1)
                 withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: BookShelfMetrics.openDuration)) { selectedId = books[next].id }
             }.onEnded { _ in dragAccum = 0 })
-        }
-        .onAppear {
-            if selectedId.isEmpty { selectedId = shelf.books.first(where: { $0.id == focusId })?.id ?? shelf.books.first?.id ?? "" }
-        }
     }
 
-    private var current: String { selectedId.isEmpty ? (shelf.books.first(where: { $0.id == focusId })?.id ?? shelf.books.first?.id ?? "") : selectedId }
+    /// A moved-away selected book falls back to the first one on the shelf.
+    private var current: String {
+        if !selectedId.isEmpty, shelf.books.contains(where: { $0.id == selectedId }) { return selectedId }
+        return shelf.books.first(where: { $0.id == focusId })?.id ?? shelf.books.first?.id ?? ""
+    }
 }
 
 /// One book: p=0 closed spine facing the viewer, p=1 open (cover forward, spine face visible on the left).
@@ -232,6 +287,7 @@ private struct BookSlot: View {
     let hidden: Bool
     let onSelect: () -> Void
     let onOpen: (CGRect) -> Void
+    @Environment(BookStore.self) private var store
 
     var body: some View {
         BookSlotBody(book: book, progress: open ? 1 : 0)
@@ -242,6 +298,13 @@ private struct BookSlot: View {
                         if open { onOpen(geo.frame(in: .global)) } else { onSelect() }
                     }
                 }
+            }
+            // Basılı tut → kitap raftan kalkar, başka bölümün üstüne bırakılır.
+            .draggable(book.id) {
+                BookCoverView(book: book, titleSize: 13)
+                    .frame(width: BookShelfMetrics.coverW * 0.85, height: BookShelfMetrics.coverH * 0.85)
+                    .rotationEffect(.degrees(-4))
+                    .environment(store)
             }
             .accessibilityElement()
             .accessibilityLabel("\(book.title), \(book.author)")

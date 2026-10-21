@@ -89,19 +89,22 @@ final class BookDocuments {
         let result: [BookParagraph]
         switch book.format {
         case "pdf":
-            result = await Task.detached(priority: .userInitiated) { () -> [BookParagraph] in
-                guard let doc = PDFDocument(url: url), let p = doc.page(at: page) else { return [] }
+            let read = await Task.detached(priority: .userInitiated) { () -> ([BookParagraph], Bool) in
+                guard let doc = PDFDocument(url: url), let p = doc.page(at: page) else { return ([], false) }
                 // Copyable PDF: its own text, laid out from line positions and fonts (bold / italic kept).
-                if let layered = BookPdfText.paragraphs(p) { return layered }
+                if let layered = BookPdfText.paragraphs(p) { return (layered, false) }
                 // Scanned page (or a text layer that cannot be read): recognise text like the Android OCR fallback.
                 let img = p.thumbnail(of: CGSize(width: 1400, height: 2000), for: .mediaBox)
-                return Self.paragraphs(fromPdf: Self.ocr(img))
+                return (Self.paragraphs(fromPdf: Self.ocr(img)), true)
             }.value
+            result = read.0
+            if read.1, !result.isEmpty { await MainActor.run { store.noteScanned(book.id) } }
         case "image":
             result = await Task.detached(priority: .userInitiated) { () -> [BookParagraph] in
                 guard let img = UIImage(contentsOfFile: url.path) else { return [] }
                 return Self.paragraphs(fromPdf: Self.ocr(img))
             }.value
+            if !result.isEmpty { await MainActor.run { store.noteScanned(book.id) } }
         case "epub":
             let epub = epubCache[book.id] ?? (try? EpubBook(url: url))
             epubCache[book.id] = epub

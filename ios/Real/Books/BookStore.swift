@@ -40,6 +40,21 @@ enum ReaderTheme: String, CaseIterable, Codable {
 
 enum ReadMode: String { case VERTICAL, HORIZONTAL }
 
+/// ReaderFont.kt: reader typeface, chosen from the "Tт" row and used in every book.
+enum ReaderFont: String, CaseIterable {
+    case SANS, SERIF, MONO
+
+    var label: String { switch self { case .SANS: "Inter"; case .SERIF: "Serif"; case .MONO: "Mono" } }
+
+    func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        switch self {
+        case .SANS: RealFont.inter(size, weight)
+        case .SERIF: .system(size: size, weight: weight, design: .serif)
+        case .MONO: .system(size: size, weight: weight, design: .monospaced)
+        }
+    }
+}
+
 enum ReaderDefaults {
     static let fontSize = 16
     static let minSize = 12
@@ -62,6 +77,11 @@ final class BookStore {
     var theme: ReaderTheme { didSet { defaults.set(theme.rawValue, forKey: "books_theme") } }
     var fontSize: Int { didSet { defaults.set(fontSize, forKey: "books_font") } }
     var readMode: ReadMode { didSet { defaults.set(readMode.rawValue, forKey: "books_read_mode") } }
+    var readerFont: ReaderFont { didSet { defaults.set(readerFont.rawValue, forKey: "books_reader_font") } }
+    /// Sections the person opened; a section stays on the shelf even while it holds no book.
+    private(set) var sections: [String] { didSet { defaults.set(sections, forKey: "books_sections") } }
+    /// Books with a page read by OCR this session (scans, or a text layer too broken to use).
+    private(set) var scannedBooks: Set<String> = []
     private(set) var lastReadId: String?
 
     @ObservationIgnored let directory: URL
@@ -75,6 +95,8 @@ final class BookStore {
         let f = defaults.integer(forKey: "books_font")
         fontSize = f == 0 ? ReaderDefaults.fontSize : min(max(f, ReaderDefaults.minSize), ReaderDefaults.maxSize)
         readMode = ReadMode(rawValue: defaults.string(forKey: "books_read_mode") ?? "") ?? .VERTICAL
+        readerFont = ReaderFont(rawValue: defaults.string(forKey: "books_reader_font") ?? "") ?? .SANS
+        sections = defaults.stringArray(forKey: "books_sections") ?? []
         lastReadId = defaults.string(forKey: "books_last_read")
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         if persist, let data = try? Data(contentsOf: directory.appendingPathComponent("books.json")),
@@ -97,8 +119,55 @@ final class BookStore {
             if groups[key] == nil { order.append(key) }
             groups[key, default: []].append(b)
         }
-        return order.enumerated().map { i, name in Shelf(name: name, books: groups[name]!, plankColor: Color(argb: colors[i % colors.count])) }
+        for s in sections where groups[s] == nil { order.append(s) }
+        return order.enumerated().map { i, name in Shelf(name: name, books: groups[name] ?? [], plankColor: Color(argb: colors[i % colors.count])) }
     }
+
+    static let defaultSection = "Dosyalarım"
+
+    private func sectionNames() -> [String] {
+        books.map { $0.category.trimmingCharacters(in: .whitespaces).isEmpty ? "Genel" : $0.category } + sections
+    }
+
+    /// Adds an empty section; nil when the name is empty, taken, or there are already 30.
+    @discardableResult
+    func addSection(_ raw: String) -> String? {
+        let name = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        guard !name.isEmpty, sections.count < 30,
+              !sectionNames().contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return nil }
+        sections.append(name)
+        return name
+    }
+
+    func renameSection(_ old: String, to raw: String) {
+        let name = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        guard !name.isEmpty, name != old,
+              !sectionNames().contains(where: { $0 != old && $0.caseInsensitiveCompare(name) == .orderedSame }) else { return }
+        for i in books.indices where books[i].category == old { books[i].category = name }
+        if let i = sections.firstIndex(of: old) { sections[i] = name }
+        save()
+    }
+
+    /// The section goes; its books move to Dosyalarım.
+    func deleteSection(_ name: String) {
+        guard name != Self.defaultSection else { return }
+        for i in books.indices where books[i].category == name { books[i].category = Self.defaultSection }
+        sections.removeAll { $0 == name }
+        save()
+    }
+
+    /// The section it leaves stays on the shelf (as an empty one) so a drag never deletes what the person made.
+    func moveBook(_ id: String, to section: String) {
+        guard let i = books.firstIndex(where: { $0.id == id }), books[i].category != section else { return }
+        let old = books[i].category
+        books[i].category = section
+        if !books.contains(where: { $0.category == old }), !sections.contains(old) { sections.append(old) }
+        save()
+    }
+
+    func noteScanned(_ id: String) { if !scannedBooks.contains(id) { scannedBooks.insert(id) } }
+    func scanNoticeShown(_ book: Book) -> Bool { defaults.bool(forKey: "books_scan_notice_\(book.id)") }
+    func markScanNoticeShown(_ book: Book) { defaults.set(true, forKey: "books_scan_notice_\(book.id)") }
 
     func add(_ book: Book) throws {
         guard AppUpdateGate.writable() else { throw BookError.message(AppUpdateGate.blockedMessage) }
@@ -121,7 +190,7 @@ final class BookStore {
         save()
         if let f = file(book) { try? FileManager.default.removeItem(at: f) }
         try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(id).cover.png"))
-        for key in ["page_", "offset_"] { defaults.removeObject(forKey: "books_\(key)\(id)") }
+        for key in ["page_", "offset_", "scan_notice_"] { defaults.removeObject(forKey: "books_\(key)\(id)") }
         if lastReadId == id { lastReadId = nil; defaults.removeObject(forKey: "books_last_read") }
     }
 

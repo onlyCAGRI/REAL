@@ -48,6 +48,9 @@ struct BooksModuleScreen: View {
     @State private var didResume = false
     /// The detail panel is sliding away before the cover flies back (Android: leaving).
     @State private var leaving = false
+    /// "" = new section, otherwise the section being renamed.
+    @State private var sectionEditing: String?
+    @State private var sectionDraft = ""
 
     var body: some View {
         GeometryReader { geo in
@@ -61,7 +64,11 @@ struct BooksModuleScreen: View {
                                      onBookTap: { b, frame in startFlight(b, frame, geo: geo, target: target) },
                                      onAdd: { if !busy { error = nil; importing = true } },
                                      onBack: back,
-                                     onTheme: { store.theme = store.theme.next })
+                                     onTheme: { store.theme = store.theme.next },
+                                     onAddSection: { sectionDraft = ""; sectionEditing = "" },
+                                     onRenameSection: { name in sectionDraft = name; sectionEditing = name },
+                                     onDeleteSection: { name in withAnimation(.easeOut(duration: 0.2)) { store.deleteSection(name) } },
+                                     onMoveBook: { id, to in withAnimation(.easeOut(duration: 0.25)) { store.moveBook(id, to: to) } })
                     .transition(.identity)
                 case .detail:
                     if let book = selected { detail(book, target: target, geo: geo) }
@@ -85,6 +92,22 @@ struct BooksModuleScreen: View {
         .onAppear {
             if documents == nil { documents = BookDocuments(store: store) }
             resumeIfNeeded()
+        }
+        .alert(sectionEditing == "" ? "Yeni bölüm" : "Bölümün adı", isPresented: Binding(
+            get: { sectionEditing != nil }, set: { if !$0 { sectionEditing = nil } })) {
+            TextField("Bölüm adı", text: $sectionDraft)
+            Button("Vazgeç", role: .cancel) { sectionEditing = nil }
+            Button(sectionEditing == "" ? "Ekle" : "Kaydet") {
+                guard let old = sectionEditing else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    if old.isEmpty {
+                        if !sectionDraft.trimmingCharacters(in: .whitespaces).isEmpty, store.addSection(sectionDraft) == nil {
+                            error = "Bu adla bir bölüm zaten var."
+                        }
+                    } else { store.renameSection(old, to: sectionDraft) }
+                }
+                sectionEditing = nil
+            }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: BookDocuments.importTypes) { result in
             guard case .success(let url) = result, let documents else { return }

@@ -17,6 +17,7 @@ struct BookReaderScreen: View {
     @State private var restored = false
     @State private var currentPage = 0
     @State private var lastOffset: CGFloat = 0
+    @State private var showScanNotice = false
 
     private var isPaged: Bool { ["pdf", "image", "epub"].contains(book.format ?? "") }
     private var hasOriginal: Bool { book.format == "pdf" || book.format == "image" }
@@ -47,6 +48,24 @@ struct BookReaderScreen: View {
                 loading = false
             }
         }
+        // Taranmış sayfa: metin OCR ile okunur; kişiye bir kez, açıkça söylenir (hata REAL'den sanılmasın).
+        .onChange(of: store.scannedBooks.contains(book.id), initial: true) { _, scanned in
+            if scanned, !store.scanNoticeShown(book) { showScanNotice = true }
+        }
+        .realOverlay(isPresented: $showScanNotice) {
+            PermissionSheet(title: "Taranmış sayfalar",
+                            description: "Bu kitabın bazı sayfalarında seçilebilir metin yok, sayfa yalnız görüntü olarak kayıtlı. REAL bu sayfaları cihazında yazı tanıma (OCR) ile okuyor; bazı kelimeler yanlış ya da eksik çıkabilir. Emin olmadığın yerde asıl sayfaya bakabilirsin.",
+                            primaryLabel: "Anladım", secondaryLabel: "Asıl sayfayı göster", glyph: .file,
+                            onPrimary: { closeScanNotice(original: false) },
+                            onSecondary: { closeScanNotice(original: true) },
+                            onDismiss: { closeScanNotice(original: false) })
+        }
+    }
+
+    private func closeScanNotice(original: Bool) {
+        store.markScanNoticeShown(book)
+        showScanNotice = false
+        if original { showOriginal = true }
     }
 
     // MARK: Vertical
@@ -154,6 +173,21 @@ struct BookReaderScreen: View {
                     .buttonStyle(.plain)
                 }
                 if showTextTools {
+                    // Yazı tipi: her seçenek kendi fontuyla yazılır; seçili olan dolu.
+                    HStack(spacing: 8) {
+                        ForEach(ReaderFont.allCases, id: \.self) { f in
+                            let on = store.readerFont == f
+                            Button { store.readerFont = f } label: {
+                                Text(f.label).font(f.font(14, .medium))
+                                    .foregroundStyle(on ? theme.background : theme.text)
+                                    .padding(.horizontal, 16).frame(height: 34)
+                                    .background(on ? theme.text : theme.text.opacity(0.1), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(on ? .isSelected : [])
+                        }
+                    }
+                    .transition(.opacity)
                     HStack(spacing: 0) {
                         ReaderPill(text: "A−", theme: theme) { store.fontSize = max(ReaderDefaults.minSize, store.fontSize - 1) }
                         Text("\(store.fontSize)").font(RealFont.inter(13)).foregroundStyle(theme.muted).padding(.horizontal, 14)
@@ -228,7 +262,7 @@ struct ReaderParagraph: View {
         if paragraph.heading {
             let h = size * 1.15
             Text(paragraph.text)
-                .font(RealFont.inter(h, .semibold)).kerning(-0.2)
+                .font(store.readerFont.font(h, .semibold)).kerning(-0.2)
                 .lineSpacing(h * 0.3)
                 .foregroundStyle(theme.text)
                 .multilineTextAlignment(.center)
@@ -247,14 +281,14 @@ struct ReaderParagraph: View {
         let t = paragraph.text
         if !paragraph.spans.isEmpty { return spanned(size: size) }
         guard first, let idx = t.firstIndex(where: { $0.isLetter || $0.isNumber }) else {
-            return Text(t).font(RealFont.inter(size))
+            return Text(t).font(store.readerFont.font(size))
         }
         let before = String(t[..<idx])
         let initial = String(t[idx])
         let rest = String(t[t.index(after: idx)...])
-        return Text(before).font(RealFont.inter(size))
+        return Text(before).font(store.readerFont.font(size))
             + Text(initial).font(.system(size: size * 2.8, design: .serif))
-            + Text(rest).font(RealFont.inter(size))
+            + Text(rest).font(store.readerFont.font(size))
     }
 
     /// The PDF's own bold / italic runs (the drop initial applies to the first letter of the first run).
@@ -275,7 +309,7 @@ struct ReaderParagraph: View {
     }
 
     private func run(_ text: String, _ span: BookSpan, _ size: CGFloat) -> Text {
-        var t = Text(text).font(RealFont.inter(size, span.bold ? .bold : .regular))
+        var t = Text(text).font(store.readerFont.font(size, span.bold ? .bold : .regular))
         if span.italic { t = t.italic() }
         return t
     }

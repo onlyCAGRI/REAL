@@ -21,27 +21,9 @@ enum BookPdfText {
     static func paragraphs(_ page: PDFPage) -> [BookParagraph]? {
         let bounds = page.bounds(for: .cropBox)
         guard let all = page.selection(for: bounds) else { return nil }
-        var lines: [Line] = []
-        for sel in all.selectionsByLine() {
-            let raw = sel.bounds(for: page)
-            guard raw.width > 0, raw.height > 0, let attr = sel.attributedString else { continue }
-            var spans: [BookSpan] = []
-            attr.enumerateAttribute(.font, in: NSRange(location: 0, length: attr.length)) { value, range, _ in
-                let piece = clean((attr.string as NSString).substring(with: range))
-                guard !piece.isEmpty else { return }
-                let (bold, italic) = style(value as? UIFont)
-                if let last = spans.last, last.bold == bold, last.italic == italic { spans[spans.count - 1].text += piece }
-                else { spans.append(BookSpan(text: piece, bold: bold, italic: italic)) }
-            }
-            // Trim the line's outer whitespace across spans.
-            while let f = spans.first, f.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { spans.removeFirst() }
-            while let l = spans.last, l.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { spans.removeLast() }
-            guard !spans.isEmpty else { continue }
-            spans[0].text = String(spans[0].text.drop { $0.isWhitespace })
-            spans[spans.count - 1].text = String(spans[spans.count - 1].text.reversed().drop { $0.isWhitespace }.reversed())
-            let box = CGRect(x: raw.minX - bounds.minX, y: bounds.maxY - raw.maxY, width: raw.width, height: raw.height)
-            lines.append(Line(spans: spans, box: box))
-        }
+        var lines = readLines(page, all, bounds: bounds, respace: false)
+        // Some PDFs never write the word spaces; rebuild them from the glyph positions (the text is still the file's).
+        if spaceless(lines.map(\.text)) { lines = readLines(page, all, bounds: bounds, respace: true) }
         let text = lines.map(\.text).joined(separator: "\n")
         guard usable(text), !spaceless(lines.map(\.text)) else { return nil }
 
@@ -90,6 +72,64 @@ enum BookPdfText {
         }
         flush()
         return out
+    }
+
+    private static func readLines(_ page: PDFPage, _ all: PDFSelection, bounds: CGRect, respace: Bool) -> [Line] {
+        var lines: [Line] = []
+        for sel in all.selectionsByLine() {
+            let raw = sel.bounds(for: page)
+            guard raw.width > 0, raw.height > 0, let attr = sel.attributedString else { continue }
+            let breaks = respace ? wordBreaks(sel, page, length: attr.length) : []
+            var spans: [BookSpan] = []
+            attr.enumerateAttribute(.font, in: NSRange(location: 0, length: attr.length)) { value, range, _ in
+                var source = (attr.string as NSString).substring(with: range)
+                if !breaks.isEmpty {
+                    let ns = source as NSString
+                    let out = NSMutableString()
+                    for k in 0..<ns.length {
+                        if breaks.contains(range.location + k) { out.append(" ") }
+                        out.append(ns.substring(with: NSRange(location: k, length: 1)))
+                    }
+                    source = out as String
+                }
+                let piece = clean(source)
+                guard !piece.isEmpty else { return }
+                let (bold, italic) = style(value as? UIFont)
+                if let last = spans.last, last.bold == bold, last.italic == italic { spans[spans.count - 1].text += piece }
+                else { spans.append(BookSpan(text: piece, bold: bold, italic: italic)) }
+            }
+            // Trim the line's outer whitespace across spans.
+            while let f = spans.first, f.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { spans.removeFirst() }
+            while let l = spans.last, l.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { spans.removeLast() }
+            guard !spans.isEmpty else { continue }
+            spans[0].text = String(spans[0].text.drop { $0.isWhitespace })
+            spans[spans.count - 1].text = String(spans[spans.count - 1].text.reversed().drop { $0.isWhitespace }.reversed())
+            let box = CGRect(x: raw.minX - bounds.minX, y: bounds.maxY - raw.maxY, width: raw.width, height: raw.height)
+            lines.append(Line(spans: spans, box: box))
+        }
+        return lines
+    }
+
+    /// Offsets in the line before which a word space is missing: the gap to the previous glyph is clearly wider than
+    /// letter spacing. Only glyphs that both have a box count; existing spaces are left alone.
+    private static func wordBreaks(_ sel: PDFSelection, _ page: PDFPage, length: Int) -> Set<Int> {
+        guard sel.numberOfTextRanges(on: page) == 1 else { return [] }
+        let r = sel.range(at: 0, on: page)
+        guard r.length == length, length >= 15, let s = sel.string.map({ $0 as NSString }), s.length == length else { return [] }
+        let boxes = (0..<length).map { page.characterBounds(at: r.location + $0) }
+        let heights = boxes.map(\.height).filter { $0 > 0 }.sorted()
+        guard !heights.isEmpty else { return [] }
+        let h = heights[heights.count / 2]
+        func blank(_ k: Int) -> Bool { s.substring(with: NSRange(location: k, length: 1)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        var gaps: [(Int, CGFloat)] = []
+        for k in 1..<length where !blank(k) && !blank(k - 1) && boxes[k].width > 0 && boxes[k - 1].width > 0 {
+            gaps.append((k, boxes[k].minX - boxes[k - 1].maxX))
+        }
+        guard !gaps.isEmpty else { return [] }
+        let sorted = gaps.map(\.1).sorted()
+        let letterGap = max(sorted[sorted.count / 2], 0)
+        let threshold = max(letterGap + h * 0.08, h * 0.15)
+        return Set(gaps.filter { $0.1 > threshold }.map(\.0))
     }
 
     /// Joins lines into one paragraph: soft hyphens at line ends removed, adjacent spans of the same style merged.
