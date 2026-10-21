@@ -255,6 +255,8 @@ struct MusicDiscoveryScreen: View {
             selection = Set(music.snapshot.selection.filter { k in !MusicMood.all.contains { $0.key == k } })
             if startInList { list = true }
         }
+        // Apple Music connected: "Müzik listem" is copied to the "REAL" playlist once.
+        .task { await AppleMusicAccount.shared.copyListOnce(music.snapshot.list.compactMap(\.music.providerTrackId)) }
         .edgeSwipeBack { back() }
     }
 

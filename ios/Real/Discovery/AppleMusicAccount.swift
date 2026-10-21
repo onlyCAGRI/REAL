@@ -48,6 +48,7 @@ final class AppleMusicAccount {
         defaults.removeObject(forKey: "real_apple_music_token")
         defaults.removeObject(forKey: "real_apple_music_state")
         defaults.removeObject(forKey: "real_apple_music_playlist")
+        defaults.removeObject(forKey: "real_apple_music_list_copied")
         isConnected = false
     }
 
@@ -66,6 +67,22 @@ final class AppleMusicAccount {
     func personalSongs(genreIds: [Int]) async -> [[String: Any]] {
         let json = (try? await call(["action": "discover", "genres": genreIds])) ?? nil
         return (json?["songs"] as? [[String: Any]]) ?? []
+    }
+
+    /// Once per connection: the songs already in "Müzik listem" go to the "REAL" playlist too (100 per call, in the
+    /// list's order). Marked done only when every part went through, so a failure is tried again next time.
+    func copyListOnce(_ songIds: [String]) async {
+        guard token != nil, !defaults.bool(forKey: "real_apple_music_list_copied") else { return }
+        var seen = Set<String>()
+        let ids = songIds.filter { !$0.isEmpty && $0.allSatisfy(\.isNumber) && seen.insert($0).inserted }
+        for start in stride(from: 0, to: ids.count, by: 100) {
+            var body: [String: Any] = ["action": "add", "songIds": Array(ids[start..<min(start + 100, ids.count)])]
+            if let playlist = defaults.string(forKey: "real_apple_music_playlist") { body["playlistId"] = playlist }
+            guard let json = (try? await call(body)) ?? nil else { return }
+            if let id = json["playlistId"] as? String, id.hasPrefix("p.") { defaults.set(id, forKey: "real_apple_music_playlist") }
+            guard json["ok"] as? Bool == true else { return }
+        }
+        defaults.set(true, forKey: "real_apple_music_list_copied")
     }
 
     /// Adds an Apple Music catalog song to the person's "REAL" playlist (made on the first save; its id is kept here).
