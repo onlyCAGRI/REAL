@@ -111,6 +111,13 @@ struct ComposerBar: View {
     @State private var showPhotoPicker = false
     @State private var showLocationEditor = false
     @State private var location: ReminderLocation?
+    /// Pin → "Konum ekle" or "Konuma varınca hatırlat"; the trigger rides on the draft like the place.
+    @State private var showLocationChoice = false
+    @State private var pickForTrigger = false
+    @State private var triggerPlace: ReminderLocation?
+    @State private var showTriggerSheet = false
+    @State private var placeTrigger: LocationTrigger?
+    @State private var placePermission = PlaceReminderPermission()
     @State private var navExpanded = false
     @State private var voice = VoiceInput()
     @Namespace private var dockNS
@@ -180,8 +187,44 @@ struct ComposerBar: View {
         }
         .realOverlay(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
         .realOverlay(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId) }
+        .realOverlay(isPresented: $showLocationChoice) {
+            PermissionSheet(title: "Konum",
+                            description: "Yeri karta ekleyebilir ya da o yere varınca (veya oradan ayrılınca) bir kere hatırlatılabilirsin. Hatırlatma için konum yalnızca bekleyen bir konum hatırlatman varken izlenir ve hatırlatma gelince takip biter.",
+                            primaryLabel: "Konuma varınca hatırlat", secondaryLabel: "Konum ekle", glyph: .pin,
+                            onPrimary: {
+                                showLocationChoice = false
+                                placePermission.request { granted in
+                                    guard granted else { return }
+                                    pickForTrigger = true
+                                    showLocationEditor = true
+                                }
+                            },
+                            onSecondary: {
+                                showLocationChoice = false
+                                pickForTrigger = false
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { showLocationEditor = true }
+                            },
+                            onDismiss: { showLocationChoice = false })
+        }
         .sheet(isPresented: $showLocationEditor) {
-            LocationEditor(initial: location) { location = $0 }.presentationDetents([.medium, .large])
+            LocationEditor(initial: pickForTrigger ? triggerPlace ?? location : location) { picked in
+                if pickForTrigger {
+                    guard let picked else { return }
+                    triggerPlace = picked
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { showTriggerSheet = true }
+                } else {
+                    location = picked
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showTriggerSheet) {
+            if let place = triggerPlace {
+                LocationTriggerSheet(place: place, initial: placeTrigger) { trigger in
+                    placeTrigger = trigger
+                    location = place
+                }
+            }
         }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
         .onChange(of: photoItems) { _, items in importPhotos(items) }
@@ -411,10 +454,17 @@ struct ComposerBar: View {
                 checklistMode.toggle()
                 if checklistMode { checklistItems = [""]; focus = text.isEmpty ? .title : .item(0) }
             }
-            // Konum: the card detail's map editor; the pin is saved with the new card.
-            toolButton("mappin", location.map { "Konum: \($0.placeName)" } ?? "Konum ekle", active: location != nil) {
+            // Konum: the card detail's map editor, or a reminder at the place; both are saved with the new card.
+            // The green dot: some card is waiting for its place (iOS watches it).
+            toolButton("mappin", placeTrigger.map(\.label) ?? location.map { "Konum: \($0.placeName)" } ?? "Konum ekle",
+                       active: location != nil || placeTrigger != nil) {
                 focus = nil
-                showLocationEditor = true
+                showLocationChoice = true
+            }
+            .overlay(alignment: .topTrailing) {
+                if store.reminders.contains(where: { $0.locationTrigger != nil && !$0.isCompleted }) {
+                    Circle().fill(Color(argb: 0xFF55D3B4)).frame(width: 6, height: 6).offset(x: -8, y: 8)
+                }
             }
     }
 
@@ -586,6 +636,7 @@ struct ComposerBar: View {
         let files = attachments
         let notify = sendImmediate
         let place = location
+        let trigger = placeTrigger
         let rings = alarm && draft.alertAt != nil
         store.addReminder(text: title, alertAt: draft.alertAt, plannedDay: draft.plannedDay, repeatRule: draft.repeatRule,
                           categoryId: categoryId, isImportant: important, checklist: items) { item in
@@ -594,8 +645,9 @@ struct ComposerBar: View {
             item.sendImmediateNotification = notify
             if let place { item.location = place }
             item.isAlarm = rings
+            item.locationTrigger = trigger
         }
-        if draft.alertAt != nil { NotificationScheduler.requestAuthorization() }
+        if draft.alertAt != nil || trigger != nil { NotificationScheduler.requestAuthorization() }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         reset()
         focus = nil
@@ -616,6 +668,8 @@ struct ComposerBar: View {
         sendImmediate = false
         alarm = false
         location = nil
+        placeTrigger = nil
+        triggerPlace = nil
     }
 }
 

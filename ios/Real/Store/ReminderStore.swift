@@ -223,6 +223,16 @@ final class ReminderStore {
         return item
     }
 
+    /// One-time place reminders that fired lose their trigger (the place itself stays on the card).
+    func clearFiredPlaces() async {
+        let fired = await NotificationScheduler.firedPlaceIds(reminders)
+        for id in fired {
+            guard var item = reminder(id), item.locationTrigger != nil else { continue }
+            item.locationTrigger = nil
+            update(item)
+        }
+    }
+
     func update(_ item: ReminderItem) {
         guard AppUpdateGate.writable() else { return }
         guard let index = reminders.firstIndex(where: { $0.id == item.id }) else { return }

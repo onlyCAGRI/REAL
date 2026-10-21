@@ -99,7 +99,7 @@ struct RealApp: App {
                     ShareImport.writeSnapshot(store)
                     _ = ClipboardWatcher.shared
                     NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
-                        Task { @MainActor in ShareImport.run(store) }
+                        Task { @MainActor in ShareImport.run(store); await store.clearFiredPlaces() }
                     }
                     // Two-way cloud sync, shared categories and Pano, every minute while the app is open.
                     pano.reminders = store
@@ -144,7 +144,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .list]
+        if notification.request.identifier.hasSuffix("-place") {
+            Task { @MainActor in await ReminderStore.current?.clearFiredPlaces() }
+        }
+        return [.banner, .sound, .list]
     }
 }
 

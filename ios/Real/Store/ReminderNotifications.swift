@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import CoreLocation
 
 /// ReminderNotifications.kt + ReminderScheduler.kt on iOS.
 /// - Title = custom category name (else "REAL"), body = the card text, subtitle = "Önemli" / repeat name.
@@ -56,6 +57,7 @@ enum NotificationScheduler {
     static func schedule(_ item: ReminderItem) {
         guard enabled else { return }
         cancel(item.id)
+        if !item.isCompleted, let place = item.locationTrigger { schedulePlace(item, place) }
         guard !item.isCompleted, let alert = item.alertAt else { return }
         let now = EpochMillis.now
         var times: [EpochMillis] = []
@@ -110,9 +112,41 @@ enum NotificationScheduler {
     }
     private static func earlyIdentifier(_ id: Int64, _ index: Int) -> String { "reminder-\(id)-early-\(index)" }
 
+    /// "Konuma varınca hatırlat": iOS watches the region itself (only "while using" permission needed) and posts once.
+    /// REAL never reads the position; the trigger is cleared when the notification is seen (clearFiredPlaces).
+    private static func schedulePlace(_ item: ReminderItem, _ place: LocationTrigger) {
+        let region = CLCircularRegion(center: CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude),
+                                      radius: CLLocationDistance(place.radiusMeters), identifier: placeIdentifier(item.id))
+        region.notifyOnEntry = !place.onExit
+        region.notifyOnExit = place.onExit
+        let content = content(for: item, alerting: true)
+        content.subtitle = (place.onExit ? "Ayrıldın · " : "Vardın · ") + place.placeName
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: placeIdentifier(item.id), content: content,
+            trigger: UNLocationNotificationTrigger(region: region, repeats: false)))
+    }
+    static func placeIdentifier(_ id: Int64) -> String { "reminder-\(id)-place" }
+
+    /// Place notifications that already fired: their cards drop the trigger (it is one-time, like Android's geofence).
+    /// Shown ones are in Notification Center; one swiped away there is only missing from the pending list.
+    static func firedPlaceIds(_ items: [ReminderItem]) async -> Set<Int64> {
+        guard enabled else { return [] }
+        let center = UNUserNotificationCenter.current()
+        var fired = Set(await center.deliveredNotifications().compactMap { n in
+            n.request.identifier.hasSuffix("-place") ? n.request.content.userInfo["reminderId"] as? Int64 : nil
+        })
+        guard await center.notificationSettings().authorizationStatus == .authorized,
+              CLLocationManager().authorizationStatus != .denied else { return fired }
+        let pending = Set(await center.pendingNotificationRequests().map(\.identifier))
+        for item in items where item.locationTrigger != nil && !item.isCompleted && !pending.contains(placeIdentifier(item.id)) {
+            fired.insert(item.id)
+        }
+        return fired
+    }
+
     /// showImmediate: a fresh card with no date posts right away when "Hemen bildir" is on.
+    /// A place reminder waits for the place instead.
     static func postImmediateIfNeeded(_ item: ReminderItem) {
-        guard enabled, !item.isCompleted, item.alertAt == nil, item.plannedDateEpochDay == nil,
+        guard enabled, !item.isCompleted, item.alertAt == nil, item.plannedDateEpochDay == nil, item.locationTrigger == nil,
               item.sendImmediateNotification, !item.isChecklist else { return }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "reminder-\(item.id)-now",
                                                                     content: content(for: item, alerting: false), trigger: nil))
@@ -136,14 +170,14 @@ enum NotificationScheduler {
     static func cancel(_ id: Int64) {
         guard enabled else { return }
         if #available(iOS 26.0, *) { RealAlarmKit.cancel(id) }
-        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) }
+        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) } + [placeIdentifier(id)]
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 
     /// Delivered banners of a completed / deleted card are removed too (ReminderNotifications.cancel).
     static func removeDelivered(_ id: Int64) {
         guard enabled else { return }
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: (0..<repeatsAhead).map { identifier(id, $0) } + ["reminder-\(id)-now"])
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: (0..<repeatsAhead).map { identifier(id, $0) } + ["reminder-\(id)-now", placeIdentifier(id)])
     }
 
     static func reschedule(_ items: [ReminderItem]) {

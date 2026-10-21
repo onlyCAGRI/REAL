@@ -42,7 +42,12 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Kartına fotoğraf çekmek için kamera kullanılır.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Kartına bulunduğun yeri eklemek için konumun yalnızca o an bir kez okunur.</string>
+	<string>Kartına bulunduğun yeri eklemek ve seçtiğin yere varınca hatırlatmak için kullanılır. Konum yalnızca bekleyen bir konum hatırlatman varken izlenir.</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>PlaceReminder</key>
+		<string>Seçtiğin yere varınca (ya da oradan ayrılınca) hatırlatmak için tam konum gerekir.</string>
+	</dict>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Kartlarına fotoğraf eklemek için fotoğraflarına erişim gerekir.</string>
 	<key>UIApplicationSceneManifest</key>

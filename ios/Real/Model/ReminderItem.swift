@@ -96,6 +96,20 @@ struct ReminderLocation: Codable, Hashable {
     var mapsUrl: String? = nil
 }
 
+/// "Konuma varınca hatırlat" (LocationTrigger.kt): fires once on arriving at / leaving the place, then is cleared.
+struct LocationTrigger: Codable, Hashable {
+    var placeName: String
+    var latitude: Double
+    var longitude: Double
+    var radiusMeters: Int = LocationTrigger.defaultRadius
+    var onExit: Bool = false
+
+    static let defaultRadius = 200
+    static let radiusChoices = [100, 200, 500]
+
+    var label: String { (onExit ? "Ayrılınca · " : "Varınca · ") + placeName }
+}
+
 /// One card inside a Card Stack (CardStackBlock.kt).
 struct CardStackCard: Codable, Identifiable, Hashable {
     var id: String = UUID().uuidString
@@ -170,6 +184,8 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     var earlyAlertMinutes: Int? = nil
     /// Alarm: at [alertAt] the card rings as an alarm (AlarmKit on iOS 26+) instead of a plain notification.
     var isAlarm = false
+    /// Konuma varınca hatırlat: the card notifies at a place instead of (or as well as) a time.
+    var locationTrigger: LocationTrigger? = nil
     /// Ortak kategori: the card's server id when it lives in a shared category (never part of personal sync).
     var sharedCardId: String? = nil
     /// Who added it; shown bottom-right when it is someone else.
@@ -291,7 +307,7 @@ extension ReminderItem {
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
              cardStack, voiceRecordings, musicBlocks, mediaBlocks, gameBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex,
-             endAt, earlyAlertMinutes, isAlarm, sharedCardId, sharedAuthorUid, sharedAuthorName, isDivider, completionNote, checkRequest
+             endAt, earlyAlertMinutes, isAlarm, locationTrigger, sharedCardId, sharedAuthorUid, sharedAuthorName, isDivider, completionNote, checkRequest
     }
 
     init(from decoder: Decoder) throws {
@@ -338,6 +354,7 @@ extension ReminderItem {
         endAt = try c.decodeIfPresent(EpochMillis.self, forKey: .endAt)
         earlyAlertMinutes = (try c.decodeIfPresent(Int.self, forKey: .earlyAlertMinutes)).flatMap { (1...ReminderItem.maxEarlyAlertMinutes).contains($0) ? $0 : nil }
         isAlarm = try c.decodeIfPresent(Bool.self, forKey: .isAlarm) ?? false
+        locationTrigger = try? c.decodeIfPresent(LocationTrigger.self, forKey: .locationTrigger)
         sharedCardId = try c.decodeIfPresent(String.self, forKey: .sharedCardId)
         sharedAuthorUid = try c.decodeIfPresent(String.self, forKey: .sharedAuthorUid)
         sharedAuthorName = try c.decodeIfPresent(String.self, forKey: .sharedAuthorName)

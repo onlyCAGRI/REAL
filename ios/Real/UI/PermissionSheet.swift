@@ -10,6 +10,8 @@ struct PermissionSheet: View {
     var glyph: ActionGlyph = .pin
     let onPrimary: () -> Void
     let onSecondary: () -> Void
+    /// Scrim tap; set when the secondary button is a real choice, not "later".
+    var onDismiss: (() -> Void)? = nil
 
     @State private var shown = false
     @State private var entered = false
@@ -17,7 +19,7 @@ struct PermissionSheet: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.black.opacity(shown ? 0.68 : 0).ignoresSafeArea()
-                .onTapGesture { close(onSecondary) }
+                .onTapGesture { close(onDismiss ?? onSecondary) }
             VStack(spacing: 0) {
                 Capsule().fill(.white.opacity(0.22)).frame(width: 38, height: 4)
                 Color.clear.frame(height: 18)
