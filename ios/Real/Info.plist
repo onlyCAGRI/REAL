@@ -33,6 +33,8 @@
 	<string>Seçtiğin takvimlerin etkinliklerini REAL takviminde göstermek ve istersen planlarını takvime göndermek için.</string>
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
 	<string>REAL planlarını seçtiğin takvime göndermek için.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Alarm olarak kurduğun kartların sessiz moddayken de tam saatinde çalması için.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Sesle REAL oluşturmak için mikrofon kullanılır.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

@@ -234,7 +234,7 @@ final class ReminderStore {
         if updated.repeatRule == .none { updated.anchorAlertAt = updated.alertAt }
         if updated.alertAt != old.alertAt { updated.notifiedAlertAt = nil }
         // Removing the date removes its end and early warning; a new start keeps an end that is still after it.
-        if updated.alertAt == nil { updated.earlyAlertMinutes = nil }
+        if updated.alertAt == nil { updated.earlyAlertMinutes = nil; updated.isAlarm = false }
         if updated.alertAt == nil && updated.plannedDateEpochDay == nil { updated.endAt = nil }
         if let start = updated.alertAt ?? updated.plannedDateEpochDay.map({ calendar.startOfDayMillis(epochDay: $0) }),
            let end = updated.endAt, end <= start { updated.endAt = nil }
@@ -293,6 +293,7 @@ final class ReminderStore {
             $0.anchorAlertAt = nil
             $0.endAt = nil
             $0.earlyAlertMinutes = nil
+            $0.isAlarm = false
         }
         NotificationScheduler.cancel(id)
     }

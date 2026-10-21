@@ -168,6 +168,8 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     var endAt: EpochMillis? = nil
     /// "Erken uyarı": a heads-up this many minutes before [alertAt] (5 dk … 30 gün). nil = none.
     var earlyAlertMinutes: Int? = nil
+    /// Alarm: at [alertAt] the card rings as an alarm (AlarmKit on iOS 26+) instead of a plain notification.
+    var isAlarm = false
     /// Ortak kategori: the card's server id when it lives in a shared category (never part of personal sync).
     var sharedCardId: String? = nil
     /// Who added it; shown bottom-right when it is someone else.
@@ -289,7 +291,7 @@ extension ReminderItem {
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
              cardStack, voiceRecordings, musicBlocks, mediaBlocks, gameBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex,
-             endAt, earlyAlertMinutes, sharedCardId, sharedAuthorUid, sharedAuthorName, isDivider, completionNote, checkRequest
+             endAt, earlyAlertMinutes, isAlarm, sharedCardId, sharedAuthorUid, sharedAuthorName, isDivider, completionNote, checkRequest
     }
 
     init(from decoder: Decoder) throws {
@@ -335,6 +337,7 @@ extension ReminderItem {
         plannerColorIndex = try c.decodeIfPresent(Int.self, forKey: .plannerColorIndex)
         endAt = try c.decodeIfPresent(EpochMillis.self, forKey: .endAt)
         earlyAlertMinutes = (try c.decodeIfPresent(Int.self, forKey: .earlyAlertMinutes)).flatMap { (1...ReminderItem.maxEarlyAlertMinutes).contains($0) ? $0 : nil }
+        isAlarm = try c.decodeIfPresent(Bool.self, forKey: .isAlarm) ?? false
         sharedCardId = try c.decodeIfPresent(String.self, forKey: .sharedCardId)
         sharedAuthorUid = try c.decodeIfPresent(String.self, forKey: .sharedAuthorUid)
         sharedAuthorName = try c.decodeIfPresent(String.self, forKey: .sharedAuthorName)

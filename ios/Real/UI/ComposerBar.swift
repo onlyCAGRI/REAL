@@ -101,6 +101,7 @@ struct ComposerBar: View {
     @State private var categoryId: Int64?
     @State private var important = false
     @State private var sendImmediate = false
+    @State private var alarm = false
     @State private var checklistMode = false
     @State private var checklistItems: [String] = [""]
     @State private var attachments: [ReminderAttachment] = []
@@ -333,6 +334,53 @@ struct ComposerBar: View {
     /// Calendar / category / attachment / checklist / bell, Android icon order.
     private var toolRow: some View {
         HStack(spacing: 4) {
+            // Tools scroll sideways when they do not fit (a long date chip); the bell stays pinned at the right.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) { tools }
+            }
+            bellButton
+        }
+        .padding(.horizontal, 14).padding(.top, 2).padding(.bottom, 4)
+    }
+
+    /// One tap = notification, again = alarm (with its label), again = back. A timed card always notifies,
+    /// so for it the bell only switches notification ↔ alarm.
+    private var bellButton: some View {
+        let timed = schedule.alertAt != nil
+        let on = alarm || timed || sendImmediate
+        let tone = alarm ? Self.alarmTone : (on ? RealColors.accentBlue : Color(argb: 0xFFBABAC3))
+        return Button {
+            if alarm {
+                alarm = false
+                if !timed { sendImmediate = false }
+            } else if timed || sendImmediate {
+                alarm = true
+                if #available(iOS 26.0, *), !RealAlarmKit.authorized {
+                    // First alarm: the system's permission prompt; once allowed, alarm cards move to AlarmKit.
+                    Task { if await RealAlarmKit.requestAuthorization() { NotificationScheduler.reschedule(store.reminders) } }
+                }
+                // An alarm needs a clock time: without one the date sheet opens right away.
+                if !timed { withoutAnimation { showDateSheet = true } }
+            } else {
+                sendImmediate = true
+            }
+        } label: {
+            HStack(spacing: 6) {
+                RealSymbol(on ? "bell" : "bell.slash", size: 20).foregroundStyle(tone)
+                if alarm { Text("Alarm").font(RealFont.inter(13, .medium)).foregroundStyle(tone) }
+            }
+            .padding(.horizontal, alarm ? 10 : 0)
+            .frame(minWidth: 40, minHeight: 40)
+            .background(RoundedRectangle(cornerRadius: 14).fill(alarm ? Self.alarmTone.opacity(0.16) : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(alarm ? "Alarm açık" : (on ? "Bildirim açık" : "Bildirim kapalı"))
+    }
+
+    static let alarmTone = Color(argb: 0xFFFF8A5B)
+
+    @ViewBuilder private var tools: some View {
             if !schedule.isEmpty {
                 Button { withoutAnimation { showDateSheet = true } } label: {
                     HStack(spacing: 6) {
@@ -368,12 +416,6 @@ struct ComposerBar: View {
                 focus = nil
                 showLocationEditor = true
             }
-            Spacer(minLength: 0)
-            if schedule.alertAt == nil {
-                toolButton(sendImmediate ? "bell" : "bell.slash", "Bildirim", active: sendImmediate) { sendImmediate.toggle() }
-            }
-        }
-        .padding(.horizontal, 14).padding(.top, 2).padding(.bottom, 4)
     }
 
     private func toolButton(_ symbol: String, _ label: String, active: Bool, tint: Color? = nil, action: @escaping () -> Void) -> some View {
@@ -544,12 +586,14 @@ struct ComposerBar: View {
         let files = attachments
         let notify = sendImmediate
         let place = location
+        let rings = alarm && draft.alertAt != nil
         store.addReminder(text: title, alertAt: draft.alertAt, plannedDay: draft.plannedDay, repeatRule: draft.repeatRule,
                           categoryId: categoryId, isImportant: important, checklist: items) { item in
             draft.apply(to: &item)
             item.attachments = files
             item.sendImmediateNotification = notify
             if let place { item.location = place }
+            item.isAlarm = rings
         }
         if draft.alertAt != nil { NotificationScheduler.requestAuthorization() }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -570,6 +614,7 @@ struct ComposerBar: View {
         checklistItems = [""]
         attachments = []
         sendImmediate = false
+        alarm = false
         location = nil
     }
 }

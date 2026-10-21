@@ -71,10 +71,22 @@ enum NotificationScheduler {
             }
         }
         let content = content(for: item, alerting: true)
+        // Alarm card: a system alarm (iOS 26+, allowed) replaces the due notification; otherwise it is time-sensitive.
+        var ringsAsAlarm = false
+        if item.isAlarm {
+            if #available(iOS 26.0, *), RealAlarmKit.authorized {
+                RealAlarmKit.schedule(item, times: times, categories: categories)
+                ringsAsAlarm = true
+            } else {
+                content.interruptionLevel = .timeSensitive
+            }
+        }
         for (i, time) in times.enumerated() {
             let comps = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: time.date)
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier(item.id, i), content: content, trigger: trigger))
+            if !ringsAsAlarm {
+                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier(item.id, i), content: content, trigger: trigger))
+            }
             // "Erken uyarı": a heads-up before each occurrence ("15 dk sonra · …").
             if let minutes = item.earlyAlertMinutes, (1...ReminderItem.maxEarlyAlertMinutes).contains(minutes) {
                 let early = time - EpochMillis(minutes) * 60_000
@@ -108,8 +120,22 @@ enum NotificationScheduler {
 
     private static func identifier(_ id: Int64, _ index: Int) -> String { index == 0 ? "reminder-\(id)" : "reminder-\(id)-\(index)" }
 
+    /// Alarm snoozed on REAL's page before iOS 26 (no AlarmKit): one time-sensitive notification.
+    static func scheduleAlarmFallback(_ alarm: RingingAlarm) {
+        guard enabled else { return }
+        let content = UNMutableNotificationContent()
+        content.title = alarm.subtitle
+        content.body = alarm.title
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        content.userInfo = ["reminderId": alarm.id]
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, alarm.at.date.timeIntervalSinceNow), repeats: false)
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "reminder-\(alarm.id)-snooze", content: content, trigger: trigger))
+    }
+
     static func cancel(_ id: Int64) {
         guard enabled else { return }
+        if #available(iOS 26.0, *) { RealAlarmKit.cancel(id) }
         let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
@@ -123,6 +149,7 @@ enum NotificationScheduler {
     static func reschedule(_ items: [ReminderItem]) {
         guard enabled else { return }
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        if #available(iOS 26.0, *) { RealAlarmKit.cancelAll() }
         items.forEach(schedule)
     }
 

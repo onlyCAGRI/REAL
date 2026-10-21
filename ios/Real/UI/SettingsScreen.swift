@@ -191,6 +191,9 @@ struct SettingsScreen: View {
     @State private var showCalendar = false
     @State private var notice: String?
     @Environment(\.openURL) private var openURL
+    @State private var alarmSnooze = RealAlarmSettings.snoozeMinutes
+    /// Set after asking; nil = read AlarmKit's state.
+    @State private var alarmAllowed: Bool?
 
     private enum Page { case main, developer, sources }
 
@@ -300,6 +303,29 @@ struct SettingsScreen: View {
             SettingsDivider()
             SettingsStatusRow(icon: .calendar, title: "Tam saatinde hatırlatma", status: "Açık", statusColor: Color(argb: 0xFF91B9FF),
                               subtitle: "Alarmlar tam zamanında çalacak şekilde ayarlandı.", actionLabel: nil, action: {})
+            SettingsDivider()
+            // Alarm cards: iOS plays its own alarm sound (apps cannot use the phone's ringtones); REAL's page has its chime.
+            if #available(iOS 26.0, *) {
+                let allowed = alarmAllowed ?? RealAlarmKit.authorized
+                SettingsStatusRow(icon: .bell, title: "Alarm izni", status: allowed ? "Açık" : "Kapalı",
+                                  statusColor: allowed ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFA5A5AF),
+                                  subtitle: allowed ? "Alarm kartları sessiz moddayken de tam ekran çalar."
+                                                    : "Alarm kartlarının sessiz modu delip çalması için izni aç.",
+                                  actionLabel: allowed ? nil : "İzni aç") {
+                    Task {
+                        let ok = await RealAlarmKit.requestAuthorization()
+                        alarmAllowed = ok
+                        if ok { NotificationScheduler.reschedule(store.reminders) }
+                        else if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                    }
+                }
+                SettingsDivider()
+            }
+            SettingsActionRow(icon: .repeat_, title: "Alarm erteleme", subtitle: "\(alarmSnooze) dakika · değiştirmek için dokun") {
+                let choices = RealAlarmSettings.snoozeChoices
+                alarmSnooze = choices[((choices.firstIndex(of: alarmSnooze) ?? 0) + 1) % choices.count]
+                RealAlarmSettings.snoozeMinutes = alarmSnooze
+            }
         }
         SettingsSectionHeader(title: "REAL PRO")
         SettingsGlassGroup {

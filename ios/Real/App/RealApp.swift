@@ -73,6 +73,14 @@ struct RealApp: App {
                                      set: { CalendarCardPublisher.shared.offerCardId = $0?.id })) { offer in
                     CalendarPublicationSheet(cardId: offer.id).environment(store).environment(life)
                 }
+                // Alarm: REAL's own alarm page ("Aç" on the system alarm, or an alarm going off while REAL is open).
+                .fullScreenCover(item: Binding(get: { AlarmCenter.shared.ringing },
+                                               set: { if $0 == nil { AlarmCenter.shared.stop() } })) { alarm in
+                    AlarmScreen(alarm: alarm)
+                }
+                .task {
+                    if #available(iOS 26.0, *) { await RealAlarmKit.watch() }
+                }
                 // Ortak kategori: local edits go up shortly; while the app is open it also pulls every minute.
                 .task {
                     let store = store

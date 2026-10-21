@@ -530,6 +530,8 @@ final class RealCloudSync {
         o["contentBlockLayout"] = Self.layoutPayload(card.contentBlockLayout)
         // Ayraç: only a divider carries the flag (as on Android).
         if card.isDivider { o["isDivider"] = true } else { o.removeValue(forKey: "isDivider") }
+        // Alarm: like Android, only an alarm card carries the flag.
+        if card.isAlarm { o["isAlarm"] = true } else { o.removeValue(forKey: "isAlarm") }
         // Files: a local name becomes the blob id; a cloud file not downloaded here yet stays as the cloud has it.
         let baseObject = base.flatMap(Self.object)
         for key in ["attachments", "voiceRecordings"] {
