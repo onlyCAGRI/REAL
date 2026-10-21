@@ -486,7 +486,7 @@ enum MediaDetailRepository {
             let img = (row["imageUrl"] as? String).flatMap(URL.init(string:)).flatMap { $0.scheme == "https" ? $0 : nil }
             return MediaCastMember(id: pid, name: name, role: (row["role"] as? String).map { String($0.prefix(120)) }, imageUrl: img)
         }
-        let duration = (d["durationMillis"] as? NSNumber)?.int64Value.flatMap { (60_000...86_400_000).contains($0) ? $0 : nil }
+        let duration = ((d["durationMillis"] as? NSNumber)?.int64Value).flatMap { (60_000...86_400_000).contains($0) ? $0 : nil }
         let trailer = (d["trailerUrl"] as? String).flatMap(URL.init(string:)).flatMap { u -> URL? in
             let h = (u.host ?? "").lowercased()
             return u.scheme == "https" && (h == "youtube.com" || h.hasSuffix(".youtube.com") || h == "youtu.be") ? u : nil

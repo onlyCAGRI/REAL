@@ -57,6 +57,7 @@ enum NotificationScheduler {
     static func schedule(_ item: ReminderItem) {
         guard enabled else { return }
         cancel(item.id)
+        DepartureReminder.plan(item)
         if !item.isCompleted, let place = item.locationTrigger { schedulePlace(item, place) }
         guard !item.isCompleted, let alert = item.alertAt else { return }
         let now = EpochMillis.now
@@ -170,7 +171,7 @@ enum NotificationScheduler {
     static func cancel(_ id: Int64) {
         guard enabled else { return }
         if #available(iOS 26.0, *) { RealAlarmKit.cancel(id) }
-        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) } + [placeIdentifier(id)]
+        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) } + [placeIdentifier(id), DepartureReminder.identifier(id)]
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 

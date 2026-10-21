@@ -267,6 +267,8 @@ struct HomeView: View {
             if phase == .background { completedShown = 3 }
             // Profile picture for connected people (only uploads when it, or the photo-sharing switch, changed).
             if phase == .active { Task { await ProfilePictures.push() } }
+            // "Çıkma vakti": traffic changes, and so may where the phone is.
+            if phase == .active, NotificationScheduler.enabled { DepartureReminder.refresh(store.reminders) }
         }
         .task { await ProfilePictures.push() }
         .sheet(item: $editingBuiltIn) { category in

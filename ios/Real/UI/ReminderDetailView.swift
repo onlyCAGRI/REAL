@@ -803,6 +803,7 @@ struct ReminderDetailView: View {
                 }
             }
             .padding(14)
+            if !editing, l.latitude != nil, l.longitude != nil { PlaceDetails(location: l).padding(.horizontal, 14).padding(.bottom, 14) }
         }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .cardContentChrome(corners: 22)
@@ -1468,6 +1469,13 @@ struct LocationEditor: View {
                         TextField("", text: $query, prompt: Text("Yer ara ya da haritaya dokun").foregroundStyle(Self.muted))
                             .font(RealFont.inter(13)).foregroundStyle(.white)
                             .submitLabel(.search).onSubmit(search).focused($searchFocused)
+                            // Suggestions while typing (cafés, addresses, malls), a moment after the last key.
+                            .task(id: query) {
+                                guard searchFocused, query.trimmingCharacters(in: .whitespaces).count >= 2 else { return }
+                                try? await Task.sleep(for: .milliseconds(300))
+                                guard !Task.isCancelled else { return }
+                                search()
+                            }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else if let pin {
@@ -1619,6 +1627,11 @@ struct LocationEditor: View {
     private func search() {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
+        request.resultTypes = [.pointOfInterest, .address]
+        // Near the place on the map (or where the phone is), so "kahve" finds the cafés around.
+        if let c = pin ?? CLLocationManager().location?.coordinate {
+            request.region = MKCoordinateRegion(center: c, latitudinalMeters: 30_000, longitudinalMeters: 30_000)
+        }
         MKLocalSearch(request: request).start { response, _ in
             results = response?.mapItems ?? []
         }
