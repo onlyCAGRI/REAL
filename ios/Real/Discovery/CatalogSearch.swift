@@ -21,9 +21,30 @@ private func encoded(_ q: String) -> String {
     String(q.trimmingCharacters(in: .whitespaces).prefix(200)).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
 }
 
-/// MusicCatalog.kt: public iTunes catalog of the person's country (MusicStorefront).
+/// MusicCatalog.kt: the Apple Music catalog of the person's country (MusicStorefront) through the REAL Worker
+/// (/api/music-search: explicit originals too); the public iTunes catalog if the Worker fails or is not set up.
+/// The iTunes Search API only returns the "cleaned" version of explicit songs.
 enum MusicCatalog {
     static func search(_ query: String) async throws -> [MusicBlock] {
+        if let songs = try? await appleMusic(query), !songs.isEmpty { return songs }
+        return try await itunes(query)
+    }
+
+    private static func appleMusic(_ query: String) async throws -> [MusicBlock] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return [] }
+        let json = try await RealBackend.post("/api/music-search",
+                                              ["query": String(trimmed.prefix(200)), "storefront": MusicStorefront.code], timeout: 12)
+        return ((json["results"] as? [[String: Any]]) ?? []).compactMap { item in
+            guard let title = item["title"] as? String, !title.isEmpty, let link = secureUrl(item["providerUrl"] as? String) else { return nil }
+            return MusicBlock(title: title, artist: (item["artist"] as? String) ?? "", album: item["album"] as? String,
+                              artworkUrl: secureUrl(item["artworkUrl"] as? String), provider: "iTunes",
+                              providerTrackId: item["providerTrackId"] as? String, providerUrl: link,
+                              previewUrl: secureUrl(item["previewUrl"] as? String))
+        }
+    }
+
+    private static func itunes(_ query: String) async throws -> [MusicBlock] {
         let url = URL(string: "https://itunes.apple.com/search?term=\(encoded(query))&entity=song&media=music&country=\(MusicStorefront.code)&limit=20")!
         let json = try await getJSON(url) as? [String: Any]
         return ((json?["results"] as? [[String: Any]]) ?? []).compactMap { item in

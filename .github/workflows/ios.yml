@@ -186,7 +186,7 @@ jobs:
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>upload</string>
+            <key>destination</key><string>export</string>
             <key>teamID</key><string>$TEAM_ID</string>
             <key>signingStyle</key><string>automatic</string>
             <key>manageAppVersionAndBuildNumber</key><false/>
@@ -200,13 +200,28 @@ jobs:
           status=$?
           grep -E "error:|\*\* ARCHIVE" build/archive.log | sort -u | head -80
           if [ $status -ne 0 ]; then rm -f "$KEY"; tail -60 build/archive.log; exit $status; fi
+          # Signing facts as annotations (readable on the run page without signing in to GitHub).
+          sign_facts() { codesign -dvv "$1" 2>&1 | grep -E "^(Authority|TeamIdentifier|Identifier)=" | tr '\n' ' '; }
+          echo "::warning title=archive signature::$(sign_facts build/REAL.xcarchive/Products/Applications/*.app)"
+          # Export (re-signs for App Store with the distribution certificate), check, then upload separately, so a
+          # failure says which of the two went wrong.
           xcodebuild -exportArchive -archivePath build/REAL.xcarchive -exportOptionsPlist build/ExportOptions.plist \
             -exportPath build/export $AUTH > build/export.log 2>&1
           status=$?
-          rm -f "$KEY"
-          grep -E "error|Upload|EXPORT" build/export.log | tail -40
+          grep -E "error|EXPORT" build/export.log | tail -40
+          if [ $status -ne 0 ]; then rm -f "$KEY"; echo "::error title=export::$(grep -m3 'error' build/export.log | tr '\n' ' ')"; exit $status; fi
+          IPA=$(ls build/export/*.ipa | head -1)
+          (cd build && rm -rf ipa && mkdir ipa && cd ipa && unzip -q "../../$IPA")
+          APP=$(ls -d build/ipa/Payload/*.app | head -1)
+          echo "::warning title=export signature::$(sign_facts "$APP")"
+          codesign --verify --deep --strict -vv "$APP" > build/verify.log 2>&1 || echo "::error title=codesign verify::$(tail -5 build/verify.log | tr '\n' ' ')"
+          mkdir -p ~/.appstoreconnect/private_keys && cp "$KEY" ~/.appstoreconnect/private_keys/
+          xcrun altool --upload-app -f "$IPA" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" > build/upload.log 2>&1
+          status=$?
+          rm -f "$KEY" ~/.appstoreconnect/private_keys/AuthKey_*.p8
+          tail -30 build/upload.log
+          if [ $status -ne 0 ]; then echo "::error title=upload::$(grep -m3 -iE 'error|invalid' build/upload.log | tr '\n' ' ')"; exit $status; fi
           echo "Uploaded build $BUILD_NUMBER"
-          exit $status
 
       - name: Upload build log
         if: always()
@@ -218,4 +233,6 @@ jobs:
             ios/build/TestResults.xcresult
             ios/build/archive.log
             ios/build/export.log
+            ios/build/verify.log
+            ios/build/upload.log
           if-no-files-found: ignore
