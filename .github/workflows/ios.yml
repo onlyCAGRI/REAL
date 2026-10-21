@@ -1,0 +1,169 @@
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  # A push whose commit message contains [appetize] also builds the Appetize simulator zip (the "Run workflow"
+  # button only shows when this file is on the default branch).
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "compile = only check that it builds; appetize = simulator app zip; test = UI tests + screenshots"
+        type: choice
+        options: [compile, appetize, test]
+        default: compile
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Intel runner: the arm64 macOS pool is capacity-constrained (jobs were dropped unstarted).
+    # macos-26 (Apple Silicon) is faster, but on 2026-10-13 and 2026-10-14 its jobs sat queued without a runner;
+    # the Intel image always picks up. 80 minutes leaves room for the Appetize package on manual runs.
+    runs-on: macos-15-intel
+    timeout-minutes: 80
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: |
+          # Liquid Glass (.glassEffect) needs the iOS 26 SDK / Swift 6.2: select the newest Xcode 26 on the runner.
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          echo "Selecting $XC"
+          if [ -z "$XC" ]; then echo "Xcode 26 not found"; ls /Applications | grep -i xcode; exit 1; fi
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+          swift --version
+          xcrun simctl list runtimes
+
+      - name: Inject Firebase config
+        # From repository secrets only: neither file is committed (the repository is public).
+        env:
+          PLIST_B64: ${{ secrets.IOS_GOOGLE_SERVICE_INFO_PLIST }}
+          APP_CHECK_DEBUG_TOKEN: ${{ secrets.IOS_APP_CHECK_DEBUG_TOKEN }}
+        run: |
+          if [ -n "$PLIST_B64" ]; then
+            printf '%s' "$PLIST_B64" | base64 --decode > Real/GoogleService-Info.plist
+            echo "GoogleService-Info.plist injected"
+          fi
+          if [ -n "$APP_CHECK_DEBUG_TOKEN" ]; then
+            echo "enum BuildSecrets { static let appCheckDebugToken = \"$APP_CHECK_DEBUG_TOKEN\" }" > Real/App/BuildSecrets.swift
+            echo "App Check debug token injected"
+          fi
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      # Pushes and "compile" runs only check that the app builds: no tests, screenshots or app package.
+      - name: Compile check
+        if: github.event_name == 'push' || inputs.mode == 'compile'
+        run: |
+          mkdir -p build
+          set +e
+          xcodebuild build -project Real.xcodeproj -scheme Real -configuration Debug             -sdk iphonesimulator -destination "generic/platform=iOS Simulator"             -derivedDataPath build/compile ONLY_ACTIVE_ARCH=YES             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/xcodebuild.log 2>&1
+          status=$?
+          grep -E "error:|\*\* BUILD" build/xcodebuild.log | sort -u | head -200
+          # Compiler errors also as annotations (readable through the public checks API).
+          grep -E "^/.*:[0-9]+:[0-9]+: error: " build/xcodebuild.log | sort -u | head -40 | sed -E 's#^.*/ios/([^:]+):([0-9]+):[0-9]+: error: (.*)$#::error file=ios/\1,line=\2::\3#'
+          exit $status
+
+      - name: Pick simulator
+        id: sim
+        if: inputs.mode == 'test'
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          best = None
+          for runtime, devices in data.items():
+              if "iOS" not in runtime:
+                  continue
+              version = tuple(int(x) for x in runtime.split("iOS-")[-1].split("-"))
+              for d in devices:
+                  if d["name"].startswith("iPhone") and "Pro" in d["name"] and "Max" not in d["name"]:
+                      if best is None or version > best[0]:
+                          best = (version, d["udid"], d["name"])
+          print(best[1])
+          print(best, file=sys.stderr)
+          ')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test
+        # Only "test" runs: UI tests and screenshots.
+        if: inputs.mode == 'test'
+        run: |
+          mkdir -p build
+          set +e
+          xcodebuild test             -project Real.xcodeproj -scheme Real             -destination "id=${{ steps.sim.outputs.udid }}"             -derivedDataPath build             -resultBundlePath build/TestResults.xcresult             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/xcodebuild.log 2>&1
+          status=$?
+          grep -E "error:|Test Case .*(passed|failed)|Executed|\*\* " build/xcodebuild.log | tail -300
+          exit $status
+
+      - name: Export screenshots
+        if: always() && inputs.mode == 'test'
+        run: |
+          mkdir -p screenshots raw
+          xcrun xcresulttool export attachments --path build/TestResults.xcresult --output-path raw || true
+          python3 - <<'PY'
+          import json, os, shutil
+          try:
+              manifest = json.load(open("raw/manifest.json"))
+          except Exception as e:
+              print("no manifest", e); manifest = []
+          for test in manifest:
+              for a in test.get("attachments", []):
+                  name = a.get("suggestedHumanReadableName") or a["exportedFileName"]
+                  base = name.split("_")[0] if "_" in name else os.path.splitext(name)[0]
+                  ext = os.path.splitext(a["exportedFileName"])[1] or ".png"
+                  shutil.copy(os.path.join("raw", a["exportedFileName"]), os.path.join("screenshots", base + ext))
+                  print(test.get("testIdentifier"), "->", base + ext)
+          PY
+          ls -la screenshots
+
+      - name: Upload screenshots
+        if: always() && inputs.mode == 'test'
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: ios/screenshots
+          if-no-files-found: ignore
+
+      - name: Package simulator app (Appetize)
+        # "appetize" runs only.
+        if: success() && (inputs.mode == 'appetize' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[appetize]')))
+        run: |
+          mkdir -p build   # the test step that used to create it is skipped on manual runs
+          xcodebuild build -project Real.xcodeproj -scheme Real -configuration Release \
+            -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build-appetize ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/appetize.log 2>&1 || { tail -80 build/appetize.log; exit 1; }
+          cd build-appetize/Build/Products/Release-iphonesimulator
+          lipo -info REAL.app/REAL
+          zip -qry "$GITHUB_WORKSPACE/REAL-simulator.zip" REAL.app
+
+      - name: Upload simulator app
+        if: success() && (inputs.mode == 'appetize' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[appetize]')))
+        uses: actions/upload-artifact@v4
+        with:
+          name: REAL-simulator-app
+          path: REAL-simulator.zip
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            ios/build/xcodebuild.log
+            ios/build/TestResults.xcresult
+          if-no-files-found: ignore

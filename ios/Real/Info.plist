@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>tr</string>
+	<key>CFBundleDisplayName</key>
+	<string>REAL</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>inter_regular.ttf</string>
+		<string>inter_medium.ttf</string>
+		<string>inter_semibold.ttf</string>
+		<string>inter_bold.ttf</string>
+	</array>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Seçtiğin takvimlerin etkinliklerini REAL takviminde göstermek ve istersen planlarını takvime göndermek için.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>REAL planlarını seçtiğin takvime göndermek için.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sesle REAL oluşturmak için mikrofon kullanılır.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Söylediklerini karta yazmak için konuşma tanıma kullanılır.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Kartına fotoğraf çekmek için kamera kullanılır.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Kartına bulunduğun yeri eklemek için konumun yalnızca o an bir kez okunur.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Kartlarına fotoğraf eklemek için fotoğraflarına erişim gerekir.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>google-sign-in</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.547860940198-r61tg5etrv3burml5qsm9bmgtfpupc39</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>real-links</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>real</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

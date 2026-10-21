@@ -1,0 +1,170 @@
+import SwiftUI
+import Observation
+
+/// BookModels.kt: one locally stored book (catalog fields kept for parity with Android).
+struct Book: Codable, Identifiable, Hashable {
+    var id: String
+    var title: String
+    var author: String
+    var category: String = "Genel"
+    var pageCount: Int?
+    var coverUrl: String?
+    var description: String?
+    var fileName: String?
+    var format: String?          // pdf · epub · txt · image
+    var rights: String?
+    var infoUrl: String?
+    var licenseUrl: String?
+}
+
+struct Shelf: Identifiable {
+    var name: String
+    var books: [Book]
+    var plankColor: Color
+    var id: String { name }
+}
+
+/// ReaderTheme: AÇIK, soft KOYU and AMOLED (pure black).
+enum ReaderTheme: String, CaseIterable, Codable {
+    case LIGHT, DARK, AMOLED
+
+    var label: String { switch self { case .LIGHT: "Açık"; case .DARK: "Koyu"; case .AMOLED: "AMOLED" } }
+    var background: Color { switch self { case .LIGHT: Color(argb: 0xFFEDEDEB); case .DARK: Color(argb: 0xFF1C1C1E); case .AMOLED: .black } }
+    var text: Color { switch self { case .LIGHT: Color(argb: 0xFF111111); case .DARK: Color(argb: 0xFFDADADC); case .AMOLED: Color(argb: 0xFFCFCFCF) } }
+    var muted: Color { switch self { case .AMOLED: Color(argb: 0xFF6E6E73); default: Color(argb: 0xFF8E8E93) } }
+    var chrome: Color { switch self { case .LIGHT: .black; case .DARK: Color(argb: 0xFF3A3A3C); case .AMOLED: Color(argb: 0xFF1A1A1A) } }
+    var chromeText: Color { switch self { case .DARK: Color(argb: 0xFFF2F2F7); default: .white } }
+    var colorScheme: ColorScheme { self == .LIGHT ? .light : .dark }
+    var next: ReaderTheme { let all = Self.allCases; return all[(all.firstIndex(of: self)! + 1) % all.count] }
+}
+
+enum ReadMode: String { case VERTICAL, HORIZONTAL }
+
+enum ReaderDefaults {
+    static let fontSize = 16
+    static let minSize = 12
+    static let maxSize = 28
+    static let lineHeight: CGFloat = 1.5
+}
+
+/// Kapak görseli yokken kapağın ve sırtın ortak zemin rengi (kitap kimliğinden türetilir).
+func coverBaseColor(_ book: Book) -> Color {
+    let colors: [UInt32] = [0xFF394E5A, 0xFF765846, 0xFF4D6152, 0xFF695367]
+    var h: UInt32 = 0
+    for u in book.id.unicodeScalars { h = h &* 31 &+ u.value }
+    return Color(argb: colors[Int(h & 0x7fffffff) % colors.count])
+}
+
+/// BookShelfStore.kt: private local library. Books are files under Application Support/books, metadata in books.json.
+@Observable
+final class BookStore {
+    private(set) var books: [Book] = []
+    var theme: ReaderTheme { didSet { defaults.set(theme.rawValue, forKey: "books_theme") } }
+    var fontSize: Int { didSet { defaults.set(fontSize, forKey: "books_font") } }
+    var readMode: ReadMode { didSet { defaults.set(readMode.rawValue, forKey: "books_read_mode") } }
+    private(set) var lastReadId: String?
+
+    @ObservationIgnored let directory: URL
+    @ObservationIgnored private let persist: Bool
+    @ObservationIgnored private let defaults = UserDefaults.standard
+
+    init(persist: Bool = true) {
+        self.persist = persist
+        directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("books", isDirectory: true)
+        theme = ReaderTheme(rawValue: defaults.string(forKey: "books_theme") ?? "") ?? .AMOLED
+        let f = defaults.integer(forKey: "books_font")
+        fontSize = f == 0 ? ReaderDefaults.fontSize : min(max(f, ReaderDefaults.minSize), ReaderDefaults.maxSize)
+        readMode = ReadMode(rawValue: defaults.string(forKey: "books_read_mode") ?? "") ?? .VERTICAL
+        lastReadId = defaults.string(forKey: "books_last_read")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if persist, let data = try? Data(contentsOf: directory.appendingPathComponent("books.json")),
+           let list = try? JSONDecoder().decode([Book].self, from: data) {
+            books = list
+        }
+    }
+
+    private func save() {
+        guard persist, let data = try? JSONEncoder().encode(books) else { return }
+        try? data.write(to: directory.appendingPathComponent("books.json"), options: .atomic)
+    }
+
+    var shelves: [Shelf] {
+        let colors: [UInt32] = [0xFFF0A24A, 0xFF48A6EE, 0xFF6FBF8B, 0xFFB587E0]
+        var order: [String] = []
+        var groups: [String: [Book]] = [:]
+        for b in books {
+            let key = b.category.trimmingCharacters(in: .whitespaces).isEmpty ? "Genel" : b.category
+            if groups[key] == nil { order.append(key) }
+            groups[key, default: []].append(b)
+        }
+        return order.enumerated().map { i, name in Shelf(name: name, books: groups[name]!, plankColor: Color(argb: colors[i % colors.count])) }
+    }
+
+    func add(_ book: Book) throws {
+        guard AppUpdateGate.writable() else { throw BookError.message(AppUpdateGate.blockedMessage) }
+        guard !books.contains(where: { $0.id == book.id }) else { return }
+        guard books.count < 200 else { throw BookError.message("Kitaplık sınırına ulaşıldı (200 kitap).") }
+        books.append(book)
+        save()
+    }
+
+    func rename(_ id: String, to title: String) {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, let i = books.firstIndex(where: { $0.id == id }) else { return }
+        books[i].title = clean
+        save()
+    }
+
+    func remove(_ id: String) {
+        guard let book = books.first(where: { $0.id == id }) else { return }
+        books.removeAll { $0.id == id }
+        save()
+        if let f = file(book) { try? FileManager.default.removeItem(at: f) }
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(id).cover.png"))
+        for key in ["page_", "offset_"] { defaults.removeObject(forKey: "books_\(key)\(id)") }
+        if lastReadId == id { lastReadId = nil; defaults.removeObject(forKey: "books_last_read") }
+    }
+
+    func file(_ book: Book) -> URL? {
+        guard let name = book.fileName, name.range(of: "^[a-zA-Z0-9_.-]+$", options: .regularExpression) != nil else { return nil }
+        return directory.appendingPathComponent(name)
+    }
+
+    func hasLocalContent(_ book: Book) -> Bool {
+        guard let f = file(book) else { return false }
+        return FileManager.default.fileExists(atPath: f.path)
+    }
+
+    @ObservationIgnored private let covers = NSCache<NSString, UIImage>()
+
+    func coverImage(_ book: Book) -> UIImage? {
+        guard book.coverUrl != nil else { return nil }
+        if let c = covers.object(forKey: book.id as NSString) { return c }
+        guard let img = UIImage(contentsOfFile: directory.appendingPathComponent("\(book.id).cover.png").path) else { return nil }
+        covers.setObject(img, forKey: book.id as NSString)
+        return img
+    }
+
+    func page(_ book: Book) -> Int { max(0, defaults.integer(forKey: "books_page_\(book.id)")) }
+    func offset(_ book: Book) -> Int { max(0, defaults.integer(forKey: "books_offset_\(book.id)")) }
+
+    func savePosition(_ book: Book, page: Int, offset: Int = 0) {
+        guard books.contains(where: { $0.id == book.id }) else { return }
+        defaults.set(page, forKey: "books_page_\(book.id)")
+        defaults.set(offset, forKey: "books_offset_\(book.id)")
+        defaults.set(book.id, forKey: "books_last_read")
+        lastReadId = book.id
+    }
+
+    /// Yaşam row: the most recently read book and its percentage.
+    var lastRead: (book: Book, percent: Int?)? {
+        guard let id = lastReadId, let b = books.first(where: { $0.id == id }) else { return nil }
+        guard let count = b.pageCount, count > 1 else { return (b, nil) }
+        return (b, min(100, Int((Double(page(b) + 1) / Double(count) * 100).rounded())))
+    }
+}
+
+enum BookError: LocalizedError {
+    case message(String)
+    var errorDescription: String? { if case .message(let m) = self { return m }; return nil }
+}
