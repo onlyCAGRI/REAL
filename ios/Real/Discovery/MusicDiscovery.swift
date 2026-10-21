@@ -31,6 +31,9 @@ struct MusicMood: Hashable, Identifiable {
     ]
 }
 
+/// Selection key of "Sana özel" (only offered with Apple Music connected).
+let MusicPersonalKey = "personal_apple"
+
 struct MusicCard: Codable, Hashable, Identifiable {
     var music: MusicBlock
     var genre: String
@@ -93,6 +96,10 @@ final class MusicDiscoveryStore {
             let withCharts = era == nil || era == .now
             for (i, g) in list.enumerated() {
                 group.addTask {
+                    // Apple Music charts + Apple's own playlists through the REAL Worker (explicit originals too); the
+                    // iTunes charts + artist songs below only when the Worker fails.
+                    let apple = await Self.appleMusic(country, g, era).filter { !known.contains($0.id) && MusicSources.inEra($0, era) }
+                    if !apple.isEmpty { return (i, Self.windows(apple)) }
                     async let local = Self.chart(country, g, when: withCharts)
                     async let us = Self.chart("us", g, when: withCharts && country != "us")
                     async let seeds = MusicSources.seedSongs(country: country, genre: g, known: known, budget: budget, era: era)
@@ -104,8 +111,14 @@ final class MusicDiscoveryStore {
             for await (i, cards) in group { results[i] = cards }
             perGenre = results
         }
-        if perGenre.allSatisfy(\.isEmpty) { throw BookError.message("Müzik listeleri alınamadı. Bağlantını kontrol edip yeniden dene.") }
-        var queues: [[MusicCard]] = perGenre.map { $0.filter { !known.contains($0.id) } }
+        // "Sana özel" (Apple Music connected): Apple's picks for the person within the genres, one more list.
+        var personal: [MusicCard] = []
+        if selection.contains(MusicPersonalKey), AppleMusicAccount.shared.isConnected {
+            personal = Self.workerCards(await AppleMusicAccount.shared.personalSongs(genreIds: list.map(\.itunesId)), list[0].key)
+                .filter { !known.contains($0.id) && MusicSources.inEra($0, era) }
+        }
+        if perGenre.allSatisfy(\.isEmpty) && personal.isEmpty { throw BookError.message("Müzik listeleri alınamadı. Bağlantını kontrol edip yeniden dene.") }
+        var queues: [[MusicCard]] = ([personal] + perGenre).map { $0.filter { !known.contains($0.id) } }
         var fresh: [MusicCard] = []
         var seen = Set<String>()
         while fresh.count < 40, queues.contains(where: { !$0.isEmpty }) {
@@ -130,12 +143,39 @@ final class MusicDiscoveryStore {
         var s = snapshot
         let rest = s.cards.filter { $0.id != card.id }
         switch action {
-        case .save: s.cards = rest; s.list = s.list.filter { $0.id != card.id } + [card]; if !s.excluded.contains(card.id) { s.excluded.append(card.id) }
+        case .save:
+            // Apple Music connected: a saved song also goes to the person's library (best effort).
+            if AppleMusicAccount.shared.isConnected, let id = card.music.providerTrackId {
+                Task { await AppleMusicAccount.shared.addToLibrary(id) }
+            }
+            s.cards = rest; s.list = s.list.filter { $0.id != card.id } + [card]; if !s.excluded.contains(card.id) { s.excluded.append(card.id) }
         case .skip: s.cards = rest; if !s.excluded.contains(card.id) { s.excluded.append(card.id) }
         case .keep: s.list = s.list.filter { $0.id != card.id } + [card]
         case .remove: s.list = s.list.filter { $0.id != card.id }
         }
         set(s)
+    }
+
+    /// Up to 250 songs of the genre (and era) from the Worker's /api/music-discover, cached there for 12 hours.
+    nonisolated static func appleMusic(_ country: String, _ genre: MusicGenre, _ era: MusicEra?) async -> [MusicCard] {
+        var body: [String: Any] = ["storefront": country, "genre": genre.itunesId]
+        if let era { body["era"] = era.rawValue }
+        guard let json = try? await RealBackend.post("/api/music-discover", body, timeout: 20) else { return [] }
+        return workerCards((json["songs"] as? [[String: Any]]) ?? [], genre.key)
+    }
+
+    /// The Worker's song objects (music-discover, music-me) as deck cards.
+    nonisolated static func workerCards(_ songs: [[String: Any]], _ genreKey: String) -> [MusicCard] {
+        func https(_ v: Any?) -> String? { (v as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil } }
+        return songs.compactMap { o in
+            guard let title = o["title"] as? String, !title.isEmpty, let link = https(o["providerUrl"]) else { return nil }
+            let preview = https(o["previewUrl"])
+            let music = MusicBlock(title: title, artist: (o["artist"] as? String) ?? "", album: o["album"] as? String,
+                                   artworkUrl: https(o["artworkUrl"]), provider: "iTunes", providerTrackId: o["providerTrackId"] as? String,
+                                   providerUrl: link, previewUrl: preview, previewDurationMillis: preview != nil ? 30_000 : nil,
+                                   explicit: (o["explicit"] as? Bool) == true ? true : nil)
+            return MusicCard(music: music, genre: genreKey, year: (o["year"] as? Int).flatMap { $0 > 0 ? $0 : nil })
+        }
     }
 
     /// Apple's ranking (most played first) kept, only mixed inside windows of six; previews first in a window.
@@ -233,16 +273,24 @@ struct MusicDiscoveryScreen: View {
                 BackCircle(action: back).padding(.leading, 22).padding(.top, 12).accessibilityLabel("Yaşam'a dön")
             }
             if let error { errorLine(error) }
-            // One question at a time: 2 genres at most, then (optional) one era; "Hepsi" = every era.
-            let allEras = "era_all"
+            // One question at a time: 2 genres at most, then (optional) one era; "Hepsi" = every era; then, with Apple
+            // Music connected, (optional) "Sana özel".
+            let allEras = "era_all", noPersonal = "personal_none"
+            let linked = AppleMusicAccount.shared.isConnected
             DiscoveryStepper(steps: [
                 DiscoveryStep(title: "Hangi türde müzik?", subtitle: "En fazla 2 tür", max: 2, optional: false,
                               groups: [(nil, MusicGenre.all.map { StepOption(key: $0.key, label: $0.label) })]),
                 DiscoveryStep(title: "Hangi dönemden?", subtitle: "İstersen bir dönem · Apple Music \(MusicStorefront.name) listeleri", max: 1, optional: true,
                               groups: [(nil, [StepOption(key: allEras, label: "Hepsi")] + MusicEra.allCases.map { StepOption(key: $0.rawValue, label: $0.label) })]),
-            ], selection: Binding(
-                get: { MusicEra.of(selection) == nil ? selection.union([allEras]) : selection },
-                set: { selection = $0.subtracting([allEras]) }),
+            ] + (linked ? [
+                DiscoveryStep(title: "Sana özel de olsun mu?", subtitle: "Apple Music'te dinlediklerine göre seçilenler karışır", max: 1, optional: true,
+                              groups: [(nil, [StepOption(key: noPersonal, label: "Hayır"), StepOption(key: MusicPersonalKey, label: "Evet, sana özel")])]),
+            ] : []), selection: Binding(
+                get: {
+                    let s = MusicEra.of(selection) == nil ? selection.union([allEras]) : selection
+                    return linked && !s.contains(MusicPersonalKey) ? s.union([noPersonal]) : s
+                },
+                set: { selection = $0.subtracting([allEras, noPersonal]) }),
                 accent: musicTone, loading: loading, enabled: true, doneLabel: "şarkıları getir", step: $pickerStep,
                 rare: { chosen, key in DiscoveryRarePairs.rare(DiscoveryRarePairs.music, chosen, key) },
                 onDone: fetch)

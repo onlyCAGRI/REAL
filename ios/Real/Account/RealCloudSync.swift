@@ -573,7 +573,7 @@ final class RealCloudSync {
     /// encodeCardContentLayout (CardContentLayoutJson.kt): "grid": 6 marks the six-unit layout (without it the account
     /// reads the old two-column one and rejects span 6); text styling only on text / files, hideActions only on
     /// music / media, and only block kinds the account knows.
-    private static let layoutKinds: Set<String> = ["text", "card_stack", "mood", "checklist", "photos", "files", "voice", "music", "media", "location", "journal"]
+    private static let layoutKinds: Set<String> = ["text", "card_stack", "mood", "checklist", "photos", "files", "voice", "music", "media", "game", "location", "weather", "journal"]
     private static func layoutPayload(_ layout: [String: CardBlockPlacement]) -> [String: Any] {
         var out: [String: Any] = [:]
         for (key, raw) in layout {

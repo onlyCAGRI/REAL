@@ -273,6 +273,13 @@ struct SettingsScreen: View {
                 MusicSource.saved = musicSource
             }
             SettingsDivider()
+            // Apple Music hesabı: "Sana özel" in Müzik keşfi, a right swipe also adds to the library.
+            let appleMusic = AppleMusicAccount.shared
+            SettingsActionRow(icon: .music, title: "Apple Music hesabı",
+                              subtitle: appleMusic.isConnected ? "Bağlı · dokun, bağlantıyı kes" : "Bağla · sana özel öneriler, kütüphanene ekleme") {
+                if appleMusic.isConnected { appleMusic.disconnect() } else { appleMusic.connect() }
+            }
+            SettingsDivider()
             // Puanlarım: film / dizi / bölüm puanlarını siler (şimdilik test için).
             // Öneriler (müzik, film / dizi, oyun): geçilenler yeniden gelebilir; kayıtlı listeler ve İzledim / Oynadım kalır.
             SettingsActionRow(icon: .music, title: "Önerileri sıfırla", subtitle: "Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez") {

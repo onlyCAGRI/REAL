@@ -789,6 +789,20 @@ struct MediaDiscoveryDetail: View {
                         PosterArtwork(media: card.media, titleSize: 18)
                             .frame(width: heroWidth, height: arrived && !leaving ? finalHeight : initialHeight)
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay(alignment: .bottomLeading) {
+                                // "▶ Fragman": the film's YouTube trailer (TheTVDB), in the YouTube app or the browser.
+                                if let trailer = detail?.trailerUrl, !leaving {
+                                    Button { UIApplication.shared.open(trailer) } label: {
+                                        HStack(spacing: 6) {
+                                            RealSymbol("play.fill", size: 11)
+                                            Text("Fragman").font(RealFont.inter(13, .semibold))
+                                        }
+                                        .foregroundStyle(.white).padding(.horizontal, 14).frame(height: 36)
+                                        .liquidGlass(Capsule(), role: .chrome)
+                                    }
+                                    .buttonStyle(.plain).padding(12).accessibilityLabel("Fragmanı aç")
+                                }
+                            }
                             .padding(.horizontal, 20)
                         content.opacity(leaving ? 0 : 1)
                     }

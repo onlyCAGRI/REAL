@@ -275,6 +275,8 @@ struct ReminderItem: Codable, Identifiable, Hashable {
         keys += mediaBlocks.map { "media:\($0.id)" }
         keys += gameBlocks.map { "game:\($0.id)" }
         if location != nil { keys.append("location") }
+        // Hava durumu: added by itself when the card has a time (or a day) and a place with coordinates.
+        if alertAt != nil || plannedDateEpochDay != nil, location?.latitude != nil, location?.longitude != nil { keys.append("weather") }
         if journal != nil || includeJournal { keys.append("journal") }
         return keys
     }

@@ -60,6 +60,7 @@ struct RealApp: App {
                 .overlay { RequiredUpdateHost(uid: RealAuth.shared.account?.uid) }
                 .overlay { RealToastHost() }
                 .onOpenURL { url in
+                    if AppleMusicAccount.shared.handle(url) { return }
                     if RealDeepLinks.shared.handle(url) { return }
                     _ = RealAuth.shared.handle(url: url)
                 }

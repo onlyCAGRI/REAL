@@ -438,10 +438,16 @@ struct MediaDetail {
     var description: String?
     var durationMillis: Int64?
     var cast: [MediaCastMember]
+    /// A YouTube trailer (TheTVDB movies), opened in the YouTube app or the browser.
+    var trailerUrl: URL? = nil
 }
 
 enum MediaDetailRepository {
     static func load(_ media: MediaBlock) async throws -> MediaDetail {
+        if media.type == .MOVIE, media.provider.lowercased() == "thetvdb", let id = media.providerId,
+           id.range(of: "^[1-9]\\d{0,9}$", options: .regularExpression) != nil {
+            return try await movie(id)
+        }
         guard media.type == .TV, media.provider.lowercased() == "tvmaze", let id = media.providerId,
               id.range(of: "^[1-9]\\d{0,9}$", options: .regularExpression) != nil,
               let url = URL(string: "https://api.tvmaze.com/shows/\(id)?embed=cast") else {
@@ -465,6 +471,27 @@ enum MediaDetailRepository {
         let runtime = (json["averageRuntime"] as? Int) ?? (json["runtime"] as? Int)
         let summary = (json["summary"] as? String).map { BookDocuments.decodeEntities($0.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)) }
         return MediaDetail(description: summary, durationMillis: runtime.map { Int64($0) * 60_000 }, cast: Array(cast.prefix(24)))
+    }
+
+    /// MediaDetailRepository.kt parseMovie: TheTVDB movie details (cast, length, trailer) through the REAL Worker.
+    private static func movie(_ id: String) async throws -> MediaDetail {
+        let json = try await RealBackend.post("/api/media-details", ["provider": "TheTVDB", "type": "MOVIE", "providerId": id], timeout: 18)
+        guard json["ok"] as? Bool == true, let d = json["details"] as? [String: Any],
+              d["provider"] as? String == "TheTVDB", d["providerId"] as? String == id else { throw BookError.message("Oyuncular şu anda alınamadı.") }
+        var seen = Set<String>()
+        let cast: [MediaCastMember] = ((d["cast"] as? [[String: Any]]) ?? []).prefix(24).compactMap { row in
+            guard let name = (row["name"] as? String).map({ String($0.prefix(120)) }), !name.isEmpty else { return nil }
+            let pid = (row["id"] as? String) ?? name
+            guard seen.insert(pid).inserted else { return nil }
+            let img = (row["imageUrl"] as? String).flatMap(URL.init(string:)).flatMap { $0.scheme == "https" ? $0 : nil }
+            return MediaCastMember(id: pid, name: name, role: (row["role"] as? String).map { String($0.prefix(120)) }, imageUrl: img)
+        }
+        let duration = (d["durationMillis"] as? NSNumber)?.int64Value.flatMap { (60_000...86_400_000).contains($0) ? $0 : nil }
+        let trailer = (d["trailerUrl"] as? String).flatMap(URL.init(string:)).flatMap { u -> URL? in
+            let h = (u.host ?? "").lowercased()
+            return u.scheme == "https" && (h == "youtube.com" || h.hasSuffix(".youtube.com") || h == "youtu.be") ? u : nil
+        }
+        return MediaDetail(description: (d["description"] as? String).map { String($0.prefix(6000)) }, durationMillis: duration, cast: cast, trailerUrl: trailer)
     }
 }
 

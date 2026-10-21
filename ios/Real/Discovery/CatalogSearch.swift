@@ -40,7 +40,8 @@ enum MusicCatalog {
             return MusicBlock(title: title, artist: (item["artist"] as? String) ?? "", album: item["album"] as? String,
                               artworkUrl: secureUrl(item["artworkUrl"] as? String), provider: "iTunes",
                               providerTrackId: item["providerTrackId"] as? String, providerUrl: link,
-                              previewUrl: secureUrl(item["previewUrl"] as? String))
+                              previewUrl: secureUrl(item["previewUrl"] as? String),
+                              explicit: (item["explicit"] as? Bool) == true ? true : nil)
         }
     }
 
@@ -239,7 +240,7 @@ struct MusicSearchSheet: View {
                         MusicArtwork(url: m.artworkUrl).frame(width: 44, height: 44)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(m.title).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
-                            Text(m.artist).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).lineLimit(1)
+                            MusicArtistLine(block: m, color: Color(argb: 0xFFA5A5B0), size: 12)
                         }
                         Spacer()
                         RealSymbol("plus", size: 17.2).foregroundStyle(.white)
@@ -454,6 +455,31 @@ final class MusicPreviewPlayer {
     }
 }
 
+/// Apple Music's "E" for explicit songs (MusicContent.kt ExplicitBadge).
+struct ExplicitBadge: View {
+    var color: Color
+    var size: CGFloat = 12
+    var body: some View {
+        Text("E").font(RealFont.inter(size * 0.72, .bold)).foregroundStyle(Color.black.opacity(0.85))
+            .frame(width: size + 2, height: size + 2)
+            .background(color, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+            .accessibilityLabel("Müstehcen")
+    }
+}
+
+/// The artist, with the "E" badge in front of it when the song is explicit.
+struct MusicArtistLine: View {
+    let block: MusicBlock
+    var color: Color
+    var size: CGFloat
+    var body: some View {
+        HStack(spacing: 5) {
+            if block.explicit == true { ExplicitBadge(color: color, size: size) }
+            Text(block.artist).font(RealFont.inter(size)).foregroundStyle(color).lineLimit(1)
+        }
+    }
+}
+
 /// MusicTrackCard on a card's detail page: artwork-tinted surface, preview play/pause, "iTunes'da aç".
 struct MusicBlockView: View {
     let block: MusicBlock
@@ -511,7 +537,7 @@ struct MusicBlockView: View {
                 MusicArtwork(url: block.artworkUrl).frame(width: 64, height: 64)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(block.title).font(RealFont.inter(18, .semibold)).foregroundStyle(Color(argb: 0xFFF1F1F4)).lineLimit(2)
-                    Text(block.artist).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFB1B1BC)).lineLimit(1)
+                    MusicArtistLine(block: block, color: Color(argb: 0xFFB1B1BC), size: 13)
                 }
                 Spacer(minLength: 4)
                 // Source logo top-right; on Spotify it turns the card over to its Spotify Code.

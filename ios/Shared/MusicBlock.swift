@@ -12,6 +12,8 @@ struct MusicBlock: Codable, Hashable, Identifiable {
     var providerUrl: String
     var previewUrl: String?
     var previewDurationMillis: Int64?
+    /// Apple Music marks the song explicit ("E"); stored only when true, like Android.
+    var explicit: Bool?
     var createdAt: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
 }
 

@@ -22,6 +22,8 @@ struct ReminderDetailView: View {
     @State private var dockCollapsed = false
     @State private var showMusicSearch = false
     @State private var voiceRecorderOpen = false
+    /// "Hava durumunu gizle" on this card (kept by CardWeatherRepository).
+    @State private var weatherHidden = false
     @State private var textToolsKey: String?
     @State private var showMediaSearch = false
     @State private var showGameSearch = false
@@ -218,6 +220,7 @@ struct ReminderDetailView: View {
 
     private func blockOrder(_ r: ReminderItem) -> [String] {
         let active = r.cardContentKeys(includeEmptyChecklist: editing && checklistOpen, includeVoiceRecorder: editing && voiceRecorderOpen, includeJournal: false)
+            .filter { $0 != "weather" || (!weatherHidden && CardWeatherRepository.mayShow(r)) }
         return r.resolvedBlockOrder(active)
     }
 
@@ -266,6 +269,11 @@ struct ReminderDetailView: View {
             if let m = r.mediaBlocks.first(where: { $0.id == id }) {
                 MediaBlockView(block: m, editing: editing, onRemove: { draft?.mediaBlocks.removeAll { $0.id == id } }, heroInset: heroInset)
             }
+        case "weather":
+            // A half-width or short slot ("Sırala") gets the compact layout.
+            let p = (r.contentBlockLayout["weather"] ?? CardBlockPlacement()).normalized
+            CardWeatherBlock(reminder: r, compact: p.span < 6 || (p.minHeight > 0 && p.minHeight < 150), interactive: !editing,
+                             onHide: { weatherHidden = true })
         case "game":
             if let g = r.gameBlocks.first(where: { $0.id == id }) {
                 GameBlockView(block: g, editing: editing, onRemove: { draft?.gameBlocks.removeAll { $0.id == id } }, heroInset: heroInset)
@@ -1790,6 +1798,7 @@ private struct BlockReorderSheet: View {
         case "music": return ("Müzik", item.musicBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "music.note")
         case "media": return ("Film / Dizi", item.mediaBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "film")
         case "game": return ("Oyun", item.gameBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "gamecontroller")
+        case "weather": return ("Hava durumu", "Apple Weather", "cloud.sun")
         default: return (key, "", "square")
         }
     }
