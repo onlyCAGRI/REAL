@@ -78,10 +78,13 @@ struct ScheduleSheet: View {
 
     private var currentYear: Int { calendar.component(.year, from: Date()) }
 
-    /// Without "Yıl gir" the year is inferred: this year if the moment is still ahead, otherwise next year.
+    /// Without "Yıl gir" the year is inferred from the day alone: this year from today on, next year for a day already
+    /// gone. Today with a clock time already past stays today (confirm says so) — judging by the moment flipped to next
+    /// year while the date wheels still held the default 09:00.
     private var effectiveYear: Int {
         if includeYear { return year }
-        return (makeDate(year: currentYear).map { $0 > Date() } ?? true) ? currentYear : currentYear + 1
+        guard let day = makeDate(year: currentYear) else { return currentYear }
+        return calendar.startOfDay(for: day) >= calendar.startOfDay(for: Date()) ? currentYear : currentYear + 1
     }
 
     private func makeDate(year: Int) -> Date? {
