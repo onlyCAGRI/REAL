@@ -276,7 +276,7 @@ struct SettingsScreen: View {
             // Apple Music hesabı: "Sana özel" in Müzik keşfi, a right swipe also adds to the library.
             let appleMusic = AppleMusicAccount.shared
             SettingsActionRow(icon: .music, title: "Apple Music hesabı",
-                              subtitle: appleMusic.isConnected ? "Bağlı · dokun, bağlantıyı kes" : "Bağla · sana özel öneriler, kütüphanene ekleme") {
+                              subtitle: appleMusic.isConnected ? "Bağlı · dokun, bağlantıyı kes" : "Bağla · sana özel öneriler, REAL çalma listesi") {
                 if appleMusic.isConnected { appleMusic.disconnect() } else { appleMusic.connect() }
             }
             SettingsDivider()

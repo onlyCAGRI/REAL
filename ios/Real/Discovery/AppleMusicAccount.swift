@@ -2,7 +2,7 @@ import SwiftUI
 
 /// AppleMusicAccount.kt: Ayarlar → Apple Music hesabı. REAL's public sign-in page (real.realapp.workers.dev) runs
 /// Apple's MusicKit sign-in and sends the Music User Token back as real://apple-music?state=…#token=…; it stays on
-/// this phone. With it Müzik keşfi offers "Sana özel" and a right swipe also adds the song to the Apple Music library.
+/// this phone. With it Müzik keşfi offers "Sana özel" and a right swipe also adds the song to a "REAL" playlist in Apple Music.
 @MainActor
 @Observable
 final class AppleMusicAccount {
@@ -47,6 +47,7 @@ final class AppleMusicAccount {
     func disconnect() {
         defaults.removeObject(forKey: "real_apple_music_token")
         defaults.removeObject(forKey: "real_apple_music_state")
+        defaults.removeObject(forKey: "real_apple_music_playlist")
         isConnected = false
     }
 
@@ -67,9 +68,12 @@ final class AppleMusicAccount {
         return (json?["songs"] as? [[String: Any]]) ?? []
     }
 
-    /// Adds an Apple Music catalog song to the person's library (best effort).
+    /// Adds an Apple Music catalog song to the person's "REAL" playlist (made on the first save; its id is kept here).
     func addToLibrary(_ songId: String) async {
         guard !songId.isEmpty, songId.allSatisfy(\.isNumber) else { return }
-        _ = try? await call(["action": "add", "songId": songId])
+        var body: [String: Any] = ["action": "add", "songId": songId]
+        if let playlist = defaults.string(forKey: "real_apple_music_playlist") { body["playlistId"] = playlist }
+        let json = (try? await call(body)) ?? nil
+        if let id = json?["playlistId"] as? String, id.hasPrefix("p.") { defaults.set(id, forKey: "real_apple_music_playlist") }
     }
 }
