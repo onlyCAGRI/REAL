@@ -458,13 +458,7 @@ private struct MusicDeck: View {
 
     private var bar: some View {
         Button { if let first = cards.first { onAdd(first.music) } } label: {
-            HStack(spacing: 7) {
-                RealSymbol("plus", size: 18.4)
-                Text("REAL'e ekle").font(RealFont.inter(13, .medium)).lineLimit(1)
-            }
-            .foregroundStyle(busy ? Color(argb: 0xFF66666C) : .white)
-            .padding(.horizontal, 16).frame(minHeight: 48)
-            .background(musicTone.opacity(0.9), in: Capsule())
+            PosterAddLabel(url: cards.first?.music.artworkUrl, fallback: musicTone, busy: busy)
         }
         .buttonStyle(.plain)
         .disabled(busy)

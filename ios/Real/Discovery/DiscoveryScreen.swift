@@ -504,6 +504,39 @@ struct PosterAmbient: View {
 /// Posters kept in memory (Android: Coil's cache). AsyncImage starts empty on every new view, so each swipe showed
 /// the dark poster face under the deck until the image came back; a cached poster now shows at once.
 @MainActor
+/// "REAL'e ekle" in the poster's dominant colour; very dark posters are lifted so the button still reads on black,
+/// light ones get dark text. Until the poster is read the screen's own accent is used.
+struct PosterAddLabel: View {
+    let url: String?
+    let fallback: Color
+    let busy: Bool
+    @State private var poster: Color?
+
+    var body: some View {
+        let tone: Color = poster.map { $0.luminance < 0.03 ? Self.lift($0, 0.22) : $0 } ?? fallback
+        let ink: Color = busy ? Color(argb: 0xFF66666C) : (tone.luminance > 0.5 ? Color(argb: 0xFF111111) : .white)
+        HStack(spacing: 7) {
+            RealSymbol("plus", size: 18.4)
+            Text("REAL'e ekle").font(RealFont.inter(13, .medium)).lineLimit(1)
+        }
+        .foregroundStyle(ink)
+        .padding(.horizontal, 16).frame(minHeight: 48)
+        .background(tone.opacity(0.92), in: Capsule())
+        .animation(.easeOut(duration: 0.22), value: poster)
+        .task(id: url) {
+            guard let url, !url.isEmpty, let img = await PosterImageCache.load(url) else { poster = nil; return }
+            poster = CoverPalette.dominant(img)
+        }
+    }
+
+    /// Blends towards white (Color.mix needs iOS 18).
+    private static func lift(_ c: Color, _ t: CGFloat) -> Color {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(c).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return Color(red: r + (1 - r) * t, green: g + (1 - g) * t, blue: b + (1 - b) * t)
+    }
+}
+
 enum PosterImageCache {
     private static let cache: NSCache<NSString, UIImage> = { let c = NSCache<NSString, UIImage>(); c.countLimit = 80; return c }()
 
@@ -697,13 +730,7 @@ private struct PosterDeck: View {
                     if kind == .game { onAddToReal(first) }
                     else { decide(first, later ? .saveList : .saveDiscovery, fly: CGSize(width: threshold * 6, height: 0)) }
                 } label: {
-                    HStack(spacing: 7) {
-                        RealSymbol("plus", size: 18.4)
-                        Text("REAL'e ekle").font(RealFont.inter(13, .medium)).lineLimit(1)
-                    }
-                    .foregroundStyle(busy ? Color(argb: 0xFF66666C) : .white)
-                    .padding(.horizontal, 16).frame(minHeight: 48)
-                    .background(accent.opacity(0.9), in: Capsule())
+                    PosterAddLabel(url: first.media.artworkUrl, fallback: accent, busy: busy)
                 }
                 .buttonStyle(.plain)
                 .disabled(busy)
@@ -767,6 +794,9 @@ struct MediaDiscoveryDetail: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                // No glass behind the header: content only fades out softly at the very top (films, series, games).
+                LinearGradient(colors: [.black, .black.opacity(0.85), .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 64).ignoresSafeArea(edges: .top).allowsHitTesting(false)
                 header.opacity(leaving ? 0 : 1)
             }
         }
