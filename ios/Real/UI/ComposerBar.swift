@@ -114,8 +114,6 @@ struct ComposerBar: View {
     /// Pin → "Konum ekle" or "Konuma varınca hatırlat"; the trigger rides on the draft like the place.
     @State private var showLocationChoice = false
     @State private var pickForTrigger = false
-    @State private var triggerPlace: ReminderLocation?
-    @State private var showTriggerSheet = false
     @State private var placeTrigger: LocationTrigger?
     @State private var placePermission = PlaceReminderPermission()
     @State private var navExpanded = false
@@ -206,24 +204,12 @@ struct ComposerBar: View {
                             },
                             onDismiss: { showLocationChoice = false })
         }
-        .sheet(isPresented: $showLocationEditor) {
-            LocationEditor(initial: pickForTrigger ? triggerPlace ?? location : location) { picked in
-                if pickForTrigger {
-                    guard let picked else { return }
-                    triggerPlace = picked
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { showTriggerSheet = true }
-                } else {
-                    location = picked
-                }
-            }
-            .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showTriggerSheet) {
-            if let place = triggerPlace {
-                LocationTriggerSheet(place: place, initial: placeTrigger) { trigger in
-                    placeTrigger = trigger
-                    location = place
-                }
+        // "Varınca / Ayrılınca hatırlat" sits on the map itself once location permission is there.
+        .fullScreenCover(isPresented: $showLocationEditor) {
+            LocationEditor(initial: location, initialTrigger: placeTrigger,
+                           onRemind: pickForTrigger ? { place, trigger in location = place; placeTrigger = trigger } : nil) { picked in
+                location = picked
+                placeTrigger = nil
             }
         }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
@@ -459,7 +445,9 @@ struct ComposerBar: View {
             toolButton("mappin", placeTrigger.map(\.label) ?? location.map { "Konum: \($0.placeName)" } ?? "Konum ekle",
                        active: location != nil || placeTrigger != nil) {
                 focus = nil
-                showLocationChoice = true
+                // The panel explains location once; with permission the pin goes straight to the map.
+                if placePermission.granted { pickForTrigger = true; showLocationEditor = true }
+                else { showLocationChoice = true }
             }
             .overlay(alignment: .topTrailing) {
                 if store.reminders.contains(where: { $0.locationTrigger != nil && !$0.isCompleted }) {
@@ -669,7 +657,6 @@ struct ComposerBar: View {
         alarm = false
         location = nil
         placeTrigger = nil
-        triggerPlace = nil
     }
 }
 

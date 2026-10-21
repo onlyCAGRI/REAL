@@ -104,7 +104,9 @@ struct LocationTrigger: Codable, Hashable {
     var radiusMeters: Int = LocationTrigger.defaultRadius
     var onExit: Bool = false
 
-    static let defaultRadius = 200
+    /// "Normal"; the composer map uses `preciseRadius` ("Hassas").
+    static let defaultRadius = 250
+    static let preciseRadius = 100
     static let radiusChoices = [100, 200, 500]
 
     var label: String { (onExit ? "Ayrılınca · " : "Varınca · ") + placeName }

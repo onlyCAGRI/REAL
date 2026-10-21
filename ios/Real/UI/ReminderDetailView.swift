@@ -119,8 +119,8 @@ struct ReminderDetailView: View {
                             onPrimary: { withoutAnimation { showLocationGuide = false }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { showLocationEditor = true } },
                             onSecondary: { withoutAnimation { showLocationGuide = false } })
         }
-        .sheet(isPresented: $showLocationEditor) {
-            LocationEditor(initial: draft?.location) { draft?.location = $0 }.presentationDetents([.medium, .large])
+        .fullScreenCover(isPresented: $showLocationEditor) {
+            LocationEditor(initial: draft?.location) { draft?.location = $0 }
         }
         .sheet(isPresented: $showLinkEditor) {
             LinkEditor(initial: draft?.referenceUrl ?? "") { draft?.referenceUrl = $0 }.presentationDetents([.height(220)])
@@ -1360,13 +1360,17 @@ struct CardStackEditor: View {
     }
 }
 
-/// Konum: search a place (MKLocalSearch), use where you are now (one GPS fix), or tap the map to drop the pin;
-/// "Bu konumu kaydet" stores the pin with its reverse-geocoded name. A typed name can be saved without coordinates.
+/// Konum: search a place (MKLocalSearch), use where you are now (one GPS fix), or move/tap the map under the pin.
+/// Liquid glass chrome over a full-screen map (LocationPickerSheet.kt): back, the picked place (tap to search), locate;
+/// a see-through dark panel below. With `onRemind` it also offers "Varınca / Ayrılınca hatırlat", saved in one tap.
 struct LocationEditor: View {
     @Environment(\.dismiss) private var dismiss
     let initial: ReminderLocation?
     let onSave: (ReminderLocation?) -> Void
+    var initialTrigger: LocationTrigger? = nil
+    var onRemind: ((ReminderLocation, LocationTrigger) -> Void)? = nil
     @State private var query = ""
+    @State private var searching = false
     @State private var results: [MKMapItem] = []
     @State private var camera: MapCameraPosition = .automatic
     @State private var pin: CLLocationCoordinate2D?
@@ -1376,130 +1380,232 @@ struct LocationEditor: View {
     @State private var locateError: String?
     @State private var fix = OneShotLocation()
     @State private var userMoving = false
+    @State private var leaving = false
+    @FocusState private var searchFocused: Bool
+
+    init(initial: ReminderLocation?, initialTrigger: LocationTrigger? = nil,
+         onRemind: ((ReminderLocation, LocationTrigger) -> Void)? = nil, onSave: @escaping (ReminderLocation?) -> Void) {
+        self.initial = initial
+        self.initialTrigger = initialTrigger
+        self.onRemind = onRemind
+        self.onSave = onSave
+    }
+
+    private static let ink = Color(argb: 0xFF0B0B0D)
+    private static let muted = Color(argb: 0xFF9A9AA4)
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                HStack(spacing: 10) {
+        ZStack {
+            MapReader { proxy in
+                Map(position: $camera) {
+                    UserAnnotation()
+                }
+                .mapStyle(.standard(pointsOfInterest: .excludingAll))
+                .onTapGesture { point in
+                    searchFocused = false
+                    if let c = proxy.convert(point, from: .local) { drop(c, name: "", address: "") }
+                }
+                .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in userMoving = true })
+                .onMapCameraChange(frequency: .onEnd) { context in
+                    guard userMoving else { return }
+                    userMoving = false
+                    drop(context.region.center, name: "", address: "", moveCamera: false)
+                }
+            }
+            .ignoresSafeArea()
+            // The pin marks the map centre; the map moves under it.
+            Image(systemName: "mappin")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(pin == nil ? Color.white.opacity(0.6) : Color.white)
+                .shadow(color: .black.opacity(0.45), radius: 4, y: 2)
+                .offset(y: -17)
+                .allowsHitTesting(false)
+            VStack(spacing: 10) {
+                topBar
+                if !results.isEmpty { resultList }
+                Spacer()
+                bottomPanel
+            }
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            leaving = initialTrigger?.onExit ?? false
+            if let lat = initial?.latitude, let lon = initial?.longitude {
+                let c = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+                pin = c
+                pinName = initial?.placeName ?? ""
+                pinAddress = initial?.address ?? ""
+                camera = .region(MKCoordinateRegion(center: c, latitudinalMeters: 900, longitudinalMeters: 900))
+            } else if let name = initial?.placeName {
+                query = name
+            }
+        }
+    }
+
+    // MARK: Chrome
+
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                    .frame(width: 44, height: 44).liquidGlass(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Vazgeç")
+            // The picked place lives here; tapping it searches instead.
+            Group {
+                if searching || pin == nil {
                     HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(Color(argb: 0xFF8E8E98))
-                        TextField("Yer ara", text: $query).submitLabel(.search).onSubmit(search)
-                            .foregroundStyle(.white)
+                        Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold)).foregroundStyle(Self.muted)
+                        TextField("", text: $query, prompt: Text("Yer ara ya da haritaya dokun").foregroundStyle(Self.muted))
+                            .font(RealFont.inter(13)).foregroundStyle(.white)
+                            .submitLabel(.search).onSubmit(search).focused($searchFocused)
                     }
-                    .padding(.horizontal, 12).frame(height: 42)
-                    .background(Capsule().fill(.white.opacity(0.08)))
-                    Button(action: locate) {
-                        Group {
-                            if locating { ProgressView().tint(Color(argb: 0xFF0B0B0D)) }
-                            else { Image(systemName: "location.fill").font(.system(size: 16, weight: .semibold)) }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else if let pin {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(pinName.isEmpty ? "Seçilen yer" : pinName).font(RealFont.inter(13, .semibold))
+                            .foregroundStyle(Color(argb: 0xFFF3F1F4)).lineLimit(1)
+                        Text(pinAddress.isEmpty ? String(format: "%.5f, %.5f", pin.latitude, pin.longitude) : pinAddress)
+                            .font(RealFont.inter(11)).foregroundStyle(Self.muted).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { searching = true; query = ""; searchFocused = true }
+                }
+            }
+            .padding(.horizontal, 16).frame(height: 44)
+            .liquidGlass(Capsule())
+            Button(action: locate) {
+                Group {
+                    if locating { ProgressView().tint(.white) }
+                    else { Image(systemName: "location").font(.system(size: 16, weight: .semibold)).foregroundStyle(.white) }
+                }
+                .frame(width: 44, height: 44).liquidGlass(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Şu anki konumum")
+        }
+        .padding(.horizontal, 12).padding(.top, 8)
+    }
+
+    private var resultList: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(results, id: \.self) { item in
+                    Button {
+                        drop(item.placemark.coordinate, name: item.name ?? query, address: item.placemark.title ?? "")
+                        results = []
+                        searching = false
+                        searchFocused = false
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name ?? "").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+                            Text(item.placemark.title ?? "").font(RealFont.inter(11)).foregroundStyle(Self.muted).lineLimit(1)
                         }
-                        .foregroundStyle(Color(argb: 0xFF0B0B0D))
-                        .frame(width: 42, height: 42)
-                        .background(Circle().fill(Color(argb: 0xFF91B9FF)))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Şu anki konumum")
-                }
-                .padding(.horizontal, 16).padding(.vertical, 10)
-
-                if !results.isEmpty {
-                    List(results, id: \.self) { item in
-                        Button {
-                            drop(item.placemark.coordinate, name: item.name ?? query, address: item.placemark.title ?? "")
-                            results = []
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.name ?? "").foregroundStyle(.white)
-                                Text(item.placemark.title ?? "").font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .listStyle(.plain)
-                    .frame(maxHeight: 240)
-                }
-
-                MapReader { proxy in
-                    Map(position: $camera) {
-                        UserAnnotation()
-                    }
-                    .onTapGesture { point in
-                        if let c = proxy.convert(point, from: .local) { drop(c, name: "", address: "") }
-                    }
-                    .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in userMoving = true })
-                    .onMapCameraChange(frequency: .onEnd) { context in
-                        guard userMoving else { return }
-                        userMoving = false
-                        drop(context.region.center, name: "", address: "", moveCamera: false)
-                    }
-                }
-                .overlay {
-                    // The pin marks the map centre; the map moves under it.
-                    Image(systemName: "mappin")
-                        .font(.system(size: 34, weight: .semibold))
-                        .foregroundStyle(pin == nil ? Color.white.opacity(0.75) : Color(argb: 0xFF91B9FF))
-                        .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
-                        .offset(y: -17)
-                        .allowsHitTesting(false)
-                }
-                .overlay(alignment: .top) {
-                    if pin == nil {
-                        Text("Haritayı kaydır veya bir yere dokun").font(RealFont.inter(12, .medium)).foregroundStyle(.white)
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(Capsule().fill(.black.opacity(0.6)))
-                            .padding(.top, 10)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    if let locateError {
-                        Text(locateError).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFE6BCB1))
-                    }
-                    if let pin {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(pinName.isEmpty ? "Seçilen yer" : pinName).font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
-                            Text(pinAddress.isEmpty ? String(format: "%.5f, %.5f", pin.latitude, pin.longitude) : pinAddress)
-                                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9A9AA4)).lineLimit(2)
-                        }
-                        Button {
-                            let name = pinName.isEmpty ? (pinAddress.isEmpty ? "Seçilen yer" : pinAddress) : pinName
-                            onSave(ReminderLocation(placeName: name, address: pinAddress, latitude: pin.latitude, longitude: pin.longitude))
-                            dismiss()
-                        } label: {
-                            Text("Bu konumu kaydet").font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFF0B0B0D))
-                                .frame(maxWidth: .infinity).frame(height: 48)
-                                .background(Capsule().fill(Color(argb: 0xFF91B9FF)))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    HStack {
-                        if !query.isEmpty && pin == nil {
-                            Button("“\(query)” olarak kaydet") { onSave(ReminderLocation(placeName: query)); dismiss() }
-                                .font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFF9DC3FF))
-                        }
-                        Spacer()
-                        if initial != nil {
-                            Button("Konumu kaldır", role: .destructive) { onSave(nil); dismiss() }.font(RealFont.inter(13, .medium))
-                        }
-                    }
-                }
-                .padding(16)
-            }
-            .background(Color(argb: 0xFF101012).ignoresSafeArea())
-            .navigationTitle("Konum")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } } }
-            .onAppear {
-                query = initial?.placeName ?? ""
-                if let lat = initial?.latitude, let lon = initial?.longitude {
-                    let c = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-                    pin = c
-                    pinName = initial?.placeName ?? ""
-                    pinAddress = initial?.address ?? ""
-                    camera = .region(MKCoordinateRegion(center: c, latitudinalMeters: 900, longitudinalMeters: 900))
                 }
             }
         }
-        .presentationDetents([.large])
+        .frame(maxHeight: 260)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(argb: 0xD908080A)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.08), lineWidth: 0.75))
+        .padding(.horizontal, 12)
+    }
+
+    private var bottomPanel: some View {
+        VStack(spacing: 10) {
+            if let locateError {
+                Text(locateError).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFE6BCB1))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if onRemind != nil {
+                remindPill
+                whitePill("Konum ekle", enabled: pin != nil) { savePlain() }
+            } else {
+                whitePill("Bu konumu kaydet", enabled: pin != nil) { savePlain() }
+            }
+            HStack {
+                if !query.isEmpty && pin == nil {
+                    Button("“\(query)” olarak kaydet") { onSave(ReminderLocation(placeName: query)); dismiss() }
+                        .font(RealFont.inter(13, .medium)).foregroundStyle(Self.muted)
+                }
+                Spacer()
+                if initial != nil {
+                    Button("Konumu kaldır", role: .destructive) { onSave(nil); dismiss() }.font(RealFont.inter(13, .medium))
+                }
+            }
+        }
+        .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 8)
+        .background {
+            // Dark but see-through: the map stays visible behind the panel.
+            UnevenRoundedRectangle(topLeadingRadius: 30, topTrailingRadius: 30, style: .continuous)
+                .fill(LinearGradient(colors: [Color(argb: 0x8C08080A), Color(argb: 0xD908080A)], startPoint: .top, endPoint: .bottom))
+                .overlay(UnevenRoundedRectangle(topLeadingRadius: 30, topTrailingRadius: 30, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [LiquidGlassTokens.contentEdgeTop, LiquidGlassTokens.contentEdgeBottom], startPoint: .top, endPoint: .bottom), lineWidth: 0.75))
+                .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    /// "Varınca hatırlat" with a small "Ayrılınca" at its right end; tapping the small one swaps them ("Ayrılınca
+    /// hatırlat" slides to the middle, "Varınca" moves to the left end). The middle saves.
+    private var remindPill: some View {
+        let enabled = pin != nil
+        return ZStack {
+            Capsule().fill(.white.opacity(enabled ? 1 : 0.4))
+            Text(leaving ? "Ayrılınca hatırlat" : "Varınca hatırlat")
+                .font(RealFont.inter(15, .semibold)).foregroundStyle(Self.ink)
+                .id(leaving)
+                .transition(.asymmetric(insertion: .move(edge: leaving ? .trailing : .leading).combined(with: .opacity),
+                                        removal: .move(edge: leaving ? .leading : .trailing).combined(with: .opacity)))
+            HStack {
+                if !leaving { Spacer() }
+                Button { withAnimation(.spring(response: 0.34, dampingFraction: 0.85)) { leaving.toggle() } } label: {
+                    Text(leaving ? "Varınca" : "Ayrılınca").font(RealFont.inter(12, .medium)).foregroundStyle(Self.ink.opacity(0.5))
+                        .padding(.horizontal, 12).padding(.vertical, 9)
+                        .background(Capsule().fill(Self.ink.opacity(0.06)))
+                }
+                .buttonStyle(.plain)
+                .disabled(!enabled)
+                if leaving { Spacer() }
+            }
+            .padding(.horizontal, 6)
+        }
+        .frame(height: 54)
+        .clipShape(Capsule())
+        .contentShape(Capsule())
+        .onTapGesture {
+            guard enabled, let pin else { return }
+            let place = pickedPlace(pin)
+            onRemind?(place, LocationTrigger(placeName: place.placeName, latitude: pin.latitude, longitude: pin.longitude,
+                                             radiusMeters: LocationTrigger.preciseRadius, onExit: leaving))
+            dismiss()
+        }
+    }
+
+    private func whitePill(_ label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(RealFont.inter(15, .semibold)).foregroundStyle(Self.ink)
+                .frame(maxWidth: .infinity).frame(height: 54)
+                .background(Capsule().fill(.white.opacity(enabled ? 1 : 0.4)))
+        }
+        .buttonStyle(PressScaleStyle(scale: 0.97))
+        .disabled(!enabled)
+    }
+
+    private func pickedPlace(_ pin: CLLocationCoordinate2D) -> ReminderLocation {
+        let name = pinName.isEmpty ? (pinAddress.isEmpty ? "Seçilen yer" : pinAddress) : pinName
+        return ReminderLocation(placeName: name, address: pinAddress, latitude: pin.latitude, longitude: pin.longitude)
+    }
+
+    private func savePlain() {
+        guard let pin else { return }
+        onSave(pickedPlace(pin))
+        dismiss()
     }
 
     private func search() {

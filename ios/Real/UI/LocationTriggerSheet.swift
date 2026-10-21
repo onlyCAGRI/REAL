@@ -14,6 +14,11 @@ final class PlaceReminderPermission: NSObject, CLLocationManagerDelegate {
         manager.delegate = self
     }
 
+    /// Already allowed (while using, precise): the pin skips the explanation panel and opens the map.
+    var granted: Bool {
+        [.authorizedWhenInUse, .authorizedAlways].contains(manager.authorizationStatus) && manager.accuracyAuthorization == .fullAccuracy
+    }
+
     func request(_ done: @escaping (Bool) -> Void) {
         completion = done
         switch manager.authorizationStatus {
