@@ -6,14 +6,15 @@ on:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
-  # A push whose commit message contains [appetize] also builds the Appetize simulator zip (the "Run workflow"
-  # button only shows when this file is on the default branch).
+  # A push whose commit message contains [appetize] also builds the Appetize simulator zip; one containing [showcase]
+  # takes the presentation screenshots instead of the compile check (the "Run workflow" button only shows when this
+  # file is on the default branch).
   workflow_dispatch:
     inputs:
       mode:
-        description: "compile = only check that it builds; appetize = simulator app zip; test = UI tests + screenshots"
+        description: "compile = only check that it builds; appetize = simulator app zip; test = UI tests + screenshots; showcase = presentation screenshots"
         type: choice
-        options: [compile, appetize, test]
+        options: [compile, appetize, test, showcase]
         default: compile
 
 concurrency:
@@ -27,6 +28,10 @@ jobs:
     # the Intel image always picks up. 80 minutes leaves room for the Appetize package on manual runs.
     runs-on: macos-15-intel
     timeout-minutes: 80
+    env:
+      # Showcase: only ShowcaseTests, on the calm presentation dataset. SHOTS: any run that takes screenshots.
+      SHOWCASE: ${{ inputs.mode == 'showcase' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[showcase]')) }}
+      SHOTS: ${{ inputs.mode == 'test' || inputs.mode == 'showcase' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[showcase]')) }}
     defaults:
       run:
         working-directory: ios
@@ -66,7 +71,7 @@ jobs:
 
       # Pushes and "compile" runs only check that the app builds: no tests, screenshots or app package.
       - name: Compile check
-        if: github.event_name == 'push' || inputs.mode == 'compile'
+        if: (github.event_name == 'push' && env.SHOWCASE != 'true') || inputs.mode == 'compile'
         run: |
           mkdir -p build
           set +e
@@ -79,7 +84,7 @@ jobs:
 
       - name: Pick simulator
         id: sim
-        if: inputs.mode == 'test'
+        if: env.SHOTS == 'true'
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
@@ -99,18 +104,20 @@ jobs:
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
 
       - name: Build and test
-        # Only "test" runs: UI tests and screenshots.
-        if: inputs.mode == 'test'
+        # "test" runs: UI tests and screenshots; "showcase" runs: only the presentation screenshots.
+        if: env.SHOTS == 'true'
         run: |
           mkdir -p build
           set +e
-          xcodebuild test             -project Real.xcodeproj -scheme Real             -destination "id=${{ steps.sim.outputs.udid }}"             -derivedDataPath build             -resultBundlePath build/TestResults.xcresult             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/xcodebuild.log 2>&1
+          ONLY=""
+          if [ "$SHOWCASE" = "true" ]; then ONLY="-only-testing:RealUITests/ShowcaseTests"; fi
+          xcodebuild test             -project Real.xcodeproj -scheme Real             -destination "id=${{ steps.sim.outputs.udid }}"             -derivedDataPath build             -resultBundlePath build/TestResults.xcresult $ONLY             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/xcodebuild.log 2>&1
           status=$?
           grep -E "error:|Test Case .*(passed|failed)|Executed|\*\* " build/xcodebuild.log | tail -300
           exit $status
 
       - name: Export screenshots
-        if: always() && inputs.mode == 'test'
+        if: always() && env.SHOTS == 'true'
         run: |
           mkdir -p screenshots raw
           xcrun xcresulttool export attachments --path build/TestResults.xcresult --output-path raw || true
@@ -131,10 +138,10 @@ jobs:
           ls -la screenshots
 
       - name: Upload screenshots
-        if: always() && inputs.mode == 'test'
+        if: always() && env.SHOTS == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
+          name: ${{ env.SHOWCASE == 'true' && 'showcase-screenshots' || 'screenshots' }}
           path: ios/screenshots
           if-no-files-found: ignore
 

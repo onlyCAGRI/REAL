@@ -20,7 +20,8 @@ struct RealApp: App {
             // Screenshot / UI test mode: in-memory store with a fixed demo dataset, no permission prompts.
             NotificationScheduler.enabled = false
             let store = ReminderStore(persist: false)
-            DemoData.seed(store)
+            let showcase = args.contains("-REALShowcase")
+            if showcase { DemoData.seedShowcase(store) } else { DemoData.seed(store) }
             _store = State(initialValue: store)
             let life = LifeStore(persist: false)
             DemoData.seedLife(life)
@@ -32,7 +33,8 @@ struct RealApp: App {
             DemoData.seedBooks(books)
             _books = State(initialValue: books)
             let discovery = DiscoveryStore(persist: false, service: DemoDiscoveryService())
-            discovery.seedDemo()
+            // Showcase screenshots keep real film titles out.
+            if !showcase { discovery.seedDemo() }
             _discovery = State(initialValue: discovery)
             initialPath = DemoData.path(for: args, store: store)
         } else {
@@ -274,6 +276,9 @@ enum DemoData {
         case "builtin": return [.category(.planned)]
         case "detail": return [.detail(1)]
         case "checklist": return [.detail(4)]
+        case "notes": return [.detail(2)]
+        case "stack": return [.detail(6)]
+        case "reading": return [.detail(7)]
         case "planner":
             UserDefaults.standard.set("daily", forKey: "planner_view_mode")
             return [.planner]
