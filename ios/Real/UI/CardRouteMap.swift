@@ -46,8 +46,7 @@ struct CardRouteMap: View {
 
     private func load() async {
         guard routeWanted else { route = nil; origin = nil; return }
-        let manager = CLLocationManager()
-        guard [.authorizedWhenInUse, .authorizedAlways].contains(manager.authorizationStatus), let here = manager.location else { return }
+        guard let here = await CurrentLocation.fix() else { return }
         guard here.distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)) > 1500 else { return }
         let request = MKDirections.Request()
         request.source = MKMapItem(placemark: MKPlacemark(coordinate: here.coordinate))

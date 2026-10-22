@@ -19,13 +19,12 @@ enum DepartureReminder {
         guard !item.isCompleted, let alert = item.alertAt, let lat = item.location?.latitude, let lng = item.location?.longitude else { return }
         let arrival = Date(timeIntervalSince1970: TimeInterval(alert) / 1000)
         guard arrival.timeIntervalSinceNow > 20 * 60, arrival.timeIntervalSinceNow < 24 * 3600 else { return }
-        let manager = CLLocationManager()
-        guard [.authorizedWhenInUse, .authorizedAlways].contains(manager.authorizationStatus), let here = manager.location else { return }
         let place = CLLocation(latitude: lat, longitude: lng)
-        // Close by: nothing to plan.
-        guard here.distance(from: place) > 1500 else { return }
         let id = item.id, name = item.location?.placeName ?? "", title = item.text
         Task {
+            guard let here = await CurrentLocation.fix() else { return }
+            // Close by: nothing to plan.
+            guard here.distance(from: place) > 1500 else { return }
             let request = MKDirections.Request()
             request.source = MKMapItem(placemark: MKPlacemark(coordinate: here.coordinate))
             request.destination = MKMapItem(placemark: MKPlacemark(coordinate: place.coordinate))
@@ -50,4 +49,49 @@ enum DepartureReminder {
     }
 
     static func refresh(_ items: [ReminderItem]) { items.forEach(plan) }
+}
+
+/// Where the phone is, for the departure time and the card's route: the system's cached position when it is under
+/// 30 minutes old, otherwise one fresh fix (nil without location permission, or after 15 seconds without a fix).
+@MainActor
+final class CurrentLocation: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private var waiting: CheckedContinuation<CLLocation?, Never>?
+    private static var active: Set<CurrentLocation> = []
+
+    static func fix() async -> CLLocation? {
+        let probe = CurrentLocation()
+        guard [.authorizedWhenInUse, .authorizedAlways].contains(probe.manager.authorizationStatus) else { return nil }
+        if let cached = probe.manager.location, cached.timestamp.timeIntervalSinceNow > -30 * 60 { return cached }
+        active.insert(probe)
+        defer { active.remove(probe) }
+        let fresh = await probe.request()
+        return fresh ?? probe.manager.location
+    }
+
+    private func request() async -> CLLocation? {
+        await withCheckedContinuation { c in
+            waiting = c
+            manager.delegate = self
+            manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+            manager.requestLocation()
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                self?.finish(nil)
+            }
+        }
+    }
+
+    private func finish(_ location: CLLocation?) {
+        waiting?.resume(returning: location)
+        waiting = nil
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        let last = locations.last
+        Task { @MainActor in self.finish(last) }
+    }
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor in self.finish(nil) }
+    }
 }
