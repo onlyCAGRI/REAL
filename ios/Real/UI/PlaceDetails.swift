@@ -47,10 +47,20 @@ struct PlaceDetails: View {
         .buttonStyle(.plain)
     }
 
+    private static func sameName(_ a: String?, _ b: String) -> Bool {
+        func norm(_ s: String) -> String {
+            s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "tr_TR"))
+                .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        let x = norm(a ?? ""), y = norm(b)
+        return x.count >= 3 && y.count >= 3 && (x == y || x.hasPrefix(y) || y.hasPrefix(x))
+    }
+
     private func load() async {
         guard let c = coordinate else { return }
         async let look = try? await MKLookAroundSceneRequest(coordinate: c).scene
-        // The business at the pin: Apple Maps' result for its name, only when it is really this place (within 150 m).
+        // The business at the pin: Apple Maps' result for its name, only when it is really this place (within 150 m
+        // and the same name; a street or an address picked by hand never borrows a nearby shop's phone).
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = location.placeName
         request.resultTypes = .pointOfInterest
@@ -58,6 +68,7 @@ struct PlaceDetails: View {
         let here = CLLocation(latitude: c.latitude, longitude: c.longitude)
         let found = (try? await MKLocalSearch(request: request).start())?.mapItems.first { m in
             CLLocation(latitude: m.placemark.coordinate.latitude, longitude: m.placemark.coordinate.longitude).distance(from: here) < 150
+                && Self.sameName(m.name, location.placeName)
         }
         let s = await look
         withAnimation(.easeOut(duration: 0.25)) { scene = s; item = found }

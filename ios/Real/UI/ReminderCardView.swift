@@ -223,15 +223,6 @@ struct ReminderCardView: View {
     }
 
     @ViewBuilder private var standardMeta: some View {
-        if reminder.isChecklist && !reminder.checklistItems.isEmpty {
-            HStack(spacing: 18) {
-                Text("\(reminder.checklistItems.count) madde")
-                Text("\(reminder.checklistItems.filter(\.isCompleted).count) tamamlandı")
-            }
-            .font(RealType.cardMeta)
-            .foregroundStyle(subtext)
-            .padding(.top, 4)
-        }
         if let journal = reminder.journal {
             HStack(spacing: 4) {
                 Text("Günlük")
@@ -241,42 +232,41 @@ struct ReminderCardView: View {
             .foregroundStyle(subtext)
             .padding(.top, 3)
         }
-        if !reminder.attachments.isEmpty || reminder.location != nil || reminder.cardStack != nil {
-            HStack(spacing: 10) {
-                if !reminder.attachments.isEmpty { Label("\(reminder.attachments.count)", systemImage: "photo") }
-                if let location = reminder.location { Label(location.placeName, systemImage: "mappin").lineLimit(1) }
-                if let stack = reminder.cardStack, !stack.cards.isEmpty { Label("\(stack.cards.count) kart", systemImage: "rectangle.stack") }
-            }
-            .labelStyle(CompactLabelStyle())
-            .font(RealType.cardMeta)
-            .foregroundStyle(subtext)
-            .padding(.top, 5)
-        }
-        if !reminder.isCompleted, reminder.alertAt != nil || reminder.plannedDateEpochDay != nil || reminder.locationTrigger != nil {
-            // Varınca / Ayrılınca: a small arrow next to the time (ReminderCard.kt); alone, with the place, when untimed.
-            HStack(spacing: 6) {
-                if let alert = reminder.alertAt {
+        // One quiet line (ReminderCard.kt): date · place (grey pin, or the Varınca / Ayrılınca arrow) · ✓ 2/5 for a
+        // checklist. Photos, voice and stacks stay on the detail page.
+        let trigger = reminder.isCompleted ? nil : reminder.locationTrigger
+        let plainPlace: String? = (trigger == nil && !reminder.isCompleted && reminder.location?.latitude != nil)
+            ? reminder.location.map { $0.placeName.trimmingCharacters(in: .whitespaces) }.flatMap { $0.isEmpty ? nil : $0 } : nil
+        let checklist = reminder.isChecklist && !reminder.checklistItems.isEmpty ? reminder.checklistItems : nil
+        let dated = !reminder.isCompleted && (reminder.alertAt != nil || reminder.plannedDateEpochDay != nil)
+        if dated || trigger != nil || plainPlace != nil || checklist != nil {
+            HStack(spacing: 5) {
+                if dated, let alert = reminder.alertAt {
                     let overdue = alert < EpochMillis.now
                     let color: Color = useDark ? (overdue ? Color(argb: 0xFFC53030) : Color(argb: 0xFF1E3A8A))
                         : (overdue ? RealColors.overdue : RealColors.accentBlue)
                     Text(reminder.hasRepeat ? "\(RealDates.reminder(alert)) • \(Recurrence.patternLabel(reminder) ?? reminder.repeatRule.displayName)"
                          : RealDates.reminder(alert))
-                        .font(RealType.cardMeta)
-                        .foregroundStyle(color)
-                } else if let day = reminder.plannedDateEpochDay {
+                        .foregroundStyle(color).lineLimit(1).layoutPriority(1)
+                } else if dated, let day = reminder.plannedDateEpochDay {
                     Text(RealDates.planned(day))
-                        .font(RealType.cardMeta)
-                        .foregroundStyle(useDark ? Color(argb: 0xFF1E3A8A) : RealColors.accentBlue)
+                        .foregroundStyle(useDark ? Color(argb: 0xFF1E3A8A) : RealColors.accentBlue).lineLimit(1).layoutPriority(1)
                 }
-                if let trigger = reminder.locationTrigger {
+                if let trigger {
                     PlaceTriggerGlyph(onExit: trigger.onExit).frame(width: 12, height: 12)
-                    if reminder.alertAt == nil && reminder.plannedDateEpochDay == nil {
-                        Text((trigger.onExit ? "Ayrılınca · " : "Varınca · ") + trigger.placeName)
-                            .font(RealType.cardMeta).lineLimit(1)
-                            .foregroundStyle(PlaceTriggerGlyph.tone(trigger.onExit))
-                    }
+                } else if plainPlace != nil {
+                    RealSymbol("mappin", size: 11).foregroundStyle(subtext)
+                }
+                if let name = trigger.map(\.placeName).flatMap({ $0.isEmpty ? nil : $0 }) ?? plainPlace {
+                    Text(name).foregroundStyle(subtext).lineLimit(1).truncationMode(.tail)
+                }
+                if let checklist {
+                    if dated || trigger != nil || plainPlace != nil { Text("·").foregroundStyle(subtext) }
+                    RealSymbol("checklist", size: 11).foregroundStyle(subtext)
+                    Text("\(checklist.filter(\.isCompleted).count)/\(checklist.count)").foregroundStyle(subtext).lineLimit(1).layoutPriority(1)
                 }
             }
+            .font(RealType.cardMeta)
             .padding(.top, 5)
         }
         if let done = reminder.completedAt {

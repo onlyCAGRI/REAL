@@ -119,8 +119,11 @@ struct AccountMenuOverlay: View {
                 onRestore: { showManage = false; restore() },
                 onSignOut: {
                     showManage = false
-                    auth.signOut()
-                    notice = "Hesaptan çıkıldı. Kartlar bu cihazda kalmaya devam ediyor."
+                    Task {
+                        await RealPush.shared.release()
+                        auth.signOut()
+                        notice = "Hesaptan çıkıldı. Kartlar bu cihazda kalmaya devam ediyor."
+                    }
                 })
         }
     }
@@ -837,10 +840,11 @@ struct AccountManageSheet: View {
         // An e-mail account confirms with its password instead of Google.
         if RealAuth.shared.usesPassword && password == nil { deletePassword = ""; askDeletePassword = true; return }
         deleteError = nil
-        deleting = password != nil ? "Şifre doğrulanıyor…" : "Google ile doğrulanıyor…"
+        deleting = password != nil ? "Şifre doğrulanıyor…" : (RealAuth.shared.usesApple ? "Apple ile doğrulanıyor…" : "Google ile doğrulanıyor…")
         Task {
             do {
                 if let password { try await RealAuth.shared.reauthenticateWithPassword(password) }
+                else if RealAuth.shared.usesApple { try await RealAuth.shared.reauthenticateWithApple() }
                 else { try await RealAuth.shared.reauthenticateWithGoogle() }
                 deleting = "Bulut verileri siliniyor…"
                 let op = UUID().uuidString.lowercased()

@@ -178,6 +178,7 @@ jobs:
           DIST_P12: ${{ secrets.IOS_DIST_P12 }}
           DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
           APPSTORE_PROFILE: ${{ secrets.IOS_APPSTORE_PROFILE }}
+          SHARE_APPSTORE_PROFILE: ${{ secrets.IOS_SHARE_APPSTORE_PROFILE }}
           TEAM_ID: VW6K9YCWLJ
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
@@ -196,6 +197,7 @@ jobs:
           rm -f "$RUNNER_TEMP/dist.p12"
           for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
             mkdir -p "$dir"; printf '%s' "$APPSTORE_PROFILE" | base64 --decode > "$dir/real-appstore.mobileprovision"
+            printf '%s' "$SHARE_APPSTORE_PROFILE" | base64 --decode > "$dir/real-share-appstore.mobileprovision"
           done
           echo "::warning title=signing identities::$(security find-identity -v -p codesigning "$KEYCHAIN" | head -3 | tr '\n' ' ')"
           cat > build/ExportOptions.plist <<EOF
@@ -207,7 +209,7 @@ jobs:
             <key>teamID</key><string>$TEAM_ID</string>
             <key>signingStyle</key><string>manual</string>
             <key>signingCertificate</key><string>Apple Distribution</string>
-            <key>provisioningProfiles</key><dict><key>com.cagri.real</key><string>REAL App Store</string></dict>
+            <key>provisioningProfiles</key><dict><key>com.cagri.real</key><string>REAL App Store</string><key>com.cagri.real.share</key><string>REAL Share App Store</string></dict>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict></plist>
           EOF
@@ -215,7 +217,7 @@ jobs:
           xcodebuild archive -project Real.xcodeproj -scheme Real -configuration Release \
             -destination "generic/platform=iOS" -archivePath build/REAL.xcarchive \
             DEVELOPMENT_TEAM=$TEAM_ID CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" \
-            REAL_PROFILE="REAL App Store" OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
+            REAL_PROFILE="REAL App Store" REAL_SHARE_PROFILE="REAL Share App Store" OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
             CURRENT_PROJECT_VERSION=$BUILD_NUMBER > build/archive.log 2>&1
           status=$?
           grep -E "error:|\*\* ARCHIVE" build/archive.log | sort -u | head -80

@@ -82,9 +82,22 @@ final class RealDeepLinks {
         var id: String { switch self { case .connection(let t): "c" + t; case .category(let t): "g" + t; case .sharedCard(let t): "s" + t } }
     }
     var pending: Pending?
+    static let shareHost = "real-share-staging.realapp.workers.dev"
 
     /// True when the URL was a REAL link.
     func handle(_ url: URL) -> Bool {
+        // Share links (universal links): /s/<id> a card, /c/<token> a connection, /g/<token> a shared category.
+        if url.scheme == "https", url.host == Self.shareHost, url.query == nil, url.fragment == nil {
+            let parts = url.pathComponents.filter { $0 != "/" }
+            guard parts.count == 2 else { return false }
+            let token = parts[1]
+            switch parts[0] {
+            case "s" where CardShareClient.isShareId(token): pending = .sharedCard(token); return true
+            case "c" where token.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil: pending = .connection(token); return true
+            case "g" where token.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil: pending = .category(token); return true
+            default: return false
+            }
+        }
         guard url.scheme == "real", url.user == nil, url.port == nil, url.query == nil, url.fragment == nil else { return false }
         let token = String(url.path.dropFirst())
         // real://shared/<share id>: a card someone shared (SharedCardLink.kt).

@@ -105,6 +105,7 @@ struct RealApp: App {
                     // Two-way cloud sync, shared categories and Pano, every minute while the app is open.
                     pano.reminders = store
                     pano.life = life
+                    RealPush.shared.attach(store, life, pano)
                     while !Task.isCancelled {
                         await RealCloudSync.shared.run(store, life)
                         await pano.sync()
@@ -122,8 +123,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         NotificationScheduler.registerCategories()
-        MainActor.assumeIsolated { RealAuth.shared.configure() }
+        MainActor.assumeIsolated {
+            RealAuth.shared.configure()
+            RealPush.shared.start(application)
+        }
         return true
+    }
+
+    /// A "pull now" push (share inbox, web sync, shared category, Pano) while REAL is in the background.
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+        await RealPush.shared.handle(userInfo) ? .newData : .noData
     }
 
     /// NotificationActionReceiver: "Tamamla" completes (repeats move on), "10 dk ertele" snoozes, a tap opens the card.

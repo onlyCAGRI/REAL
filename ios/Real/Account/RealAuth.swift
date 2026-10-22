@@ -4,6 +4,8 @@ import FirebaseCore
 import FirebaseAuth
 import FirebaseAppCheck
 import GoogleSignIn
+import AuthenticationServices
+import CryptoKit
 
 /// REAL account on iOS (AndroidBackend.auth + AndroidAuthUiController): Google sign-in through Firebase Auth, and the
 /// two tokens every REAL worker request carries (Firebase ID token + App Check token).
@@ -78,6 +80,60 @@ final class RealAuth {
             lastError = "Google ile giriş yapılamadı."
             return nil
         }
+    }
+
+    // MARK: Apple ile giriş
+
+    /// Apple → Firebase credential (with a one-time nonce). The name comes only on the first sign-in; it is kept then.
+    func signInWithApple() async -> Account? {
+        guard isAvailable else {
+            lastError = "Apple ile giriş bu sürümde henüz kullanılamıyor."
+            return nil
+        }
+        busy = true
+        lastError = nil
+        defer { busy = false }
+        let nonce = Self.randomNonce()
+        do {
+            let apple = try await AppleSignInRequest.run(nonce: nonce)
+            guard let data = apple.identityToken, let idToken = String(data: data, encoding: .utf8) else {
+                lastError = "Apple girişi tamamlanamadı."
+                return nil
+            }
+            let credential = OAuthProvider.appleCredential(withIDToken: idToken, rawNonce: nonce, fullName: apple.fullName)
+            let result = try await Auth.auth().signIn(with: credential)
+            let name = [apple.fullName?.givenName, apple.fullName?.familyName].compactMap { $0 }.joined(separator: " ")
+            if !name.isEmpty, (result.user.displayName ?? "").isEmpty {
+                let change = result.user.createProfileChangeRequest()
+                change.displayName = name
+                try? await change.commitChanges()
+                _ = try? await result.user.getIDTokenResult(forcingRefresh: true)
+            }
+            refreshAccount()
+            return account
+        } catch {
+            if (error as? ASAuthorizationError)?.code == .canceled { return nil }
+            lastError = "Apple ile giriş yapılamadı."
+            return nil
+        }
+    }
+
+    /// The signed-in account came from Apple (account deletion signs in with Apple again).
+    var usesApple: Bool { Auth.auth().currentUser?.providerData.contains { $0.providerID == "apple.com" } ?? false }
+
+    func reauthenticateWithApple() async throws {
+        guard let user = Auth.auth().currentUser else { throw URLError(.userAuthenticationRequired) }
+        let nonce = Self.randomNonce()
+        let apple = try await AppleSignInRequest.run(nonce: nonce)
+        guard let data = apple.identityToken, let idToken = String(data: data, encoding: .utf8) else { throw URLError(.userAuthenticationRequired) }
+        try await user.reauthenticate(with: OAuthProvider.appleCredential(withIDToken: idToken, rawNonce: nonce, fullName: nil))
+        _ = try await user.getIDTokenResult(forcingRefresh: true)
+    }
+
+    private static func randomNonce() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return bytes.map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: E-posta ile giriş (FirebaseAuthRepository: signInWithEmail / createAccountWithName / sendPasswordReset)
@@ -226,6 +282,51 @@ final class RealAuth {
         var top = root
         while let presented = top?.presentedViewController { top = presented }
         return top
+    }
+}
+
+/// One Apple ID request: ASAuthorizationController's delegate as an async call. The SHA-256 of [nonce] goes to Apple,
+/// the raw nonce to Firebase.
+@MainActor
+private final class AppleSignInRequest: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    private var continuation: CheckedContinuation<ASAuthorizationAppleIDCredential, Error>?
+    private static var running: AppleSignInRequest?
+
+    static func run(nonce: String) async throws -> ASAuthorizationAppleIDCredential {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = SHA256.hash(data: Data(nonce.utf8)).map { String(format: "%02x", $0) }.joined()
+        let delegate = AppleSignInRequest()
+        running = delegate
+        defer { running = nil }
+        return try await withCheckedThrowingContinuation { continuation in
+            delegate.continuation = continuation
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = delegate
+            controller.presentationContextProvider = delegate
+            controller.performRequests()
+        }
+    }
+
+    nonisolated func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        MainActor.assumeIsolated {
+            if let credential = authorization.credential as? ASAuthorizationAppleIDCredential { continuation?.resume(returning: credential) }
+            else { continuation?.resume(throwing: ASAuthorizationError(.failed)) }
+            continuation = nil
+        }
+    }
+
+    nonisolated func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        MainActor.assumeIsolated {
+            continuation?.resume(throwing: error)
+            continuation = nil
+        }
+    }
+
+    nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        MainActor.assumeIsolated {
+            UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first ?? ASPresentationAnchor()
+        }
     }
 }
 

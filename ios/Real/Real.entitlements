@@ -6,5 +6,17 @@
 	<array>
 		<string>group.com.cagri.real</string>
 	</array>
+	<key>aps-environment</key>
+	<string>production</string>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:real-share-staging.realapp.workers.dev</string>
+	</array>
 </dict>
 </plist>

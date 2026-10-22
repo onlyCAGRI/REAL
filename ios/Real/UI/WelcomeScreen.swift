@@ -147,8 +147,7 @@ struct WelcomeScreen: View {
                         .multilineTextAlignment(.center).frame(width: 300).padding(.top, 8)
                 }
                 Color.clear.frame(height: 9)
-                // Shown with the sign-in set but not available yet: it cannot be pressed.
-                authButton("Apple ile devam et", emphasized: false)
+                appleButton
                 Color.clear.frame(height: 9)
                 if auth.isAvailable {
                     Button { focused = false; authError = nil; showEmailAuth = true } label: {
@@ -208,6 +207,37 @@ struct WelcomeScreen: View {
             .disabled(auth.busy)
         } else {
             authButton("Google ile devam et", emphasized: true)
+        }
+    }
+
+    /// Apple → Firebase, then the same restore and greeting as Google.
+    @ViewBuilder
+    private var appleButton: some View {
+        if auth.isAvailable {
+            Button {
+                focused = false
+                authError = nil
+                Task { @MainActor in
+                    guard let account = await auth.signInWithApple() else {
+                        authError = auth.lastError
+                        return
+                    }
+                    await finishAfterAuthentication(account)
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "apple.logo").font(.system(size: 17))
+                    Text("Apple ile devam et")
+                }
+                    .font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                    .frame(width: 300, height: 50)
+                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white.opacity(0.08)))
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.14)))
+            }
+            .buttonStyle(.plain)
+            .disabled(auth.busy)
+        } else {
+            authButton("Apple ile devam et", emphasized: false)
         }
     }
 

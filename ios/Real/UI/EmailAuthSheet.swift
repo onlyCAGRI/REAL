@@ -31,6 +31,13 @@ struct AuthChoiceSheet: View {
                         else { error = auth.lastError }
                     }
                 }
+                methodRow(glyph: "A", tone: .white, title: "Apple ile devam et", subtitle: "Hesabını Apple ile bağla") {
+                    error = nil
+                    Task { @MainActor in
+                        if let account = await auth.signInWithApple() { dismiss(); onAuthenticated(account) }
+                        else { error = auth.lastError }
+                    }
+                }
                 methodRow(glyph: "@", tone: Color(argb: 0xFFB59BFF), title: "E-posta ile devam et", subtitle: "Giriş yap ya da hesap oluştur") {
                     error = nil
                     withAnimation(.easeOut(duration: 0.18)) { showEmail = true }
@@ -57,6 +64,7 @@ struct AuthChoiceSheet: View {
             HStack(spacing: 14) {
                 Group {
                     if glyph == "G" { Image("GoogleG").resizable().frame(width: 20, height: 20) }
+                    else if glyph == "A" { Image(systemName: "apple.logo").font(.system(size: 19)).foregroundStyle(.white) }
                     else { Text(glyph).font(RealFont.inter(18, .bold)).foregroundStyle(tone) }
                 }
                     .frame(width: 42, height: 42).background(Circle().fill(tone.opacity(0.14)))
