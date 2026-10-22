@@ -35,7 +35,9 @@ final class RealPush: NSObject, MessagingDelegate {
     func register(_ known: String? = nil) {
         Task {
             guard let uid = RealAuth.shared.account?.uid else { return }
-            guard let token = known ?? (try? await Messaging.messaging().token()) else { return }
+            var fetched = known
+            if fetched == nil { fetched = try? await Messaging.messaging().token() }
+            guard let token = fetched else { return }
             guard UserDefaults.standard.string(forKey: Self.sentKey) != "\(uid):\(token)" else { return }
             if (try? await RealBackend.post("/api/boards/v1/push-token", ["token": token], timeout: 20)) != nil {
                 UserDefaults.standard.set("\(uid):\(token)", forKey: Self.sentKey)
