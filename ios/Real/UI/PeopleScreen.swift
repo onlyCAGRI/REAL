@@ -194,7 +194,7 @@ struct PeopleScreen: View {
                 Button("Bitti") { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(.white)
             }
             if RealAuth.shared.account == nil {
-                Text("Kişi eklemek için REAL hesabınla giriş yap.").font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.6))
+                SignInRequiredPrompt(reason: .people)
             } else {
                 Button {
                     Task { inviteURL = try? await connections.createInvite() }

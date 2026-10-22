@@ -252,22 +252,32 @@ struct ReminderCardView: View {
             .foregroundStyle(subtext)
             .padding(.top, 5)
         }
-        if !reminder.isCompleted {
-            if let alert = reminder.alertAt {
-                let overdue = alert < EpochMillis.now
-                let color: Color = useDark ? (overdue ? Color(argb: 0xFFC53030) : Color(argb: 0xFF1E3A8A))
-                    : (overdue ? RealColors.overdue : RealColors.accentBlue)
-                Text(reminder.hasRepeat ? "\(RealDates.reminder(alert)) • \(Recurrence.patternLabel(reminder) ?? reminder.repeatRule.displayName)"
-                     : RealDates.reminder(alert))
-                    .font(RealType.cardMeta)
-                    .foregroundStyle(color)
-                    .padding(.top, 5)
-            } else if let day = reminder.plannedDateEpochDay {
-                Text(RealDates.planned(day))
-                    .font(RealType.cardMeta)
-                    .foregroundStyle(useDark ? Color(argb: 0xFF1E3A8A) : RealColors.accentBlue)
-                    .padding(.top, 5)
+        if !reminder.isCompleted, reminder.alertAt != nil || reminder.plannedDateEpochDay != nil || reminder.locationTrigger != nil {
+            // Varınca / Ayrılınca: a small arrow next to the time (ReminderCard.kt); alone, with the place, when untimed.
+            HStack(spacing: 6) {
+                if let alert = reminder.alertAt {
+                    let overdue = alert < EpochMillis.now
+                    let color: Color = useDark ? (overdue ? Color(argb: 0xFFC53030) : Color(argb: 0xFF1E3A8A))
+                        : (overdue ? RealColors.overdue : RealColors.accentBlue)
+                    Text(reminder.hasRepeat ? "\(RealDates.reminder(alert)) • \(Recurrence.patternLabel(reminder) ?? reminder.repeatRule.displayName)"
+                         : RealDates.reminder(alert))
+                        .font(RealType.cardMeta)
+                        .foregroundStyle(color)
+                } else if let day = reminder.plannedDateEpochDay {
+                    Text(RealDates.planned(day))
+                        .font(RealType.cardMeta)
+                        .foregroundStyle(useDark ? Color(argb: 0xFF1E3A8A) : RealColors.accentBlue)
+                }
+                if let trigger = reminder.locationTrigger {
+                    PlaceTriggerGlyph(onExit: trigger.onExit).frame(width: 12, height: 12)
+                    if reminder.alertAt == nil && reminder.plannedDateEpochDay == nil {
+                        Text((trigger.onExit ? "Ayrılınca · " : "Varınca · ") + trigger.placeName)
+                            .font(RealType.cardMeta).lineLimit(1)
+                            .foregroundStyle(PlaceTriggerGlyph.tone(trigger.onExit))
+                    }
+                }
             }
+            .padding(.top, 5)
         }
         if let done = reminder.completedAt {
             Text("Tamamlandı: \(RealDates.reminder(done))")
@@ -450,5 +460,26 @@ struct CategoryPill: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
             .overlay(Capsule().strokeBorder(foreground.opacity(0.42), lineWidth: 1))
+    }
+}
+
+/// Varınca: a navigation arrow pointing in (green); Ayrılınca: the same arrow turned around (amber).
+struct PlaceTriggerGlyph: View {
+    let onExit: Bool
+    static func tone(_ onExit: Bool) -> Color { onExit ? Color(argb: 0xFFFFB86F) : Color(argb: 0xFF5DCAA5) }
+
+    var body: some View {
+        Canvas { ctx, size in
+            let w = size.width, h = size.height
+            var arrow = Path()
+            arrow.move(to: CGPoint(x: w * 0.92, y: h * 0.08))
+            arrow.addLine(to: CGPoint(x: w * 0.08, y: h * 0.45))
+            arrow.addLine(to: CGPoint(x: w * 0.48, y: h * 0.52))
+            arrow.addLine(to: CGPoint(x: w * 0.55, y: h * 0.92))
+            arrow.closeSubpath()
+            ctx.fill(arrow, with: .color(Self.tone(onExit)))
+        }
+        .rotationEffect(.degrees(onExit ? 180 : 0))
+        .accessibilityLabel(onExit ? "Ayrılınca hatırlatır" : "Varınca hatırlatır")
     }
 }

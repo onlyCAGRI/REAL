@@ -27,11 +27,11 @@ struct AccountMenuOverlay: View {
     /// Hesap ekle: Google or e-posta (AuthChoiceSheet), then the account's cards come back.
     private func signInAndRestore() { showAuthChoice = true }
 
-    private func restore() {
+    private func restore(keepGuest: Bool = false) {
         Task { @MainActor in
             do {
                 RealCloudSync.shared.reset()
-                let summary = try await RealCloudRestore.run(store: store, life: life)
+                let summary = try await RealCloudRestore.run(store: store, life: life, keepGuest: keepGuest)
                 var text = "Hesabından \(summary.cards) kart, \(summary.categories) kategori ve \(summary.moods) mood yüklendi"
                 if summary.categoryOrder { text += ", kategori sıralaman uygulandı" }
                 // Boards come from their own service; a failure there does not undo the cards.
@@ -72,7 +72,7 @@ struct AccountMenuOverlay: View {
                     item(.star, "REAL Pro") { notice = "REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak." }
                     if auth.account == nil {
                         item(.add, auth.busy ? "Google açılıyor…" : "Hesap ekle") { signInAndRestore() }
-                            .sheet(isPresented: $showAuthChoice) { AuthChoiceSheet { _ in restore() } }
+                            .sheet(isPresented: $showAuthChoice) { AuthChoiceSheet { _ in restore(keepGuest: true) } }
                     } else {
                         item(.manage, "Hesapları yönet") { showManage = true }
                         item(.person, "Kişilerim") { showPeople = true }

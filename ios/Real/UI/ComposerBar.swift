@@ -214,7 +214,10 @@ struct ComposerBar: View {
                             onDismiss: { showLocationChoice = false })
         }
         // "Varınca / Ayrılınca hatırlat" sits on the map itself once location permission is there.
-        .fullScreenCover(isPresented: $showLocationEditor) {
+        // The pin closed the keyboard; once the map is done the composer comes back up so the person keeps typing.
+        .fullScreenCover(isPresented: $showLocationEditor, onDismiss: {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focus = .title }
+        }) {
             LocationEditor(initial: location, initialTrigger: placeTrigger,
                            onRemind: pickForTrigger ? { place, trigger in location = place; placeTrigger = trigger } : nil) { picked in
                 location = picked

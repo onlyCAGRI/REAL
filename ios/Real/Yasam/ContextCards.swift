@@ -123,13 +123,21 @@ enum ContextCardStore {
         }
         return h
     }
+    /// Posted after Settings' test buttons (and every other change): Home looks again right away, not on the next minute.
+    static let changed = Notification.Name("RealContextCardsChanged")
     static func update(_ change: (ContextCardHistory) -> ContextCardHistory) {
         let next = change(load())
         if let d = try? JSONEncoder().encode(next) { UserDefaults.standard.set(d, forKey: key) }
     }
     /// Settings test buttons.
-    static func force(_ type: ContextCardType?) { update { var h = $0; h.forcedType = type?.rawValue; h.forcedDone = nil; return h } }
-    static func forceAll() { update { var h = $0; h.forcedType = ContextCardEngine.forceAll; h.forcedDone = nil; return h } }
+    static func force(_ type: ContextCardType?) {
+        update { var h = $0; h.forcedType = type?.rawValue; h.forcedDone = nil; return h }
+        NotificationCenter.default.post(name: changed, object: nil)
+    }
+    static func forceAll() {
+        update { var h = $0; h.forcedType = ContextCardEngine.forceAll; h.forcedDone = nil; return h }
+        NotificationCenter.default.post(name: changed, object: nil)
+    }
 }
 
 enum ContextCardEngine {
@@ -300,6 +308,8 @@ struct HomeContextCard: View {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: ContextCardStore.changed)) { _ in evaluate() }
+        .onAppear { evaluate() }
         .onChange(of: card?.type) { _, type in ContextCardPresence.shared.activeType = type }
         .onDisappear { ContextCardPresence.shared.activeType = nil }
     }

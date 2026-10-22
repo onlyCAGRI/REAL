@@ -196,7 +196,10 @@ struct WelcomeScreen: View {
                     await finishAfterAuthentication(account)
                 }
             } label: {
-                Text(auth.busy ? "Google açılıyor…" : "Google ile devam et")
+                HStack(spacing: 10) {
+                    Image("GoogleG").resizable().frame(width: 18, height: 18)
+                    Text(auth.busy ? "Google açılıyor…" : "Google ile devam et")
+                }
                     .font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                     .frame(width: 300, height: 50)
                     .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white))
@@ -227,7 +230,13 @@ struct WelcomeScreen: View {
 
     /// WelcomeAuthButton in its disabled state (sign-in not available in this build, or Apple for now).
     private func authButton(_ label: String, emphasized: Bool) -> some View {
-        Text(label).font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFF66666E))
+        HStack(spacing: 10) {
+            // The Google / Apple mark before the label, dimmed with it.
+            if label.hasPrefix("Google") { Image("GoogleG").resizable().frame(width: 18, height: 18).opacity(0.5) }
+            if label.hasPrefix("Apple") { Image(systemName: "apple.logo").font(.system(size: 17)) }
+            Text(label)
+        }
+        .font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFF66666E))
             .frame(width: 300, height: 50)
             .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white.opacity(0.05)))
             .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.06), lineWidth: 1))

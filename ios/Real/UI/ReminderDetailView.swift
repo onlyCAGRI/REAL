@@ -24,6 +24,7 @@ struct ReminderDetailView: View {
     @State private var voiceRecorderOpen = false
     /// "Hava durumunu gizle" on this card (kept by CardWeatherRepository).
     @State private var weatherHidden = false
+    @State private var weatherUnavailable = false
     @State private var textToolsKey: String?
     @State private var showMediaSearch = false
     @State private var showGameSearch = false
@@ -220,7 +221,7 @@ struct ReminderDetailView: View {
 
     private func blockOrder(_ r: ReminderItem) -> [String] {
         let active = r.cardContentKeys(includeEmptyChecklist: editing && checklistOpen, includeVoiceRecorder: editing && voiceRecorderOpen, includeJournal: false)
-            .filter { $0 != "weather" || (!weatherHidden && CardWeatherRepository.mayShow(r)) }
+            .filter { $0 != "weather" || (!weatherHidden && !weatherUnavailable && CardWeatherRepository.mayShow(r)) }
         return r.resolvedBlockOrder(active)
     }
 
@@ -273,7 +274,7 @@ struct ReminderDetailView: View {
             // A half-width or short slot ("Sırala") gets the compact layout.
             let p = (r.contentBlockLayout["weather"] ?? CardBlockPlacement()).normalized
             CardWeatherBlock(reminder: r, compact: p.span < 6 || (p.minHeight > 0 && p.minHeight < 150), interactive: !editing,
-                             onHide: { weatherHidden = true })
+                             onHide: { weatherHidden = true }, onUnavailable: { weatherUnavailable = true })
         case "game":
             if let g = r.gameBlocks.first(where: { $0.id == id }) {
                 GameBlockView(block: g, editing: editing, onRemove: { draft?.gameBlocks.removeAll { $0.id == id } }, heroInset: heroInset)
@@ -447,6 +448,17 @@ struct ReminderDetailView: View {
                         HStack(spacing: 6) {
                             categoryBadge(category, size: 16)
                             Text(category.name).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFC4C4CE))
+                        }
+                        .padding(.top, 1)
+                    }
+                    // Varınca / Ayrılınca: the place and how close counts (same arrow as on Home).
+                    if let trigger = r.locationTrigger, !r.isCompleted {
+                        HStack(spacing: 6) {
+                            PlaceTriggerGlyph(onExit: trigger.onExit).frame(width: 12, height: 12)
+                            Text((trigger.onExit ? "Ayrılınca · " : "Varınca · ") + trigger.placeName
+                                 + (trigger.onExit ? " · \(trigger.radiusMeters) m dışına çıkınca" : " · \(trigger.radiusMeters) m içinde"))
+                                .font(RealFont.inter(12)).lineLimit(1)
+                                .foregroundStyle(PlaceTriggerGlyph.tone(trigger.onExit))
                         }
                         .padding(.top, 1)
                     }

@@ -98,7 +98,7 @@ struct CardShareSheet: View {
                 Button("Bitti") { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(.white)
             }
             if RealAuth.shared.account == nil {
-                Text("Kart paylaşmak için REAL hesabınla giriş yap.").font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.6))
+                SignInRequiredPrompt(reason: .share)
                 ShareLink(item: card.shareText) {
                     Text("Metin olarak paylaş").font(RealFont.inter(15)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 46).background(Capsule().fill(.white.opacity(0.08)))

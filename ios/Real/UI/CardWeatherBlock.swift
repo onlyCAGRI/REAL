@@ -95,6 +95,8 @@ struct CardWeatherBlock: View {
     /// Long press → "Hava durumunu gizle"; off while the card is being edited (the grid owns the gestures then).
     var interactive = true
     var onHide: () -> Void = {}
+    /// No forecast came (offline, not signed in, too far ahead…): the card drops the slot instead of an empty box.
+    var onUnavailable: () -> Void = {}
     @State private var weather: CardWeather?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -108,12 +110,15 @@ struct CardWeatherBlock: View {
             if let w = weather, let target = CardWeatherRepository.target(reminder) {
                 content(w, target)
             } else {
-                // Still loading (or no forecast yet): keep the slot calm instead of jumping.
+                // Still loading: keep the slot calm instead of jumping.
                 RoundedRectangle(cornerRadius: 22, style: .continuous).fill(weatherSurface)
                     .frame(maxWidth: .infinity, minHeight: compact ? 72 : 120)
             }
         }
-        .task(id: loadKey) { weather = await CardWeatherRepository.load(reminder) }
+        .task(id: loadKey) {
+            weather = await CardWeatherRepository.load(reminder)
+            if weather == nil, !Task.isCancelled { onUnavailable() }
+        }
     }
 
     private func whenText(_ at: Int64, _ allDay: Bool) -> String {

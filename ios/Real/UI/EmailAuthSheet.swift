@@ -4,6 +4,9 @@ import SwiftUI
 /// (the welcome screen's "E-posta ile devam et").
 struct AuthChoiceSheet: View {
     var startWithEmail = false
+    /// SignInRequired: what the guest tapped asks for an account.
+    var title = "Hesap ekle"
+    var subtitle = "Notların bu cihazda kalır. Hesap; eşitleme ve yedekleme için kullanılır."
     let onAuthenticated: (RealAuth.Account) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var auth = RealAuth.shared
@@ -17,8 +20,8 @@ struct AuthChoiceSheet: View {
                               onAuthenticated: { account in dismiss(); onAuthenticated(account) })
                     .transition(.opacity)
             } else {
-                Text("Hesap ekle").font(RealFont.inter(24, .semibold)).foregroundStyle(.white).padding(.top, 8)
-                Text("Notların bu cihazda kalır. Hesap; eşitleme ve yedekleme için kullanılır.")
+                Text(title).font(RealFont.inter(24, .semibold)).foregroundStyle(.white).padding(.top, 8)
+                Text(subtitle)
                     .font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFA9A9B2)).padding(.bottom, 6)
                 methodRow(glyph: "G", tone: Color(argb: 0xFF6FD6FF), title: auth.busy ? "Google açılıyor…" : "Google ile devam et",
                           subtitle: "Hesabını Google ile bağla") {
@@ -52,7 +55,10 @@ struct AuthChoiceSheet: View {
     private func methodRow(glyph: String, tone: Color, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                Text(glyph).font(RealFont.inter(18, .bold)).foregroundStyle(tone)
+                Group {
+                    if glyph == "G" { Image("GoogleG").resizable().frame(width: 20, height: 20) }
+                    else { Text(glyph).font(RealFont.inter(18, .bold)).foregroundStyle(tone) }
+                }
                     .frame(width: 42, height: 42).background(Circle().fill(tone.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(RealFont.inter(16, .medium)).foregroundStyle(.white)

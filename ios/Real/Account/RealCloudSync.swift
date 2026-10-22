@@ -417,6 +417,12 @@ final class RealCloudSync {
                         if let p = payload { try await uploadFiles(p, resourceId: id, &st) }
                     }
                 } catch {
+                    if (error as? RealBackend.Failure)?.status == 507 {
+                        // Bulut alanı dolu: the card waits on this iPhone and goes up on a later sync once there is room.
+                        found.append(issue(docKey, store, st, reason: "Bulut alanın doldu; ek bu telefonda duruyor. Yer açınca kendiliğinden yüklenir."))
+                        Task { @MainActor in await CloudSpace.shared.check(force: true) }
+                        continue
+                    }
                     let network = (error as? URLError).map { [.notConnectedToInternet, .networkConnectionLost, .cancelled].contains($0.code) } ?? false
                     if network || error is CancellationError || !(Self.recordOnly(error) || error is URLError) { throw error }
                     found.append(issue(docKey, store, st,

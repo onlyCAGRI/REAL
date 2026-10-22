@@ -176,7 +176,10 @@ struct HomeView: View {
                         .foregroundStyle(RealColors.textMuted)
                         .padding(.top, 40)
                 }
-                if selectedIds.isEmpty && !searching { HomeContextCard(onOpen: openContext) }
+                if selectedIds.isEmpty && !searching {
+                    HomeContextCard(onOpen: openContext)
+                    GuestBackupNudge(cardCount: store.reminders.count)
+                }
                 ForEach(active) { reminder in
                     card(reminder, swipe: true, label: searching)
                 }
@@ -271,6 +274,7 @@ struct HomeView: View {
             if phase == .active, NotificationScheduler.enabled { DepartureReminder.refresh(store.reminders) }
         }
         .task { await ProfilePictures.push() }
+        .cloudSpaceNotice()
         .sheet(item: $editingBuiltIn) { category in
             BuiltInCategoryColorSheet(category: category)
         }

@@ -56,7 +56,12 @@ enum RealBackend {
 enum RealCloudRestore {
     struct Summary { let cards: Int; let categories: Int; let moods: Int; let categoryOrder: Bool; let files: Int }
 
-    static func run(store: ReminderStore, life: LifeStore) async throws -> Summary {
+    /// [keepGuest]: signing in from Misafir — what was made on this iPhone and is not in the account stays and goes up
+    /// with the next sync (Android's guest adoption), instead of being replaced.
+    static func run(store: ReminderStore, life: LifeStore, keepGuest: Bool = false) async throws -> Summary {
+        let guestCards = keepGuest ? store.reminders.filter { $0.id >= 0 && $0.sharedCardId == nil } : []
+        let guestCategories = keepGuest ? store.categories.filter { !$0.isSharedMirror } : []
+        let guestMoods = keepGuest ? life.moods : []
         var cards: [Int64: ReminderItem] = [:]
         var categories: [Int64: CustomCategory] = [:]
         var moods: [Int64: MoodTrackerEntry] = [:]
@@ -116,7 +121,11 @@ enum RealCloudRestore {
             c.voiceRecordings = c.voiceRecordings.filter { !$0.localPath.isEmpty }
             return c
         }.sorted { $0.createdAt > $1.createdAt }
-        store.replaceAll(reminders: restoredCards, categories: categories.values.sorted { $0.id < $1.id }, ownerName: store.ownerName)
+        for c in guestCategories where categories[c.id] == nil { categories[c.id] = c }
+        let keptCards = guestCards.filter { cards[$0.id] == nil }
+        for m in guestMoods where moods[m.id] == nil { moods[m.id] = m }
+        store.replaceAll(reminders: (restoredCards + keptCards).sorted { $0.createdAt > $1.createdAt },
+                         categories: categories.values.sorted { $0.id < $1.id }, ownerName: store.ownerName)
         if !moods.isEmpty {
             life.replaceAll(goal: life.goalMl, entries: life.entries, moods: moods.values.sorted { $0.id > $1.id })
         }
