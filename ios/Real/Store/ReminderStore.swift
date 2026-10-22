@@ -116,7 +116,7 @@ final class ReminderStore {
     func addDivider(categoryId: Int64, title: String) {
         guard AppUpdateGate.writable() else { return }
         let now = EpochMillis.now
-        var d = ReminderItem(id: max(now, (reminders.map(\.id).max() ?? 0) + 1), text: String(title.trimmingCharacters(in: .whitespaces).prefix(40)), createdAt: now)
+        var d = ReminderItem(id: UsedCardIds.next(now: now, existing: reminders.map(\.id)), text: String(title.trimmingCharacters(in: .whitespaces).prefix(40)), createdAt: now)
         d.customCategoryId = categoryId
         d.sendImmediateNotification = false
         d.isDivider = true
@@ -200,7 +200,7 @@ final class ReminderStore {
                      categoryId: Int64? = nil, isImportant: Bool = false, checklist: [String] = [],
                      configure: ((inout ReminderItem) -> Void)? = nil) -> ReminderItem {
         let now = EpochMillis.now
-        var item = ReminderItem(id: CategoryRules.nextId(now: now, existing: reminders.map(\.id)),
+        var item = ReminderItem(id: UsedCardIds.next(now: now, existing: reminders.map(\.id)),
                                 text: text.trimmingCharacters(in: .whitespacesAndNewlines), createdAt: now)
         item.alertAt = alertAt
         item.anchorAlertAt = alertAt

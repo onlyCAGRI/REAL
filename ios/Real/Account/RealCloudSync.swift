@@ -99,9 +99,12 @@ final class RealCloudSync {
     }
     private func loadState() -> State {
         guard let url = stateURL, let data = try? Data(contentsOf: url) else { return State() }
-        return (try? JSONDecoder().decode(State.self, from: data)) ?? State()
+        let st = (try? JSONDecoder().decode(State.self, from: data)) ?? State()
+        UsedCardIds.remember(st.records.keys)
+        return st
     }
     private func saveState(_ st: State) {
+        UsedCardIds.remember(st.records.keys)
         guard let url = stateURL, let data = try? JSONEncoder().encode(st) else { return }
         try? data.write(to: url, options: .atomic)
     }
@@ -822,5 +825,23 @@ final class RealCloudSync {
             prev = c
         }
         return out + "\""
+    }
+}
+
+/// Card ids this account ever had (live or deleted, here or elsewhere). The account keeps a deletion under its id, so a
+/// new card reusing one would arrive as "Hesapta silinmiş": ReminderStore skips them when it numbers a new card.
+enum UsedCardIds {
+    private static let lock = NSLock()
+    private static var ids = Set<Int64>()
+    static func remember<S: Sequence>(_ docKeys: S) where S.Element == String {
+        let found = docKeys.compactMap { $0.hasPrefix("CARD/") ? Int64($0.dropFirst(5)) : nil }
+        lock.lock(); ids.formUnion(found); lock.unlock()
+    }
+    static func contains(_ id: Int64) -> Bool { lock.lock(); defer { lock.unlock() }; return ids.contains(id) }
+    /// After every card here, and never an id the account already used.
+    static func next(now: Int64, existing: [Int64]) -> Int64 {
+        var id = max(now, (existing.max() ?? 0) + 1)
+        while contains(id) { id += 1 }
+        return id
     }
 }
