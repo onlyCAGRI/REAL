@@ -33,3 +33,9 @@ CI (`.github/workflows/ios.yml`) builds on macOS, runs the tests, launches the a
 `-REALDemo -REALScreen <home|category|builtin|detail|checklist|planner>` and uploads the screenshots and a
 simulator build as artifacts.
 <!-- build 4 -->
+
+## CI
+
+A push to `main` that touches `ios/` builds the app. Put `[appetize]` in the commit message for the Appetize simulator zip
+(artifact "REAL-simulator-app"), or `[testflight]` for a signed build uploaded to TestFlight. A newer push cancels the
+run in progress. An empty commit does not start a run (the workflow only watches `ios/`).
