@@ -37,5 +37,6 @@ simulator build as artifacts.
 ## CI
 
 A push to `main` that touches `ios/` builds the app. Put `[appetize]` in the commit message for the Appetize simulator zip
-(artifact "REAL-simulator-app"), or `[testflight]` for a signed build uploaded to TestFlight. A newer push cancels the If a newer push without the tag cancels a TestFlight run, the next upload needs the tag again.
-run in progress. An empty commit does not start a run (the workflow only watches `ios/`).
+(artifact "REAL-simulator-app"), or `[testflight]` for a signed build uploaded to TestFlight. A newer push cancels the
+run in progress. An empty commit does not start a run (the workflow only watches `ios/`). If a newer push without the tag cancels a TestFlight run, the next upload needs
+the tag again.
