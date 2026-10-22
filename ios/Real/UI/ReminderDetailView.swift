@@ -784,9 +784,9 @@ struct ReminderDetailView: View {
     private func locationBlock(_ l: ReminderLocation, card: ReminderItem) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if let lat = l.latitude, let lon = l.longitude {
-                // Yol: within three hours of the card's time, the driving route from here (taller map).
+                // Yol: within an hour of the card's time, the driving route from here (taller map).
                 CardRouteMap(location: l, coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
-                             routeWanted: !editing && !card.isCompleted && card.alertAt.map { (0...3 * 3_600_000).contains($0 - EpochMillis.now) } == true)
+                             routeWanted: !editing && !card.isCompleted && card.alertAt.map { (0...3_600_000).contains($0 - EpochMillis.now) } == true)
                 .overlay(alignment: .bottomTrailing) {
                     if let label = reminderLocationLabel(l) {
                         Text(label).font(RealFont.inter(11, .medium)).foregroundStyle(.white).lineLimit(1)
