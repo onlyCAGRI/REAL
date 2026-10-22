@@ -255,7 +255,7 @@ struct ReminderDetailView: View {
                     SnippetBlockView(attachment: a, editing: editing, onSave: { updateSnippet(a.id, $0) }, onRemove: { removeAttachment(a) })
                 } else { fileBlock(a) }
             }
-        case "location": if let l = r.location { locationBlock(l) }
+        case "location": if let l = r.location { locationBlock(l, card: r) }
         case "journal": if let j = r.journal { journalBlock(j) }
         case "voice":
             VoiceRecordingBlock(recordings: r.voiceRecordings, editing: editing,
@@ -781,16 +781,12 @@ struct ReminderDetailView: View {
         }
     }
 
-    private func locationBlock(_ l: ReminderLocation) -> some View {
+    private func locationBlock(_ l: ReminderLocation, card: ReminderItem) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if let lat = l.latitude, let lon = l.longitude {
-                let coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-                Map(initialPosition: .region(MKCoordinateRegion(center: coord, latitudinalMeters: 900, longitudinalMeters: 900)), interactionModes: []) {
-                    Marker(l.placeName, coordinate: coord)
-                }
-                .environment(\.colorScheme, .dark)
-                .frame(height: 150)
-                .allowsHitTesting(false)
+                // Yol: within three hours of the card's time, the driving route from here (taller map).
+                CardRouteMap(location: l, coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                             routeWanted: !editing && !card.isCompleted && card.alertAt.map { (0...3 * 3_600_000).contains($0 - EpochMillis.now) } == true)
                 .overlay(alignment: .bottomTrailing) {
                     if let label = reminderLocationLabel(l) {
                         Text(label).font(RealFont.inter(11, .medium)).foregroundStyle(.white).lineLimit(1)

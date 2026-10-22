@@ -229,10 +229,9 @@ struct WelcomeScreen: View {
                     Image(systemName: "apple.logo").font(.system(size: 17))
                     Text("Apple ile devam et")
                 }
-                    .font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                    .font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                     .frame(width: 300, height: 50)
-                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white.opacity(0.08)))
-                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.14)))
+                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white))
             }
             .buttonStyle(.plain)
             .disabled(auth.busy)

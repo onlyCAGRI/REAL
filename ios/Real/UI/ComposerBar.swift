@@ -203,7 +203,8 @@ struct ComposerBar: View {
                                 placePermission.request { granted in
                                     guard granted else { return }
                                     pickForTrigger = true
-                                    showLocationEditor = true
+                                    // After iOS's own permission alert: open the map once that alert is gone.
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showLocationEditor = true }
                                 }
                             },
                             onSecondary: {
@@ -219,7 +220,8 @@ struct ComposerBar: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focus = .title }
         }) {
             LocationEditor(initial: location, initialTrigger: placeTrigger,
-                           onRemind: pickForTrigger ? { place, trigger in location = place; placeTrigger = trigger } : nil) { picked in
+                           // With permission the map always offers Varınca / Ayrılınca (as when the pin opens it directly).
+                           onRemind: pickForTrigger || placePermission.granted ? { place, trigger in location = place; placeTrigger = trigger } : nil) { picked in
                 location = picked
                 placeTrigger = nil
             }
