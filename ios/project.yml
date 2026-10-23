@@ -26,6 +26,8 @@ targets:
     sources:
       - path: Real
       - path: Shared
+      - path: ../android/app/src/main/assets/i18n/en.json
+        buildPhase: resources
     dependencies:
       - package: Firebase
         product: FirebaseCore

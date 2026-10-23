@@ -37,7 +37,7 @@ struct DiscoveryFilter: Hashable, Identifiable {
     static let film: [DiscoveryFilter] = {
         func g(_ k: String, _ l: String, _ a: [String] = []) -> DiscoveryFilter { DiscoveryFilter(key: k, label: l, aliases: a.isEmpty ? [k] : a) }
         func f(_ k: String, _ l: String) -> DiscoveryFilter { DiscoveryFilter(key: k, label: l, genre: false) }
-        func t(_ k: String, _ l: String, _ group: String) -> DiscoveryFilter { DiscoveryFilter(key: k, label: l, genre: false, themeGroup: group) }
+        func theme(_ k: String, _ l: String, _ group: String) -> DiscoveryFilter { DiscoveryFilter(key: k, label: l, genre: false, themeGroup: group) }
         let future = "Gelecek ve bilim kurgu", mystery = "Gizem ve mücadele", human = "İnsan ve yaşam", fantasy = "Fantastik ve doğaüstü"
         return [
             g("action", "Aksiyon"), g("adventure", "Macera"), g("comedy", "Komedi"), g("drama", "Dram"), g("romance", "Romantik"),
@@ -48,15 +48,15 @@ struct DiscoveryFilter: Hashable, Identifiable {
             f("emotional", "Duygulandıran"), f("heartbreaking", "Hüzünlendiren"),
             f("plot-twist", "Ters köşe yapan"), f("thought-provoking", "Düşündüren"), f("inspiring", "İlham veren"),
             f("relaxing", "Rahatlatan"), f("dark-tone", "Karanlık atmosferli"), f("nostalgic", "Nostaljik"),
-            t("dystopia", "Distopya", future), t("post-apocalyptic", "Kıyamet sonrası", future), t("time-travel", "Zaman yolculuğu", future),
-            t("time-loop", "Zaman döngüsü", future), t("parallel-universe", "Paralel evren", future), t("space", "Uzay", future),
-            t("aliens", "Uzaylılar", future), t("artificial-intelligence", "Yapay zekâ", future), t("cyberpunk", "Siberpunk", future),
-            t("simulation", "Simülasyon", future),
-            t("survival", "Hayatta kalma", mystery), t("isolation", "İzolasyon", mystery), t("conspiracy", "Komplo", mystery),
-            t("detective", "Dedektiflik", mystery), t("espionage", "Casusluk", mystery), t("heist", "Soygun", mystery),
-            t("true-story", "Gerçek hikâye", human), t("coming-of-age", "Büyüme hikâyesi", human), t("friendship", "Dostluk", human),
-            t("family-ties", "Aile bağları", human),
-            t("mythology", "Mitoloji", fantasy), t("supernatural", "Doğaüstü", fantasy), t("zombies", "Zombiler", fantasy), t("magic", "Büyü", fantasy),
+            theme("dystopia", "Distopya", future), theme("post-apocalyptic", "Kıyamet sonrası", future), theme("time-travel", "Zaman yolculuğu", future),
+            theme("time-loop", "Zaman döngüsü", future), theme("parallel-universe", "Paralel evren", future), theme("space", "Uzay", future),
+            theme("aliens", "Uzaylılar", future), theme("artificial-intelligence", "Yapay zekâ", future), theme("cyberpunk", "Siberpunk", future),
+            theme("simulation", "Simülasyon", future),
+            theme("survival", "Hayatta kalma", mystery), theme("isolation", "İzolasyon", mystery), theme("conspiracy", "Komplo", mystery),
+            theme("detective", "Dedektiflik", mystery), theme("espionage", "Casusluk", mystery), theme("heist", "Soygun", mystery),
+            theme("true-story", "Gerçek hikâye", human), theme("coming-of-age", "Büyüme hikâyesi", human), theme("friendship", "Dostluk", human),
+            theme("family-ties", "Aile bağları", human),
+            theme("mythology", "Mitoloji", fantasy), theme("supernatural", "Doğaüstü", fantasy), theme("zombies", "Zombiler", fantasy), theme("magic", "Büyü", fantasy),
         ]
     }()
 

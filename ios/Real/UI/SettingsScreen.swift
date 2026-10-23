@@ -194,6 +194,8 @@ struct SettingsScreen: View {
     @State private var showCalendar = false
     @State private var notice: String?
     @Environment(\.openURL) private var openURL
+    @State private var language = LanguageSettings.shared
+    @State private var showLanguage = false
     @State private var alarmSnooze = RealAlarmSettings.snoozeMinutes
     /// Set after asking; nil = read AlarmKit's state.
     @State private var alarmAllowed: Bool?
@@ -239,6 +241,12 @@ struct SettingsScreen: View {
         .alert("REAL", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("Tamam", role: .cancel) {}
         } message: { Text(notice ?? "") }
+        .confirmationDialog(t("Uygulama dilini seç"), isPresented: $showLanguage, titleVisibility: .visible) {
+            Button(t("Sistem")) { language.set(.system) }
+            Button(t("Türkçe")) { language.set(.turkish) }
+            Button("English") { language.set(.english) }
+            Button(t("Kapat"), role: .cancel) {}
+        }
     }
 
     @AppStorage(HomeCardStyle.plainKey) private var plainCards = false
@@ -249,6 +257,10 @@ struct SettingsScreen: View {
     private var mainPage: some View {
         SettingsSectionHeader(title: "GÖRÜNÜM")
         SettingsGlassGroup {
+            SettingsActionRow(icon: .theme, title: t("Dil"), subtitle: language.currentLabel) {
+                showLanguage = true
+            }
+            SettingsDivider()
             SettingsToggleRow(icon: .motionOff, title: "Animasyonu azalt", subtitle: "Arayüz hareketlerini ve geçiş efektlerini sakinleştirir", isOn: $reduceAnimations)
             SettingsDivider()
             SettingsToggleRow(icon: .blurOff, title: "Dinamik bulanıklığı azalt", subtitle: "Bulanıklık efektleri yerine sabit koyu yüzeyler kullanır", isOn: $reduceDynamicBlur)

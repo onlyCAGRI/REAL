@@ -9,6 +9,7 @@ struct RealApp: App {
     @State private var pano: PanoStore
     @State private var books: BookStore
     @State private var discovery: DiscoveryStore
+    @State private var language = LanguageSettings.shared
     private let initialPath: [Route]
 
     init() {
@@ -50,6 +51,8 @@ struct RealApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(initialPath: initialPath)
+                .id(language.revision)
+                .environment(\.locale, I18n.locale)
                 .scrollIndicators(.hidden)
                 .environment(store)
                 .environment(life)
