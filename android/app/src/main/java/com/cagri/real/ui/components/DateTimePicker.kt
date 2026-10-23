@@ -265,8 +265,10 @@ fun DateTimePickerOverlay(
     var timeAnimatedOnce by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var moving by remember { mutableStateOf(emptySet<String>()) }
-    val tr = remember { Locale.forLanguageTag("tr-TR") }
-    val months = remember { listOf("OCA", t("ŞUB"), "MAR", t("NİS"), "MAY", "HAZ", "TEM", t("AĞU"), "EYL", t("EKİ"), "KAS", "ARA") }
+    val tr = remember { com.cagri.real.i18n.I18n.locale }
+    val months = remember {
+        java.time.Month.entries.map { it.getDisplayName(java.time.format.TextStyle.SHORT, tr).take(3).uppercase(tr) }
+    }
     val currentYear = LocalDate.now(zone).year
     val firstYear = minOf(seed.year, currentYear)
     val years = remember(firstYear, currentYear) { (firstYear..currentYear + 20).toList() }

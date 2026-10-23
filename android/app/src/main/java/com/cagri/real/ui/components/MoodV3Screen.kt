@@ -248,7 +248,7 @@ fun MoodV3FullScreen(
                                     (slideOutHorizontally(tween(260)) { -it * dir / 2 } + fadeOut(tween(160)))
                             }
                         }) { index ->
-                            Text(MoodFamiliesV2[index].title.uppercase(java.util.Locale("tr")), color = ink.copy(alpha = 0.82f),
+                            Text(MoodFamiliesV2[index].title.uppercase(com.cagri.real.i18n.I18n.locale), color = ink.copy(alpha = 0.82f),
                                 fontSize = 64.sp, lineHeight = 64.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, maxLines = 1,
                                 modifier = Modifier.fillMaxWidth())
                         }

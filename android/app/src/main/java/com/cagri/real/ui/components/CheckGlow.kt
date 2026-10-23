@@ -137,7 +137,7 @@ fun CheckRequestSheet(targets: List<CheckTarget>, canClear: Boolean, onDismiss: 
 }
 
 @Composable
-private fun SheetLabel(text: String) = androidx.compose.material3.Text(text.uppercase(java.util.Locale("tr")), color = Color(0xFF8C8C95),
+private fun SheetLabel(text: String) = androidx.compose.material3.Text(text.uppercase(com.cagri.real.i18n.I18n.locale), color = Color(0xFF8C8C95),
     fontSize = 11.sp, letterSpacing = 0.5.sp)
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
