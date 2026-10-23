@@ -1,5 +1,6 @@
 package com.cagri.real.ui.share
 
+import com.cagri.real.i18n.t
 import com.cagri.real.share.validatedPublicShareUrl
 import com.cagri.real.platform.android.share.CardShareClient
 import kotlinx.coroutines.CancellationException
@@ -30,11 +31,11 @@ class CardShareController(
         onReady(link.url)
     }
     fun send(email: String, options: CardShareClient.Options) = run {
-        require(email.trim().matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))) { "Geçerli bir e-posta adresi gir." }
+        require(email.trim().matches(Regex("[^\\s@]+@[^\\s@]+\\.[^\\s@]+"))) { t("Geçerli bir e-posta adresi gir.") }
         val link = mutable.value.link ?: client.create(cardId, options.copy(selectedIds = selectedIds), requestId)
         mutable.value = mutable.value.copy(link = link)
         client.send(link.id, email)
-        mutable.value = mutable.value.copy(message = "Gönderildi. Kart, alıcının REAL'i eşitlendiğinde görünür. REAL kullanmıyorsa bağlantıyı paylaş.")
+        mutable.value = mutable.value.copy(message = t("Gönderildi. Kart, alıcının REAL'i eşitlendiğinde görünür. REAL kullanmıyorsa bağlantıyı paylaş."))
     }
     suspend fun sendConnection(uid: String, options: CardShareClient.Options) {
         check(!mutable.value.busy && !mutable.value.revoked) { "Paylaşım meşgul veya kapatılmış." }
@@ -43,12 +44,12 @@ class CardShareController(
             val link = mutable.value.link ?: client.create(cardId, options.copy(selectedIds = selectedIds), requestId)
             mutable.value = mutable.value.copy(link = link)
             client.sendConnection(link.id, uid)
-            mutable.value = mutable.value.copy(message = "Gönderildi. Kart alıcının REAL sync akışında Kartlarım'a eklenecek.")
+            mutable.value = mutable.value.copy(message = t("Gönderildi. Kart alıcının REAL sync akışında Kartlarım'a eklenecek."))
         } finally { mutable.value = mutable.value.copy(busy = false) }
     }
     fun revoke() = run {
         mutable.value.link?.let { client.revoke(it.id) }
-        mutable.value = State(message = "Paylaşım durduruldu. Daha önce kaydedilen kopyalar korunur.", revoked = true)
+        mutable.value = State(message = t("Paylaşım durduruldu. Daha önce kaydedilen kopyalar korunur."), revoked = true)
     }
     private fun run(block: suspend () -> Unit) {
         if (mutable.value.busy || mutable.value.revoked) return
@@ -61,8 +62,8 @@ class CardShareController(
                     failure is SecurityException || failure is java.io.FileNotFoundException ||
                     failure.message?.contains("Permission Denial", ignoreCase = true) == true ||
                     failure.message?.contains("MediaDocumentsProvider", ignoreCase = true) == true ||
-                    failure.message?.contains("SecurityException", ignoreCase = true) == true -> "Ekli dosyaya artık erişilemiyor"
-                    else -> failure.message ?: "Kart paylaşılamadı."
+                    failure.message?.contains("SecurityException", ignoreCase = true) == true -> t("Ekli dosyaya artık erişilemiyor")
+                    else -> failure.message ?: t("Kart paylaşılamadı.")
                 }
                 mutable.value = mutable.value.copy(message = userMessage)
             }

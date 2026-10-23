@@ -1,5 +1,6 @@
 package com.cagri.real.ui.sharedcategories
 
+import com.cagri.real.i18n.t
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import com.cagri.real.ui.components.realSheetSurface
@@ -46,7 +47,7 @@ fun SharedCategoryMembersDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var removing by remember { mutableStateOf<SharedCategoryMember?>(null) }
     suspend fun refresh() {
-        val client = checkNotNull(api) { "REAL hesabınla giriş yap." }
+        val client = checkNotNull(api) { t("REAL hesabınla giriş yap.") }
         val item = detail?.item ?: client.ensure(category, initialLink)
         val loaded = client.metadata(item.id)
         detail = loaded; onChanged(loaded)
@@ -57,7 +58,7 @@ fun SharedCategoryMembersDialog(
         scope.launch {
             try { block() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { error = failure.message ?: "İşlem tamamlanamadı." }
+            catch (failure: Exception) { error = failure.message ?: t("İşlem tamamlanamadı.") }
             finally { busy = false }
         }
     }
@@ -93,14 +94,14 @@ fun SharedCategoryMembersDialog(
                     Text(category.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("Members · ${detail?.members?.size ?: 0}", color = ConnectionPalette.Muted, fontSize = 13.sp)
                 }
-                ConnectionPill("Bitti", onDismiss, filled = true, small = true)
+                ConnectionPill(t("Bitti"), onDismiss, filled = true, small = true)
             }
             Column(
                 Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
                     .padding(start = 16.dp, end = 16.dp, bottom = 22.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                ConnectionNote("Üyeler aynı kategori hedeflerini ve ortak linki görüntüler. Kartlar onların ana ekranına kopyalanmaz. Düzenleme sende kalır.")
+                ConnectionNote(t("Üyeler aynı kategori hedeflerini ve ortak linki görüntüler. Kartlar onların ana ekranına kopyalanmaz. Düzenleme sende kalır."))
 
                 detail?.members?.takeIf { it.isNotEmpty() }?.let { list ->
                     val groupShape = RoundedCornerShape(22.dp)
@@ -116,7 +117,7 @@ fun SharedCategoryMembersDialog(
                                     Text(member.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     if (member.isOwner) Text("Owner", color = ConnectionPalette.Accent, fontSize = 12.sp)
                                 }
-                                if (!member.isOwner) ConnectionPill("Kaldır", { removing = member }, enabled = !busy, small = true, danger = true)
+                                if (!member.isOwner) ConnectionPill(t("Kaldır"), { removing = member }, enabled = !busy, small = true, danger = true)
                             }
                             if (index != list.lastIndex) {
                                 Box(Modifier.fillMaxWidth().padding(start = 70.dp).height(0.5.dp).background(ConnectionPalette.Stroke))
@@ -126,36 +127,36 @@ fun SharedCategoryMembersDialog(
                 }
 
                 if (detail != null) {
-                    Text("KİŞİ EKLE", color = ConnectionPalette.Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    Text(t("KİŞİ EKLE"), color = ConnectionPalette.Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 6.dp))
-                    ConnectionPeoplePicker(enabled = !busy, actionLabel = "Ekle") { person ->
+                    ConnectionPeoplePicker(enabled = !busy, actionLabel = t("Ekle")) { person ->
                         checkNotNull(api).add(checkNotNull(detail).item.id, person.uid)
                         refresh()
                     }
-                    ConnectionPill("Kategori davet linki paylaş", { action {
+                    ConnectionPill(t("Kategori davet linki paylaş"), { action {
                         val url = checkNotNull(api).invite(checkNotNull(detail).item.id)
                         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"; putExtra(Intent.EXTRA_TEXT, "${category.name} kategorime katıl: $url")
-                        }, "REAL kategori daveti"))
+                            type = "text/plain"; putExtra(Intent.EXTRA_TEXT, t("{0} kategorime katıl: {1}", category.name, url))
+                        }, t("REAL kategori daveti")))
                     } }, Modifier.fillMaxWidth(), enabled = !busy, filled = true)
-                    Text("Davet 7 gün geçerli ve bir kişi tarafından kullanılabilir. Kaldırmak, kişinin REAL bağlantısını silmez.",
+                    Text(t("Davet 7 gün geçerli ve bir kişi tarafından kullanılabilir. Kaldırmak, kişinin REAL bağlantısını silmez."),
                         color = ConnectionPalette.Muted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(horizontal = 6.dp))
                 }
                 if (busy) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     com.cagri.real.ui.components.RealSpinner(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
                 }
-                error?.let { ConnectionNote(it); ConnectionPill("Yeniden dene", { action { refresh() } }, enabled = !busy) }
+                error?.let { ConnectionNote(it); ConnectionPill(t("Yeniden dene"), { action { refresh() } }, enabled = !busy) }
             }
         }
         }
     }
     removing?.let { member ->
         com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = { removing = null }, containerColor = Color(0xFF17171B), shape = RoundedCornerShape(28.dp),
-            title = { Text("${member.name} kaldırılsın mı?", color = Color.White) },
-            text = { Text("Bu kategorinin çevrimiçi erişimi kesilir. Kişilerim bağlantınız korunur.", color = Color.Gray) },
+            title = { Text(t("{0} kaldırılsın mı?", member.name), color = Color.White) },
+            text = { Text(t("Bu kategorinin çevrimiçi erişimi kesilir. Kişilerim bağlantınız korunur."), color = Color.Gray) },
             confirmButton = { TextButton(onClick = { removing = null; action {
                 checkNotNull(api).remove(checkNotNull(detail).item.id, member.uid); refresh()
-            } }) { Text("Kaldır") } },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("Vazgeç") } })
+            } }) { Text(t("Kaldır")) } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text(t("Vazgeç")) } })
     }
 }

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.sharedcategories
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -47,7 +48,7 @@ fun SharedCategoryBrowser(reduceAnimations: Boolean, onDismiss: () -> Unit) {
         scope.launch {
             try { block() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { error = failure.message ?: "Kategori yüklenemedi." }
+            catch (failure: Exception) { error = failure.message ?: t("Kategori yüklenemedi.") }
             finally { busy = false }
         }
     }
@@ -69,10 +70,10 @@ fun SharedCategoryBrowser(reduceAnimations: Boolean, onDismiss: () -> Unit) {
                     Row(Modifier.fillMaxWidth()) {
                         com.cagri.real.ui.components.RealBackButton(onDismiss)
                         Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { action { load() } }, enabled = !busy) { Text("Yenile", color = Color.White) }
+                        TextButton(onClick = { action { load() } }, enabled = !busy) { Text(t("Yenile"), color = Color.White) }
                     }
-                    Text("Paylaşılan kategoriler", style = com.cagri.real.ui.theme.RealType.editorialSection, color = Color.White)
-                    if (items.isEmpty() && !busy) Text("Henüz bir kategoriye eklenmedin.", color = Color.Gray)
+                    Text(t("Paylaşılan kategoriler"), style = com.cagri.real.ui.theme.RealType.editorialSection, color = Color.White)
+                    if (items.isEmpty() && !busy) Text(t("Henüz bir kategoriye eklenmedin."), color = Color.Gray)
                     items.forEach { item ->
                         ConnectionCard {
                             Text(item.category.name, color = Color.White, modifier = Modifier.fillMaxWidth().clickable { action { detail = checkNotNull(api).detail(item.id) } }.padding(12.dp))
@@ -106,7 +107,7 @@ fun SharedCategoryBrowser(reduceAnimations: Boolean, onDismiss: () -> Unit) {
                     onStartNext = { id -> card = current.goals.firstOrNull { it.card.id == id } },
                     onAddMember = { showMembers = true }, onSend = { showMembers = true })
                 TextButton(onClick = { action { detail = checkNotNull(api).detail(current.item.id) } },
-                    enabled = !busy, modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(16.dp)) { Text("Yenile", color = Color.White) }
+                    enabled = !busy, modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(16.dp)) { Text(t("Yenile"), color = Color.White) }
             }
             if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.align(androidx.compose.ui.Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
             error?.let { ConnectionNote(it, Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(16.dp)) }
@@ -116,13 +117,13 @@ fun SharedCategoryBrowser(reduceAnimations: Boolean, onDismiss: () -> Unit) {
             com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = { showMembers = false }, containerColor = Color(0xFF151519),
                 title = { Text("Members", color = Color.White) },
                 text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    current.members.forEach { Text(it.name + if (it.isOwner) " · Owner" else "", color = Color.White) }
-                    Text("Üye ekleme ve çıkarma kategori sahibine aittir.", color = Color.Gray)
+                    current.members.forEach { Text(it.name + if (it.isOwner) t(" · Owner") else "", color = Color.White) }
+                    Text(t("Üye ekleme ve çıkarma kategori sahibine aittir."), color = Color.Gray)
                 } },
-                confirmButton = { TextButton(onClick = { showMembers = false }) { Text("Bitti") } },
+                confirmButton = { TextButton(onClick = { showMembers = false }) { Text(t("Bitti")) } },
                 dismissButton = { TextButton(onClick = { showMembers = false; action {
                     checkNotNull(api).remove(current.item.id, checkNotNull(user).id); detail = null; load()
-                } }) { Text("Kategoriden ayrıl") } })
+                } }) { Text(t("Kategoriden ayrıl")) } })
         }
         card?.let { SharedGoalDetailDialog(checkNotNull(api), checkNotNull(detail).item.id, it) { card = null } }
     }

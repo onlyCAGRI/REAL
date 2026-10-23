@@ -1,5 +1,6 @@
 package com.cagri.real.ui.connections
 
+import com.cagri.real.i18n.t
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -64,7 +65,7 @@ private fun InviteHero(done: Boolean) {
             }
         } else androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(com.cagri.real.R.drawable.real_invite_logo),
-            contentDescription = "REAL",
+            contentDescription = t("REAL"),
             modifier = Modifier.size(84.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(22.dp)),
         )
     }
@@ -84,11 +85,11 @@ private fun ConnectionInviteScreen(token: String, onSignIn: () -> Unit, onClose:
     val user = currentConnectionsUser()
     if (user != null && user.displayName.isNullOrBlank()) {
         InviteFrame {
-            Text("Önce adını ekle", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text("Arkadaşların seni tanıyabilsin diye adın davette görünür.", color = ConnectionPalette.Muted, fontSize = 14.sp,
+            Text(t("Önce adını ekle"), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(t("Arkadaşların seni tanıyabilsin diye adın davette görünür."), color = ConnectionPalette.Muted, fontSize = 14.sp,
                 textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp, bottom = 18.dp))
             com.cagri.real.ui.auth.ProfileNameForm(user, onSaved = {})
-            ConnectionPill("Vazgeç", onClose, Modifier.padding(top = 12.dp))
+            ConnectionPill(t("Vazgeç"), onClose, Modifier.padding(top = 12.dp))
         }
         return
     }
@@ -104,7 +105,7 @@ private fun ConnectionInviteScreen(token: String, onSignIn: () -> Unit, onClose:
             busy = true; error = null
             try { name = api?.preview(token) }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { error = failure.message ?: "Davet açılamadı." }
+            catch (failure: Exception) { error = failure.message ?: t("Davet açılamadı.") }
             finally { busy = false }
         }
         LaunchedEffect(api) { if (api != null) preview() }
@@ -112,29 +113,29 @@ private fun ConnectionInviteScreen(token: String, onSignIn: () -> Unit, onClose:
             when {
                 user == null -> {
                     InviteHero(false)
-                    InviteHeading("REAL daveti", "Daveti görmek için REAL hesabınla giriş yap, ardından bu bağlantıya geri dön.")
-                    ConnectionPill("REAL'e giriş yap", onSignIn, Modifier.fillMaxWidth(), filled = true)
-                    ConnectionPill("Vazgeç", onClose, Modifier.padding(top = 10.dp))
+                    InviteHeading(t("REAL daveti"), t("Daveti görmek için REAL hesabınla giriş yap, ardından bu bağlantıya geri dön."))
+                    ConnectionPill(t("REAL'e giriş yap"), onSignIn, Modifier.fillMaxWidth(), filled = true)
+                    ConnectionPill(t("Vazgeç"), onClose, Modifier.padding(top = 10.dp))
                 }
                 busy && name == null && !done -> {
                     InviteHero(false)
-                    InviteHeading("Davet kontrol ediliyor…")
+                    InviteHeading(t("Davet kontrol ediliyor…"))
                     com.cagri.real.ui.components.RealSpinner(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(26.dp))
                 }
                 done -> {
                     InviteHero(true)
-                    InviteHeading("Bağlandınız!", "${name ?: "Arkadaşın"} artık kişi listende. Kart paylaşırken ve Pano davetlerinde aynı kişiyi kullanabilirsin.")
-                    ConnectionPill("Bitti", onClose, Modifier.fillMaxWidth(), filled = true)
+                    InviteHeading(t("Bağlandınız!"), t("{0} artık kişi listende. Kart paylaşırken ve Pano davetlerinde aynı kişiyi kullanabilirsin.", name ?: t("Arkadaşın")))
+                    ConnectionPill(t("Bitti"), onClose, Modifier.fillMaxWidth(), filled = true)
                 }
                 name != null -> {
                     InviteHero(false)
-                    InviteHeading("${name} seni REAL'e davet ediyor", "Kabul edersen birbirinizin listesinde görünür, kart ve Pano paylaşabilirsiniz.")
+                    InviteHeading(t("{0} seni REAL'e davet ediyor", name), t("Kabul edersen birbirinizin listesinde görünür, kart ve Pano paylaşabilirsiniz."))
                     ConnectionCard {
-                        Text("Hesap", color = ConnectionPalette.Muted, fontSize = 12.sp)
-                        Text(user.email ?: user.displayName ?: "REAL", color = Color.White, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp))
+                        Text(t("Hesap"), color = ConnectionPalette.Muted, fontSize = 12.sp)
+                        Text(user.email ?: user.displayName ?: t("REAL"), color = Color.White, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp))
                     }
                     Spacer(Modifier.height(18.dp))
-                    ConnectionPill(if (busy) "Kabul ediliyor…" else "Kabul et", {
+                    ConnectionPill(if (busy) t("Kabul ediliyor…") else t("Kabul et"), {
                         busy = true; error = null
                         scope.launch {
                             try {
@@ -142,39 +143,39 @@ private fun ConnectionInviteScreen(token: String, onSignIn: () -> Unit, onClose:
                                 done = true // Acceptance is committed even if subsequent cache refresh is offline.
                                 try { RealConnections.repository(context, user.id).refresh() }
                                 catch (cancelled: CancellationException) { throw cancelled }
-                                catch (_: Exception) { error = "Bağlantı kaydedildi; kişi listesi çevrimiçi olduğunda güncellenecek." }
+                                catch (_: Exception) { error = t("Bağlantı kaydedildi; kişi listesi çevrimiçi olduğunda güncellenecek.") }
                             } catch (cancelled: CancellationException) { throw cancelled }
-                            catch (failure: Exception) { error = failure.message ?: "Bağlantı kurulamadı." }
+                            catch (failure: Exception) { error = failure.message ?: t("Bağlantı kurulamadı.") }
                             finally { busy = false }
                         }
                     }, Modifier.fillMaxWidth(), enabled = !busy, filled = true)
-                    ConnectionPill("Şimdi değil", onClose, Modifier.padding(top = 10.dp), enabled = !busy)
+                    ConnectionPill(t("Şimdi değil"), onClose, Modifier.padding(top = 10.dp), enabled = !busy)
                 }
                 else -> {
                     InviteHero(false)
-                    InviteHeading("Davet açılamadı", "Davetin süresi dolmuş, iptal edilmiş ya da bu hesapla kabul edilemiyor olabilir.")
-                    ConnectionPill("Tekrar dene", { scope.launch { preview() } }, Modifier.fillMaxWidth(), filled = true)
-                    ConnectionPill("Kapat", onClose, Modifier.padding(top = 10.dp))
+                    InviteHeading(t("Davet açılamadı"), t("Davetin süresi dolmuş, iptal edilmiş ya da bu hesapla kabul edilemiyor olabilir."))
+                    ConnectionPill(t("Tekrar dene"), { scope.launch { preview() } }, Modifier.fillMaxWidth(), filled = true)
+                    ConnectionPill(t("Kapat"), onClose, Modifier.padding(top = 10.dp))
                 }
             }
             error?.let { ConnectionNote(it, Modifier.padding(top = 16.dp)) }
             if (error != null && !done && user != null && !user.email.isNullOrBlank()) {
                 ConnectionCard(Modifier.padding(top = 12.dp)) {
-                    Text("E-postaya özel davet mi?", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    Text("Önce hesabının e-posta adresini doğrula, sonra tekrar dene.", color = ConnectionPalette.Muted, fontSize = 13.sp,
+                    Text(t("E-postaya özel davet mi?"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(t("Önce hesabının e-posta adresini doğrula, sonra tekrar dene."), color = ConnectionPalette.Muted, fontSize = 13.sp,
                         modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
-                    ConnectionPill("Doğrulama e-postası gönder", {
+                    ConnectionPill(t("Doğrulama e-postası gönder"), {
                         busy = true
                         scope.launch {
                             try {
                                 com.cagri.real.platform.android.connections.ConnectionEmailVerification.send(user.id)
-                                error = "Doğrulama e-postanı kontrol et; ardından \"Doğruladım\"a bas."
+                                error = t("Doğrulama e-postanı kontrol et; ardından \"Doğruladım\"a bas.")
                             } catch (cancelled: CancellationException) { throw cancelled }
                             catch (failure: Exception) { error = failure.message }
                             finally { busy = false }
                         }
                     }, Modifier.fillMaxWidth(), enabled = !busy, small = true)
-                    ConnectionPill("Doğruladım · tekrar dene", {
+                    ConnectionPill(t("Doğruladım · tekrar dene"), {
                         busy = true
                         scope.launch {
                             try {

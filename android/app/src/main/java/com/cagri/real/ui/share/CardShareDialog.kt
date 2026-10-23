@@ -1,5 +1,6 @@
 package com.cagri.real.ui.share
 
+import com.cagri.real.i18n.t
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
@@ -76,9 +77,9 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
     val user = com.cagri.real.ui.connections.currentConnectionsUser()
     if (user != null && user.displayName.isNullOrBlank()) {
         com.cagri.real.ui.components.RealAlertDialog(onDismissRequest = onDismiss,
-            title = { Text("Gönderen bilgisi") },
+            title = { Text(t("Gönderen bilgisi")) },
             text = { com.cagri.real.ui.auth.ProfileNameForm(user, onSaved = {}) },
-            confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } })
+            confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text(t("Vazgeç")) } })
         return
     }
     val context = LocalContext.current
@@ -107,7 +108,7 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
     fun shareLink(url: String) {
         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"; putExtra(Intent.EXTRA_TEXT, url)
-        }, "Kartı paylaş"))
+        }, t("Kartı paylaş")))
     }
     val phonePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) result.data?.data?.let { uri ->
@@ -122,7 +123,7 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                         catch (_: Exception) { shareLink(url) }
                     }
                 }
-            } catch (_: Exception) { contactError = "Seçilen telefon okunamadı. Bunun yerine bağlantıyı paylaş." }
+            } catch (_: Exception) { contactError = t("Seçilen telefon okunamadı. Bunun yerine bağlantıyı paylaş.") }
         }
     }
     LaunchedEffect(client) {
@@ -163,9 +164,9 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             com.cagri.real.ui.components.RealBackButton({ showSettings = false }, enabled = !state.busy)
                         }
-                        Text("Paylaşım ayarları", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
+                        Text(t("Paylaşım ayarları"), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(top = 14.dp))
-                        Text("Açık paylaşım linklerini yönet ve gelen kartları kontrol et.", color = MutedText, fontSize = 14.sp,
+                        Text(t("Açık paylaşım linklerini yönet ve gelen kartları kontrol et."), color = MutedText, fontSize = 14.sp,
                             modifier = Modifier.padding(top = 2.dp))
                         Spacer(Modifier.height(18.dp))
                         SharedLinksSection(client, state.link?.id)
@@ -178,8 +179,8 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text("Gelen kartlara izin ver", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                                    Text("Kapalıyken kimse sana doğrudan kart gönderemez.", color = MutedText, fontSize = 12.sp)
+                                    Text(t("Gelen kartlara izin ver"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                                    Text(t("Kapalıyken kimse sana doğrudan kart gönderemez."), color = MutedText, fontSize = 12.sp)
                                 }
                                 Switch(
                                     checked = enabled,
@@ -205,8 +206,8 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                     // ---------- Ana paylaşım ekranı ----------
                     Column(Modifier.fillMaxWidth().animateContentSize(tween(220))) {
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.Top) {
-                            Text("Kartı paylaş", Modifier.weight(1f), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-                            ConnectionPill("Ayarlar", { showSettings = true }, enabled = !state.busy, small = true)
+                            Text(t("Kartı paylaş"), Modifier.weight(1f), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+                            ConnectionPill(t("Ayarlar"), { showSettings = true }, enabled = !state.busy, small = true)
                         }
                         // Paylaşılacak kartın kısa önizlemesi
                         val preview = fallbackText.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
@@ -222,7 +223,7 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                         Spacer(Modifier.height(18.dp))
 
                         // 1 · REAL kullanıcısına gönder
-                        MethodRow(MethodIcon.Person, AccentCyan, "REAL kullanıcısına gönder", "Kartın bağımsız bir kopyası iletilir",
+                        MethodRow(MethodIcon.Person, AccentCyan, t("REAL kullanıcısına gönder"), t("Kartın bağımsız bir kopyası iletilir"),
                             selected = mode == ShareMode.RealUser, expandable = true, enabled = true) {
                             mode = if (mode == ShareMode.RealUser) ShareMode.None else ShareMode.RealUser
                         }
@@ -235,7 +236,7 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                                     { files = it }, { location = it }, { voice = it }, { journal = it })
                                 Spacer(Modifier.height(14.dp))
                                 com.cagri.real.ui.connections.ConnectionPeoplePicker(
-                                    enabled = !state.busy && !state.revoked, actionLabel = "Gönder",
+                                    enabled = !state.busy && !state.revoked, actionLabel = t("Gönder"),
                                     onSelect = { person -> frozen = true; controller.sendConnection(person.uid, options) }
                                 )
                                 Spacer(Modifier.height(12.dp))
@@ -245,7 +246,7 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                         Spacer(Modifier.height(10.dp))
 
                         // 2 · Bağlantı paylaş
-                        MethodRow(MethodIcon.Link, Violet, "Bağlantı paylaş", "WhatsApp, e-posta ve daha fazlası",
+                        MethodRow(MethodIcon.Link, Violet, t("Bağlantı paylaş"), t("WhatsApp, e-posta ve daha fazlası"),
                             selected = mode == ShareMode.Link, expandable = true, enabled = true) {
                             mode = if (mode == ShareMode.Link) ShareMode.None else ShareMode.Link
                         }
@@ -253,7 +254,7 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                             enter = fadeIn(tween(180)) + expandVertically(tween(220)),
                             exit = fadeOut(tween(120)) + shrinkVertically(tween(180))) {
                             Column(Modifier.fillMaxWidth().padding(top = 14.dp, start = 2.dp, end = 2.dp)) {
-                                Text("Bağlantıya sahip olan herkes seçilen içeriği görüntüleyebilir. Yeni bağlantılar 24 saat geçerlidir.", color = MutedText, fontSize = 13.sp)
+                                Text(t("Bağlantıya sahip olan herkes seçilen içeriği görüntüleyebilir. Yeni bağlantılar 24 saat geçerlidir."), color = MutedText, fontSize = 13.sp)
                                 Spacer(Modifier.height(10.dp))
                                 IncludedContent(content, contentOpen, { contentOpen = !contentOpen },
                                     files, location, voice, journal, optionsEnabled,
@@ -266,14 +267,14 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                                         verticalAlignment = Alignment.CenterVertically) {
                                         Text(link.url.removePrefix("https://"), Modifier.weight(1f), color = AccentCyan, fontSize = 13.sp,
                                             maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        ConnectionPill("Kopyala", {
+                                        ConnectionPill(t("Kopyala"), {
                                             val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("REAL kart linki", link.url))
-                                            contactError = "Link kopyalandı."
+                                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText(t("REAL kart linki"), link.url))
+                                            contactError = t("Link kopyalandı.")
                                         }, enabled = !state.busy, small = true)
                                     }
                                 }
-                                PrimaryButton(if (state.link == null) "Bağlantı oluştur ve paylaş" else "Bağlantıyı tekrar paylaş",
+                                PrimaryButton(if (state.link == null) t("Bağlantı oluştur ve paylaş") else t("Bağlantıyı tekrar paylaş"),
                                     enabled = !state.busy && !state.revoked) {
                                     frozen = true; controller.create(options, ::shareLink)
                                 }
@@ -281,14 +282,14 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                                     TextButton(
                                         onClick = {
                                             try { phonePicker.launch(Intent(Intent.ACTION_PICK).apply { type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE }) }
-                                            catch (_: Exception) { contactError = "Telefon rehberi açılamadı. Bağlantıyı paylaş'ı kullan." }
+                                            catch (_: Exception) { contactError = t("Telefon rehberi açılamadı. Bağlantıyı paylaş'ı kullan.") }
                                         },
                                         enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp)
-                                    ) { Text("SMS ile gönder", color = AccentCyan, fontSize = 14.sp) }
+                                    ) { Text(t("SMS ile gönder"), color = AccentCyan, fontSize = 14.sp) }
                                     if (state.link != null) TextButton(
                                         onClick = { controller.revoke() }, enabled = !state.busy,
                                         modifier = Modifier.heightIn(min = 48.dp)
-                                    ) { Text("Bu linki kapat", color = MutedText, fontSize = 14.sp) }
+                                    ) { Text(t("Bu linki kapat"), color = MutedText, fontSize = 14.sp) }
                                 }
                             }
                         }
@@ -296,11 +297,11 @@ fun CardShareDialog(cardId: Long, selectedIds: Set<String>? = null, fallbackText
                         Spacer(Modifier.height(10.dp))
 
                         // 3 · Metin olarak paylaş (hemen çalışır, ayar yok)
-                        MethodRow(MethodIcon.Text, Amber, "Metin olarak paylaş", "İnternetsiz de çalışır",
+                        MethodRow(MethodIcon.Text, Amber, t("Metin olarak paylaş"), t("İnternetsiz de çalışır"),
                             selected = false, expandable = false, enabled = !state.busy) {
                             context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"; putExtra(Intent.EXTRA_TEXT, fallbackText)
-                            }, "Metin olarak paylaş"))
+                            }, t("Metin olarak paylaş")))
                         }
                     }
                 }
@@ -381,12 +382,12 @@ private fun IncludedContent(
     val showLocation = content?.hasLocation ?: false
     val showVoice = (content?.voices ?: 0) > 0
     val showJournal = content?.hasJournal ?: false
-    val filesLabel = if (content != null && content.files > 0) "${content.files} görsel ve dosya" else "Görsel ve dosyalar"
-    val voiceLabel = if (content != null && content.voices > 0) "${content.voices} ses kaydı" else "Ses kayıtları"
+    val filesLabel = if (content != null && content.files > 0) t("{0} görsel ve dosya", content.files) else t("Görsel ve dosyalar")
+    val voiceLabel = if (content != null && content.voices > 0) t("{0} ses kaydı", content.voices) else t("Ses kayıtları")
     val summary = listOfNotNull(
-        filesLabel.takeIf { files && showFiles }, "Konum".takeIf { location && showLocation },
-        voiceLabel.takeIf { voice && showVoice }, "Günlük ve ruh hali".takeIf { journal && showJournal }
-    ).joinToString(", ").ifEmpty { "Yalnızca metin" }
+        filesLabel.takeIf { files && showFiles }, t("Konum").takeIf { location && showLocation },
+        voiceLabel.takeIf { voice && showVoice }, t("Günlük ve ruh hali").takeIf { journal && showJournal }
+    ).joinToString(", ").ifEmpty { t("Yalnızca metin") }
     val nothingExtra = !showFiles && !showLocation && !showVoice && !showJournal
     Column(Modifier.fillMaxWidth()) {
         Row(
@@ -397,11 +398,11 @@ private fun IncludedContent(
         ) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Dahil edilecek içerik", color = Color.White, fontSize = 15.sp)
+                    Text(t("Dahil edilecek içerik"), color = Color.White, fontSize = 15.sp)
                     if (content != null) Text("  · otomatik", color = AccentCyan, fontSize = 12.sp)
                 }
                 if (!open || nothingExtra) Text(
-                    if (nothingExtra) "Bu kartta dosya, konum ya da ses yok; yalnızca metin paylaşılır." else summary,
+                    if (nothingExtra) t("Bu kartta dosya, konum ya da ses yok; yalnızca metin paylaşılır.") else summary,
                     color = MutedText, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis
                 )
             }
@@ -412,9 +413,9 @@ private fun IncludedContent(
             Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val chips = buildList<@Composable (Modifier) -> Unit> {
                     if (showFiles) add { m -> Pill(filesLabel, files, enabled, onFiles, m) }
-                    if (showLocation) add { m -> Pill("Konum", location, enabled, onLocation, m) }
+                    if (showLocation) add { m -> Pill(t("Konum"), location, enabled, onLocation, m) }
                     if (showVoice) add { m -> Pill(voiceLabel, voice, enabled, onVoice, m) }
-                    if (showJournal) add { m -> Pill("Günlük ve ruh hali", journal, enabled, onJournal, m) }
+                    if (showJournal) add { m -> Pill(t("Günlük ve ruh hali"), journal, enabled, onJournal, m) }
                 }
                 chips.chunked(2).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.sharedcategories
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -51,12 +52,19 @@ internal fun SharedCategorySheet(
     calendarLinked: Boolean,
     onDismiss: () -> Unit
 ) {
+    if (com.cagri.real.ui.auth.SignInRequired.isGuest()) {
+        LaunchedEffect(Unit) {
+            com.cagri.real.ui.auth.SignInRequired.needed(com.cagri.real.ui.auth.SignInRequired.Reason.SharedCategory)
+            onDismiss()
+        }
+        return
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var members by remember { mutableStateOf<List<SharedMember>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var working by remember { mutableStateOf<String?>(null) } // full-screen "Kategori paylaşılıyor" text
+    var working by remember { mutableStateOf<String?>(null) } // full-screen t("Kategori paylaşılıyor") text
     var movedCount by remember { mutableIntStateOf(0) }
     var newAccess by remember { mutableStateOf("full") }
     var leaving by remember { mutableStateOf(false) }
@@ -73,7 +81,7 @@ internal fun SharedCategorySheet(
         scope.launch {
             try { block() }
             catch (c: CancellationException) { throw c }
-            catch (e: Exception) { error = e.message ?: "İşlem tamamlanamadı." }
+            catch (e: Exception) { error = e.message ?: t("İşlem tamamlanamadı.") }
             finally { busy = false; working = null }
         }
     }
@@ -103,9 +111,9 @@ internal fun SharedCategorySheet(
                     Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Text("Kişiler", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text(t("Kişiler"), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                     if (calendarLinked && current.sharedId == null) {
-                        Text("Takvime bağlı kategoriler paylaşılamaz.", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                        Text(t("Takvime bağlı kategoriler paylaşılamaz."), color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
                         return@Column
                     }
 
@@ -118,17 +126,17 @@ internal fun SharedCategorySheet(
                                     Text(m.name, color = Color.White, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f).padding(start = 12.dp))
                                     when {
-                                        m.isOwner -> Text("Sahibi", color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp)
+                                        m.isOwner -> Text(t("Sahibi"), color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp)
                                         isOwner -> {
                                             AccessToggle(m.access) { access -> act {
                                                 SharedCategorySync.setAccess(current, m.uid, access); refresh()
                                             } }
-                                            Text("Çıkar", color = Color(0xFFFFB4AB), fontSize = 13.sp,
+                                            Text(t("Çıkar"), color = Color(0xFFFFB4AB), fontSize = 13.sp,
                                                 modifier = Modifier.padding(start = 8.dp).clip(CircleShape).clickable(enabled = !busy) {
                                                     act {
                                                         val empty = SharedCategorySync.removeMember(current, m.uid)
                                                         if (empty) {
-                                                            working = "Kategori sana dönüyor"
+                                                            working = t("Kategori sana dönüyor")
                                                             SharedCategorySync.release(context, current)
                                                             current = current.copy(sharedId = null, sharedRole = null)
                                                         }
@@ -136,7 +144,7 @@ internal fun SharedCategorySheet(
                                                     }
                                                 }.padding(horizontal = 8.dp, vertical = 6.dp))
                                         }
-                                        else -> Text(if (m.access == "view") "Sınırlı" else "Tam", color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp)
+                                        else -> Text(if (m.access == "view") t("Sınırlı") else t("Tam"), color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -146,36 +154,36 @@ internal fun SharedCategorySheet(
                     if (isOwner) {
                         if ((members?.count { !it.isOwner } ?: 0) < 10) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Yeni kişi", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                Text(t("Yeni kişi"), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp, modifier = Modifier.weight(1f))
                                 AccessToggle(newAccess) { newAccess = it }
                             }
-                            ConnectionPeoplePicker(enabled = !busy, actionLabel = "Ekle") { person ->
+                            ConnectionPeoplePicker(enabled = !busy, actionLabel = t("Ekle")) { person ->
                                 if (members?.any { it.uid == person.uid } == true) return@ConnectionPeoplePicker
                                 busy = true; error = null
                                 try {
                                     if (current.sharedId == null) {
-                                        working = "Kategori paylaşılıyor"; movedCount = 0
+                                        working = t("Kategori paylaşılıyor"); movedCount = 0
                                         SharedCategorySync.share(context, current, person.uid, newAccess) { movedCount = it }
                                         current = com.cagri.real.data.CategoryRepository(context).load().firstOrNull { it.id == current.id } ?: current
                                     } else SharedCategorySync.addMember(current, person.uid, newAccess)
                                     refresh()
                                 } catch (c: CancellationException) { throw c }
-                                catch (e: Exception) { error = e.message ?: "Kişi eklenemedi." }
+                                catch (e: Exception) { error = e.message ?: t("Kişi eklenemedi.") }
                                 finally { busy = false; working = null }
                             }
                         } else {
-                            Text("Bir kategoride en fazla 10 kişi olabilir.", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+                            Text(t("Bir kategoride en fazla 10 kişi olabilir."), color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
                         }
                     } else if (!leaving) {
-                        Text("Kategoriden ayrıl", color = Color(0xFFFFB4AB), fontSize = 15.sp,
+                        Text(t("Kategoriden ayrıl"), color = Color(0xFFFFB4AB), fontSize = 15.sp,
                             modifier = Modifier.clip(CircleShape).clickable(enabled = !busy) { leaving = true }.padding(vertical = 8.dp))
                     } else {
-                        Text("Kartlar kategoride kalır.", color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+                        Text(t("Kartlar kategoride kalır."), color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            SheetButton("Kopyasını sakla", filled = true, enabled = !busy, modifier = Modifier.weight(1f)) {
+                            SheetButton(t("Kopyasını sakla"), filled = true, enabled = !busy, modifier = Modifier.weight(1f)) {
                                 act { SharedCategorySync.leave(context, current, keepCopy = true); onDismiss() }
                             }
-                            SheetButton("Benden kaldır", filled = false, enabled = !busy, modifier = Modifier.weight(1f)) {
+                            SheetButton(t("Benden kaldır"), filled = false, enabled = !busy, modifier = Modifier.weight(1f)) {
                                 act { SharedCategorySync.leave(context, current, keepCopy = false); onDismiss() }
                             }
                         }
@@ -205,7 +213,7 @@ internal fun SharedCategorySheet(
 @Composable
 private fun AccessToggle(access: String, onChange: (String) -> Unit) {
     Row(Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.06f)).padding(3.dp)) {
-        listOf("full" to "Tam", "view" to "Sınırlı").forEach { (key, label) ->
+        listOf("full" to t("Tam"), "view" to t("Sınırlı")).forEach { (key, label) ->
             val on = access == key
             Text(label, color = if (on) Color.Black else Color.White.copy(alpha = 0.7f), fontSize = 12.sp,
                 fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
