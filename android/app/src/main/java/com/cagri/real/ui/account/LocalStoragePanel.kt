@@ -1,5 +1,6 @@
 package com.cagri.real.ui.account
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -33,19 +34,19 @@ internal fun LocalStoragePanel() {
         scope.launch {
             try { if (clear) repository.clearImageCache(); usage = repository.measure() }
             catch (c: CancellationException) { throw c }
-            catch (_: Exception) { error = "Depolama bilgisi okunamadı." }
+            catch (_: Exception) { error = t("Depolama bilgisi okunamadı.") }
             finally { busy = false }
         }
     }
     LaunchedEffect(repository) { refresh() }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         ConnectionCard {
-            Text(usage?.let { storageSize(it.total) } ?: "Ölçülüyor…", color = Color.White, fontSize = 24.sp)
+            Text(usage?.let { storageSize(it.total) } ?: t("Ölçülüyor…"), color = Color.White, fontSize = 24.sp)
             usage?.let { u ->
                 Spacer(Modifier.height(10.dp))
-                listOf("Kitaplar ve okuma verileri" to u.books, "Fotoğraflar" to u.photos, "GIF'ler" to u.gifs,
-                    "Sesler" to u.audio, "Diğer ekler" to u.attachments, "Pano kayıtları" to u.boardData,
-                    "Yerel veritabanı" to u.databases, "Ayarlar" to u.preferences, "Önbellek" to u.cache, "Diğer" to u.other)
+                listOf(t("Kitaplar ve okuma verileri") to u.books, t("Fotoğraflar") to u.photos, t("GIF'ler") to u.gifs,
+                    t("Sesler") to u.audio, t("Diğer ekler") to u.attachments, t("Pano kayıtları") to u.boardData,
+                    t("Yerel veritabanı") to u.databases, t("Ayarlar") to u.preferences, t("Önbellek") to u.cache, t("Diğer") to u.other)
                     .filter { it.second > 0 }.forEach { (label, bytes) ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(label, Modifier.weight(1f), color = Color.White.copy(alpha = .85f), fontSize = 14.sp)
@@ -54,9 +55,9 @@ internal fun LocalStoragePanel() {
                     }
             }
         }
-        ConnectionNote("Kitaplar, Pano dosyaları ve bekleyen yüklemeler otomatik silinmez.")
-        ConnectionPill("Görsel önbelleğini temizle", { refresh(true) }, Modifier.fillMaxWidth(), enabled = !busy)
-        ConnectionPill("Yeniden ölç", { refresh() }, Modifier.fillMaxWidth(), enabled = !busy, small = true)
+        ConnectionNote(t("Kitaplar, Pano dosyaları ve bekleyen yüklemeler otomatik silinmez."))
+        ConnectionPill(t("Görsel önbelleğini temizle"), { refresh(true) }, Modifier.fillMaxWidth(), enabled = !busy)
+        ConnectionPill(t("Yeniden ölç"), { refresh() }, Modifier.fillMaxWidth(), enabled = !busy, small = true)
         error?.let { ConnectionNote(it) }
     }
 }

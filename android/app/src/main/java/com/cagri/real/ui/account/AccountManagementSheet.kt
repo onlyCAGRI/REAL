@@ -1,5 +1,6 @@
 package com.cagri.real.ui.account
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
@@ -82,7 +83,7 @@ private class AccountUi(private val scope: CoroutineScope) {
             try { work() }
             catch (_: AuthCancelled) { /* User cancelled provider chooser; nothing submitted. */ }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: Exception) { error = failure.message ?: "İşlem tamamlanamadı." }
+            catch (failure: Exception) { error = failure.message ?: t("İşlem tamamlanamadı.") }
             finally { busy = false }
         }
     }
@@ -96,9 +97,10 @@ private suspend fun refreshAccount(ui: AccountUi, repository: AndroidAccountRepo
 }
 
 /** Same sheet geometry, rows and pills as Card Share. */
+/** [openSpace]: opened from the cloud-space notice, with the "Yer aç" list already open. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AccountManagementSheet(onDismiss: () -> Unit, onAddAccount: () -> Unit) {
+fun AccountManagementSheet(onDismiss: () -> Unit, onAddAccount: () -> Unit, openSpace: Boolean = false) {
     val controller = LocalAuthUiController.current
     val user = controller?.user?.collectAsState()?.value
     val scope = rememberCoroutineScope()
@@ -114,14 +116,14 @@ fun AccountManagementSheet(onDismiss: () -> Unit, onAddAccount: () -> Unit) {
             .padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
             if (user == null || controller == null) {
                 AnimatedContent(page, transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) }, label = "accountPage") { p ->
-                    if (p == AccountPage.Storage) SubPage("Bu cihazdaki alan", { page = AccountPage.Main }) { LocalStoragePanel() }
+                    if (p == AccountPage.Storage) SubPage(t("Bu cihazdaki alan"), { page = AccountPage.Main }) { LocalStoragePanel() }
                     else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PageTitle("Hesapları yönet", "Bu cihazda REAL hesabı bağlı değil.")
+                        PageTitle(t("Hesapları yönet"), t("Bu cihazda REAL hesabı bağlı değil."))
                         Spacer(Modifier.height(6.dp))
-                        AccountRow(RowGlyph.Device, ConnectionPalette.Accent, "Bu cihazdaki alan", "Önbellek ve yerel dosyalar", true) { page = AccountPage.Storage }
+                        AccountRow(RowGlyph.Device, ConnectionPalette.Accent, t("Bu cihazdaki alan"), t("Önbellek ve yerel dosyalar"), true) { page = AccountPage.Storage }
                         Spacer(Modifier.height(6.dp))
-                        ConnectionPill("Hesap ekle", { onDismiss(); onAddAccount() }, Modifier.fillMaxWidth(), filled = true)
-                        ConnectionPill("Kapat", onDismiss, Modifier.fillMaxWidth(), small = true)
+                        ConnectionPill(t("Hesap ekle"), { onDismiss(); onAddAccount() }, Modifier.fillMaxWidth(), filled = true)
+                        ConnectionPill(t("Kapat"), onDismiss, Modifier.fillMaxWidth(), small = true)
                     }
                 }
             } else key(user.id) {
@@ -130,7 +132,7 @@ fun AccountManagementSheet(onDismiss: () -> Unit, onAddAccount: () -> Unit) {
                 LaunchedEffect(repository) {
                     try { ui.usage = withContext(Dispatchers.IO) { repository.cachedUsage() }; refreshAccount(ui, repository) }
                     catch (cancelled: CancellationException) { throw cancelled }
-                    catch (failure: Exception) { ui.error = failure.message ?: "Bulut kullanımı alınamadı." }
+                    catch (failure: Exception) { ui.error = failure.message ?: t("Bulut kullanımı alınamadı.") }
                 }
                 val hasPassword = "password" in user.providerIds
                 val hasGoogle = "google.com" in user.providerIds
@@ -142,16 +144,16 @@ fun AccountManagementSheet(onDismiss: () -> Unit, onAddAccount: () -> Unit) {
                 }
                 AnimatedContent(page, transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) }, label = "accountPage") { p ->
                     when (p) {
-                        AccountPage.Main -> MainPage(ui, user.displayName?.takeIf { it.isNotBlank() } ?: "REAL hesabı", user.email, user.id,
-                            open = { page = it },
+                        AccountPage.Main -> MainPage(ui, user.displayName?.takeIf { it.isNotBlank() } ?: t("REAL hesabı"), user.email, user.id,
+                            open = { page = it }, openSpace = openSpace,
                             onPurge = { ui.run { repository.purgeRetained(); ui.confirmPurge = false; refreshAccount(ui, repository) } },
                             onRefresh = { ui.run { refreshAccount(ui, repository) } },
                             onSignOut = { ui.run { controller.signOut().getOrThrow(); onDismiss() } },
                             onAdd = { onDismiss(); onAddAccount() }, onClose = onDismiss,
                             onEditName = { onDismiss(); com.cagri.real.ui.auth.ProfileNamePrompt.forced.value = true })
-                        AccountPage.Sync -> SubPage("Eşitleme", { page = AccountPage.Main }) { SyncManagementPanel(user.id, enabled = !ui.busy) }
-                        AccountPage.Storage -> SubPage("Bu cihazdaki alan", { page = AccountPage.Main }) { LocalStoragePanel() }
-                        AccountPage.Data -> SubPage("Veri ve silme", { page = AccountPage.Main }) {
+                        AccountPage.Sync -> SubPage(t("Eşitleme"), { page = AccountPage.Main }) { SyncManagementPanel(user.id, enabled = !ui.busy) }
+                        AccountPage.Storage -> SubPage(t("Bu cihazdaki alan"), { page = AccountPage.Main }) { LocalStoragePanel() }
+                        AccountPage.Data -> SubPage(t("Veri ve silme"), { page = AccountPage.Main }) {
                             DataPage(ui, repository, hasPassword, hasGoogle, reauth, onFinishAccount = {
                                 withContext(NonCancellable) {
                                     LocalAccountCleanup.prepare(context, user.id)
@@ -189,11 +191,11 @@ private fun SubPage(title: String, onBack: () -> Unit, content: @Composable Colu
 }
 
 @Composable
-private fun MainPage(ui: AccountUi, name: String, email: String?, userId: String, open: (AccountPage) -> Unit,
+private fun MainPage(ui: AccountUi, name: String, email: String?, userId: String, open: (AccountPage) -> Unit, openSpace: Boolean,
                      onPurge: () -> Unit, onRefresh: () -> Unit, onSignOut: () -> Unit, onAdd: () -> Unit, onClose: () -> Unit,
                      onEditName: () -> Unit) {
     Column(Modifier.fillMaxWidth().animateContentSize(tween(220)), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        PageTitle("Hesapları yönet")
+        PageTitle(t("Hesapları yönet"))
         Spacer(Modifier.height(6.dp))
         // Hesap
         ConnectionCard {
@@ -208,20 +210,20 @@ private fun MainPage(ui: AccountUi, name: String, email: String?, userId: String
             // Adın: the name others see in shared categories and on shared cards.
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Ortak kategorilerde ve paylaşımlarda bu ad görünür.", Modifier.weight(1f), color = ConnectionPalette.Muted, fontSize = 13.sp)
+                Text(t("Ortak kategorilerde ve paylaşımlarda bu ad görünür."), Modifier.weight(1f), color = ConnectionPalette.Muted, fontSize = 13.sp)
                 Spacer(Modifier.width(10.dp))
-                ConnectionPill("Adını değiştir", onEditName, enabled = !ui.busy, small = true)
+                ConnectionPill(t("Adını değiştir"), onEditName, enabled = !ui.busy, small = true)
             }
         }
         // Bulut alanı
         ConnectionCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Bulut alanı", Modifier.weight(1f), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                ConnectionPill("Yenile", onRefresh, enabled = !ui.busy, small = true)
+                Text(t("Bulut alanı"), Modifier.weight(1f), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                ConnectionPill(t("Yenile"), onRefresh, enabled = !ui.busy, small = true)
             }
             val usage = ui.usage
             if (usage == null) {
-                Text("Kullanım bilgisi henüz alınamadı.", color = ConnectionPalette.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+                Text(t("Kullanım bilgisi henüz alınamadı."), color = ConnectionPalette.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
             } else {
                 val fraction = if (usage.quotaBytes > 0) (usage.usedBytes.toFloat() / usage.quotaBytes).coerceIn(0f, 1f) else 0f
                 Text("${size(usage.usedBytes)} / ${size(usage.quotaBytes)}", color = ConnectionPalette.Accent, fontSize = 24.sp, modifier = Modifier.padding(top = 6.dp))
@@ -230,37 +232,40 @@ private fun MainPage(ui: AccountUi, name: String, email: String?, userId: String
                         .background(if (fraction > .9f) Color(0xFFFFB86F) else ConnectionPalette.Accent))
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                    Stat("Aktif", size(usage.activeBytes), Modifier.weight(1f))
-                    Stat("Temizlenmeyi bekleyen", size(usage.retainedBytes), Modifier.weight(1f))
+                    Stat(t("Aktif"), size(usage.activeBytes), Modifier.weight(1f))
+                    Stat(t("Temizlenmeyi bekleyen"), size(usage.retainedBytes), Modifier.weight(1f))
                 }
-                Text("${usage.fileCount} dosya" + if (ui.cached) " · son kaydedilen bilgi" else "", color = ConnectionPalette.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                Text(t("{0} dosya", usage.fileCount) + if (ui.cached) t(" · son kaydedilen bilgi") else "", color = ConnectionPalette.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                var showFiles by rememberSaveable { mutableStateOf(openSpace) }
+                if (showFiles) CloudSpaceFiles(onRemoved = {})
+                else if (fraction > .8f) ConnectionPill(t("Yer aç"), { showFiles = true }, Modifier.fillMaxWidth().padding(top = 10.dp), small = true)
                 if (usage.retainedBytes > 0) {
                     Spacer(Modifier.height(10.dp))
-                    if (!ui.confirmPurge) ConnectionPill("Bekleyenleri şimdi temizle", { ui.confirmPurge = true }, Modifier.fillMaxWidth(), enabled = !ui.busy && ui.remoteKnown && ui.erasure == null, small = true)
+                    if (!ui.confirmPurge) ConnectionPill(t("Bekleyenleri şimdi temizle"), { ui.confirmPurge = true }, Modifier.fillMaxWidth(), enabled = !ui.busy && ui.remoteKnown && ui.erasure == null, small = true)
                     else {
-                        Text("Silinmiş dosyalar buluttan kalıcı olarak kaldırılır. Aktif dosyaların etkilenmez.", color = ConnectionPalette.Muted, fontSize = 13.sp)
+                        Text(t("Silinmiş dosyalar buluttan kalıcı olarak kaldırılır. Aktif dosyaların etkilenmez."), color = ConnectionPalette.Muted, fontSize = 13.sp)
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ConnectionPill("Temizle", onPurge, Modifier.weight(1f), enabled = !ui.busy, danger = true, small = true)
-                            ConnectionPill("Vazgeç", { ui.confirmPurge = false }, Modifier.weight(1f), enabled = !ui.busy, small = true)
+                            ConnectionPill(t("Temizle"), onPurge, Modifier.weight(1f), enabled = !ui.busy, danger = true, small = true)
+                            ConnectionPill(t("Vazgeç"), { ui.confirmPurge = false }, Modifier.weight(1f), enabled = !ui.busy, small = true)
                         }
                     }
                 }
             }
         }
         if (!ui.deviceApproved && !ui.pendingRestart)
-            ConnectionNote("Bulut yedeği başka bir cihazda yeniden başlatılmış. Bu cihazdaki eski veriler otomatik yüklenmez.")
+            ConnectionNote(t("Bulut yedeği başka bir cihazda yeniden başlatılmış. Bu cihazdaki eski veriler otomatik yüklenmez."))
         val erasure = ui.erasure
-        AccountRow(RowGlyph.Sync, ConnectionPalette.Accent, "Eşitleme", "Bekleyen kayıtlar ve çakışmalar", true) { open(AccountPage.Sync) }
-        AccountRow(RowGlyph.Device, Color(0xFFB59BFF), "Bu cihazdaki alan", "Önbellek ve yerel dosyalar", true) { open(AccountPage.Storage) }
-        AccountRow(RowGlyph.Data, ConnectionPalette.Danger, "Veri ve silme",
-            when { erasure != null && !erasure.complete -> "Silme devam ediyor"; ui.pendingRestart -> "Yedekleme yeniden başlatılmayı bekliyor"
-                else -> "Bulut verilerini veya hesabı sil" }, true) { open(AccountPage.Data) }
+        AccountRow(RowGlyph.Sync, ConnectionPalette.Accent, t("Eşitleme"), t("Bekleyen kayıtlar ve çakışmalar"), true) { open(AccountPage.Sync) }
+        AccountRow(RowGlyph.Device, Color(0xFFB59BFF), t("Bu cihazdaki alan"), t("Önbellek ve yerel dosyalar"), true) { open(AccountPage.Storage) }
+        AccountRow(RowGlyph.Data, ConnectionPalette.Danger, t("Veri ve silme"),
+            when { erasure != null && !erasure.complete -> t("Silme devam ediyor"); ui.pendingRestart -> t("Yedekleme yeniden başlatılmayı bekliyor")
+                else -> t("Bulut verilerini veya hesabı sil") }, true) { open(AccountPage.Data) }
         Spacer(Modifier.height(6.dp))
-        ConnectionPill("Çıkış yap", onSignOut, Modifier.fillMaxWidth(), enabled = !ui.busy, filled = true)
+        ConnectionPill(t("Çıkış yap"), onSignOut, Modifier.fillMaxWidth(), enabled = !ui.busy, filled = true)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ConnectionPill("Başka hesap ekle", onAdd, Modifier.weight(1f), enabled = !ui.busy, small = true)
-            ConnectionPill("Kapat", { if (!ui.busy) onClose() }, Modifier.weight(1f), enabled = !ui.busy, small = true)
+            ConnectionPill(t("Başka hesap ekle"), onAdd, Modifier.weight(1f), enabled = !ui.busy, small = true)
+            ConnectionPill(t("Kapat"), { if (!ui.busy) onClose() }, Modifier.weight(1f), enabled = !ui.busy, small = true)
         }
     }
 }
@@ -280,54 +285,54 @@ private fun DataPage(ui: AccountUi, repository: AndroidAccountRepository, hasPas
     Column(Modifier.fillMaxWidth().animateContentSize(tween(220)), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (current != null) {
             ConnectionNote(when {
-                !current.complete -> "Silme devam ediyor. Dosya temizliği bitmeden işlem tamamlanmış sayılmaz; pencereyi kapatıp sonra devam edebilirsin."
-                current.mode == ErasureMode.CLOUD -> "Bulut verilerin silindi. Yerel kartların duruyor; otomatik bulut eşitlemesi kapalı."
-                else -> "Bulut temizliği tamamlandı. Firebase hesabını silmek için yeniden doğrulayıp son adımı bitir."
+                !current.complete -> t("Silme devam ediyor. Dosya temizliği bitmeden işlem tamamlanmış sayılmaz; pencereyi kapatıp sonra devam edebilirsin.")
+                current.mode == ErasureMode.CLOUD -> t("Bulut verilerin silindi. Yerel kartların duruyor; otomatik bulut eşitlemesi kapalı.")
+                else -> t("Bulut temizliği tamamlandı. Firebase hesabını silmek için yeniden doğrulayıp son adımı bitir.")
             })
-            if (!current.complete) ConnectionPill("Silme durumunu yenile", {
+            if (!current.complete) ConnectionPill(t("Silme durumunu yenile"), {
                 ui.run { ui.erasure = repository.advance(current.operationId); if (ui.erasure?.complete == true) refreshAccount(ui, repository) }
             }, Modifier.fillMaxWidth(), enabled = !ui.busy)
             if (current.complete && current.mode == ErasureMode.ACCOUNT) {
-                if (hasPassword) PasswordField(ui, "Şifre")
-                if (hasPassword) ConnectionPill("Hesap silmeyi bitir", { ui.run { reauth(false); onFinishAccount() } },
+                if (hasPassword) PasswordField(ui, t("Şifre"))
+                if (hasPassword) ConnectionPill(t("Hesap silmeyi bitir"), { ui.run { reauth(false); onFinishAccount() } },
                     Modifier.fillMaxWidth(), enabled = !ui.busy && ui.password.isNotBlank(), danger = true)
-                if (hasGoogle) ConnectionPill("Google ile doğrula ve bitir", { ui.run { reauth(true); onFinishAccount() } },
+                if (hasGoogle) ConnectionPill(t("Google ile doğrula ve bitir"), { ui.run { reauth(true); onFinishAccount() } },
                     Modifier.fillMaxWidth(), enabled = !ui.busy, danger = true)
             }
         }
         if ((current?.mode == ErasureMode.CLOUD && current.complete) || ui.pendingRestart) {
             if (!ui.confirmRestart) ConnectionCard {
-                Text("Bulut yedeklemesi", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                Text("Bu cihazdaki kartlar, kategoriler ve planlar yeniden buluta yedeklenir.", color = ConnectionPalette.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
-                ConnectionPill(if (ui.pendingRestart) "Yeniden başlatmayı tamamla" else "Yedeklemeyi yeniden başlat", {
+                Text(t("Bulut yedeklemesi"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(t("Bu cihazdaki kartlar, kategoriler ve planlar yeniden buluta yedeklenir."), color = ConnectionPalette.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+                ConnectionPill(if (ui.pendingRestart) t("Yeniden başlatmayı tamamla") else t("Yedeklemeyi yeniden başlat"), {
                     ui.confirmRestart = true; ui.restartAccepted = false; ui.password = ""
                 }, Modifier.fillMaxWidth(), enabled = !ui.busy && ui.remoteKnown)
             } else ConnectionCard {
-                Text("Yedeklemeyi yeniden başlat", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(t("Yedeklemeyi yeniden başlat"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(8.dp))
-                ConnectionNote("Yalnız bu cihazda hâlâ bulunan kartlar, kategoriler ve planlar yeniden yedeklenir. Yerelde de silinen kartlar geri gelmez. Silinen ortak panolar, arkadaş bağlantıları ve paylaşım linkleri geri oluşturulmaz. Diğer cihazlardaki eski veriler yüklenmez ve bu işlem yeniden bulut alanı kullanır.")
-                ConsentRow(ui.restartAccepted, !ui.busy, "Bu cihazdaki mevcut verileri yeniden yedeklemek istiyorum.") { ui.restartAccepted = it }
-                if (hasPassword) PasswordField(ui, "Şifreyle doğrula")
+                ConnectionNote(t("Yalnız bu cihazda hâlâ bulunan kartlar, kategoriler ve planlar yeniden yedeklenir. Yerelde de silinen kartlar geri gelmez. Silinen ortak panolar, arkadaş bağlantıları ve paylaşım linkleri geri oluşturulmaz. Diğer cihazlardaki eski veriler yüklenmez ve bu işlem yeniden bulut alanı kullanır."))
+                ConsentRow(ui.restartAccepted, !ui.busy, t("Bu cihazdaki mevcut verileri yeniden yedeklemek istiyorum.")) { ui.restartAccepted = it }
+                if (hasPassword) PasswordField(ui, t("Şifreyle doğrula"))
                 val operation = current?.operationId
-                if (hasPassword) ConnectionPill("Doğrula ve başlat", {
+                if (hasPassword) ConnectionPill(t("Doğrula ve başlat"), {
                     ui.run { reauth(false); repository.restartBackup(operation); ui.confirmRestart = false; ui.restartAccepted = false; refreshAccount(ui, repository) }
                 }, Modifier.fillMaxWidth(), enabled = !ui.busy && ui.restartAccepted && ui.password.isNotBlank())
-                if (hasGoogle) ConnectionPill("Google ile doğrula ve başlat", {
+                if (hasGoogle) ConnectionPill(t("Google ile doğrula ve başlat"), {
                     ui.run { reauth(true); repository.restartBackup(operation); ui.confirmRestart = false; ui.restartAccepted = false; refreshAccount(ui, repository) }
                 }, Modifier.fillMaxWidth(), enabled = !ui.busy && ui.restartAccepted)
-                ConnectionPill("Vazgeç", { ui.confirmRestart = false; ui.restartAccepted = false; ui.password = "" }, Modifier.fillMaxWidth(), enabled = !ui.busy, small = true)
+                ConnectionPill(t("Vazgeç"), { ui.confirmRestart = false; ui.restartAccepted = false; ui.password = "" }, Modifier.fillMaxWidth(), enabled = !ui.busy, small = true)
             }
         }
         val mode = ui.confirm
         if (mode != null && !ui.confirmRestart) ConnectionCard {
-            Text(if (mode == ErasureMode.CLOUD) "Bulut verilerini sil" else "Hesabı sil", color = ConnectionPalette.Danger, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text(if (mode == ErasureMode.CLOUD) t("Bulut verilerini sil") else t("Hesabı sil"), color = ConnectionPalette.Danger, fontSize = 16.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(8.dp))
             ConnectionNote(if (mode == ErasureMode.CLOUD)
-                "Buluttaki kartların, kategorilerin, planların, eklerin, paylaşım bağlantıların, bağlantıların ve sahip olduğun tüm panolar silinir. Yerel dosyaların ve Firebase hesabın kalır; otomatik sync kapatılır."
-                else "Buluttaki verilerin, paylaşım bağlantıların, bağlantıların ve sahip olduğun tüm panolar silinir. Ardından Firebase hesabın ve bu hesabın yerel çalışma alanı silinir.")
-            ConnectionNote("Ortak panolarının üyeleri erişimi kaybeder. Başkasının panosu ve alıcının içe aktardığı bağımsız kart kopyaları silinmez. Bu işlem geri alınamaz.")
-            ConsentRow(ui.accepted, !ui.busy, "Sahip olduğum ortak panoların da silineceğini anladım.") { ui.accepted = it }
-            if (hasPassword) PasswordField(ui, "Şifreyle doğrula")
+                t("Buluttaki kartların, kategorilerin, planların, eklerin, paylaşım bağlantıların, bağlantıların ve sahip olduğun tüm panolar silinir. Yerel dosyaların ve Firebase hesabın kalır; otomatik sync kapatılır.")
+                else t("Buluttaki verilerin, paylaşım bağlantıların, bağlantıların ve sahip olduğun tüm panolar silinir. Ardından Firebase hesabın ve bu hesabın yerel çalışma alanı silinir."))
+            ConnectionNote(t("Ortak panolarının üyeleri erişimi kaybeder. Başkasının panosu ve alıcının içe aktardığı bağımsız kart kopyaları silinmez. Bu işlem geri alınamaz."))
+            ConsentRow(ui.accepted, !ui.busy, t("Sahip olduğum ortak panoların da silineceğini anladım.")) { ui.accepted = it }
+            if (hasPassword) PasswordField(ui, t("Şifreyle doğrula"))
             val begin: (Boolean) -> Unit = { google ->
                 ui.run {
                     reauth(google)
@@ -336,28 +341,28 @@ private fun DataPage(ui: AccountUi, repository: AndroidAccountRepository, hasPas
                     ui.erasure = repository.advance(ui.erasure!!.operationId)
                 }
             }
-            if (hasPassword) ConnectionPill("Doğrula ve sil", { begin(false) }, Modifier.fillMaxWidth(),
+            if (hasPassword) ConnectionPill(t("Doğrula ve sil"), { begin(false) }, Modifier.fillMaxWidth(),
                 enabled = !ui.busy && ui.accepted && ui.password.isNotBlank(), danger = true)
-            if (hasGoogle) ConnectionPill("Google ile doğrula ve sil", { begin(true) }, Modifier.fillMaxWidth(),
+            if (hasGoogle) ConnectionPill(t("Google ile doğrula ve sil"), { begin(true) }, Modifier.fillMaxWidth(),
                 enabled = !ui.busy && ui.accepted, danger = true)
-            ConnectionPill("Vazgeç", { ui.confirm = null; ui.accepted = false; ui.password = "" }, Modifier.fillMaxWidth(), enabled = !ui.busy, small = true)
+            ConnectionPill(t("Vazgeç"), { ui.confirm = null; ui.accepted = false; ui.password = "" }, Modifier.fillMaxWidth(), enabled = !ui.busy, small = true)
         } else if (!ui.confirmRestart && (current == null || (current.complete && current.mode == ErasureMode.CLOUD))) {
             if (current == null) ConnectionCard {
-                Text("Bulut verilerini sil", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                Text("Buluttaki kartlar, ekler ve paylaşımlar silinir. Yerel verilerin kalır.", color = ConnectionPalette.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
-                ConnectionPill("Bulut verilerini sil", {
+                Text(t("Bulut verilerini sil"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(t("Buluttaki kartlar, ekler ve paylaşımlar silinir. Yerel verilerin kalır."), color = ConnectionPalette.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+                ConnectionPill(t("Bulut verilerini sil"), {
                     ui.confirm = ErasureMode.CLOUD; ui.accepted = false; ui.operationId = UUID.randomUUID().toString()
                 }, Modifier.fillMaxWidth(), enabled = !ui.busy && ui.remoteKnown, danger = true)
             }
             ConnectionCard {
-                Text("Hesabı sil", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                Text("Bulut verilerin, hesabın ve bu hesabın yerel çalışma alanı silinir.", color = ConnectionPalette.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
-                ConnectionPill("Hesabı sil", {
+                Text(t("Hesabı sil"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(t("Bulut verilerin, hesabın ve bu hesabın yerel çalışma alanı silinir."), color = ConnectionPalette.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+                ConnectionPill(t("Hesabı sil"), {
                     ui.confirm = ErasureMode.ACCOUNT; ui.accepted = false; ui.operationId = UUID.randomUUID().toString()
                 }, Modifier.fillMaxWidth(), enabled = !ui.busy && ui.remoteKnown, danger = true)
             }
         }
-        if (ui.error != null && current == null) ConnectionPill("Silme başlamadıysa eşitlemeyi aç", {
+        if (ui.error != null && current == null) ConnectionPill(t("Silme başlamadıysa eşitlemeyi aç"), {
             ui.run { repository.resumeCloudIfNoErasure(); refreshAccount(ui, repository) }
         }, Modifier.fillMaxWidth(), enabled = !ui.busy, small = true)
     }
