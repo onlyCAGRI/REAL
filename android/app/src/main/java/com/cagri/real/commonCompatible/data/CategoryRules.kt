@@ -1,5 +1,7 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.t
+
 /** All time inputs are supplied by the caller; no implicit clock or timezone. */
 object CategoryRules {
     const val ROLLING_24_HOURS_MILLIS: Long = 24L * 60L * 60L * 1000L
@@ -19,7 +21,7 @@ object CategoryRules {
     }
 
     fun normalizedName(name: String): String {
-        require(name.isNotBlank()) { "Kategori adı boş olamaz" }
+        require(name.isNotBlank()) { t("Kategori adı boş olamaz") }
         return name.trim()
     }
 

@@ -1,5 +1,6 @@
 package com.cagri.real.ai
 
+import com.cagri.real.i18n.t
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +14,7 @@ interface AiConsentStore {
     suspend fun save(uid: String, feature: AiFeature, allowed: Boolean)
 }
 data class AiConsentPrompt(val id: Long, val uid: String, val feature: AiFeature)
-class AiConsentDeclined : Exception("AI için veri gönderilmedi. İstersen daha sonra yeniden deneyebilirsin.")
+class AiConsentDeclined : Exception(t("AI için veri gönderilmedi. İstersen daha sonra yeniden deneyebilirsin."))
 
 /** Serializes requests without timers. Cancellation/dismissal never counts as agreement. */
 class AiConsentCoordinator(private val store: AiConsentStore) {
@@ -37,7 +38,7 @@ class AiConsentCoordinator(private val store: AiConsentStore) {
 
         ensureAccount()
         if (store.allowed(uid, feature)) return@withLock
-        check(hostActive) { "AI açıklamasını uygulama açıkken onayla." }
+        check(hostActive) { t("AI açıklamasını uygulama açıkken onayla.") }
         val pending = AiConsentPrompt(++nextId, uid, feature)
         val deferred = CompletableDeferred<Boolean>()
         answer = deferred; mutablePrompt.value = pending

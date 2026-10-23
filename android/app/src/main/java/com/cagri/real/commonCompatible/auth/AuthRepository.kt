@@ -1,5 +1,7 @@
 package com.cagri.real.auth
 
+import com.cagri.real.i18n.t
+
 data class AuthUser(
     val id: String,
     val email: String?,
@@ -29,11 +31,11 @@ interface AuthRepository {
     suspend fun idTokenForUser(expectedUid: String): Result<String?>
 
     suspend fun reauthenticateWithEmail(expectedUid: String, password: String): Result<Unit> =
-        Result.failure(AuthFailure("Bu hesap için doğrulama desteklenmiyor."))
+        Result.failure(AuthFailure(t("Bu hesap için doğrulama desteklenmiyor.")))
     suspend fun deleteAccount(expectedUid: String): Result<Unit> =
-        Result.failure(AuthFailure("Hesap silme desteklenmiyor."))
+        Result.failure(AuthFailure(t("Hesap silme desteklenmiyor.")))
     suspend fun reauthenticateWithGoogleIdToken(expectedUid: String, idToken: String): Result<Unit> =
-        Result.failure(AuthFailure("Google doğrulaması desteklenmiyor."))
+        Result.failure(AuthFailure(t("Google doğrulaması desteklenmiyor.")))
 
     fun signOut()
 }

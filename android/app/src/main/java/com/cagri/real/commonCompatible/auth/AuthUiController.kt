@@ -1,5 +1,6 @@
 package com.cagri.real.auth
 
+import com.cagri.real.i18n.t
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -16,11 +17,11 @@ interface AuthUiController {
     suspend fun updateProfileName(expectedUid: String, firstName: String, lastName: String = ""): Result<AuthUser>
     suspend fun sendPasswordReset(email: String): Result<Unit>
     suspend fun reauthenticateWithEmail(expectedUid: String, password: String): Result<Unit> =
-        Result.failure(AuthFailure("Bu hesap için doğrulama desteklenmiyor."))
+        Result.failure(AuthFailure(t("Bu hesap için doğrulama desteklenmiyor.")))
     suspend fun deleteAccount(expectedUid: String): Result<Unit> =
-        Result.failure(AuthFailure("Hesap silme desteklenmiyor."))
+        Result.failure(AuthFailure(t("Hesap silme desteklenmiyor.")))
     suspend fun reauthenticateWithGoogle(expectedUid: String): Result<Unit> =
-        Result.failure(AuthFailure("Google doğrulaması desteklenmiyor."))
+        Result.failure(AuthFailure(t("Google doğrulaması desteklenmiyor.")))
 
     suspend fun signOut(): Result<Unit>
 
