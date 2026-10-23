@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -85,6 +86,7 @@ internal fun DiscoveryStepper(
     reduceAnimations: Boolean,
     doneLabel: String,
     modifier: Modifier = Modifier,
+    actionTestTag: String? = null,
     rare: (chosen: Set<String>, key: String) -> Boolean = { _, _ -> false },
     onDone: () -> Unit,
 ) {
@@ -160,7 +162,10 @@ internal fun DiscoveryStepper(
             else -> doneLabel
         }
         Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-            DiscoveryLoadingButton(label.replaceFirstChar { it.uppercase() }, loading && last, enabled && canGo, accent, reduceAnimations) {
+            DiscoveryLoadingButton(
+                label.replaceFirstChar { it.uppercase() }, loading && last, enabled && canGo, accent, reduceAnimations,
+                buttonModifier = if (actionTestTag != null) Modifier.testTag(actionTestTag) else Modifier
+            ) {
                 if (last) onDone() else step++
             }
         }

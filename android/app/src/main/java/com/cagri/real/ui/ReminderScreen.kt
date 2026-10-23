@@ -148,6 +148,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import com.cagri.real.ui.components.RealHaptics
 import com.cagri.real.ui.components.RealMotion
 import androidx.compose.ui.unit.IntOffset
@@ -1765,6 +1766,7 @@ private fun ReminderListScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize()
+                .testTag("home_list")
                 // Keyboard open: a tap on the list only closes the keyboard; it does not open the category or card under
                 // the finger. Scrolling still works.
                 .pointerInput(Unit) {
@@ -2215,6 +2217,7 @@ private fun ReminderListScreen(
                         plainStyle = plainHomeCards,
                         onSwipeLeftDelete = if (viewOnly) null else ({ onDeleteReminders(setOf(reminder.id)) }),
                         modifier = Modifier
+                            .testTag("home_card")
                             .then(if (reduceAnimations) Modifier else Modifier.animateItem(
                                 placementSpec = RealMotion.smooth<IntOffset>(0.35f),
                                 fadeInSpec = if (isNewlyCreated) null else tween(180),

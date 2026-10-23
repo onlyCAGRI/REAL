@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -158,7 +159,8 @@ internal fun YasamIconTabs(tab: Int, onTab: (Int) -> Unit, reduceAnimations: Boo
                 Box(
                     Modifier.weight(1f).height(48.dp)
                         .clickable(role = Role.Tab) { onTab(i) }
-                        .semantics { contentDescription = name; selected = i == tab },
+                        .semantics { contentDescription = name; selected = i == tab }
+                        .then(if (i == 2) Modifier.testTag("yasam_tab_discover") else Modifier),
                     contentAlignment = Alignment.Center
                 ) {
                     Canvas(Modifier.size(20.dp)) {

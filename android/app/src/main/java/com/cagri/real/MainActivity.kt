@@ -24,6 +24,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -243,7 +245,7 @@ class MainActivity : ComponentActivity() {
                     com.cagri.real.ui.components.LocalSetReminderAlarm provides { id, on -> mutate { repository.setAlarm(id, on) } },
                     com.cagri.real.ui.components.LocalSetReminderLocationTrigger provides { id, trigger -> mutate { repository.setLocationTrigger(id, trigger) } }
                 ) {
-                Box(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                     Crossfade(
                     targetState = showWelcome,
                     animationSpec = if (reduceAnimations) snap() else tween(240),

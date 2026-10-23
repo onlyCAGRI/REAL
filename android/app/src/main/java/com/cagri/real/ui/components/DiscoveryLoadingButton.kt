@@ -28,7 +28,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 internal fun DiscoveryLoadingButton(
     label: String, loading: Boolean, enabled: Boolean, accent: Color,
-    reduceAnimations: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit
+    reduceAnimations: Boolean, modifier: Modifier = Modifier, buttonModifier: Modifier = Modifier,
+    onClick: () -> Unit
 ) {
     val angle = if (loading && !reduceAnimations) {
         rememberInfiniteTransition(label = "discovery-loading-orbit").animateFloat(
@@ -38,6 +39,7 @@ internal fun DiscoveryLoadingButton(
     val shape = RoundedCornerShape(28.dp)
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp).height(56.dp)
+            .then(buttonModifier)
             .drawWithCache {
                 fun ringPath(outer: Float, inner: Float) = Path().apply {
                     fillType = PathFillType.EvenOdd

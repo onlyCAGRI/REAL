@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -206,6 +207,7 @@ fun MediaDiscoveryScreen(
                         selection = filters.toSet(), onSelection = { filters = ArrayList(it) },
                         accent = DiscoveryBlue, loading = loading, enabled = ready && repo != null, reduceAnimations = reduceAnimations,
                         doneLabel = t("afişleri getir"), modifier = Modifier.weight(1f).then(filterBodyModifier),
+                        actionTestTag = "discovery_start",
                         rare = { chosen, key -> DiscoveryRarePairs.rare(DiscoveryRarePairs.film, chosen, key) }
                     ) { discover() }
                 }
@@ -370,7 +372,7 @@ private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceA
             } finally { busy = false }
         }
     }
-    BoxWithConstraints(modifier.fillMaxWidth().padding(top = 34.dp, bottom = 8.dp), contentAlignment = Alignment.TopCenter) {
+    BoxWithConstraints(modifier.fillMaxWidth().testTag("discovery_deck").padding(top = 34.dp, bottom = 8.dp), contentAlignment = Alignment.TopCenter) {
         // Reserve a separate 64dp dock and a 12dp gap; never cover the artwork.
         val width = min(maxWidth.value * .96f, (maxHeight.value - 76f).coerceAtLeast(1f) * PosterAspect).dp
         val posterHeight = width / PosterAspect

@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -139,7 +140,7 @@ fun HomeLiquidDock(
 
     // The composer remains at one stable composition location in every state.
     Layout(
-        modifier = modifier.then(dockGesture),
+        modifier = modifier.then(dockGesture).testTag("home_dock"),
         content = {
             Box { composer() }
             if (showChrome) {
@@ -230,7 +231,7 @@ private fun HomeDockExpandedNavigation(
             selected = false,
             onClick = onOpenWidget,
             pill = selectedPill,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f).testTag("dock_yasam")
         )
         HomeDockNavigationItem(
             label = t("Pano"),

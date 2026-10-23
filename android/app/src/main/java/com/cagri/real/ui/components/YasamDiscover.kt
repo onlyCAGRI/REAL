@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,7 +57,7 @@ internal fun YasamDiscoverGrid(
             Text(t("bugün ne yapsak"), color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp, fontWeight = FontWeight.Light, fontFamily = YasamThin)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            DiscoverTile(t("İzle"), WatchTone, listLine(watchlistCount), actions.openFilm, actions.openFilmList, Modifier.weight(1f)) {
+            DiscoverTile(t("İzle"), WatchTone, listLine(watchlistCount), actions.openFilm, actions.openFilmList, Modifier.weight(1f).testTag("discover_watch")) {
                 PosterStack(watchArt, RoundedCornerShape(5.dp), 22, 32)
             }
             DiscoverTile(t("Oyna"), PlayTone, listLine(playlistCount), actions.openGame, actions.openGameList, Modifier.weight(1f)) {
