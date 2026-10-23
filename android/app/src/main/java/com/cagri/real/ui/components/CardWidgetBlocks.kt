@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -204,7 +205,7 @@ private fun StepButton(step: Int, enabled: Boolean, size: androidx.compose.ui.un
             .background(if (positive) WidgetBlue.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.08f))
             .border(0.7.dp, if (positive) WidgetBlue.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.12f), CircleShape)
             .clickable(source, indication = null, enabled = enabled, role = Role.Button) { onStep(step) }
-            .semantics { contentDescription = if (positive) "$step artır" else "${abs(step)} azalt" },
+            .semantics { contentDescription = if (positive) t("{0} artır", step) else t("{0} azalt", abs(step)) },
         contentAlignment = Alignment.Center
     ) {
         Text(stepLabel(step), color = if (positive) Color(0xFFDCE8FF) else WidgetInk,
@@ -286,11 +287,11 @@ fun MarketBlockView(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         when {
-                            failed -> "Fiyat alınamadı · dokun"
-                            quote == null -> "Fiyat yükleniyor…"
-                            quote.stale -> "Son bilinen fiyat"
-                            narrow -> "24 saat · ${agoText(quote.updatedAt)}"
-                            else -> "Son 24 saat · CoinGecko · ${agoText(quote.updatedAt)}"
+                            failed -> t("Fiyat alınamadı · dokun")
+                            quote == null -> t("Fiyat yükleniyor…")
+                            quote.stale -> t("Son bilinen fiyat")
+                            narrow -> t("24 saat · {0}", agoText(quote.updatedAt))
+                            else -> t("Son 24 saat · CoinGecko · {0}", agoText(quote.updatedAt))
                         },
                         color = WidgetSoft.copy(alpha = 0.8f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = if (failed) Modifier.clickable { failed = false; retryTick++ } else Modifier
@@ -313,13 +314,13 @@ fun WidgetSettingsDialog(attachment: ReminderAttachment, onChange: (ReminderAtta
         Column(Modifier.fillMaxWidth().liquidDockChip(RoundedCornerShape(24.dp)).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (attachment.isCounterBlock()) "Sayaç ayarları" else "Piyasa ayarları",
+                Text(if (attachment.isCounterBlock()) t("Sayaç ayarları") else t("Piyasa ayarları"),
                     color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text("Bitti", color = Color.White) }
+                TextButton(onClick = onDismiss) { Text(t("Bitti"), color = Color.White) }
             }
             if (attachment.isCounterBlock()) {
                 val config = attachment.counterConfig()
-                SettingsLabel("Ad")
+                SettingsLabel(t("Ad"))
                 var title by remember(attachment.id) { mutableStateOf(config.title) }
                 Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.06f))
                     .padding(horizontal = 14.dp, vertical = 12.dp)) {
@@ -333,7 +334,7 @@ fun WidgetSettingsDialog(attachment: ReminderAttachment, onChange: (ReminderAtta
                         cursorBrush = SolidColor(WidgetBlue), modifier = Modifier.fillMaxWidth()
                     )
                 }
-                SettingsLabel("Butonlar · dokunarak kaldır")
+                SettingsLabel(t("Butonlar · dokunarak kaldır"))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     config.steps.forEach { s ->
                         val removable = config.steps.size > 1
@@ -342,7 +343,7 @@ fun WidgetSettingsDialog(attachment: ReminderAttachment, onChange: (ReminderAtta
                                 .clickable(enabled = removable, role = Role.Button) {
                                     onChange(currentAttachment.withCounter(currentAttachment.counterConfig().let { it.copy(steps = it.steps - s) }))
                                 }
-                                .semantics { contentDescription = "${stepLabel(s)} butonunu kaldır" }
+                                .semantics { contentDescription = t("{0} butonunu kaldır", stepLabel(s)) }
                                 .padding(start = 14.dp, end = if (removable) 10.dp else 14.dp, top = 8.dp, bottom = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -363,7 +364,7 @@ fun WidgetSettingsDialog(attachment: ReminderAttachment, onChange: (ReminderAtta
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.06f))
                             .padding(horizontal = 14.dp, vertical = 12.dp)) {
-                            if (draft.isEmpty()) Text("Yeni buton: miktar", color = WidgetSoft.copy(alpha = 0.7f), fontSize = 15.sp)
+                            if (draft.isEmpty()) Text(t("Yeni buton: miktar"), color = WidgetSoft.copy(alpha = 0.7f), fontSize = 15.sp)
                             BasicTextField(
                                 value = draft, onValueChange = { draft = it.filter(Char::isDigit).take(4) },
                                 singleLine = true, textStyle = TextStyle(color = WidgetInk, fontSize = 15.sp),
@@ -378,7 +379,7 @@ fun WidgetSettingsDialog(attachment: ReminderAttachment, onChange: (ReminderAtta
                                 Modifier.size(44.dp).clip(CircleShape)
                                     .background(if (sign > 0) WidgetBlue.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.09f))
                                     .clickable(enabled = draft.isNotEmpty(), role = Role.Button) { add(sign) }
-                                    .semantics { contentDescription = if (sign > 0) "Artı buton ekle" else "Eksi buton ekle" },
+                                    .semantics { contentDescription = if (sign > 0) t("Artı buton ekle") else t("Eksi buton ekle") },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(label, color = if (draft.isNotEmpty()) WidgetInk else WidgetSoft.copy(alpha = 0.5f),
@@ -387,12 +388,12 @@ fun WidgetSettingsDialog(attachment: ReminderAttachment, onChange: (ReminderAtta
                         }
                     }
                 }
-                Text("Sayacı sıfırla", color = WidgetDown, fontSize = 14.sp,
+                Text(t("Sayacı sıfırla"), color = WidgetDown, fontSize = 14.sp,
                     modifier = Modifier.clip(CircleShape).clickable(role = Role.Button) {
                         onChange(currentAttachment.withCounter(currentAttachment.counterConfig().copy(value = 0)))
                     }.padding(vertical = 6.dp))
             } else {
-                SettingsLabel("Gösterilen")
+                SettingsLabel(t("Gösterilen"))
                 val asset = attachment.marketAsset()
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     MarketAsset.entries.forEach { option ->
@@ -427,14 +428,14 @@ private fun formatTry(price: Double, asset: MarketAsset): String {
 
 private fun unitCaption(asset: MarketAsset): String = when (asset) {
     MarketAsset.BTC -> "1 BTC"
-    MarketAsset.GOLD_GRAM -> "1 gram altın"
+    MarketAsset.GOLD_GRAM -> t("1 gram altın")
     MarketAsset.EUR -> "1 €"
     MarketAsset.USD -> "1 $"
 }
 
 private fun agoText(at: Long): String {
     val minutes = ((System.currentTimeMillis() - at) / 60_000L).coerceAtLeast(0)
-    return if (minutes < 1) "az önce" else "$minutes dk önce"
+    return if (minutes < 1) t("az önce") else t("{0} dk önce", minutes)
 }
 
 /** Smooth area chart: soft gradient fill under a rounded line, revealed left to right by [progress]. */

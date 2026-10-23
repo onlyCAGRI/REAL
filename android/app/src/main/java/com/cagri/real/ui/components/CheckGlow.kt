@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -113,13 +114,13 @@ fun CheckRequestSheet(targets: List<CheckTarget>, canClear: Boolean, onDismiss: 
             Modifier.fillMaxWidth().background(Color(0xFF16161A), androidx.compose.foundation.shape.RoundedCornerShape(26.dp)).padding(20.dp),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
         ) {
-            androidx.compose.material3.Text("Kontrol ettir", color = Color(0xFFF5F5F8), fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-            SheetLabel("Kime")
+            androidx.compose.material3.Text(t("Kontrol ettir"), color = Color(0xFFF5F5F8), fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+            SheetLabel(t("Kime"))
             ChipRow { targets.forEach { t -> SheetChip(t.label, target == t.key) { target = t.key } } }
-            SheetLabel("Ne zaman yansın")
+            SheetLabel(t("Ne zaman yansın"))
             ChipRow {
-                SheetChip("Şimdi", startDay == null) { startDay = null }
-                SheetChip(startDay?.let { "Tarih · " + java.time.LocalDate.ofEpochDay(it).format(dayFormat) } ?: "Tarih seç", startDay != null) {
+                SheetChip(t("Şimdi"), startDay == null) { startDay = null }
+                SheetChip(startDay?.let { t("Tarih · {0}", java.time.LocalDate.ofEpochDay(it).format(dayFormat)) } ?: t("Tarih seç"), startDay != null) {
                     val today = java.time.LocalDate.now()
                     android.app.DatePickerDialog(context, { _, y, m, d -> startDay = java.time.LocalDate.of(y, m + 1, d).toEpochDay() },
                         today.year, today.monthValue - 1, today.dayOfMonth).apply { datePicker.minDate = System.currentTimeMillis() - 1000 }.show()
@@ -127,8 +128,8 @@ fun CheckRequestSheet(targets: List<CheckTarget>, canClear: Boolean, onDismiss: 
             }
             androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(top = 4.dp),
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
-                SheetButton(if (canClear) "Kontrolü kaldır" else "Vazgeç", filled = false, modifier = Modifier.weight(1f)) { if (canClear) onClear() else onDismiss() }
-                SheetButton("Işığı yak", filled = true, modifier = Modifier.weight(1f)) { onSave(target, startDay, null) }
+                SheetButton(if (canClear) t("Kontrolü kaldır") else t("Vazgeç"), filled = false, modifier = Modifier.weight(1f)) { if (canClear) onClear() else onDismiss() }
+                SheetButton(t("Işığı yak"), filled = true, modifier = Modifier.weight(1f)) { onSave(target, startDay, null) }
             }
         }
     }

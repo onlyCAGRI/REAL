@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -128,7 +129,7 @@ internal fun DiscoveryStepper(
                                     on -> { onSelection(selection - o.key); hint = null }
                                     full -> {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        hint = if (s.max == 2) "En iyi sonuçlar için 2 seçim yeterli" else "En fazla ${s.max} seçim"
+                                        hint = if (s.max == 2) t("En iyi sonuçlar için 2 seçim yeterli") else t("En fazla {0} seçim", s.max)
                                     }
                                     else -> {
                                         // A single-choice step swaps its choice.
@@ -136,7 +137,7 @@ internal fun DiscoveryStepper(
                                         hint = if (isRare) {
                                             val other = s.groups.flatMap { it.second }.firstOrNull { it.key in chosen }?.label
                                                 ?: steps.flatMap { st -> st.groups.flatMap { it.second } }.firstOrNull { it.key in selection }?.label
-                                            if (other != null) "${o.label} ile $other birlikte nadir" else null
+                                            if (other != null) t("{0} ile {1} birlikte nadir", o.label, other) else null
                                         } else null
                                         onSelection(base + o.key)
                                     }
@@ -153,9 +154,9 @@ internal fun DiscoveryStepper(
         val last = step == steps.lastIndex
         val canGo = s.optional || chosenHere > 0
         val label = when {
-            !last && chosenHere == 0 && s.optional -> "Atla"
-            !last -> "Devam"
-            chosenHere == 0 && s.optional -> "Atla ve $doneLabel"
+            !last && chosenHere == 0 && s.optional -> t("Atla")
+            !last -> t("Devam")
+            chosenHere == 0 && s.optional -> t("Atla ve {0}", doneLabel)
             else -> doneLabel
         }
         Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {

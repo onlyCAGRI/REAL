@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -236,14 +237,14 @@ fun CardStackContentSection(
                 ActionIcon(ActionGlyph.Cards, Modifier.size(16.dp), Color(0xFF8E8E98))
                 if (editing && measureDetailHeight) {
                     IconButton(onClick = { showEditorTools = true }, modifier = Modifier.size(28.dp)
-                        .semantics { contentDescription = "Kart yığını ayarları" }) {
+                        .semantics { contentDescription = t("Kart yığını ayarları") }) {
                         ActionIcon(ActionGlyph.Settings, Modifier.size(15.dp), Color(0xFFB7B7C0))
                     }
                 }
             }
             if (cards.getOrNull(safeActiveIndex)?.id?.startsWith("completed_journal_") == true) {
                 Text(
-                    text = "Aklında kalanı yaz.",
+                    text = t("Aklında kalanı yaz."),
                     color = Color(0xFFBBBBC6),
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -260,7 +261,7 @@ fun CardStackContentSection(
                 ) {
                     ActionIcon(
                         ActionGlyph.Close,
-                        Modifier.size(14.dp).semantics { contentDescription = "Kart yığınını kaldır" },
+                        Modifier.size(14.dp).semantics { contentDescription = t("Kart yığınını kaldır") },
                         Color(0xFF8E8E98)
                     )
                 }
@@ -367,7 +368,7 @@ fun CardStackContentSection(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "Kart ${idx + 1}",
+                            t("Kart {0}", idx + 1),
                             color = if (selected) Color.White else Color(0xFFA5A5AD),
                             fontSize = 11.sp,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
@@ -394,13 +395,13 @@ fun CardStackContentSection(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = {
                                 photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                            }) { Text(if (activeCard.imageUri == null) "Fotoğraf ekle" else "Fotoğrafı değiştir") }
+                            }) { Text(if (activeCard.imageUri == null) t("Fotoğraf ekle") else t("Fotoğrafı değiştir")) }
                             if (activeCard.imageUri != null) TextButton(onClick = {
                                 activeCard.imageUri?.let(onImageReplacedOrRemoved)
                                 onUpdate(block.copy(cards = cards.mapIndexed { i, card ->
                                     if (i == safeActiveIndex) card.copy(imageUri = null) else card
                                 }))
-                            }) { Text("Kaldır") }
+                            }) { Text(t("Kaldır")) }
                         }
                     }
 
@@ -433,7 +434,7 @@ fun CardStackContentSection(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    "Kart ${idx + 1}",
+                                    t("Kart {0}", idx + 1),
                                     color = if (selected) Color.White else Color(0xFFA5A5AD),
                                     fontSize = 12.sp,
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
@@ -463,7 +464,7 @@ fun CardStackContentSection(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 ActionIcon(ActionGlyph.Add, Modifier.size(12.dp), Color.White)
-                                Text("Kart ekle", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Text(t("Kart ekle"), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
@@ -517,9 +518,9 @@ private fun CardStackEditorTools(
                 .background(Color(0xFF171719)).padding(16.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text("Kart yığını", color = Color.White, fontSize = 16.sp)
+                    Text(t("Kart yığını"), color = Color.White, fontSize = 16.sp)
                     androidx.compose.material3.TextButton(onClick = onDismiss) {
-                        Text("Bitti", color = Color.White)
+                        Text(t("Bitti"), color = Color.White)
                     }
                 }
                 content()
@@ -593,7 +594,7 @@ private fun ProductionCardStackDeck(
     val currentFrontHeight by animateDpAsState(
         targetValue = desiredFrontHeight,
         animationSpec = spring(dampingRatio = 0.90f, stiffness = 420f),
-        label = "Card stack writing height"
+        label = t("Card stack writing height")
     )
 
     val frontHeight = if (heightOverride != null) desiredFrontHeight else currentFrontHeight
@@ -606,7 +607,7 @@ private fun ProductionCardStackDeck(
     val containerHeight by animateDpAsState(
         targetValue = targetContainerHeight,
         animationSpec = spring(dampingRatio = 0.88f, stiffness = 380f),
-        label = "Production deck height"
+        label = t("Production deck height")
     )
 
     var previousActiveCard by remember { mutableIntStateOf(activeCard) }
@@ -662,7 +663,7 @@ private fun ProductionCardStackDeck(
                     contentAlignment = Alignment.BottomCenter
                 ) {
                     Text(
-                        "+ Kart ekle",
+                        t("+ Kart ekle"),
                         color = Color.White.copy(alpha = 0.65f),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
@@ -722,7 +723,7 @@ private fun ProductionCardStackDeck(
                     val top by animateDpAsState(
                         targetValue = targetTop,
                         animationSpec = spring(dampingRatio = 0.84f, stiffness = 360f),
-                        label = "Production card Y $index"
+                        label = t("Production card Y {0}", index)
                     )
 
                     val incomingDirection = if (activeCard >= safeSwapFromCard) 1f else -1f
@@ -864,7 +865,7 @@ private fun SingleStackCard(
             .clickable(
                 enabled = (!active && promoteEnabled) || (active && !editing && !inlineTextEditing),
                 role = Role.Button,
-                onClickLabel = if (active) "Kart ${index + 1} içine yaz" else "Kart ${index + 1} öne gelsin",
+                onClickLabel = if (active) t("Kart {0} içine yaz", index + 1) else t("Kart {0} öne gelsin", index + 1),
                 onClick = {
                     if (active) onRequestInlineEdit(index) else onPromote()
                 }
@@ -886,7 +887,7 @@ private fun SingleStackCard(
             }
             AsyncImage(
                 model = imageModel,
-                contentDescription = "Kart ${index + 1} görseli",
+                contentDescription = t("Kart {0} görseli", index + 1),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().cardPhotoPixels(photoZoom)
             )
@@ -930,7 +931,7 @@ private fun SingleStackCard(
             ) {
                 val badgeBackground = if (hasImage) Color.Black.copy(alpha = 0.36f) else Color.Transparent
                 Text(
-                    if (compactWidth) "${index + 1}" else "KART 0${index + 1}",
+                    if (compactWidth) "${index + 1}" else t("KART 0{0}", index + 1),
                     maxLines = 1,
                     color = foreground.copy(alpha = 0.90f),
                     fontSize = 10.sp,
@@ -1013,7 +1014,7 @@ private fun SingleStackCard(
                     text = java.time.Instant.ofEpochMilli(journalTimestamp)
                         .atZone(java.time.ZoneId.systemDefault())
                         .format(java.time.format.DateTimeFormatter.ofPattern(
-                            "d MMMM yyyy · HH:mm", java.util.Locale.forLanguageTag("tr-TR")
+                            if (com.cagri.real.i18n.I18n.isEnglish) "MMMM d yyyy · h:mm a" else "d MMMM yyyy · HH:mm", com.cagri.real.i18n.I18n.locale
                         )),
                     color = foreground.copy(alpha = 0.60f),
                     fontSize = 12.sp,
@@ -1049,7 +1050,7 @@ private fun SingleStackCard(
                             decorationBox = { innerTextField ->
                                 if (card.title.isBlank()) {
                                     Text(
-                                        "Kart başlığı",
+                                        t("Kart başlığı"),
                                         color = foreground.copy(alpha = 0.40f),
                                         fontSize = titleSize,
                                         lineHeight = titleLine
@@ -1132,7 +1133,7 @@ private fun SingleStackCard(
                             decorationBox = { innerTextField ->
                                 if (bodyTextFieldValue.text.isBlank()) {
                                     Text(
-                                        if (hasImage) "Fotoğraf açıklaması ekle…" else "Buraya yaz…",
+                                        if (hasImage) t("Fotoğraf açıklaması ekle…") else t("Buraya yaz…"),
                                         color = foreground.copy(alpha = 0.40f),
                                         fontSize = 14.sp,
                                         lineHeight = 20.sp
@@ -1161,7 +1162,7 @@ private fun SingleStackCard(
                     val bodyDisplay = card.body.ifBlank {
                         if (editing || inlineTextEditing) ""
                         else if (hasImage) ""
-                        else "Boş kart"
+                        else t("Boş kart")
                     }
                     if (bodyDisplay.isNotBlank() && !(shallow && hasImage)) {
                         Text(
@@ -1184,7 +1185,7 @@ private fun SingleStackCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Kart 0${index + 1} ↘",
+                        t("Kart 0{0} ↘", index + 1),
                         color = foreground.copy(alpha = 0.70f),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium

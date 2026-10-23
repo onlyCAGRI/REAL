@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -51,7 +52,7 @@ private val Muted = Color(0xFF9C9CA6)
 private val Field = Color.White.copy(alpha = 0.06f)
 private val Stroke = Color.White.copy(alpha = 0.10f)
 
-private enum class ShareTab(val label: String) { New("Yeni kart"), Existing("Karta ekle"), Board("Pano") }
+private enum class ShareTab(val label: String) { New(t("Yeni kart")), Existing(t("Karta ekle")), Board(t("Pano")) }
 
 /** Share → REAL sheet (AttachmentImportActivity). */
 @Composable
@@ -95,8 +96,8 @@ private fun DoneContent(text: String, onOpen: () -> Unit, onClose: () -> Unit) {
         Text(text, color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SheetButton("Aç", filled = true, modifier = Modifier.weight(1f), onClick = onOpen)
-            SheetButton("Tamam", filled = false, modifier = Modifier.weight(1f), onClick = onClose)
+            SheetButton(t("Aç"), filled = true, modifier = Modifier.weight(1f), onClick = onOpen)
+            SheetButton(t("Tamam"), filled = false, modifier = Modifier.weight(1f), onClick = onClose)
         }
     }
 }
@@ -117,15 +118,15 @@ private fun ColumnScope.ShareContent(model: AttachmentImportModel, content: Inco
     LaunchedEffect(model.presetCategoryId) { if (model.presetCategoryId != null) categoryId = model.presetCategoryId }
 
     Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("REAL'e ekle", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text("İptal", color = Muted, fontSize = 15.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp))
+        Text(t("REAL'e ekle"), color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text(t("İptal"), color = Muted, fontSize = 15.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp))
             .clickable(enabled = !model.loading && !model.busy) { model.discard() }.padding(horizontal = 10.dp, vertical = 6.dp))
     }
     if (model.loading) {
         Row(Modifier.fillMaxWidth().padding(vertical = 28.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(18.dp), color = Muted, strokeWidth = 2.dp)
             Spacer(Modifier.width(10.dp))
-            Text("İçerik hazırlanıyor…", color = Muted, fontSize = 14.sp)
+            Text(t("İçerik hazırlanıyor…"), color = Muted, fontSize = 14.sp)
         }
     }
     content?.let { Preview(it, model.resolving) }
@@ -161,12 +162,12 @@ private fun ColumnScope.ShareContent(model: AttachmentImportModel, content: Inco
                 if (replaceLink) ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color.Black)
             }
             Spacer(Modifier.width(10.dp))
-            Text("Kartın mevcut bağlantısını değiştir", color = Ink, fontSize = 14.sp)
+            Text(t("Kartın mevcut bağlantısını değiştir"), color = Ink, fontSize = 14.sp)
         }
     }
     if (tab != ShareTab.Board && content.attachments.any { it.type == AttachmentType.TEXT_SNIPPET }) {
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Metin", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(end = 4.dp))
+            Text(t("Metin"), color = Muted, fontSize = 13.sp, modifier = Modifier.padding(end = 4.dp))
             SnippetSource.entries.forEach { s ->
                 Chip(s.label, s == source, enabled = !model.busy) { source = s }
             }
@@ -179,10 +180,10 @@ private fun ColumnScope.ShareContent(model: AttachmentImportModel, content: Inco
     }
     SheetButton(
         when {
-            model.busy -> "Kaydediliyor…"
-            tab == ShareTab.New -> "Kart oluştur"
-            tab == ShareTab.Existing -> "Karta ekle"
-            else -> "Panoya ekle"
+            model.busy -> t("Kaydediliyor…")
+            tab == ShareTab.New -> t("Kart oluştur")
+            tab == ShareTab.Existing -> t("Karta ekle")
+            else -> t("Panoya ekle")
         }, filled = true, enabled = canSave, modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 16.dp)
     ) {
         val destination = when (tab) {
@@ -213,7 +214,7 @@ private fun Preview(content: IncomingContent, resolving: Boolean) {
         content.referenceUrl?.let { url ->
             val host = runCatching { java.net.URI(url).host?.removePrefix("www.") }.getOrNull() ?: url
             PreviewRow(content.previewImageUrl, content.previewTitle?.takeIf { it.isNotBlank() }
-                ?: if (resolving) "Önizleme yükleniyor…" else host, host)
+                ?: if (resolving) t("Önizleme yükleniyor…") else host, host)
         }
         content.attachments.firstOrNull { it.type == AttachmentType.TEXT_SNIPPET }?.text?.let {
             Text(it, color = Ink.copy(alpha = 0.85f), fontSize = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis,
@@ -222,9 +223,9 @@ private fun Preview(content: IncomingContent, resolving: Boolean) {
         val files = content.attachments.filter { it.type == AttachmentType.FILE }
         val voices = content.voiceRecordings
         val extra = listOfNotNull(
-            if (files.isNotEmpty()) files.joinToString(" · ") { it.displayName ?: "Dosya" } else null,
-            if (voices.isNotEmpty()) "${voices.size} ses kaydı · " + voices.joinToString(" · ") { duration(it.durationMillis) } else null,
-            if (photos.size > 3) "Kartta 3 fotoğraf görünür; kalanlar dosya olarak eklenir." else null
+            if (files.isNotEmpty()) files.joinToString(" · ") { it.displayName ?: t("Dosya") } else null,
+            if (voices.isNotEmpty()) t("{0} ses kaydı · ", voices.size) + voices.joinToString(" · ") { duration(it.durationMillis) } else null,
+            if (photos.size > 3) t("Kartta 3 fotoğraf görünür; kalanlar dosya olarak eklenir.") else null
         )
         extra.forEach { Text(it, color = Muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth()) }
         content.warning?.let { Text(it, color = Color(0xFFCEB98B), fontSize = 12.sp, modifier = Modifier.fillMaxWidth()) }
@@ -256,25 +257,25 @@ private fun NewCardTab(
     Column(Modifier.fillMaxWidth().verticalScrollIfNeeded(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Field).border(0.7.dp, Stroke, RoundedCornerShape(18.dp))
             .padding(horizontal = 16.dp, vertical = 14.dp)) {
-            if (title.isEmpty()) Text("Kart başlığı", color = Muted, fontSize = 16.sp)
+            if (title.isEmpty()) Text(t("Kart başlığı"), color = Muted, fontSize = 16.sp)
             BasicTextField(title, { if (!busy) onTitle(it.take(2000)) }, Modifier.fillMaxWidth(),
                 textStyle = TextStyle(color = Ink, fontSize = 16.sp), cursorBrush = SolidColor(Color.White), maxLines = 3,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done))
         }
         if (categories.isNotEmpty()) {
-            Text("Kategori", color = Muted, fontSize = 13.sp)
+            Text(t("Kategori"), color = Muted, fontSize = 13.sp)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip("Kategorisiz", categoryId == null, enabled = !busy) { onCategory(null) }
+                Chip(t("Kategorisiz"), categoryId == null, enabled = !busy) { onCategory(null) }
                 categories.forEach { c ->
                     Chip(c.name, categoryId == c.id, dot = categoryColor(c), enabled = !busy) { onCategory(c.id) }
                 }
             }
         }
-        Text("Tarih", color = Muted, fontSize = 13.sp)
+        Text(t("Tarih"), color = Muted, fontSize = 13.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip("Tarih yok", plannedOffset == null, enabled = !busy) { onPlanned(null) }
-            Chip("Bugün", plannedOffset == 0, enabled = !busy) { onPlanned(0) }
-            Chip("Yarın", plannedOffset == 1, enabled = !busy) { onPlanned(1) }
+            Chip(t("Tarih yok"), plannedOffset == null, enabled = !busy) { onPlanned(null) }
+            Chip(t("Bugün"), plannedOffset == 0, enabled = !busy) { onPlanned(0) }
+            Chip(t("Yarın"), plannedOffset == 1, enabled = !busy) { onPlanned(1) }
         }
     }
 }
@@ -294,15 +295,15 @@ private fun ExistingCardTab(reminders: List<ReminderItem>, selected: Long?, onSe
     }
     Column(Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Field).padding(horizontal = 16.dp, vertical = 12.dp)) {
-            if (query.isEmpty()) Text("Kart ara", color = Muted, fontSize = 15.sp)
+            if (query.isEmpty()) Text(t("Kart ara"), color = Muted, fontSize = 15.sp)
             BasicTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
                 textStyle = TextStyle(color = Ink, fontSize = 15.sp), cursorBrush = SolidColor(Color.White))
         }
-        if (reminders.isEmpty()) Text("Henüz kart yok. \"Yeni kart\" ile oluştur.", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+        if (reminders.isEmpty()) Text(t("Henüz kart yok. \"Yeni kart\" ile oluştur."), color = Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 340.dp).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(active, key = { it.id }) { CardRow(it, it.id == selected, busy) { onSelect(it.id) } }
             if (completed.isNotEmpty()) {
-                item(key = "done") { Text("Tamamlananlar", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp, start = 4.dp)) }
+                item(key = "done") { Text(t("Tamamlananlar"), color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp, start = 4.dp)) }
                 items(completed, key = { it.id }) { CardRow(it, it.id == selected, busy) { onSelect(it.id) } }
             }
         }
@@ -315,7 +316,7 @@ private fun CardRow(item: ReminderItem, on: Boolean, busy: Boolean, onClick: () 
         .border(if (on) 1.2.dp else 0.7.dp, if (on) Color.White else Stroke, RoundedCornerShape(18.dp))
         .clickable(enabled = !busy, onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(item.text.ifBlank { "Boş not" }, color = if (item.isCompleted) Muted else Ink, fontSize = 15.sp, maxLines = 2,
+        Text(item.text.ifBlank { t("Boş not") }, color = if (item.isCompleted) Muted else Ink, fontSize = 15.sp, maxLines = 2,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         if (on) ActionIcon(ActionGlyph.Check, Modifier.size(18.dp), Ink)
     }
@@ -324,7 +325,7 @@ private fun CardRow(item: ReminderItem, on: Boolean, busy: Boolean, onClick: () 
 @Composable
 private fun BoardTab(boards: List<com.cagri.real.boards.PanoBoard>, selected: String?, onSelect: (String) -> Unit, busy: Boolean) {
     if (boards.isEmpty()) {
-        Text("Henüz pano yok. Pano'yu REAL'de oluşturduktan sonra buradan ekleyebilirsin.", color = Muted, fontSize = 14.sp,
+        Text(t("Henüz pano yok. Pano'yu REAL'de oluşturduktan sonra buradan ekleyebilirsin."), color = Muted, fontSize = 14.sp,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
         return
     }
@@ -339,7 +340,7 @@ private fun BoardTab(boards: List<com.cagri.real.boards.PanoBoard>, selected: St
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(b.title, color = Ink, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (b.shared) Text(if (b.role == "OWNER") "Paylaşılan pano" else "${b.ownerName} ile ortak", color = Muted, fontSize = 12.sp)
+                    if (b.shared) Text(if (b.role == "OWNER") t("Paylaşılan pano") else t("{0} ile ortak", b.ownerName), color = Muted, fontSize = 12.sp)
                 }
                 if (on) ActionIcon(ActionGlyph.Check, Modifier.size(18.dp), Ink)
             }

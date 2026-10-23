@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -211,7 +212,7 @@ internal fun CategoryFullHero(
             .padding(top = statusTop + 10.dp, start = 18.dp, end = 18.dp, bottom = 22.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeroRoundButton(fg, "Ana sayfaya dön", onClick = onBack) {
+            HeroRoundButton(fg, t("Ana sayfaya dön"), onClick = onBack) {
                 ActionIcon(ActionGlyph.Back, Modifier.size(20.dp), fg)
             }
             Row(
@@ -221,14 +222,14 @@ internal fun CategoryFullHero(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    if (query.isEmpty()) Text("Bu kategoride ara", color = fg.copy(alpha = 0.72f), fontSize = 14.sp, maxLines = 1)
+                    if (query.isEmpty()) Text(t("Bu kategoride ara"), color = fg.copy(alpha = 0.72f), fontSize = 14.sp, maxLines = 1)
                     BasicTextField(
                         value = query, onValueChange = { onQueryChange(it.take(80)) }, singleLine = true,
                         textStyle = TextStyle(color = fg, fontSize = 14.sp, fontWeight = FontWeight.Medium),
                         cursorBrush = SolidColor(fg),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Bu kategoride ara" }
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = t("Bu kategoride ara") }
                     )
                 }
                 if (query.isNotEmpty()) {
@@ -239,7 +240,7 @@ internal fun CategoryFullHero(
             }
             var menuOpen by remember { mutableStateOf(false) }
             Box {
-                HeroRoundButton(fg, if (menuOpen) "Seçenekleri kapat" else "Seçenekler", onClick = { menuOpen = !menuOpen }) {
+                HeroRoundButton(fg, if (menuOpen) t("Seçenekleri kapat") else t("Seçenekler"), onClick = { menuOpen = !menuOpen }) {
                     Text("•••", color = fg, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     if (hasFilter) Box(Modifier.align(Alignment.TopEnd).padding(7.dp).size(7.dp).background(fg, CircleShape))
                 }
@@ -263,7 +264,7 @@ internal fun CategoryFullHero(
                                     // Over the header colour: same glass, a touch more opaque so it reads on the cards too.
                                     Box(Modifier.size(40.dp).clip(CircleShape).background(palette.accent).background(glassFill(fg))) {
                                         HeroRoundButton(
-                                            fg, when (index) { 0 -> editLabel; 2 -> "Hedefler"; 3 -> "Kişiler"; 4 -> "Ayraç ekle"; else -> if (hasFilter) "Renk filtresi (açık)" else "Renge göre filtrele" },
+                                            fg, when (index) { 0 -> editLabel; 2 -> t("Hedefler"); 3 -> t("Kişiler"); 4 -> t("Ayraç ekle"); else -> if (hasFilter) t("Renk filtresi (açık)") else t("Renge göre filtrele") },
                                             onClick = { menuOpen = false; when (index) { 0 -> onEdit(); 2 -> onGoals?.invoke(); 3 -> onPeople?.invoke(); 4 -> onAddDivider?.invoke(); else -> onFilter() } }
                                         ) {
                                             when (index) {
@@ -294,7 +295,7 @@ internal fun CategoryFullHero(
                 val icon = CategoryIcon.fromKey(customCategory.iconKey)
                 if (icon != CategoryIcon.NONE) CategoryIconGlyph(icon, Modifier.size(16.dp), color = fg.copy(alpha = 0.85f))
             } else CategoryGlyph(category?.glyph() ?: Glyph.Note, Modifier.size(16.dp), tint = fg.copy(alpha = 0.85f))
-            Text(description.ifBlank { "Kategori" }, color = fg.copy(alpha = 0.8f), fontSize = 13.sp, fontWeight = FontWeight.Medium,
+            Text(description.ifBlank { t("Kategori") }, color = fg.copy(alpha = 0.8f), fontSize = 13.sp, fontWeight = FontWeight.Medium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.height(4.dp))
@@ -302,12 +303,12 @@ internal fun CategoryFullHero(
             maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(14.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            val note = detail ?: if (todayCount > 0) "$todayCount tanesi bugün" to false else null
+            val note = detail ?: if (todayCount > 0) t("{0} tanesi bugün", todayCount) to false else null
             // Overdue reads in a soft red that still shows on light and dark category colours.
             val alertColor = if (fg.luminance() > 0.5f) Color(0xFFFFB4AB) else Color(0xFF9C1C1C)
             Text(
                 androidx.compose.ui.text.buildAnnotatedString {
-                    append("$count kart")
+                    append(t("{0} kart", count))
                     if (note != null) {
                         append("  •  ")
                         if (note.second) withStyle(androidx.compose.ui.text.SpanStyle(color = alertColor)) { append(note.first) }
@@ -320,7 +321,7 @@ internal fun CategoryFullHero(
             // Ortak kategori: the friend mark left of the progress ring; a tap opens Kişiler.
             if (customCategory?.isShared == true) {
                 Box(Modifier.size(34.dp).clip(CircleShape).clickable(enabled = onPeople != null) { onPeople?.invoke() }
-                    .semantics { contentDescription = "Ortak kategori · Kişiler" }, contentAlignment = Alignment.Center) {
+                    .semantics { contentDescription = t("Ortak kategori · Kişiler") }, contentAlignment = Alignment.Center) {
                     CategoryIconGlyph(CategoryIcon.FRIENDS, Modifier.size(19.dp), color = fg)
                 }
                 Spacer(Modifier.width(4.dp))
@@ -367,14 +368,14 @@ private fun HeroProgress(stats: CategoryProgressStats, fg: Color, reduceAnimatio
             Text("${(fill.value * 100f).toInt()}", color = fg, fontSize = 46.sp, lineHeight = 46.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1.5).sp)
             Text("%", color = fg.copy(alpha = 0.7f), fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 2.dp, bottom = 6.dp))
             Spacer(Modifier.weight(1f))
-            Text(if (stats.total == 0) "Kayıt yok" else "${stats.done} / ${stats.total} tamamlandı",
+            Text(if (stats.total == 0) t("Kayıt yok") else t("{0} / {1} tamamlandı", stats.done, stats.total),
                 color = fg.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
         }
         Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)).background(glassFill(fg))) {
             Box(Modifier.fillMaxWidth(fill.value.coerceIn(0f, 1f)).height(12.dp).clip(RoundedCornerShape(6.dp)).background(fg.copy(alpha = 0.9f)))
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Tamamlanan" to stats.done, "Kalan" to stats.remaining, "Bugün" to stats.doneToday).forEach { (label, value) ->
+            listOf(t("Tamamlanan") to stats.done, t("Kalan") to stats.remaining, t("Bugün") to stats.doneToday).forEach { (label, value) ->
                 Column(
                     Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(glassFill(fg))
                         .border(0.8.dp, glassRim(fg), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
@@ -407,7 +408,7 @@ internal fun CategoryCompactBar(
             .padding(top = statusTop + 6.dp, start = 12.dp, end = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        HeroRoundButton(fg, "Ana sayfaya dön", size = 36.dp, onClick = onBack) { ActionIcon(ActionGlyph.Back, Modifier.size(18.dp), fg) }
+        HeroRoundButton(fg, t("Ana sayfaya dön"), size = 36.dp, onClick = onBack) { ActionIcon(ActionGlyph.Back, Modifier.size(18.dp), fg) }
         Text(customCategory?.name ?: category?.title.orEmpty(), color = fg, fontSize = 18.sp, fontWeight = FontWeight.Bold,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 4.dp))
         actions(fg)

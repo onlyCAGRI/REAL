@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.stateDescription
@@ -129,7 +130,7 @@ fun CategoryGlassBackButton(
     onBack: () -> Unit, modifier: Modifier = Modifier,
     surface: (@Composable (Modifier) -> Unit)? = null
 ) {
-    RealBackButton(onBack, modifier, description = "Ana sayfaya dön", glyphSize = 20.dp, surface = {
+    RealBackButton(onBack, modifier, description = t("Ana sayfaya dön"), glyphSize = 20.dp, surface = {
         if (surface != null) surface(Modifier.fillMaxSize())
         else Box(Modifier.fillMaxSize().liquidDockChip(CircleShape))
     })
@@ -186,10 +187,10 @@ private fun SortLinesGlyph(longestFirst: Boolean, color: Color, modifier: Modifi
 
 private data class SortChoice(val order: ReminderSortOrder, val label: String)
 
-private val CategorySortChoices = listOf(
-    SortChoice(ReminderSortOrder.RECENTLY_ADDED, "Son eklenen üstte"),
-    SortChoice(ReminderSortOrder.OLDEST_FIRST, "Son eklenen en sonda"),
-    SortChoice(ReminderSortOrder.NEAREST_DATE, "Tarihi en yakın")
+private val CategorySortChoices get() = listOf(
+    SortChoice(ReminderSortOrder.RECENTLY_ADDED, t("Son eklenen üstte")),
+    SortChoice(ReminderSortOrder.OLDEST_FIRST, t("Son eklenen en sonda")),
+    SortChoice(ReminderSortOrder.NEAREST_DATE, t("Tarihi en yakın"))
 )
 
 @Composable
@@ -222,7 +223,7 @@ fun CategoryGlassActions(
         if (progressFraction != null) {
             DockGlassCircle(HeaderButtonSize, surface = surface) {
                 GlassTap(
-                    if (progressOpen) "İlerlemeyi gizle" else "Kategori ilerlemesini göster",
+                    if (progressOpen) t("İlerlemeyi gizle") else t("Kategori ilerlemesini göster"),
                     onProgressClick, Modifier.size(HeaderButtonSize)
                 ) { ProgressRingIcon(progressFraction, progressOpen) }
             }
@@ -231,7 +232,7 @@ fun CategoryGlassActions(
             var menuOpen by remember { mutableStateOf(false) }
             Box {
                 DockGlassCircle(HeaderButtonSize, surface = surface) {
-                    GlassTap("Sıralama", { menuOpen = true }, Modifier.size(HeaderButtonSize)) {
+                    GlassTap(t("Sıralama"), { menuOpen = true }, Modifier.size(HeaderButtonSize)) {
                         SortGlyphFor(sortOrder, if (menuOpen) GlyphActive else GlyphColor)
                     }
                 }
@@ -371,7 +372,7 @@ internal fun CategoryProgressPanel(
     }
     WidgetGlowCard(glowColor, reduceAnimations, 0, modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("İlerleme", color = Color.White, style = RealType.categoryProgressHeader, modifier = Modifier.weight(1f))
+            Text(t("İlerleme"), color = Color.White, style = RealType.categoryProgressHeader, modifier = Modifier.weight(1f))
             Text(title, color = Color(0xFFB4B9C4), style = RealType.categoryProgressSubtitle)
         }
         Spacer(Modifier.height(6.dp))
@@ -382,7 +383,7 @@ internal fun CategoryProgressPanel(
         Spacer(Modifier.height(8.dp))
         GlowProgressBar(
             fraction = fill.value,
-            label = if (stats.total == 0) "Kayıt yok" else "${stats.done} / ${stats.total}",
+            label = if (stats.total == 0) t("Kayıt yok") else "${stats.done} / ${stats.total}",
             height = 46.dp,
             accentColor = accent
         )
@@ -392,9 +393,9 @@ internal fun CategoryProgressPanel(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            StatChip("Tamamlanan", stats.done, Modifier.weight(1f), accentColor = accent)
-            StatChip("Kalan", stats.remaining, Modifier.weight(1f))
-            StatChip("Bugün", stats.doneToday, Modifier.weight(1f))
+            StatChip(t("Tamamlanan"), stats.done, Modifier.weight(1f), accentColor = accent)
+            StatChip(t("Kalan"), stats.remaining, Modifier.weight(1f))
+            StatChip(t("Bugün"), stats.doneToday, Modifier.weight(1f))
         }
     }
 }
@@ -426,9 +427,9 @@ internal fun CategoryHeroActions(
         label = "categorySortArrow"
     )
     val currentLabel = when (sortOrder) {
-        ReminderSortOrder.OLDEST_FIRST -> "Son eklenen altta"
-        ReminderSortOrder.NEAREST_DATE, ReminderSortOrder.REMINDER_TIME -> "Tarihi en yakın"
-        else -> "Son eklenen üstte"
+        ReminderSortOrder.OLDEST_FIRST -> t("Son eklenen altta")
+        ReminderSortOrder.NEAREST_DATE, ReminderSortOrder.REMINDER_TIME -> t("Tarihi en yakın")
+        else -> t("Son eklenen üstte")
     }
     val next = when (sortOrder) {
         ReminderSortOrder.RECENTLY_ADDED -> ReminderSortOrder.OLDEST_FIRST
@@ -439,7 +440,7 @@ internal fun CategoryHeroActions(
         if (progressFraction != null) IconButton(
             onClick = onProgressClick,
             modifier = Modifier.size(buttonSize).semantics {
-                contentDescription = if (progressOpen) "İlerlemeyi gizle" else "Kategori ilerlemesini göster"
+                contentDescription = if (progressOpen) t("İlerlemeyi gizle") else t("Kategori ilerlemesini göster")
             }
         ) {
             if (ringTint != null) CategoryProgressDisc(progressFraction, progressOpen, ringTint)
@@ -448,7 +449,7 @@ internal fun CategoryHeroActions(
         if (showSort) IconButton(
             onClick = { onSortSelected(next) },
             modifier = Modifier.size(buttonSize).semantics {
-                contentDescription = "Sıralamayı değiştir"
+                contentDescription = t("Sıralamayı değiştir")
                 stateDescription = currentLabel
             }
         ) {
