@@ -245,6 +245,7 @@ final class DiscoveryStore {
     func act(_ kind: DiscoveryKind, _ card: DiscoveryCard, _ action: DiscoveryAction) throws {
         guard AppUpdateGate.writable() else { throw BookError.message(AppUpdateGate.blockedMessage) }
         var s = snapshot(kind)
+        let before = s
         let remainder = s.cards.filter { $0.id != card.id }
         func rotated() -> [DiscoveryCard] { s.later.contains { $0.id == card.id } ? s.later.filter { $0.id != card.id } + [card] : s.later }
         switch action {
@@ -266,7 +267,28 @@ final class DiscoveryStore {
             if !s.later.contains(where: { $0.id == card.id }) { s.later.append(card) }
             for t in card.seenTitles where !s.excluded.contains(t) { s.excluded.append(t) }
         }
+        if before.cards.contains(where: { $0.id == card.id }) && !s.cards.contains(where: { $0.id == card.id }) {
+            swiped.append((kind, card, before)); if swiped.count > 10 { swiped.removeFirst() }
+        }
         set(kind, s)
+    }
+
+    /// Posters swiped off a deck, newest last (shaking the phone brings the last one back).
+    @ObservationIgnored private var swiped: [(DiscoveryKind, DiscoveryCard, Snapshot)] = []
+
+    /// Shake: the last poster swiped off `kind`'s deck is back on top, and out of the list / İzledim / passed titles
+    /// again (only what that swipe did). False when there is nothing to bring back.
+    @discardableResult
+    func undo(_ kind: DiscoveryKind) -> Bool {
+        guard let i = swiped.lastIndex(where: { $0.0 == kind }) else { return false }
+        let (_, card, before) = swiped.remove(at: i)
+        var s = snapshot(kind)
+        s.cards = [card] + s.cards.filter { $0.id != card.id }
+        if !before.later.contains(where: { $0.id == card.id }) { s.later = s.later.filter { $0.id != card.id } }
+        if !before.watched.contains(where: { $0.id == card.id }) { s.watched = s.watched.filter { $0.id != card.id } }
+        s.excluded = s.excluded.filter { !card.seenTitles.contains($0) || before.excluded.contains($0) }
+        set(kind, s)
+        return true
     }
 
     func seedDemo() {

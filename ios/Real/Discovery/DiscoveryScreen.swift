@@ -44,6 +44,8 @@ struct DiscoveryScreen: View {
             case .filters: filterPage
             case .discover, .list: deckPage
             }
+            // Shaking the phone brings the last swiped poster back on top.
+            Color.clear.frame(width: 0, height: 0).onShake { if page == .discover && discovery.undo(kind) { error = nil } }
             if let detail {
                 MediaDiscoveryDetail(card: detail, kind: kind) { withAnimation(.easeOut(duration: 0.12)) { self.detail = nil } }
                     .transition(.opacity.combined(with: .offset(y: 120)))
@@ -989,5 +991,26 @@ struct MediaBlockView: View {
         case "apple": return "Apple TV'de aç ↗"
         default: return "\(block.provider)'de aç ↗"
         }
+    }
+}
+
+// MARK: Shake
+
+extension Notification.Name {
+    static let realDeviceShake = Notification.Name("REAL.deviceShake")
+}
+
+/// UIKit reports a shake to the key window; it is passed on to the SwiftUI screens that listen (.onShake).
+extension UIWindow {
+    open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        if motion == .motionShake { NotificationCenter.default.post(name: .realDeviceShake, object: nil) }
+        super.motionEnded(motion, with: event)
+    }
+}
+
+extension View {
+    /// Runs `action` when the phone is shaken while this view is on screen.
+    func onShake(perform action: @escaping () -> Void) -> some View {
+        onReceive(NotificationCenter.default.publisher(for: .realDeviceShake)) { _ in action() }
     }
 }

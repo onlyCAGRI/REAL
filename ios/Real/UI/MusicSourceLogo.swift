@@ -48,6 +48,15 @@ struct MusicSourceLogo: View {
 func openMusicBlock(_ block: MusicBlock) {
     // An Apple Music song opens as a Spotify search for someone whose music app is Spotify (per viewer).
     if block.provider != "Spotify" && musicOpensIn(block) == "Spotify" { searchSpotify(block); return }
+    if block.provider == "iTunes" || block.provider == "Apple Music" {
+        // A song from another country's chart (the US one is woven into the deck) may carry an id this country's Apple
+        // Music does not have ("not available in your country") although the song is there: open this country's copy.
+        Task {
+            let here = await appleMusicLinkHere(block)
+            if let url = URL(string: here ?? block.providerUrl) { _ = await UIApplication.shared.open(url) }
+        }
+        return
+    }
     let web = URL(string: block.providerUrl).flatMap { ["http", "https"].contains($0.scheme ?? "") ? $0 : nil }
     if block.provider == "Spotify", let id = block.providerTrackId, id.count == 22, let app = URL(string: "spotify:track:\(id)") {
         UIApplication.shared.open(app) { ok in if !ok, let web { UIApplication.shared.open(web) } }
@@ -76,4 +85,28 @@ private func searchSpotify(_ music: MusicBlock) {
             if !ok, let web = URL(string: "https://open.spotify.com/search/\(encoded)") { UIApplication.shared.open(web) }
         }
     }
+}
+
+/// This storefront's link for an Apple Music song: its own id when the store has it, else the same title and artist,
+/// else Apple Music's search for them.
+private func appleMusicLinkHere(_ block: MusicBlock) async -> String? {
+    let store = MusicStorefront.code.lowercased()
+    func results(_ url: String) async -> [[String: Any]] {
+        guard let u = URL(string: url), let (data, _) = try? await URLSession.shared.data(from: u),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+        return json["results"] as? [[String: Any]] ?? []
+    }
+    func link(_ o: [String: Any]?) -> String? { (o?["trackViewUrl"] as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil } }
+    if let id = block.providerTrackId, !id.isEmpty, id.allSatisfy(\.isNumber),
+       let found = link(await results("https://itunes.apple.com/lookup?id=\(id)&country=\(store)").first) { return found }
+    let term = [block.title, block.artist].filter { !$0.isEmpty }.joined(separator: " ")
+    let q = term.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? term
+    func norm(_ v: String) -> String { v.lowercased().filter { $0.isLetter || $0.isNumber } }
+    for o in await results("https://itunes.apple.com/search?term=\(q)&entity=song&country=\(store)&limit=10") {
+        let title = norm(o["trackName"] as? String ?? ""), artist = norm(o["artistName"] as? String ?? "")
+        let want = norm(block.title), by = norm(block.artist)
+        if !title.isEmpty, title.hasPrefix(want) || want.hasPrefix(title), by.isEmpty || artist.contains(by) || by.contains(artist),
+           let found = link(o) { return found }
+    }
+    return "https://music.apple.com/\(store)/search?term=\(q)"
 }

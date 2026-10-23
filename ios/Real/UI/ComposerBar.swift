@@ -197,8 +197,14 @@ struct ComposerBar: View {
         .realOverlay(isPresented: $showLocationChoice) {
             PermissionSheet(title: "Konum",
                             description: "Yeri karta ekleyebilir ya da o yere varınca (veya oradan ayrılınca) bir kere hatırlatılabilirsin. Hatırlatma için konum yalnızca bekleyen bir konum hatırlatman varken izlenir ve hatırlatma gelince takip biter.",
-                            primaryLabel: "Konuma varınca hatırlat", secondaryLabel: "Konum ekle", glyph: .pin,
+                            // First choice: just add the place; reminding on arrival / departure is the second one.
+                            primaryLabel: "Konum ekle", secondaryLabel: "Varınca / ayrılınca hatırlat", glyph: .pin,
                             onPrimary: {
+                                showLocationChoice = false
+                                pickForTrigger = false
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { showLocationEditor = true }
+                            },
+                            onSecondary: {
                                 showLocationChoice = false
                                 placePermission.request { granted in
                                     guard granted else { return }
@@ -206,11 +212,6 @@ struct ComposerBar: View {
                                     // After iOS's own permission alert: open the map once that alert is gone.
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showLocationEditor = true }
                                 }
-                            },
-                            onSecondary: {
-                                showLocationChoice = false
-                                pickForTrigger = false
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { showLocationEditor = true }
                             },
                             onDismiss: { showLocationChoice = false })
         }

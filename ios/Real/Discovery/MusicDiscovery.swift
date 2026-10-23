@@ -141,6 +141,9 @@ final class MusicDiscoveryStore {
     func act(_ card: MusicCard, _ action: Action) {
         guard AppUpdateGate.writable() else { return }
         var s = snapshot
+        if (action == .save || action == .skip) && s.cards.contains(where: { $0.id == card.id }) {
+            swiped.append((card, s)); if swiped.count > 10 { swiped.removeFirst() }
+        }
         let rest = s.cards.filter { $0.id != card.id }
         switch action {
         case .save:
@@ -154,6 +157,21 @@ final class MusicDiscoveryStore {
         case .remove: s.list = s.list.filter { $0.id != card.id }
         }
         set(s)
+    }
+
+    /// Songs swiped off the deck, newest last (shaking the phone brings the last one back).
+    @ObservationIgnored private var swiped: [(MusicCard, Snapshot)] = []
+
+    /// Shake: the last swiped song is back on top, and out of the list / passed songs again (only what that swipe did).
+    @discardableResult
+    func undo() -> Bool {
+        guard let (card, before) = swiped.popLast() else { return false }
+        var s = snapshot
+        s.cards = [card] + s.cards.filter { $0.id != card.id }
+        if !before.list.contains(where: { $0.id == card.id }) { s.list = s.list.filter { $0.id != card.id } }
+        if !before.excluded.contains(card.id) { s.excluded = s.excluded.filter { $0 != card.id } }
+        set(s)
+        return true
     }
 
     /// Up to 250 songs of the genre (and era) from the Worker's /api/music-discover, cached there for 12 hours.
@@ -250,6 +268,8 @@ struct MusicDiscoveryScreen: View {
             Color.black.ignoresSafeArea()
             if deck || list { deckPage } else { filterPage }
         }
+        // Shaking the phone brings the last swiped song back on top.
+        .onShake { if deck && !list && music.undo() { error = nil } }
         .onAppear {
             // "Nasıl hissettirsin" is gone; old mood keys are dropped.
             selection = Set(music.snapshot.selection.filter { k in !MusicMood.all.contains { $0.key == k } })

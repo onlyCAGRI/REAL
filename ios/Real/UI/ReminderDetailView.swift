@@ -1548,8 +1548,9 @@ struct LocationEditor: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if onRemind != nil {
-                remindPill
+                // Adding the place comes first; reminding on arrival / departure is the second choice.
                 whitePill("Konum ekle", enabled: pin != nil) { savePlain() }
+                remindPill
             } else {
                 whitePill("Bu konumu kaydet", enabled: pin != nil) { savePlain() }
             }

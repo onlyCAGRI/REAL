@@ -27,6 +27,11 @@ struct ReminderCardView: View {
     var categoryLabel = false
 
     @State private var dragX: CGFloat = 0
+    /// Which way this drag may go: a card is swiped from its edge (Sil from the right side, complete / 24 hour from the
+    /// left side); a drag starting in the middle does not move it, so a scroll or a tap cannot throw a card away.
+    @State private var mayLeft = false
+    @State private var mayRight = false
+    @State private var cardWidth: CGFloat = 1
     @State private var recurringAck = false
 
     private var useDark: Bool { reminder.autoDarkText }
@@ -58,21 +63,28 @@ struct ReminderCardView: View {
 
     var body: some View {
         ZStack {
+            if swipeEnabled && dragX != 0 { CardSwipeGlow(x: dragX) }
             if swipeEnabled && swipeRightOn {
+                let p = min(max(dragX / 82, 0), 1)
                 Text(swipeRightLabel)
                     .font(RealFont.inter(12, .semibold))
                     .foregroundStyle(RealColors.selection)
+                    .scaleEffect(0.85 + 0.15 * p, anchor: .leading)
                     .padding(.leading, 18)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .opacity(Double(min(max(dragX / 82, 0), 1)))
+                    .opacity(Double(p))
             }
             if swipeEnabled && swipeLeftOn {
-                Text("Sil")
-                    .font(RealFont.inter(12, .semibold))
-                    .foregroundStyle(Color(argb: 0xFFFF8A80))
-                    .padding(.trailing, 18)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .opacity(Double(min(max(-dragX / 82, 0), 1)))
+                let p = min(max(-dragX / 82, 0), 1)
+                HStack(spacing: 6) {
+                    Image(systemName: "trash").font(.system(size: 13, weight: .semibold))
+                    Text("Sil").font(RealFont.inter(12, .semibold))
+                }
+                .foregroundStyle(Color(argb: 0xFFFF8A80))
+                .scaleEffect(0.85 + 0.15 * p, anchor: .trailing)
+                .padding(.trailing, 18)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .opacity(Double(p))
             }
             swipeable
         }
@@ -83,11 +95,14 @@ struct ReminderCardView: View {
     @ViewBuilder private var swipeable: some View {
         if #available(iOS 18.0, *) {
             card.offset(x: dragX)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { cardWidth = max(1, $0) }
                 .gesture(HorizontalSwipeGesture(enabled: swipeEnabled,
+                                                onBegan: { swipeBegan(at: $0) },
                                                 onChanged: { swipeChanged($0) },
                                                 onEnded: { swipeEnded($0, predicted: $1) }))
         } else {
             card.offset(x: dragX)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { cardWidth = max(1, $0) }
                 .simultaneousGesture(swipeGesture, including: swipeEnabled ? .all : .subviews)
         }
     }
@@ -287,6 +302,7 @@ struct ReminderCardView: View {
         DragGesture(minimumDistance: 18)
             .onChanged { value in
                 guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                if dragX == 0 { swipeBegan(at: value.startLocation.x) }
                 swipeChanged(value.translation.width)
             }
             .onEnded { value in
@@ -296,8 +312,14 @@ struct ReminderCardView: View {
             }
     }
 
+    private func swipeBegan(at x: CGFloat) {
+        let at = x / cardWidth
+        mayLeft = swipeLeftOn && at >= 0.6
+        mayRight = swipeRightOn && at <= 0.4
+    }
+
     private func swipeChanged(_ w: CGFloat) {
-        let clamped = min(max(w, swipeLeftOn ? -.infinity : 0), swipeRightOn ? .infinity : 0)
+        let clamped = min(max(w, mayLeft ? -.infinity : 0), mayRight ? .infinity : 0)
         if abs(clamped) >= 82 && abs(dragX) < 82 { UISelectionFeedbackGenerator().selectionChanged() }
         dragX = clamped
     }
@@ -326,6 +348,8 @@ struct ReminderCardView: View {
 @available(iOS 18.0, *)
 struct HorizontalSwipeGesture: UIGestureRecognizerRepresentable {
     var enabled: Bool
+    /// Where the finger went down, from the card's left edge.
+    var onBegan: (CGFloat) -> Void
     var onChanged: (CGFloat) -> Void
     /// Translation and the predicted end translation (as SwiftUI's DragGesture gives it).
     var onEnded: (CGFloat, CGFloat) -> Void
@@ -356,11 +380,36 @@ struct HorizontalSwipeGesture: UIGestureRecognizerRepresentable {
         guard let view = recognizer.view else { return }
         let t = recognizer.translation(in: view).x
         switch recognizer.state {
-        case .began, .changed: onChanged(t)
+        case .began:
+            onBegan(recognizer.location(in: view).x - t)
+            onChanged(t)
+        case .changed: onChanged(t)
         case .ended: onEnded(t, t + recognizer.velocity(in: view).x * 0.25)
         case .cancelled, .failed: onEnded(t, t)
         default: break
         }
+    }
+}
+
+/// Light from the edge a swiped card leaves (as on the posters): red on the right (Sil), blue on the left.
+private struct CardSwipeGlow: View {
+    let x: CGFloat
+    var body: some View {
+        let p = min(abs(x) / 82, 1.4) / 1.4
+        let s = p * p * (3 - 2 * p)
+        let color = x < 0 ? Color(argb: 0xFFFF4D6D) : Color(argb: 0xFF4D8DFF)
+        let armed: Double = abs(x) >= 82 ? 1.35 : 1
+        GeometryReader { geo in
+            let radius = max(abs(x) * 1.15, geo.size.height * 0.8)
+            ZStack(alignment: x < 0 ? .trailing : .leading) {
+                RadialGradient(colors: [color.opacity(min(0.42 * s * armed, 0.6)), color.opacity(0.16 * s * armed), .clear],
+                               center: x < 0 ? .trailing : .leading, startRadius: 0, endRadius: radius)
+                LinearGradient(colors: [.clear, color.opacity(0.75 * s), .white.opacity(0.9 * s), color.opacity(0.75 * s), .clear],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(width: 2.5)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
