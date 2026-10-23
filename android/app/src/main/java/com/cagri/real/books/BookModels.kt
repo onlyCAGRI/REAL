@@ -1,5 +1,6 @@
 package com.cagri.real.books
 
+import com.cagri.real.i18n.t
 import androidx.compose.ui.graphics.Color
 
 enum class BookSource { LOCAL, ALL, GOOGLE_BOOKS, OPEN_LIBRARY, GUTENBERG, WIKISOURCE, OAPEN, DOAB, STANDARD_EBOOKS }
@@ -32,7 +33,7 @@ data class Shelf(
 
 /** Okuma sayfası temaları: AÇIK, yumuşak KOYU (saf siyah değil) ve AMOLED (saf siyah). */
 enum class ReaderTheme(
-    val label: String,
+    private val trLabel: String,
     val background: Color,
     val text: Color,
     val muted: Color,
@@ -43,6 +44,7 @@ enum class ReaderTheme(
     DARK("Koyu", Color(0xFF1C1C1E), Color(0xFFDADADC), Color(0xFF8E8E93), Color(0xFF3A3A3C), Color(0xFFF2F2F7)),
     AMOLED("AMOLED", Color(0xFF000000), Color(0xFFCFCFCF), Color(0xFF6E6E73), Color(0xFF1A1A1A), Color.White);
 
+    val label: String get() = t(trLabel)
     fun next(): ReaderTheme = entries[(ordinal + 1) % entries.size]
 }
 

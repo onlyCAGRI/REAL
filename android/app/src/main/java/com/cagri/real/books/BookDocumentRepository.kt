@@ -1,5 +1,6 @@
 package com.cagri.real.books
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -15,6 +16,9 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.withPermit
@@ -52,7 +56,7 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
     suspend fun prepareReading(original: Book): Book = withContext(Dispatchers.IO) {
         val book = restoreLegacyLocalText(original)
         if (book.format != "epub") book else {
-            val file = store.file(book) ?: throw IOException("Kitap dosyası bulunamadı.")
+            val file = store.file(book) ?: throw IOException(t("Kitap dosyası bulunamadı."))
             val index = epubIndex(file)
             if (!store.epubPositionMigrated(book)) {
                 // One-time mapping preserves the former all-book paragraph position.
@@ -80,14 +84,14 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
         store.directory.mkdirs()
         val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
-        } ?: "Kitap"
+        } ?: t("Kitap")
         val mime = context.contentResolver.getType(uri).orEmpty()
         val format = when {
             mime == "application/pdf" || name.endsWith(".pdf", true) -> "pdf"
             mime == "application/epub+zip" || name.endsWith(".epub", true) -> "epub"
             mime.startsWith("image/") -> "image"
             mime.startsWith("text/") || name.endsWith(".txt", true) -> "txt"
-            else -> throw IOException("PDF, EPUB, TXT veya sayfa görseli seç.")
+            else -> throw IOException(t("PDF, EPUB, TXT veya sayfa görseli seç."))
         }
         val temp = File(store.directory, "${UUID.randomUUID()}.tmp")
         var createdFile: File? = null
@@ -98,9 +102,9 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
             context.contentResolver.openInputStream(uri)?.use { input -> temp.outputStream().use { output ->
                 val buffer = ByteArray(8192); var total = 0
                 while (true) { coroutineContext.ensureActive(); val n = input.read(buffer); if (n < 0) break
-                    total += n; if (total > 100 * 1024 * 1024) throw IOException("Dosya en fazla 100 MB olabilir.")
+                    total += n; if (total > 100 * 1024 * 1024) throw IOException(t("Dosya en fazla 100 MB olabilir."))
                     hash.update(buffer, 0, n); output.write(buffer, 0, n) }
-            } } ?: throw IOException("Dosya açılamadı.")
+            } } ?: throw IOException(t("Dosya açılamadı."))
             val id = "local_" + hash.digest().joinToString("") { "%02x".format(it) }
             val file = File(store.directory, "$id.$format")
             var title = name.substringBeforeLast('.', name).take(400); var author = ""; var pages: Int? = null
@@ -110,7 +114,7 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
             when (format) {
                 "pdf" -> renderer(temp).use { pdf ->
                     pages = pdf.pageCount
-                    if (pdf.pageCount == 0) throw IOException("PDF boş.")
+                    if (pdf.pageCount == 0) throw IOException(t("PDF boş."))
                     pdf.openPage(0).use { page ->
                         val bitmap = render(page, 480)
                         try { cover = saveCover(id, bitmap).absolutePath } finally { bitmap.recycle() }
@@ -119,17 +123,17 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
                 "epub" -> ZipFile(temp).use { zip ->
                     val content = epubChapters.index(temp, includeCover = true)
                     title = content.title.ifBlank { title }; author = content.author
-                    if (content.chapters.isEmpty()) throw IOException("EPUB içeriği alınamadı.")
+                    if (content.chapters.isEmpty()) throw IOException(t("EPUB içeriği alınamadı."))
                     content.cover?.let { cover = it.let { bytes -> File(store.directory, "$id.cover.png").apply { writeBytes(bytes) }.absolutePath } }
                 }
                 "image" -> { val bitmap = decodeImage(temp, 480)
                     try { cover = saveCover(id, bitmap).absolutePath } finally { bitmap.recycle() }; pages = 1 }
-                "txt" -> { if (temp.length() > 12 * 1024 * 1024) throw IOException("Metin dosyası çok büyük.") }
+                "txt" -> { if (temp.length() > 12 * 1024 * 1024) throw IOException(t("Metin dosyası çok büyük.")) }
             }
             coroutineContext.ensureActive()
             if (!file.exists()) {
                 createdFile = file
-                if (!temp.renameTo(file)) throw IOException("Dosya kaydedilemedi.")
+                if (!temp.renameTo(file)) throw IOException(t("Dosya kaydedilemedi."))
             }
             val book = Book(id, title, author, category = "Dosyalarım", pageCount = pages, coverUrl = cover,
                 fileName = file.name, format = format)
@@ -152,9 +156,9 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
         val existing = store.load().firstOrNull { it.id == book.id }
         if (existing != null && store.file(existing)?.isFile == true) return@withPermit existing
         val cache = legacyTextCache(book)?.takeIf { it.isFile }
-            ?: throw IOException("Kitap dosyası cihazda bulunamadı. Dosyadan yeniden ekleyebilirsin.")
+            ?: throw IOException(t("Kitap dosyası cihazda bulunamadı. Dosyadan yeniden ekleyebilirsin."))
         val text = jsonParagraphs(cache.readText()).joinToString("\n\n")
-        if (text.isBlank()) throw IOException("Yerel kitap metni boş. Orijinal dosyanı yeniden ekleyebilirsin.")
+        if (text.isBlank()) throw IOException(t("Yerel kitap metni boş. Orijinal dosyanı yeniden ekleyebilirsin."))
         val token = UUID.randomUUID().toString()
         val temp = File(store.directory, "$token.tmp")
         val target = File(store.directory, "${book.id}-$token.txt")
@@ -162,7 +166,7 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
         try {
             temp.writeText(text)
             coroutineContext.ensureActive()
-            if (!temp.renameTo(target)) throw IOException("Yerel kitap dosyası kaydedilemedi.")
+            if (!temp.renameTo(target)) throw IOException(t("Yerel kitap dosyası kaydedilemedi."))
             val restored = book.copy(fileName = target.name, format = "txt")
             withContext(NonCancellable) { store.saveDownloaded(restored); persisted = true }
             return@withPermit restored
@@ -176,22 +180,34 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
         pageWork.withPage("${book.id}:$pageIndex") { loadText(book, pageIndex, rebuildLayout) }
     }
     private suspend fun loadText(book: Book, pageIndex: Int, rebuildLayout: Boolean): List<String> {
-        val file = store.file(book) ?: throw IOException("Kitap dosyası bulunamadı.")
+        val file = store.file(book) ?: throw IOException(t("Kitap dosyası bulunamadı."))
         return when (book.format) {
             "pdf", "image" -> {
                 val dir = File(store.directory, "${book.id}.pages").apply { mkdirs() }
                 val cached = File(dir, "$pageIndex.v8.json")
-                if (!rebuildLayout && cached.exists()) return jsonParagraphs(cached.readText())
+                val ocrPages = ocrPages(dir)
+                // A cached OCR page gets another chance at the text layer (word spaces are now rebuilt from glyphs).
+                if (!rebuildLayout && cached.exists() && (book.format != "pdf" || pageIndex !in ocrPages)) {
+                    if (pageIndex in ocrPages) scanned.update { it + book.id }
+                    return jsonParagraphs(cached.readText())
+                }
                 // v8: a copyable PDF is read from its own text layer (words, bold, italic) on every Android version.
                 // That text replaces older OCR caches of the page; only pages without usable text keep them.
                 val layered: List<String>? = if (book.format == "pdf") gate.withPermit { textLayer(book.id, file, pageIndex) } else null
                 if (layered != null) {
                     coroutineContext.ensureActive()
                     val temp = File(dir, "$pageIndex.tmp"); temp.writeText(JSONArray(layered).toString())
-                    if (!temp.renameTo(cached)) { temp.delete(); throw IOException("Sayfa metni kaydedilemedi.") }
+                    if (!temp.renameTo(cached)) { temp.delete(); throw IOException(t("Sayfa metni kaydedilemedi.")) }
+                    if (pageIndex in ocrPages) saveOcrPages(dir, ocrPages - pageIndex)
                     return layered
                 }
+                if (!rebuildLayout && cached.exists()) {
+                    scanned.update { it + book.id }
+                    return jsonParagraphs(cached.readText())
+                }
                 if (!rebuildLayout) {
+                    // The text layer failed above, so older caches of this page came from OCR.
+                    if (listOf(7, 6, 5, 4).any { File(dir, "$pageIndex.v$it.json").exists() }) scanned.update { it + book.id }
                     File(dir, "$pageIndex.v7.json").takeIf { it.exists() }?.let { return jsonParagraphs(it.readText()) }
                     // Old manual paragraph deletions have no edit marker; keep the old cache until
                     // the user explicitly chooses to rebuild this page, rather than resurrecting text.
@@ -203,6 +219,7 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
                 }
                 // Metin katmanı uygunsa native; değilse konumlu OCR. Eski konumsuz OCR yeni analize sokulmaz.
                 // Sayfa görselleri metin katmanı taşımaz; yalnız onlar ve metni alınamayan PDF sayfaları OCR'lanır.
+                var byOcr = false
                 val result: List<String> = gate.withPermit {
                     if (book.format == "pdf") renderer(file).use { pdf ->
                         require(pageIndex in 0 until pdf.pageCount)
@@ -219,21 +236,25 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
                                     }.takeIf { p -> p.isNotEmpty() }
                                 }
                                 nativeText ?: recognizeLayout(bitmap, headers,
-                                    native?.let { nativeChapterTitles(it.runs, bitmap.width, bitmap.height) }.orEmpty())
+                                    native?.let { nativeChapterTitles(it.runs, bitmap.width, bitmap.height) }.orEmpty()).also { byOcr = true }
                             } finally { bitmap.recycle() }
                         }
                     } else {
                         val bitmap = decodeImage(file, 1800)
-                        try { recognizeLayout(bitmap) } finally { bitmap.recycle() }
+                        try { recognizeLayout(bitmap).also { byOcr = true } } finally { bitmap.recycle() }
                     }
                 }
                 coroutineContext.ensureActive()
                 if (result.isNotEmpty()) {
                     val temp = File(dir, "$pageIndex.tmp"); temp.writeText(JSONArray(result).toString())
-                    if (!temp.renameTo(cached)) { temp.delete(); throw IOException("Sayfa metni kaydedilemedi.") }
+                    if (!temp.renameTo(cached)) { temp.delete(); throw IOException(t("Sayfa metni kaydedilemedi.")) }
                     File(dir, "$pageIndex.v3.json").delete()   // v4 is retained as a pre-rebuild backup.
                     File(dir, "$pageIndex.v2.json").delete()
                     File(dir, "$pageIndex.json").delete()
+                    if (byOcr) {
+                        if (pageIndex !in ocrPages) saveOcrPages(dir, ocrPages + pageIndex)
+                        scanned.update { it + book.id }
+                    }
                 }
                 result
             }
@@ -250,12 +271,12 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
             ?: File(dir, "$pageIndex.v6.json").takeIf { it.exists() }
             ?: File(dir, "$pageIndex.v5.json").takeIf { it.exists() }
             ?: File(dir, "$pageIndex.v4.json").takeIf { it.exists() }
-            ?: throw IOException("Sayfa metni bulunamadı.")
+            ?: throw IOException(t("Sayfa metni bulunamadı."))
         val list = jsonParagraphs(source.readText()).toMutableList()
         if (paragraphIndex !in list.indices) return@withPage
         list.removeAt(paragraphIndex)
         val temp = File(dir, "$pageIndex.tmp"); temp.writeText(JSONArray(list).toString())
-        if (!temp.renameTo(cached)) { temp.delete(); throw IOException("Değişiklik kaydedilemedi.") }
+        if (!temp.renameTo(cached)) { temp.delete(); throw IOException(t("Değişiklik kaydedilemedi.")) }
         }
     }
     /** Paragrafı başlık / gövde olarak işaretler (kalıcı; metin değişmez). */
@@ -267,12 +288,12 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
             ?: File(dir, "$pageIndex.v6.json").takeIf { it.exists() }
             ?: File(dir, "$pageIndex.v5.json").takeIf { it.exists() }
             ?: File(dir, "$pageIndex.v4.json").takeIf { it.exists() }
-            ?: throw IOException("Sayfa metni bulunamadı.")
+            ?: throw IOException(t("Sayfa metni bulunamadı."))
         val list = jsonParagraphs(source.readText()).toMutableList()
         if (paragraphIndex !in list.indices) return@withPage
         list[paragraphIndex] = ParagraphKind.withKind(list[paragraphIndex], heading)
         val temp = File(dir, "$pageIndex.tmp"); temp.writeText(JSONArray(list).toString())
-        if (!temp.renameTo(cached)) { temp.delete(); throw IOException("Değişiklik kaydedilemedi.") }
+        if (!temp.renameTo(cached)) { temp.delete(); throw IOException(t("Değişiklik kaydedilemedi.")) }
         }
     }
     suspend fun original(book: Book, pageIndex: Int): Bitmap = withContext(Dispatchers.IO) {
@@ -309,6 +330,17 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
             }
         }
     }
+
+    /**
+     * Books with at least one page read by OCR (scans, or a text layer too broken to use). The reader tells the
+     * person once, so misread words are not taken for an app bug.
+     */
+    private val scanned = MutableStateFlow<Set<String>>(emptySet())
+    val scannedBooks: StateFlow<Set<String>> = scanned
+
+    private fun ocrPages(dir: File): Set<Int> = File(dir, "ocr.txt").takeIf { it.exists() }
+        ?.readText()?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.toSet().orEmpty()
+    private fun saveOcrPages(dir: File, pages: Set<Int>) { File(dir, "ocr.txt").writeText(pages.sorted().joinToString(",")) }
 
     private data class NativePage(val runs: List<PageLayout.NativeRun>, val complete: Boolean)
 
@@ -424,7 +456,7 @@ class BookDocumentRepository(private val context: Context, private val store: Bo
         BitmapFactory.decodeFile(file.absolutePath, bounds)
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / sample > longest) sample *= 2
-        return BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample }) ?: throw IOException("Görsel okunamadı.")
+        return BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample }) ?: throw IOException(t("Görsel okunamadı."))
     }
     private fun saveCover(id: String, bitmap: Bitmap) = File(store.directory, "$id.cover.png").apply {
         outputStream().use { if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) throw IOException("Kapak kaydedilemedi.") }

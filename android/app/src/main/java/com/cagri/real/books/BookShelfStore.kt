@@ -1,5 +1,6 @@
 package com.cagri.real.books
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -26,17 +27,17 @@ class BookShelfStore(context: Context, uid: String) {
     suspend fun add(book: Book): List<Book> = withContext(Dispatchers.IO) { mutex.withLock {
         val old = readBooks()
         if (old.any { it.id == book.id }) return@withLock old
-        require(old.size < 200) { "Kitaplık sınırına ulaşıldı (200 kitap)." }
+        require(old.size < 200) { t("Kitaplık sınırına ulaşıldı (200 kitap).") }
         val updated = old + book
         checkSave(prefs.edit().putString("books", JSONArray().apply { updated.forEach { put(encode(it)) } }.toString()).commit())
         updated
     } }
     /** Upgrade a catalog-only entry after the validated full file has been committed. */
     suspend fun saveDownloaded(book: Book): List<Book> = withContext(Dispatchers.IO) { mutex.withLock {
-        require(file(book)?.isFile == true) { "Kitap dosyası bulunamadı." }
+        require(file(book)?.isFile == true) { t("Kitap dosyası bulunamadı.") }
         val old = readBooks()
         val previous = old.firstOrNull { it.id == book.id }
-        require(previous != null || old.size < 200) { "Kitaplık sınırına ulaşıldı (200 kitap)." }
+        require(previous != null || old.size < 200) { t("Kitaplık sınırına ulaşıldı (200 kitap).") }
         val updated = if (previous == null) old + book else old.map { if (it.id == book.id) book else it }
         checkSave(prefs.edit().putString("books", JSONArray().apply { updated.forEach { put(encode(it)) } }.toString()).commit())
         if (previous?.fileName != book.fileName) previous?.let { file(it)?.delete() }
@@ -45,7 +46,7 @@ class BookShelfStore(context: Context, uid: String) {
     /** Kitabın görünen adını değiştirir (kapak, sırt ve detayda yeni ad kullanılır). */
     suspend fun rename(book: Book, title: String): List<Book> = withContext(Dispatchers.IO) { mutex.withLock {
         val clean = title.trim()
-        require(clean.isNotEmpty()) { "Kitap adı boş olamaz." }
+        require(clean.isNotEmpty()) { t("Kitap adı boş olamaz.") }
         val updated = readBooks().map { if (it.id == book.id) it.copy(title = clean) else it }
         checkSave(prefs.edit().putString("books", JSONArray().apply { updated.forEach { put(encode(it)) } }.toString()).commit())
         updated
@@ -66,7 +67,51 @@ class BookShelfStore(context: Context, uid: String) {
         File(directory, "${book.id}.pages").deleteRecursively()
         updated
     } }
-    fun file(book: Book): File? = book.fileName?.takeIf { it.matches(Regex("[a-zA-Z0-9_.-]+")) }?.let { File(directory, it) }
+    private fun writeBooks(list: List<Book>) =
+        checkSave(prefs.edit().putString("books", JSONArray().apply { list.forEach { put(encode(it)) } }.toString()).commit())
+    private fun readSections(): List<String> = runCatching {
+        val a = JSONArray(prefs.getString("sections", "[]") ?: "[]"); (0 until a.length()).map { a.getString(it) }
+    }.getOrDefault(emptyList())
+    private fun writeSections(list: List<String>) =
+        checkSave(prefs.edit().putString("sections", JSONArray(list).toString()).commit())
+
+    /** Bölümler: kitapların [Book.category] alanı. Burada yalnız kişinin açtığı (boş da kalabilen) bölümler tutulur. */
+    suspend fun sections(): List<String> = withContext(Dispatchers.IO) { mutex.withLock { readSections() } }
+    suspend fun addSection(name: String): List<String> = withContext(Dispatchers.IO) { mutex.withLock {
+        val clean = name.trim().take(40)
+        require(clean.isNotEmpty()) { t("Bölüm adı boş olamaz.") }
+        val taken = readSections() + readBooks().map { it.category }
+        require(taken.none { it.equals(clean, ignoreCase = true) }) { t("Bu adla bir bölüm zaten var.") }
+        require(readSections().size < 30) { t("En fazla 30 bölüm açılabilir.") }
+        (readSections() + clean).also(::writeSections)
+    } }
+    /** Kitabı sürükleyip başka bölüme bırakmak. */
+    suspend fun moveBook(bookId: String, section: String): List<Book> = withContext(Dispatchers.IO) { mutex.withLock {
+        readBooks().map { if (it.id == bookId) it.copy(category = section) else it }.also(::writeBooks)
+    } }
+    suspend fun renameSection(old: String, new: String): Pair<List<Book>, List<String>> = withContext(Dispatchers.IO) { mutex.withLock {
+        val clean = new.trim().take(40)
+        require(clean.isNotEmpty()) { t("Bölüm adı boş olamaz.") }
+        val taken = (readSections() + readBooks().map { it.category }).filterNot { it == old }
+        require(taken.none { it.equals(clean, ignoreCase = true) }) { t("Bu adla bir bölüm zaten var.") }
+        val books = readBooks().map { if (it.category == old) it.copy(category = clean) else it }.also(::writeBooks)
+        val sections = readSections().let { s -> if (old in s) s.map { if (it == old) clean else it } else s + clean }.also(::writeSections)
+        books to sections
+    } }
+    /** Bölüm silinir; içindeki kitaplar Dosyalarım'a döner (kitap silinmez). */
+    suspend fun deleteSection(name: String): Pair<List<Book>, List<String>> = withContext(Dispatchers.IO) { mutex.withLock {
+        val books = readBooks().map { if (it.category == name) it.copy(category = DEFAULT_SECTION) else it }.also(::writeBooks)
+        books to readSections().filterNot { it == name }.also(::writeSections)
+    } }
+    suspend fun readerFont(): ReaderFont = withContext(Dispatchers.IO) {
+        runCatching { ReaderFont.valueOf(prefs.getString("reader_font", "SANS") ?: "SANS") }.getOrDefault(ReaderFont.SANS)
+    }
+    suspend fun saveReaderFont(font: ReaderFont) = withContext(Dispatchers.IO) { checkSave(prefs.edit().putString("reader_font", font.name).commit()) }
+    /** "Taranmış kitap" paneli bir kitap için bir kez gösterilir. */
+    suspend fun scanNoticeShown(book: Book): Boolean = withContext(Dispatchers.IO) { prefs.getBoolean("scan_notice_${book.id}", false) }
+    suspend fun markScanNoticeShown(book: Book) = withContext(Dispatchers.IO) { checkSave(prefs.edit().putBoolean("scan_notice_${book.id}", true).commit()) }
+
+    fun file(book: Book): File? =book.fileName?.takeIf { it.matches(Regex("[a-zA-Z0-9_.-]+")) }?.let { File(directory, it) }
     suspend fun theme(): ReaderTheme = withContext(Dispatchers.IO) {
         runCatching { ReaderTheme.valueOf(prefs.getString("theme", "AMOLED") ?: "AMOLED") }.getOrDefault(ReaderTheme.AMOLED)
     }
@@ -110,8 +155,9 @@ class BookShelfStore(context: Context, uid: String) {
                 .putInt("reader_offset_${book.id}", offset.coerceAtLeast(0)).putString("last_read_id", book.id).commit())
         }
     }
-    private fun checkSave(ok: Boolean) { if (!ok) throw IOException("Kitaplık kaydedilemedi.") }
+    private fun checkSave(ok: Boolean) { if (!ok) throw IOException(t("Kitaplık kaydedilemedi.")) }
     companion object {
+        const val DEFAULT_SECTION = "Dosyalarım"
         internal fun encode(b: Book) = JSONObject().put("id", b.id).put("title", b.title).put("author", b.author)
             .put("category", b.category).put("pageCount", b.pageCount).put("coverUrl", b.coverUrl)
             .put("licenseUrl", b.licenseUrl).put("rights", b.rights)

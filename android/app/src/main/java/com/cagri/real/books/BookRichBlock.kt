@@ -1,5 +1,7 @@
 package com.cagri.real.books
 
+import com.cagri.real.i18n.t
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.horizontalScroll
@@ -19,7 +21,7 @@ internal fun BookRichBlock(raw: String, style: TextStyle) {
     val data = remember(raw) { BookRichContent.decode(raw) } ?: return
     when (data.optString("kind")) {
         "image" -> Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-            AsyncImage(model = File(data.getString("path")), contentDescription = data.optString("alt").ifBlank { "Kitap görseli" },
+            AsyncImage(model = File(data.getString("path")), contentDescription = data.optString("alt").ifBlank { t("Kitap görseli") },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 500.dp), contentScale = ContentScale.Fit)
             data.optString("alt").takeIf { it.isNotBlank() }?.let { Text(it, style = style, modifier = Modifier.padding(top = 8.dp)) }
         }

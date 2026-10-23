@@ -1,5 +1,7 @@
 package com.cagri.real.books
 
+import com.cagri.real.i18n.t
+
 import android.text.Html
 import android.util.Xml
 import android.util.AtomicFile
@@ -18,11 +20,11 @@ import kotlin.coroutines.coroutineContext
 internal class EpubChapters(private val directory: File) {
     data class Index(val title: String, val author: String, val chapters: List<String>, val cover: ByteArray?)
     private fun bytes(zip: ZipFile, path: String, limit: Int = 3 * 1024 * 1024): ByteArray {
-        val entry = zip.getEntry(path) ?: throw IOException("EPUB içeriği eksik.")
+        val entry = zip.getEntry(path) ?: throw IOException(t("EPUB içeriği eksik."))
         return zip.getInputStream(entry).use { input ->
             val out = java.io.ByteArrayOutputStream(); val buffer = ByteArray(8192)
             while (true) { val n = input.read(buffer); if (n < 0) break
-                if (out.size() + n > limit) throw IOException("EPUB bölümü çok büyük.")
+                if (out.size() + n > limit) throw IOException(t("EPUB bölümü çok büyük."))
                 out.write(buffer, 0, n)
             }; out.toByteArray()
         }
@@ -51,7 +53,7 @@ internal class EpubChapters(private val directory: File) {
             if (container.eventType == XmlPullParser.START_TAG && container.name == "rootfile") opf = container.getAttributeValue(null, "full-path")
             container.next()
         }
-        val path = opf ?: throw IOException("EPUB kitap yapısı bulunamadı.")
+        val path = opf ?: throw IOException(t("EPUB kitap yapısı bulunamadı."))
         val parser = xml(bytes(zip, path)); val manifest = mutableMapOf<String, String>(); val spine = mutableListOf<String>()
         var title = ""; var author = ""; var coverId: String? = null
         while (parser.eventType != XmlPullParser.END_DOCUMENT) {
@@ -67,8 +69,8 @@ internal class EpubChapters(private val directory: File) {
                 "itemref" -> if (parser.getAttributeValue(null, "linear") != "no") parser.getAttributeValue(null, "idref")?.let { spine.add(it) }
             }; parser.next()
         }
-        val chapters = spine.map { manifest[it] ?: throw IOException("EPUB bölümü eksik.") }
-        require(chapters.isNotEmpty() && chapters.size <= 1000) { "EPUB bölüm sayısı desteklenmiyor." }
+        val chapters = spine.map { manifest[it] ?: throw IOException(t("EPUB bölümü eksik.")) }
+        require(chapters.isNotEmpty() && chapters.size <= 1000) { t("EPUB bölüm sayısı desteklenmiyor.") }
         Index(title, author, chapters, if (includeCover) coverId?.let { manifest[it] }?.let { bytes(zip, it, 8 * 1024 * 1024) } else null)
     }
     fun legacyParagraphCount(file: File, index: Index, number: Int): Int = ZipFile(file).use { zip ->
