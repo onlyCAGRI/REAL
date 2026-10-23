@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -53,9 +54,9 @@ internal fun YasamWaterHistory(water: YasamWater?, reduceAnimations: Boolean) {
     val points = water?.history.orEmpty()
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         if (points.isEmpty()) {
-            Text("Su verisi yükleniyor", color = YasamMuted, fontSize = 13.sp, fontFamily = YasamThin)
+            Text(t("Su verisi yükleniyor"), color = YasamMuted, fontSize = 13.sp, fontFamily = YasamThin)
         } else {
-            if (points.any { it.goalMl == null }) Text("Eski hedef kaydı yoksa güncel hedef kullanılır",
+            if (points.any { it.goalMl == null }) Text(t("Eski hedef kaydı yoksa güncel hedef kullanılır"),
                 color = YasamMuted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 4.dp))
             BoxWithConstraints(Modifier.fillMaxWidth().clipToBounds()) {
                 val scroll = rememberScrollState(initial = Int.MAX_VALUE)
@@ -84,8 +85,8 @@ private fun YasamWaterChart(points: List<YasamWaterDay>, goalMl: Int, reduceAnim
     }
     val scores = remember(points, goalMl) { points.map { (it.amountMl.toFloat() / (it.goalMl ?: goalMl).coerceAtLeast(1)).coerceIn(0f, 1f) } }
     val summary = remember(points) {
-        "Son ${points.size} gün su kaydı: " + points.joinToString(", ") {
-            "${it.day}: ${it.amountMl} ml, hedef ${it.goalMl?.let { goal -> "$goal ml" } ?: "kaydı yok"}"
+        t("Son {0} gün su kaydı: ", points.size) + points.joinToString(", ") {
+            t("{0}: {1} ml, hedef {2}", it.day, it.amountMl, it.goalMl?.let { goal -> t("{0} ml", goal) } ?: t("kaydı yok"))
         }
     }
     val progress = remember { Animatable(if (reduceAnimations) 1f else 0f) }

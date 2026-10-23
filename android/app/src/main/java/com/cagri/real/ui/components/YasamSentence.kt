@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import com.cagri.real.data.JournalMood
 import com.cagri.real.data.MoodTrackerEntry
 import java.time.Instant
@@ -14,12 +15,12 @@ import java.util.Locale
  * Sahne: Sabah 05-11, Akşam 17-23, kalan saatlerde Okuma.
  */
 internal object YasamSentence {
-    private val TR: Locale = Locale.forLanguageTag("tr-TR")
+    private val TR: Locale get() = com.cagri.real.i18n.I18n.locale
 
     fun greeting(hour: Int): String = when (hour) {
-        in 5..10 -> "Günaydın"
-        in 11..17 -> "İyi günler"
-        else -> "İyi akşamlar"
+        in 5..10 -> t("Günaydın")
+        in 11..17 -> t("İyi günler")
+        else -> t("İyi akşamlar")
     }
 
     /** 0 = Sabah, 1 = Akşam, 2 = Okuma. */
@@ -32,39 +33,39 @@ internal object YasamSentence {
     /** 1800 -> "1,8", 2000 -> "2", 0 -> "0". */
     fun litres(ml: Int): String {
         val text = String.format(TR, "%.1f", ml / 1000.0)
-        return if (text.endsWith(",0")) text.dropLast(2) else text
+        return if (text.endsWith(",0") || text.endsWith(".0")) text.dropLast(2) else text
     }
 
     /** Veri yoksa ilgili parça atlanır; ikisi de yoksa null döner (sayı uydurulmaz). */
     fun build(yesterdayMl: Int?, yesterdayMood: JournalMood?): String? {
         val water = yesterdayMl?.takeIf { it > 0 }?.let {
-            if (it < 1000) "Dün $it ml su içtin" else "Dün ${litres(it)} L su içtin"
+            if (it < 1000) t("Dün {0} ml su içtin", it) else t("Dün {0} L su içtin", litres(it))
         }
-        val mood = yesterdayMood?.let { "ruh halin ${moodPhrase(it)}" }
+        val mood = yesterdayMood?.let { t("ruh halin {0}", moodPhrase(it)) }
         return when {
-            water != null && mood != null -> "$water,\n$mood."
-            water != null -> "$water."
-            mood != null -> "Dün $mood."
+            water != null && mood != null -> t("{0},\n{1}.", water, mood)
+            water != null -> t("{0}.", water)
+            mood != null -> t("Dün {0}.", mood)
             else -> null
         }
     }
 
     fun moodPhrase(mood: JournalMood): String = when (mood) {
-        JournalMood.VERY_GOOD -> "çok iyiydi"
-        JournalMood.GOOD -> "iyiydi"
-        JournalMood.NEUTRAL -> "normaldi"
-        JournalMood.HARD -> "zordu"
-        JournalMood.BAD -> "kötüydü"
-        JournalMood.HAPPY -> "mutluydu"
-        JournalMood.EXCITED -> "heyecanlıydı"
-        JournalMood.CALM -> "sakindi"
-        JournalMood.TIRED -> "yorgundu"
-        JournalMood.BORED -> "sıkkındı"
-        JournalMood.STRESSED -> "stresliydi"
-        JournalMood.ANGRY -> "sinirliydi"
-        JournalMood.SAD -> "üzgündü"
-        JournalMood.LOW -> "keyifsizdi"
-        JournalMood.FUCK_OFF -> "zordu"
+        JournalMood.VERY_GOOD -> t("çok iyiydi")
+        JournalMood.GOOD -> t("iyiydi")
+        JournalMood.NEUTRAL -> t("normaldi")
+        JournalMood.HARD -> t("zordu")
+        JournalMood.BAD -> t("kötüydü")
+        JournalMood.HAPPY -> t("mutluydu")
+        JournalMood.EXCITED -> t("heyecanlıydı")
+        JournalMood.CALM -> t("sakindi")
+        JournalMood.TIRED -> t("yorgundu")
+        JournalMood.BORED -> t("sıkkındı")
+        JournalMood.STRESSED -> t("stresliydi")
+        JournalMood.ANGRY -> t("sinirliydi")
+        JournalMood.SAD -> t("üzgündü")
+        JournalMood.LOW -> t("keyifsizdi")
+        JournalMood.FUCK_OFF -> t("zordu")
     }
 
     /** Mini çizgi için 1..5 arası kaba puan. */

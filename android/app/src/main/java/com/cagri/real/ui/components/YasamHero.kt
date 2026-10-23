@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -134,14 +135,14 @@ internal fun YasamHeroSentence(
 
 /** Yaşam da ortak geri düğmesini kullanır. */
 @Composable
-internal fun YasamBackButton(onBack: () -> Unit, modifier: Modifier = Modifier, description: String = "Geri") {
+internal fun YasamBackButton(onBack: () -> Unit, modifier: Modifier = Modifier, description: String = t("Geri")) {
     RealBackButton(onBack, modifier, description)
 }
 
 /** Referanstaki üst bar: üç ikon, altında kayan ince çizgi. 0 = hepsi, 1 = kayıtlar, 2 = eğlence. */
 @Composable
 internal fun YasamIconTabs(tab: Int, onTab: (Int) -> Unit, reduceAnimations: Boolean, modifier: Modifier = Modifier) {
-    val names = listOf("Hepsi", "Kayıtlar", "Keşfet")
+    val names = listOf(t("Hepsi"), t("Kayıtlar"), t("Keşfet"))
     BoxWithConstraints(modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)) {
         val cell = maxWidth / 3
         val indicatorX = animateDpAsState(
@@ -215,18 +216,18 @@ internal fun yasamHeroSentence(
     journal: YasamJournalPreview? = null
 ): String = when (topic) {
     0 -> when {
-        water == null || water.progress <= 0f -> "Bugün bir bardak suyla başlamaya ne dersin?"
-        water.progress >= 1f -> "Su hedefini tamamladın, harika gidiyorsun."
-        else -> "Bugün ${YasamSentence.litres(water.todayMl)} L su içtin, hedefe ${YasamSentence.litres(water.goalMl - water.todayMl)} L kaldı."
+        water == null || water.progress <= 0f -> t("Bugün bir bardak suyla başlamaya ne dersin?")
+        water.progress >= 1f -> t("Su hedefini tamamladın, harika gidiyorsun.")
+        else -> t("Bugün {0} L su içtin, hedefe {1} L kaldı.", YasamSentence.litres(water.todayMl), YasamSentence.litres(water.goalMl - water.todayMl))
     }
-    1 -> YasamSentence.build(water?.yesterdayMl, mood.yesterday) ?: "Dün nasıl geçti? Bugün nasıl gidiyor?"
-    2 -> mood.last?.let { "En son ruh halin ${it.label} idi. Şimdi nasılsın?" } ?: "Bugün ruh halin nasıl?"
+    1 -> YasamSentence.build(water?.yesterdayMl, mood.yesterday) ?: t("Dün nasıl geçti? Bugün nasıl gidiyor?")
+    2 -> mood.last?.let { t("En son ruh halin {0} idi. Şimdi nasılsın?", it.label) } ?: t("Bugün ruh halin nasıl?")
     3 -> when {
-        book?.percent != null -> "Kitabın %${book.percent}'de. Bu akşam birkaç sayfa okumaya ne dersin?"
-        book != null -> "${book.book.title} seni bekliyor."
-        else -> "Rafında yeni bir kitap için zaman var mı?"
+        book?.percent != null -> t("Kitabın %{0}'de. Bu akşam birkaç sayfa okumaya ne dersin?", book.percent)
+        book != null -> t("{0} seni bekliyor.", book.book.title)
+        else -> t("Rafında yeni bir kitap için zaman var mı?")
     }
-    4 -> "$mediaPrompt Sana bir film, dizi ya da oyun önerelim."
-    else -> journal?.let { "En son \"${it.shortLine}\" yazmıştın. Bugün neler var?" }
-        ?: "Bugünü iki satırla kayda geçirmek ister misin?"
+    4 -> t("{0} Sana bir film, dizi ya da oyun önerelim.", mediaPrompt)
+    else -> journal?.let { t("En son \"{0}\" yazmıştın. Bugün neler var?", it.shortLine) }
+        ?: t("Bugünü iki satırla kayda geçirmek ister misin?")
 }

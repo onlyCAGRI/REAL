@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,11 +59,11 @@ fun YasamJournalSheet(onDismiss: () -> Unit, onSave: suspend (String) -> Boolean
         busy = true; error = null
         scope.launch {
             try {
-                if (onSave(value)) onDismiss() else error = "Günlük kaydedilemedi."
+                if (onSave(value)) onDismiss() else error = t("Günlük kaydedilemedi.")
             } catch (c: CancellationException) {
                 throw c
             } catch (_: Exception) {
-                error = "Günlük kaydedilemedi."
+                error = t("Günlük kaydedilemedi.")
             } finally {
                 busy = false
             }
@@ -89,16 +90,16 @@ fun YasamJournalSheet(onDismiss: () -> Unit, onSave: suspend (String) -> Boolean
                 .padding(horizontal = 20.dp).padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Bugün yaz", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
+            Text(t("Bugün yaz"), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = 8.dp))
-            Text("Nasıl geçti? Aklında kalanı yaz.", color = SheetMuted, fontSize = 14.sp)
+            Text(t("Nasıl geçti? Aklında kalanı yaz."), color = SheetMuted, fontSize = 14.sp)
             Spacer(Modifier.height(4.dp))
             val shape = RoundedCornerShape(22.dp)
             Box(
                 Modifier.fillMaxWidth().heightIn(min = 180.dp).clip(shape).background(SheetGlass)
                     .border(1.dp, SheetStroke, shape).padding(18.dp)
             ) {
-                if (text.isEmpty()) Text("Günlüğün…", color = SheetMuted, fontSize = 16.sp)
+                if (text.isEmpty()) Text(t("Günlüğün…"), color = SheetMuted, fontSize = 16.sp)
                 BasicTextField(
                     value = text,
                     onValueChange = { if (!busy) { text = it; error = null } },
@@ -110,8 +111,8 @@ fun YasamJournalSheet(onDismiss: () -> Unit, onSave: suspend (String) -> Boolean
             }
             error?.let { Text(it, color = Color(0xFFFF8A80), fontSize = 13.sp) }
             val canSave = !busy && text.isNotBlank()
-            SheetButton(if (busy) "Kaydediliyor…" else "Kaydet", filled = true, enabled = canSave, onClick = ::save)
-            SheetButton("Vazgeç", filled = false, enabled = !busy) { if (!busy) onDismiss() }
+            SheetButton(if (busy) t("Kaydediliyor…") else t("Kaydet"), filled = true, enabled = canSave, onClick = ::save)
+            SheetButton(t("Vazgeç"), filled = false, enabled = !busy) { if (!busy) onDismiss() }
         }
     }
 }

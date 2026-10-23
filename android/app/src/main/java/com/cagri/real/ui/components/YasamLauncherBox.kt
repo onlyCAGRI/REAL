@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -43,7 +44,7 @@ internal fun YasamLauncherCards(
         Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Önizleme tasarımları", color = Color(0xFF8E8E93), fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp))
+        Text(t("Önizleme tasarımları"), color = Color(0xFF8E8E93), fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp))
         MoodMonthChartCard(
             entries = moodEntries, reduceAnimations = reduceAnimations,
             modifier = Modifier.fillMaxWidth(), enterDelayMillis = 0
@@ -56,7 +57,7 @@ internal fun YasamLauncherCards(
             reduceAnimations = reduceAnimations,
             modifier = Modifier.fillMaxWidth(), enterDelayMillis = 180
         )
-        Text("Yeni tasarımlar", color = Color(0xFF8E8E93), fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp))
+        Text(t("Yeni tasarımlar"), color = Color(0xFF8E8E93), fontSize = 13.sp, modifier = Modifier.padding(start = 4.dp, top = 6.dp))
         WidgetReferenceSection(
             reminders = reminders, reduceAnimations = reduceAnimations,
             modifier = Modifier.fillMaxWidth(), onToggleReminder = onToggleReminder

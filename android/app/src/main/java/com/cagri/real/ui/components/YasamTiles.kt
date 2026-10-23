@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.cagri.real.books.coverBaseColor
 import com.cagri.real.books.CoverPalette
@@ -123,15 +124,15 @@ internal class YasamJournalPreview(val whenLabel: String, val line: String) {
 
 /** Zaman etiketi: BUGÜN · 14:20 / DÜN · 23:10 / 3 EKİ. [createdAt] epoch milisaniye; yoksa "SON GİRİŞ". */
 internal fun yasamJournalWhenLabel(createdAt: Long?): String {
-    if (createdAt == null) return "SON GİRİŞ"
+    if (createdAt == null) return t("SON GİRİŞ")
     val zone = java.time.ZoneId.systemDefault()
     val at = java.time.Instant.ofEpochMilli(createdAt).atZone(zone)
     val days = java.time.temporal.ChronoUnit.DAYS.between(at.toLocalDate(), java.time.LocalDate.now(zone))
     val time = at.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
     return when (days) {
-        0L -> "BUGÜN · $time"
-        1L -> "DÜN · $time"
-        else -> at.format(java.time.format.DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("tr-TR"))).uppercase(Locale.forLanguageTag("tr-TR"))
+        0L -> t("BUGÜN · {0}", time)
+        1L -> t("DÜN · {0}", time)
+        else -> at.format(java.time.format.DateTimeFormatter.ofPattern(if (com.cagri.real.i18n.I18n.isEnglish) "MMM d" else "d MMM", com.cagri.real.i18n.I18n.locale)).uppercase(com.cagri.real.i18n.I18n.locale)
     }
 }
 
@@ -195,31 +196,31 @@ internal fun YasamTiles(
         if (showRecords) {
             YasamWaterHero(water, reduceAnimations, entrance, baseMs, Modifier.rowLeave(leave, 0))
             YasamRow(
-                "SU", if (water == null) "—" else "/ ${YasamSentence.litres(water.goalMl)} L",
+                t("SU"), if (water == null) "—" else "/ ${YasamSentence.litres(water.goalMl)} L",
                 open == "water", reduceAnimations, rowEnter(entrance, baseMs, 0).rowLeave(leave, 1), { toggle("water") },
                 preview = {
                     // Çubuk zaten üstteki dev rakamın altında; burada tekrar yok, kısa bir durum cümlesi var.
                     Text(
                         when {
-                            water == null -> "Su verisi yükleniyor"
-                            water.progress >= 1f -> "Günlük hedefi tamamladın"
-                            else -> "Hedefe ${YasamSentence.litres(water.goalMl - water.todayMl)} L kaldı"
+                            water == null -> t("Su verisi yükleniyor")
+                            water.progress >= 1f -> t("Günlük hedefi tamamladın")
+                            else -> t("Hedefe {0} L kaldı", YasamSentence.litres(water.goalMl - water.todayMl))
                         },
                         color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, fontWeight = FontWeight.Light, fontFamily = YasamThin
                     )
                 }
             ) {
                 Text(
-                    if (water == null) "Veri yok" else "BUGÜN ${(water.progress * 100).roundToInt()}% · 250 ML",
+                    if (water == null) t("Veri yok") else t("BUGÜN {0}% · 250 ML", (water.progress * 100).roundToInt()),
                     color = YasamMuted, fontSize = 11.sp, fontFamily = Mono, letterSpacing = 1.sp
                 )
                 Spacer(Modifier.height(12.dp))
-                YasamSlideToAdd("Kaydır · 250 ml su ekle", reduceAnimations, actions.addWater)
-                YasamTextAction("SU EKRANINI AÇ  ›", YasamWaterTone, actions.openWater)
+                YasamSlideToAdd(t("Kaydır · 250 ml su ekle"), reduceAnimations, actions.addWater)
+                YasamTextAction(t("SU EKRANINI AÇ  ›"), YasamWaterTone, actions.openWater)
                 YasamTextAction(
-                    if (waterHistoryOpen) "GEÇMİŞİ GİZLE  ‹" else "GEÇMİŞİ AÇ  ›", YasamMuted,
+                    if (waterHistoryOpen) t("GEÇMİŞİ GİZLE  ‹") else t("GEÇMİŞİ AÇ  ›"), YasamMuted,
                     { waterHistoryOpen = !waterHistoryOpen },
-                    state = if (waterHistoryOpen) "Açık" else "Kapalı"
+                    state = if (waterHistoryOpen) t("Açık") else t("Kapalı")
                 )
                 AnimatedVisibility(
                     visible = waterHistoryOpen,
@@ -230,15 +231,15 @@ internal fun YasamTiles(
                 ) { YasamWaterHistory(water, reduceAnimations) }
             }
             YasamRow(
-                "MOOD", mood.last?.label ?: "Henüz yok",
+                "MOOD", mood.last?.label ?: t("Henüz yok"),
                 open == "mood", reduceAnimations, rowEnter(entrance, baseMs, 1).rowLeave(leave, 2), { toggle("mood") },
                 preview = { YasamSpark(mood.points, YasamMoodTone) }
             ) {
-                YasamTextAction("MOOD EKLE  +", YasamMoodTone, actions.addMood)
+                YasamTextAction(t("MOOD EKLE  +"), YasamMoodTone, actions.addMood)
                 YasamTextAction(
-                    if (moodHistoryOpen) "GEÇMİŞİ GİZLE  ‹" else "GEÇMİŞİ AÇ  ›", YasamMuted,
+                    if (moodHistoryOpen) t("GEÇMİŞİ GİZLE  ‹") else t("GEÇMİŞİ AÇ  ›"), YasamMuted,
                     { moodHistoryOpen = !moodHistoryOpen },
-                    state = if (moodHistoryOpen) "Açık" else "Kapalı"
+                    state = if (moodHistoryOpen) t("Açık") else t("Kapalı")
                 )
                 AnimatedVisibility(
                     visible = moodHistoryOpen,
@@ -251,11 +252,11 @@ internal fun YasamTiles(
                 }
             }
             YasamRow(
-                "GÜNLÜKLERİM", "Bugün yaz",
+                t("GÜNLÜKLERİM"), t("Bugün yaz"),
                 open == "journal", reduceAnimations, rowEnter(entrance, baseMs, 2).rowLeave(leave, 3), { toggle("journal") },
                 preview = {
                     if (journal == null) Text(
-                        "Bugün ne düşünüyorsun?", color = Color.White.copy(alpha = 0.7f),
+                        t("Bugün ne düşünüyorsun?"), color = Color.White.copy(alpha = 0.7f),
                         fontSize = 13.sp, fontWeight = FontWeight.Light, fontFamily = YasamThin
                     ) else Column {
                         Text(journal.whenLabel, color = YasamMuted, fontSize = 10.sp, fontFamily = Mono, letterSpacing = 1.2.sp)
@@ -267,24 +268,24 @@ internal fun YasamTiles(
                     }
                 }
             ) {
-                YasamTextAction("BUGÜN YAZ  +", YasamJournalTone, actions.newJournal)
-                YasamTextAction("GÜNLÜKLERİ AÇ  ›", YasamMuted, actions.openJournals)
+                YasamTextAction(t("BUGÜN YAZ  +"), YasamJournalTone, actions.newJournal)
+                YasamTextAction(t("GÜNLÜKLERİ AÇ  ›"), YasamMuted, actions.openJournals)
             }
         }
         if (showFun) {
             YasamRow(
-                "KİTAP", book?.percent?.let { "%$it" } ?: book?.book?.title ?: "Rafını aç",
+                t("KİTAP"), book?.percent?.let { "%$it" } ?: book?.book?.title ?: t("Rafını aç"),
                 open == "book", reduceAnimations, rowEnter(entrance, baseMs, 3).rowLeave(leave, 4), { toggle("book") },
                 preview = {
                     if (book != null) YasamBookPreview(book, reduceAnimations)
-                    else Text("Rafını aç", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, fontFamily = YasamThin, fontWeight = FontWeight.Light)
+                    else Text(t("Rafını aç"), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, fontFamily = YasamThin, fontWeight = FontWeight.Light)
                 }
             ) {
                 YasamTextAction(
-                    if (book != null) "OKUMAYA DEVAM ET  ›" else "RAFINI AÇ  ›", YasamBookTone,
+                    if (book != null) t("OKUMAYA DEVAM ET  ›") else t("RAFINI AÇ  ›"), YasamBookTone,
                     if (book != null) actions.resumeBook else actions.openBooks
                 )
-                if (book != null) YasamTextAction("RAFI AÇ  ›", YasamMuted, actions.openBooks)
+                if (book != null) YasamTextAction(t("RAFI AÇ  ›"), YasamMuted, actions.openBooks)
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(YasamHairline).rowLeave(leave, 5))
             YasamDiscoverGrid(
@@ -376,7 +377,7 @@ private fun YasamWaterHero(water: YasamWater?, reduce: Boolean, entrance: RealEn
         modifier.fillMaxWidth().padding(bottom = 12.dp)
             .then(if (entrance != null) Modifier.realEntrance(entrance, baseMs + 300, 520, slideY = 12.dp) else Modifier)
     ) {
-        Text("SU · BUGÜN", color = YasamMuted, fontSize = 11.sp, fontFamily = Mono, letterSpacing = 1.6.sp)
+        Text(t("SU · BUGÜN"), color = YasamMuted, fontSize = 11.sp, fontFamily = Mono, letterSpacing = 1.6.sp)
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 if (water == null) "—" else String.format(Locale("tr"), "%.1f", shownMl / 1000f),
@@ -425,7 +426,7 @@ private fun YasamRow(
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp)
                 .clickable(role = Role.Button, onClick = onToggle)
-                .semantics { stateDescription = if (expanded) "Açık" else "Kapalı" },
+                .semantics { stateDescription = if (expanded) t("Açık") else t("Kapalı") },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(

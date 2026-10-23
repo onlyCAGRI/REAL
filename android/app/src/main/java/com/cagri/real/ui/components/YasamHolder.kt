@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -111,11 +112,11 @@ internal class YasamHolder(context: Context, uid: String, private val scope: Cor
                 val values = list.mapNotNull { it.value }
                 val films = list.count { !it.series }
                 val series = list.size - films
-                val parts = listOfNotNull("$films film".takeIf { films > 0 }, "$series dizi".takeIf { series > 0 }).joinToString(", ")
+                val parts = listOfNotNull(t("{0} film", films).takeIf { films > 0 }, t("{0} dizi", series).takeIf { series > 0 }).joinToString(", ")
                 YasamRatings(values.takeIf { it.isNotEmpty() }?.let { (it.average() * 10).roundToInt() / 10.0 },
                     line = when {
-                        list.isEmpty() -> "İzlediklerine puan ver, zevkin ortaya çıksın"
-                        values.size < list.size -> "$parts · ${list.size - values.size} puan bekliyor"
+                        list.isEmpty() -> t("İzlediklerine puan ver, zevkin ortaya çıksın")
+                        values.size < list.size -> t("{0} · {1} puan bekliyor", parts, list.size - values.size)
                         else -> parts
                     },
                     recent = list.sortedByDescending { it.addedAt ?: Long.MIN_VALUE }.mapNotNull { it.value }.take(6))

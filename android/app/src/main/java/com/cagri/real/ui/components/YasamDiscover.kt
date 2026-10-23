@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,23 +52,23 @@ internal fun YasamDiscoverGrid(
 ) {
     Column(modifier.fillMaxWidth().padding(top = 22.dp, bottom = 8.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
-            Text("KEŞFET", color = YasamMuted, fontSize = 12.sp, fontFamily = Mono, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f))
-            Text("bugün ne yapsak", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp, fontWeight = FontWeight.Light, fontFamily = YasamThin)
+            Text(t("KEŞFET"), color = YasamMuted, fontSize = 12.sp, fontFamily = Mono, letterSpacing = 1.2.sp, modifier = Modifier.weight(1f))
+            Text(t("bugün ne yapsak"), color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp, fontWeight = FontWeight.Light, fontFamily = YasamThin)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            DiscoverTile("İzle", WatchTone, listLine(watchlistCount), actions.openFilm, actions.openFilmList, Modifier.weight(1f)) {
+            DiscoverTile(t("İzle"), WatchTone, listLine(watchlistCount), actions.openFilm, actions.openFilmList, Modifier.weight(1f)) {
                 PosterStack(watchArt, RoundedCornerShape(5.dp), 22, 32)
             }
-            DiscoverTile("Oyna", PlayTone, listLine(playlistCount), actions.openGame, actions.openGameList, Modifier.weight(1f)) {
+            DiscoverTile(t("Oyna"), PlayTone, listLine(playlistCount), actions.openGame, actions.openGameList, Modifier.weight(1f)) {
                 PosterStack(gameArt, RoundedCornerShape(5.dp), 22, 32)
             }
         }
         Spacer(Modifier.size(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            DiscoverTile("Dinle", ListenTone, listLine(musicCount), actions.openMusic, actions.openMusicList, Modifier.weight(1f)) {
+            DiscoverTile(t("Dinle"), ListenTone, listLine(musicCount), actions.openMusic, actions.openMusicList, Modifier.weight(1f)) {
                 PosterStack(musicArt, CircleShape, 26, 26)
             }
-            DiscoverTile("Puanla", RateTone, ratings?.average?.let { "ort. ${scoreText(it)}" } ?: "Henüz yok",
+            DiscoverTile(t("Puanla"), RateTone, ratings?.average?.let { t("ort. {0}", scoreText(it)) } ?: t("Henüz yok"),
                 actions.openRatings, null, Modifier.weight(1f)) {
                 val recent = ratings?.recent.orEmpty()
                 if (recent.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -78,7 +79,7 @@ internal fun YasamDiscoverGrid(
     }
 }
 
-private fun listLine(count: Int?) = if (count == null || count == 0) "Listen boş" else "Listende $count"
+private fun listLine(count: Int?) = if (count == null || count == 0) t("Listen boş") else t("Listende {0}", count)
 
 @Composable
 private fun DiscoverTile(verb: String, tone: DiscoverTone, line: String, onOpen: () -> Unit, onList: (() -> Unit)?,

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -73,14 +74,14 @@ internal fun YasamJournalList(
                     .then(if (entrance != null) Modifier.realEntrance(entrance, baseMs, 460, slideY = 14.dp) else Modifier)
             ) {
                 Text(
-                    "Henüz günlük yok", color = Color.White.copy(alpha = 0.85f), fontSize = 19.sp, lineHeight = 25.sp,
+                    t("Henüz günlük yok"), color = Color.White.copy(alpha = 0.85f), fontSize = 19.sp, lineHeight = 25.sp,
                     fontWeight = FontWeight.Light, fontFamily = YasamThin, modifier = Modifier.padding(vertical = 12.dp)
                 )
-                YasamTextAction("BUGÜN YAZ  +", YasamJournalTone, onWrite)
+                YasamTextAction(t("BUGÜN YAZ  +"), YasamJournalTone, onWrite)
             }
         } else {
             Box(if (entrance != null) Modifier.realEntrance(entrance, baseMs, 460, slideY = 14.dp) else Modifier) {
-                YasamTextAction("BUGÜN YAZ  +", YasamJournalTone, onWrite)
+                YasamTextAction(t("BUGÜN YAZ  +"), YasamJournalTone, onWrite)
             }
             sorted.take(shown).forEachIndexed { index, reminder ->
                 val journal = reminder.journal ?: return@forEachIndexed
@@ -102,7 +103,7 @@ internal fun YasamJournalList(
                                         append(whenLabel.replace("·", ""))
                                         if (moodLabel != null) append(", ").append(moodLabel)
                                         if (text.isNotEmpty()) append(". ").append(text)
-                                        append(". Günlüğü aç")
+                                        append(t(". Günlüğü aç"))
                                     }
                                 }
                                 .padding(vertical = 14.dp)
@@ -126,7 +127,7 @@ internal fun YasamJournalList(
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(Hairline))
-            if (sorted.size > shown) YasamTextAction("DAHA FAZLA GÖSTER  ›", YasamMuted, { shown += PAGE })
+            if (sorted.size > shown) YasamTextAction(t("DAHA FAZLA GÖSTER  ›"), YasamMuted, { shown += PAGE })
         }
     }
 }

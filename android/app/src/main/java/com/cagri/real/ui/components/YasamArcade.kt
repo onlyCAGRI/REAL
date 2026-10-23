@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -568,7 +569,7 @@ private fun ArcadBigBox(value: Int, dragging: Boolean, theme: ArcadTheme, reduce
                 },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Sıradaki", color = theme.muted, fontSize = 13.sp, fontFamily = RealFont)
+                Text(t("Sıradaki"), color = theme.muted, fontSize = 13.sp, fontFamily = RealFont)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "$value", color = theme.ink, fontSize = 54.sp,
@@ -629,7 +630,7 @@ internal fun YasamArcadeHost(reduceAnimations: Boolean, onClose: () -> Unit) {
                 }
                 Spacer(Modifier.weight(1f))
                 Text(
-                    "Sayı Kulesi", color = theme.ink,
+                    t("Sayı Kulesi"), color = theme.ink,
                     fontSize = 17.sp, fontFamily = RealFont, fontWeight = FontWeight.Medium
                 )
                 Spacer(Modifier.weight(1f))
@@ -659,8 +660,8 @@ internal fun YasamArcadeHost(reduceAnimations: Boolean, onClose: () -> Unit) {
             modifier = Modifier.fillMaxSize()
         ) {
             val won = active.status == ArcadStatus.Won
-            val label = if (won) "Tamamlandı" else "Sıra bozuldu"
-            val headline = if (won) "Kule ayakta" else "Kule yine düşmedi"
+            val label = if (won) t("Tamamlandı") else t("Sıra bozuldu")
+            val headline = if (won) t("Kule ayakta") else t("Kule yine düşmedi")
             Box(Modifier.fillMaxSize().background(theme.scrim), contentAlignment = Alignment.Center) {
                 Column(
                     Modifier.padding(horizontal = 34.dp)
@@ -675,9 +676,9 @@ internal fun YasamArcadeHost(reduceAnimations: Boolean, onClose: () -> Unit) {
                         fontWeight = FontWeight.Medium, fontFamily = RealFont
                     )
                     Spacer(Modifier.height(26.dp))
-                    ArcadButton("Tekrar dene", primary = true, theme = theme, reduceAnimations = reduceAnimations) { active.restart() }
+                    ArcadButton(t("Tekrar dene"), primary = true, theme = theme, reduceAnimations = reduceAnimations) { active.restart() }
                     Spacer(Modifier.height(12.dp))
-                    ArcadButton("Çık", primary = false, theme = theme, reduceAnimations = reduceAnimations, onClick = onClose)
+                    ArcadButton(t("Çık"), primary = false, theme = theme, reduceAnimations = reduceAnimations, onClick = onClose)
                 }
             }
         }

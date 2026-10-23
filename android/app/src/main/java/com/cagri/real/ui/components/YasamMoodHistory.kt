@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -24,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
@@ -71,10 +73,10 @@ internal fun YasamMoodHistory(
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         if (points.isEmpty()) {
             Text(
-                "Henüz mood yok", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp,
+                t("Henüz mood yok"), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp,
                 fontWeight = FontWeight.Light, fontFamily = YasamThin, modifier = Modifier.padding(vertical = 8.dp)
             )
-            YasamTextAction("MOOD EKLE  +", YasamMoodTone, onAddMood)
+            YasamTextAction(t("MOOD EKLE  +"), YasamMoodTone, onAddMood)
         } else {
             BoxWithConstraints(Modifier.fillMaxWidth().clipToBounds()) {
                 // One chronological path. Start at the newest (rightmost) five;
@@ -87,7 +89,7 @@ internal fun YasamMoodHistory(
                     }
                 }
             }
-            YasamTextAction("DAHA FAZLA  ›", YasamMuted, onMore)
+            YasamTextAction(t("DAHA FAZLA  ›"), YasamMuted, onMore)
         }
     }
 }
@@ -101,13 +103,13 @@ private fun YasamMoodChart(points: List<MoodTrackerEntry>, reduceAnimations: Boo
             Triple(
                 Instant.ofEpochMilli(e.details.loggedAt).atZone(zone).format(dateFormat).uppercase(TR),
                 e.mood.label,
-                yasamMoodTone(e.mood)
+                moodV2Tint(e.mood)
             )
         }
     }
     val scores = remember(points) { points.map { YasamSentence.moodScore(it.mood) } }
     val summary = remember(labels) {
-        "Son ${labels.size} mood: " + labels.joinToString(", ") { "${it.first} ${it.second}" }
+        t("Son {0} mood: ", labels.size) + labels.joinToString(", ") { "${it.first} ${it.second}" }
     }
     val progress = remember { Animatable(if (reduceAnimations) 1f else 0f) }
     LaunchedEffect(reduceAnimations) {
@@ -139,6 +141,10 @@ private fun YasamMoodChart(points: List<MoodTrackerEntry>, reduceAnimations: Boo
                     val segment = Path()
                     val stroke = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                     val base = Color.White.copy(alpha = 0.10f)
+                    // Çizgi her noktada o mood'un aile rengini taşır, aralarda bir sonrakine geçer.
+                    val line = if (n > 1) Brush.horizontalGradient(
+                        *Array(n) { xs[it] / size.width to labels[it].third }, startX = 0f, endX = size.width
+                    ) else Brush.linearGradient(listOf(Color.White, Color.White))
                     onDrawBehind {
                         val p = progress.value
                         // Soluk zemin çizgisi: grafiğin ölçeğini (orta hat) gösterir.
@@ -146,7 +152,7 @@ private fun YasamMoodChart(points: List<MoodTrackerEntry>, reduceAnimations: Boo
                         if (n > 1 && length > 0f) {
                             segment.reset()
                             measure.getSegment(0f, length * p, segment, true)
-                            drawPath(segment, Color.White.copy(alpha = 0.55f), style = stroke)
+                            drawPath(segment, line, alpha = 0.85f, style = stroke)
                         }
                         for (i in 0 until n) {
                             // Nokta, çizgi ona ulaşınca belirir.
@@ -161,7 +167,7 @@ private fun YasamMoodChart(points: List<MoodTrackerEntry>, reduceAnimations: Boo
             Modifier.fillMaxWidth().padding(top = 6.dp).clearAndSetSemantics { },
             horizontalArrangement = Arrangement.Start
         ) {
-            labels.forEach { (date, name, _) ->
+            labels.forEach { (date, name, tint) ->
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         date, color = YasamMuted, fontSize = 10.sp, fontFamily = Mono, letterSpacing = 0.6.sp,
@@ -169,7 +175,7 @@ private fun YasamMoodChart(points: List<MoodTrackerEntry>, reduceAnimations: Boo
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        name, color = Color.White.copy(alpha = 0.85f), fontSize = 11.sp, fontFamily = Mono,
+                        name, color = tint, fontSize = 11.sp, fontFamily = Mono,
                         maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center
                     )
                 }

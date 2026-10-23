@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -106,7 +107,7 @@ internal fun YasamMic(
         Box(
             Modifier.size(64.dp).clip(CircleShape)
                 .clickable(role = Role.Button, onClick = onMicClick)
-                .semantics { contentDescription = "Sesli komut" },
+                .semantics { contentDescription = t("Sesli komut") },
             contentAlignment = Alignment.Center
         ) {
             YasamMicGlass(
