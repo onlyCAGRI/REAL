@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.cagri.real.data.CustomCategory
@@ -42,7 +43,7 @@ internal object CalendarHomeDays {
         prefs(context).edit().putInt("days", days).apply()
         state.intValue = days
     }
-    fun label(days: Int) = if (days <= 0) "Kapalı" else "Önümüzdeki $days gün"
+    fun label(days: Int) = if (days <= 0) t("Kapalı") else t("Önümüzdeki {0} gün", days)
 }
 
 /** Upcoming events of the coming year (a yearly birthday shows once), the nearest occurrence of each. */
@@ -128,13 +129,13 @@ internal fun CalendarEventDetailHost(
                 check(store.isCurrent())
                 provider.calendars().singleOrNull { it.id == event.calendarId &&
                     store.options().readIdentities[it.id] == it.identity }
-                    ?: error("Kaynak takvim değişti; seçimi yenile.")
+                    ?: error(t("Kaynak takvim değişti; seçimi yenile."))
             }
             val existing = cards.associations().firstOrNull {
                 it.eventId == event.eventId && it.calendarId == event.calendarId && it.identity == source.identity &&
                     reminders.any { r -> r.id == it.cardId }
             }
-            val id = existing?.cardId ?: onCreateCalendarCard(event.title.take(2000), current) ?: error("REAL kartı oluşturulamadı.")
+            val id = existing?.cardId ?: onCreateCalendarCard(event.title.take(2000), current) ?: error(t("REAL kartı oluşturulamadı."))
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
                 check(store.isCurrent())
                 if (existing == null) cards.associate(event, source, id)

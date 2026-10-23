@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
@@ -92,7 +93,7 @@ internal fun rememberCalendarConnection(reminders: List<ReminderItem>): Calendar
                 val keys = if (key == null) CalendarReceiptKeys else if (key in CalendarReceiptKeys) setOf(key) else emptySet()
                 val changed = keys.filter { k -> rawValue(prefs, k).let { now -> (seen[k] != now).also { seen[k] = now } } }
                 if (changed.isNotEmpty()) {
-                    calendarSyncLog("listener: changed=$changed")
+                    calendarSyncLog("listener: changed=${changed}")
                     handler.post { if (state.store.isCurrent()) {
                         if ("options" in changed) state.options = state.store.options()
                         if ("event_details" in changed || "card_associations" in changed) state.request++
@@ -119,7 +120,7 @@ internal fun rememberCalendarConnection(reminders: List<ReminderItem>): Calendar
     LaunchedEffect(input, state.options, state.request, lifecycle) {
         if (!lifecycle.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
         if (!state.provider.canRead() || !state.store.isCurrent()) {
-            if (state.options.readIds.isNotEmpty() || state.options.exportEnabled) state.status = "Takvim izni gerekli. Ayarlardan yeniden izin ver."
+            if (state.options.readIds.isNotEmpty() || state.options.exportEnabled) state.status = t("Takvim izni gerekli. Ayarlardan yeniden izin ver.")
             return@LaunchedEffect
         }
         delay(400)
@@ -131,7 +132,7 @@ internal fun rememberCalendarConnection(reminders: List<ReminderItem>): Calendar
         }
         if (signature == null) {
             state.lastRunClean = false
-            state.status = "Takvim kayıtları okunamadı. Yeniden eşitle."
+            state.status = t("Takvim kayıtları okunamadı. Yeniden eşitle.")
             return@LaunchedEffect
         }
         if (state.lastRunClean && state.lastRunRequest == requestAtStart && state.lastRunToken == resumeToken &&
@@ -139,7 +140,7 @@ internal fun rememberCalendarConnection(reminders: List<ReminderItem>): Calendar
             calendarSyncLog("main: skipped, no calendar-relevant change")
             return@LaunchedEffect
         }
-        calendarSyncLog("main: run request=$requestAtStart cards=${input.cards.size} export=${snapshot.exportEnabled}")
+        calendarSyncLog("main: run request=${requestAtStart} cards=${input.cards.size} export=${snapshot.exportEnabled}")
         val operation = ++state.operation
         state.busy = true
         try {
@@ -167,7 +168,7 @@ internal fun rememberCalendarConnection(reminders: List<ReminderItem>): Calendar
                         catch (error: Exception) { unpublished++; calendarSyncLog("publish FAILED card=${card.id}: $error") }
                     }
                     state.publicationStatus = if (unpublished > 0)
-                        "$unpublished kartın web bağlantısı güncellenemedi. Kartların REAL'de korunuyor; yeniden eşitle." else ""
+                        t("{0} kartın web bağlantısı güncellenemedi. Kartların REAL'de korunuyor; yeniden eşitle.", unpublished) else ""
                     CalendarExporter(state.provider, state.store, updatePublicLink = { existing, plan, link ->
                         val previous = cardLinks.publications()[plan.reminderId]?.previousUrl
                         if (existing.description == DeviceCalendarProvider.description(link.marker, previous) && plan.publicUrl != null) {
@@ -181,7 +182,7 @@ internal fun rememberCalendarConnection(reminders: List<ReminderItem>): Calendar
                         exporter.reconcile(snapshot, plans, now,
                             existingCardIds = input.existingCardIds,
                             allowRemoval = input.existingCardIds.isNotEmpty() || state.cardsSeen
-                        ).also { calendarSyncLog("export: plans=${plans.size} validTarget=$validTarget result=$it") }
+                        ).also { calendarSyncLog("export: plans=${plans.size} validTarget=${validTarget} result=${it}") }
                     }
                 } else {
                     calendarSyncLog("export: skipped enabled=${snapshot.exportEnabled} canWrite=${state.provider.canWrite()}")
@@ -191,8 +192,8 @@ internal fun rememberCalendarConnection(reminders: List<ReminderItem>): Calendar
             } }
             if (state.store.isCurrent() && state.operation == operation) {
                 state.calendars = result.first
-                state.status = if (state.options.exportEnabled && !state.provider.canWrite()) "Takvime yazma izni gerekli."
-                    else result.second?.message ?: "Cihaz takvimleri hazır."
+                state.status = if (state.options.exportEnabled && !state.provider.canWrite()) t("Takvime yazma izni gerekli.")
+                    else result.second?.message ?: t("Cihaz takvimleri hazır.")
                 state.lastRunSignature = signature
                 state.lastRunRequest = requestAtStart
                 state.lastRunToken = resumeToken
@@ -201,9 +202,9 @@ internal fun rememberCalendarConnection(reminders: List<ReminderItem>): Calendar
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) {
-            calendarSyncLog("main: run FAILED: $error")
+            calendarSyncLog("main: run FAILED: ${error}")
             state.lastRunClean = false
-            if (state.operation == operation) state.status = "Takvim işlemi tamamlanamadı. Bağlantıyı ve izinleri kontrol edip yeniden dene."
+            if (state.operation == operation) state.status = t("Takvim işlemi tamamlanamadı. Bağlantıyı ve izinleri kontrol edip yeniden dene.")
         }
         finally { if (state.operation == operation) state.busy = false }
     }

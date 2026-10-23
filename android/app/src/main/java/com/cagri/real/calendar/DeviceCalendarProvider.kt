@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import android.Manifest
 import android.content.ContentUris
 import android.content.ContentValues
@@ -52,21 +53,21 @@ internal class DeviceCalendarProvider(private val context: Context) : CalendarGa
                 while (cursor.moveToNext()) add(DeviceCalendar(cursor.getLong(0), cursor.getString(1).orEmpty(),
                     cursor.getString(2).orEmpty(), cursor.getString(3).orEmpty(),
                     cursor.getInt(4) >= Calendars.CAL_ACCESS_CONTRIBUTOR, cursor.getInt(5) != 0))
-            } } ?: error("Cihaz takvim sağlayıcısı kullanılamıyor")
+            } } ?: error(t("Cihaz takvim sağlayıcısı kullanılamıyor"))
     }
     private fun queryEvents(selection: String, args: Array<String>): List<DeviceEvent> {
         check(canRead())
         return resolver.query(CalendarContract.Events.CONTENT_URI,
             arrayOf(CalendarContract.Events._ID, CalendarContract.Events.CALENDAR_ID) + fields,
-            "(${CalendarContract.Events.DELETED}=0) AND ($selection)", args, null)?.use { cursor -> buildList {
+            "(${CalendarContract.Events.DELETED}=0) AND (${selection})", args, null)?.use { cursor -> buildList {
                 while (cursor.moveToNext()) add(DeviceEvent(cursor.getLong(0), cursor.getLong(1),
                     fields.indices.map { if (cursor.isNull(it + 2)) null else cursor.getString(it + 2) }))
-            } } ?: error("Etkinlikler okunamadı")
+            } } ?: error(t("Etkinlikler okunamadı"))
     }
     override fun event(id: Long) = queryEvents("${CalendarContract.Events._ID}=?", arrayOf(id.toString())).singleOrNull()
     override fun find(calendarId: Long, marker: String) = queryEvents(
         "${CalendarContract.Events.CALENDAR_ID}=? AND ${CalendarContract.Events.DESCRIPTION} LIKE ?",
-        arrayOf(calendarId.toString(), "REAL planı%\n[REAL:$marker]"))
+        arrayOf(calendarId.toString(), "REAL planı%\n[REAL:${marker}]"))
 
     override fun insert(calendarId: Long, plan: CalendarPlan, marker: String): DeviceEvent {
         check(canWrite())
@@ -74,8 +75,8 @@ internal class DeviceCalendarProvider(private val context: Context) : CalendarGa
             put(CalendarContract.Events.CALENDAR_ID, calendarId)
             put(CalendarContract.Events.HAS_ALARM, 0) // REAL keeps authoritative reminders; no duplicate alarms.
         }
-        val uri = resolver.insert(CalendarContract.Events.CONTENT_URI, values) ?: error("Takvim etkinliği eklenemedi")
-        return event(ContentUris.parseId(uri)) ?: error("Eklenen etkinlik doğrulanamadı")
+        val uri = resolver.insert(CalendarContract.Events.CONTENT_URI, values) ?: error(t("Takvim etkinliği eklenemedi"))
+        return event(ContentUris.parseId(uri)) ?: error(t("Eklenen etkinlik doğrulanamadı"))
     }
     override fun update(before: DeviceEvent, plan: CalendarPlan, marker: String): DeviceEvent? {
         check(canWrite())
@@ -127,7 +128,7 @@ internal class DeviceCalendarProvider(private val context: Context) : CalendarGa
         }.build()
         val projection = arrayOf(Instances.EVENT_ID, Instances.CALENDAR_ID, Instances.TITLE, Instances.BEGIN, Instances.END, Instances.ALL_DAY)
         val placeholders = allowed.joinToString(",") { "?" }
-        return resolver.query(uri, projection, "${Instances.CALENDAR_ID} IN ($placeholders)",
+        return resolver.query(uri, projection, "${Instances.CALENDAR_ID} IN (${placeholders})",
             allowed.map { it.id.toString() }.toTypedArray(), "${Instances.BEGIN} ASC")?.use { cursor -> buildList {
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(0)
@@ -136,7 +137,7 @@ internal class DeviceCalendarProvider(private val context: Context) : CalendarGa
                     add(CalendarOccurrence(id, cal, cursor.getString(2)?.takeIf { it.isNotBlank() } ?: "Etkinlik",
                         cursor.getLong(3), cursor.getLong(4), cursor.getInt(5) != 0, names[cal].orEmpty()))
                 }
-            } } ?: error("Takvim etkinlikleri okunamadı")
+            } } ?: error(t("Takvim etkinlikleri okunamadı"))
     }
     fun open(eventId: Long, start: Long? = null) {
         val intent = Intent(Intent.ACTION_VIEW, ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId))
@@ -146,7 +147,7 @@ internal class DeviceCalendarProvider(private val context: Context) : CalendarGa
     }
     companion object {
         fun description(marker: String, url: String? = null) =
-            "REAL planı" + (url?.let { "\nREAL kartı: $it" } ?: "") + "\n[REAL:$marker]"
+            "REAL planı" + (url?.let { "\nREAL kartı: ${it}" } ?: "") + "\n[REAL:$marker]"
         fun ownsDescription(value: String?, marker: String) = value != null && value.startsWith("REAL planı") &&
             value.endsWith("\n[REAL:$marker]")
         // All fields we overwrite + recurrence/location/attendees, so external changes never disappear silently.

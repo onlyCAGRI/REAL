@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -59,7 +60,7 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
         try {
             val record = withContext(Dispatchers.IO) { provider.event(occurrence.eventId) }
             if (record == null || record.calendarId != occurrence.calendarId || record.fields[0] != occurrence.title) {
-                error = "Etkinlik değişmiş veya kaldırılmış olabilir. Takvime dönüp yenile."
+                error = t("Etkinlik değişmiş veya kaldırılmış olabilir. Takvime dönüp yenile.")
             } else {
                 // A REAL export marker is bookkeeping, not user-facing event content.
                 description = record.description?.replace(Regex("\\n\\[REAL:[0-9a-fA-F-]{36}\\]$"), "")
@@ -69,7 +70,7 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
                 available = true
             }
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (_: Exception) { error = "Etkinlik ayrıntıları okunamadı. Takvim iznini kontrol et." }
+        catch (_: Exception) { error = t("Etkinlik ayrıntıları okunamadı. Takvim iznini kontrol et.") }
         finally { loading = false }
     }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(
@@ -81,7 +82,7 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 com.cagri.real.ui.components.RealBackButton(onDismiss)
-                Text("Takvim etkinliği", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                Text(t("Takvim etkinliği"), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f).padding(start = 14.dp))
             }
             val detailScroll = rememberScrollState()
@@ -92,13 +93,13 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
                     Text(occurrence.title, color = Color.White, fontSize = 28.sp, lineHeight = 34.sp,
                         fontWeight = FontWeight.SemiBold)
                 }
-                DetailSection("Tarih ve saat", externalCalendarTimeLabel(occurrence))
-                DetailSection("Takvim", occurrence.calendarName)
-                if (loading) Text("Ayrıntılar yükleniyor…", color = Color.LightGray)
-                description?.let { DetailSection("Açıklama", it) }
-                location?.let { DetailSection("Konum", it) }
+                DetailSection(t("Tarih ve saat"), externalCalendarTimeLabel(occurrence))
+                DetailSection(t("Takvim"), occurrence.calendarName)
+                if (loading) Text(t("Ayrıntılar yükleniyor…"), color = Color.LightGray)
+                description?.let { DetailSection(t("Açıklama"), it) }
+                location?.let { DetailSection(t("Konum"), it) }
                 error?.let { Text(it, color = Color(0xFFFFB4AB)) }
-                Text("Bu etkinliğin tarih ve saati bağlı takviminden gelir. İçine fotoğraf, checklist, CardStack ve diğer REAL içeriklerini eklemek için bir REAL kartı bağlayabilirsin. Bağlantı kurmak içerikleri public yapmaz.",
+                Text(t("Bu etkinliğin tarih ve saati bağlı takviminden gelir. İçine fotoğraf, checklist, CardStack ve diğer REAL içeriklerini eklemek için bir REAL kartı bağlayabilirsin. Bağlantı kurmak içerikleri public yapmaz."),
                     color = Color(0xFF9B9BA6), fontSize = 13.sp, lineHeight = 19.sp)
                 if (categorizeOpen) CategorizePanel(occurrence.calendarName, categories, currentCategoryId,
                     currentIsWholeCalendar) { id, name, whole -> onCategorize(id, name, whole); categorizeOpen = false }
@@ -108,11 +109,11 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
                 scope.launch {
                     try { onCreateRealCard() }
                     catch (cancelled: CancellationException) { throw cancelled }
-                    catch (failure: Exception) { error = failure.message ?: "REAL kartı bağlanamadı." }
+                    catch (failure: Exception) { error = failure.message ?: t("REAL kartı bağlanamadı.") }
                     finally { creating = false }
                 }
             }, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                Text(if (creating) "Bağlanıyor…" else "REAL içeriği ekle", color = Color.White)
+                Text(if (creating) t("Bağlanıyor…") else t("REAL içeriği ekle"), color = Color.White)
             }
             // Kategorize et: shows the current category (with its colour) once linked.
             val linked = categories.firstOrNull { it.id == currentCategoryId }
@@ -122,15 +123,15 @@ internal fun ExternalCalendarEventDetail(occurrence: CalendarOccurrence, onDismi
                     Box(Modifier.size(12.dp).clip(CircleShape).background(categoryDotColor(linked)))
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(linked?.name ?: "Kategorize et", color = Color.White)
+                Text(linked?.name ?: t("Kategorize et"), color = Color.White)
             }
             CalendarGlassButton(enabled = available, onClick = {
                 try { provider.open(occurrence.eventId, occurrence.start) }
-                catch (_: Exception) { error = "Etkinliği düzenleyecek takvim uygulaması bulunamadı." }
+                catch (_: Exception) { error = t("Etkinliği düzenleyecek takvim uygulaması bulunamadı.") }
             }, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
                 ActionIcon(ActionGlyph.Edit, Modifier.size(18.dp), Color.White)
                 Spacer(Modifier.width(8.dp))
-                Text("Takvimde düzenle", color = Color.White)
+                Text(t("Takvimde düzenle"), color = Color.White)
             }
         }
         }
@@ -162,7 +163,7 @@ private fun CategorizePanel(
                     contentAlignment = Alignment.Center) {
                     if (whole) ActionIcon(ActionGlyph.Check, Modifier.size(12.dp), Color(0xFF111216))
                 }
-                Text("$calendarName takvimindeki tüm etkinlikler", color = Color.White, fontSize = 14.sp,
+                Text(t("{0} takvimindeki tüm etkinlikler", calendarName), color = Color.White, fontSize = 14.sp,
                     modifier = Modifier.padding(start = 10.dp))
             }
             categories.forEach { c ->
@@ -175,13 +176,13 @@ private fun CategorizePanel(
                 }
             }
             if (categories.none { it.name.equals(calendarName, ignoreCase = true) }) {
-                Text("+ Yeni kategori: $calendarName", color = Color(0xFF91B9FF), fontSize = 15.sp,
+                Text(t("+ Yeni kategori: {0}", calendarName), color = Color(0xFF91B9FF), fontSize = 15.sp,
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                         .clickable { onCategorize(null, calendarName, whole) }
                         .padding(vertical = 8.dp))
             }
             if (currentCategoryId != null) {
-                Text("Kategoriden çıkar", color = Color(0xFFFFB4AB), fontSize = 14.sp,
+                Text(t("Kategoriden çıkar"), color = Color(0xFFFFB4AB), fontSize = 14.sp,
                     modifier = Modifier.clip(RoundedCornerShape(12.dp))
                         .clickable { onCategorize(null, null, false) }
                         .padding(vertical = 6.dp))
@@ -201,15 +202,15 @@ private fun DetailSection(label: String, value: String) {
 }
 
 internal fun externalCalendarTimeLabel(event: CalendarOccurrence, zone: ZoneId = ZoneId.systemDefault()): String {
-    val locale = Locale.forLanguageTag("tr-TR")
-    val dayFormat = DateTimeFormatter.ofPattern("d MMMM yyyy, EEEE", locale)
+    val locale = com.cagri.real.i18n.I18n.locale
+    val dayFormat = DateTimeFormatter.ofPattern(if (com.cagri.real.i18n.I18n.isEnglish) "EEEE, MMMM d yyyy" else "d MMMM yyyy, EEEE", locale)
     if (event.allDay) {
         val utc = ZoneId.of("UTC")
         val first = Instant.ofEpochMilli(event.start).atZone(utc).toLocalDate()
         // Calendar end is exclusive; a one-day event must not show the following day.
         val last = Instant.ofEpochMilli(maxOf(event.start, event.end - 1)).atZone(utc).toLocalDate()
-        return if (first == last) "${first.format(dayFormat)}\nTüm gün"
-        else "${first.format(dayFormat)} – ${last.format(dayFormat)}\nTüm gün"
+        return if (first == last) t("{0}\nTüm gün", first.format(dayFormat))
+        else t("{0} – {1}\nTüm gün", first.format(dayFormat), last.format(dayFormat))
     }
     val start = Instant.ofEpochMilli(event.start).atZone(zone)
     val end = Instant.ofEpochMilli(event.end).atZone(zone)

@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import com.cagri.real.data.ReminderItem
 import com.cagri.real.platform.android.share.CardShareClient
 import kotlinx.coroutines.Dispatchers
@@ -12,7 +13,7 @@ internal suspend fun prepareCalendarPublication(
     state: CalendarConnectionState, card: ReminderItem, options: CardShareClient.Options
 ): CalendarPublication {
     val store = state.store
-    check(store.isCurrent() && store.belongsToSignedInUser()) { "REAL hesabı değişti." }
+    check(store.isCurrent() && store.belongsToSignedInUser()) { t("REAL hesabı değişti.") }
     val links = CalendarCardLinks(store)
     val prior = links.publications()[card.id]
     val now = System.currentTimeMillis()
@@ -29,7 +30,7 @@ internal suspend fun prepareCalendarPublication(
     // Receipt is durable before networking. A retry refreshes the same token, not another binary snapshot.
     links.savePublication(pending)
     val url = CardShareClient().createCalendar(card.id, card.updatedAt, options, pending.requestId).url
-    check(store.isCurrent() && store.belongsToSignedInUser()) { "REAL hesabı değişti." }
+    check(store.isCurrent() && store.belongsToSignedInUser()) { t("REAL hesabı değişti.") }
     return pending.copy(url = url).also(links::savePublication)
 }
 
@@ -40,25 +41,25 @@ internal class CalendarCardPublisher(private val state: CalendarConnectionState)
             val store = state.store; val provider = state.provider; val links = CalendarCardLinks(store)
             check(provider.canRead() && provider.canWrite()) { "Takvim okuma ve yazma izni gerekli." }
             val associations = links.associations().filter { it.cardId == card.id }
-            check(associations.isNotEmpty()) { "Bu kartın bağlı bir harici takvim etkinliği yok." }
+            check(associations.isNotEmpty()) { t("Bu kartın bağlı bir harici takvim etkinliği yok.") }
             val calendars = provider.calendars()
             check(associations.all { a -> calendars.any { it.id == a.calendarId && it.identity == a.identity && it.writable } &&
                 provider.event(a.eventId)?.calendarId == a.calendarId }) {
-                "Bağlı takvim etkinliği bulunamadı veya düzenleme yetkisi yok. REAL içeriğin korunuyor."
+                t("Bağlı takvim etkinliği bulunamadı veya düzenleme yetkisi yok. REAL içeriğin korunuyor.")
             }
             val pending = prepareCalendarPublication(state, card, options)
             val url = checkNotNull(pending.url)
             for (association in associations) {
                 check(store.isCurrent() && store.belongsToSignedInUser())
                 val existing = provider.event(association.eventId)
-                check(existing != null && existing.calendarId == association.calendarId) { "Takvim etkinliği artık bulunamıyor." }
+                check(existing != null && existing.calendarId == association.calendarId) { t("Takvim etkinliği artık bulunamıyor.") }
                 val description = withExternalCardLink(existing.description, association, url)
                 val updated = if (existing.description == description) existing else provider.updateDescription(existing, description)
-                check(updated != null) { "Takvim etkinliği aynı anda değişti. REAL kartın kaydedildi; bağlantıyı yeniden dene." }
+                check(updated != null) { t("Takvim etkinliği aynı anda değişti. REAL kartın kaydedildi; bağlantıyı yeniden dene.") }
                 links.updateBlock(association, externalCardLinkBlock(association.marker, url))
             }
             links.savePublication(pending.copy(applied = true))
-            "Web bağlantısı takvime eklendi. Yeni içerik için yeniden onay ver."
+            t("Web bağlantısı takvime eklendi. Yeni içerik için yeniden onay ver.")
         }
     }
 }

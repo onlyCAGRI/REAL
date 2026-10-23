@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -65,13 +66,13 @@ internal fun CalendarConnectionScreen(
     val dirty = draft != state.options
 
     fun commit() {
-        try { state.save(draft); error = null } catch (_: Exception) { error = "Seçimler kaydedilemedi." }
+        try { state.save(draft); error = null } catch (_: Exception) { error = t("Seçimler kaydedilemedi.") }
     }
 
     fun trySave() {
         val targetValid = state.calendars.any { it.id == draft.targetId && it.identity == draft.targetIdentity && it.writable }
         if (draft.exportEnabled && (!writable || !targetValid)) {
-            error = "Göndermek için yazma izni ver ve bir hedef takvim seç."; return
+            error = t("Göndermek için yazma izni ver ve bir hedef takvim seç."); return
         }
         val before = state.options
         // Ask for consent only when this save would publish MORE than what was already approved.
@@ -87,19 +88,19 @@ internal fun CalendarConnectionScreen(
 
     if (confirm) CalendarGlassDialog(
         onDismiss = { confirm = false },
-        title = "Takvime gönderilsin mi?",
+        title = t("Takvime gönderilsin mi?"),
         reduceBlur = reduceDynamicBlur,
         actions = {
-            CalendarGlassButton(primary = true, onClick = { confirm = false; commit() }) { Text("Onayla ve gönder") }
+            CalendarGlassButton(primary = true, onClick = { confirm = false; commit() }) { Text(t("Onayla ve gönder")) }
             TextButton(onClick = { confirm = false }, modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text("Vazgeç") }
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text(t("Vazgeç")) }
         }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Bullet("Başlık, gün, saat ve kartın linki takvime yazılır.")
-            Bullet("Linki bilen kartın içeriğini görebilir; konum, ses ve günlük görünmez. Link 30 gün geçerli.")
-            Bullet("Tekrarlı planlarda gelecek 90 gün gönderilir.")
-            Bullet("REAL'de sildiğin plan takvimden de silinir. Takvimde değiştirdiğin kopyaya dokunulmaz.")
+            Bullet(t("Başlık, gün, saat ve kartın linki takvime yazılır."))
+            Bullet(t("Linki bilen kartın içeriğini görebilir; konum, ses ve günlük görünmez. Link 30 gün geçerli."))
+            Bullet(t("Tekrarlı planlarda gelecek 90 gün gönderilir."))
+            Bullet(t("REAL'de sildiğin plan takvimden de silinir. Takvimde değiştirdiğin kopyaya dokunulmaz."))
         }
     }
 
@@ -108,8 +109,8 @@ internal fun CalendarConnectionScreen(
             com.cagri.real.ui.components.RealBackButton(onBack, Modifier.padding(vertical = 8.dp))
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(22.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Takvim bağlantısı", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Telefondaki takvimleri REAL'de gör, istersen planlarını takvime gönder.",
+                    Text(t("Takvim bağlantısı"), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+                    Text(t("Telefondaki takvimleri REAL'de gör, istersen planlarını takvime gönder."),
                         color = CalendarMuted, fontSize = 14.sp, lineHeight = 20.sp)
                 }
 
@@ -119,13 +120,13 @@ internal fun CalendarConnectionScreen(
                     Column(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().clickable { howOpen = !howOpen }.padding(horizontal = 18.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically) {
-                            Text("Nasıl çalışır?", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                            Text(t("Nasıl çalışır?"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                             ActionIcon(ActionGlyph.ChevronRight, Modifier.size(16.dp).graphicsLayer { rotationZ = if (howOpen) 90f else 0f }, CalendarMuted)
                         }
                         if (howOpen) Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Bullet("Takvimden gelenler REAL'de yalnızca gösterilir, değiştirilmez.")
-                            Bullet("'Takvime gönder' açıksa başlık, gün, saat ve kartın linki seçtiğin takvime yazılır.")
-                            Bullet("Eşitleme uygulamayı açınca, ayar kaydedince ve yenile'ye basınca yapılır; arka planda sürekli çalışmaz.")
+                            Bullet(t("Takvimden gelenler REAL'de yalnızca gösterilir, değiştirilmez."))
+                            Bullet(t("'Takvime gönder' açıksa başlık, gün, saat ve kartın linki seçtiğin takvime yazılır."))
+                            Bullet(t("Eşitleme uygulamayı açınca, ayar kaydedince ve yenile'ye basınca yapılır; arka planda sürekli çalışmaz."))
                         }
                     }
                 }
@@ -135,7 +136,7 @@ internal fun CalendarConnectionScreen(
                     Row(Modifier.fillMaxWidth().padding(start = 18.dp, top = 14.dp, bottom = 14.dp, end = 10.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(if (state.busy) "Eşitleniyor…" else state.status.ifBlank { "Takvim bağlantısı hazır." },
+                            Text(if (state.busy) t("Eşitleniyor…") else state.status.ifBlank { t("Takvim bağlantısı hazır.") },
                                 color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
                             if (state.publicationStatus.isNotBlank())
                                 Text(state.publicationStatus, color = Color(0xFFFFD79A), fontSize = 12.sp, lineHeight = 17.sp)
@@ -149,16 +150,16 @@ internal fun CalendarConnectionScreen(
                 }
 
                 if (!readable) {
-                    CalendarSection("Başlamak için") {
-                        ActionRow("Takvimleri görmeye izin ver", "Cihazda Google hesabı ve takvim eşitlemesi açık olmalı.") {
+                    CalendarSection(t("Başlamak için")) {
+                        ActionRow(t("Takvimleri görmeye izin ver"), t("Cihazda Google hesabı ve takvim eşitlemesi açık olmalı.")) {
                             readPermission.launch(Manifest.permission.READ_CALENDAR)
                         }
                     }
                 } else {
                     // 1) READ
-                    CalendarSection("REAL'de göster") {
+                    CalendarSection(t("REAL'de göster")) {
                         if (state.calendars.isEmpty()) {
-                            Text("Takvim bulunamadı. Cihaz ayarlarından Google hesabını ekleyip takvim eşitlemesini aç.",
+                            Text(t("Takvim bulunamadı. Cihaz ayarlarından Google hesabını ekleyip takvim eşitlemesini aç."),
                                 color = CalendarMuted, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(18.dp))
                         }
                         state.calendars.forEachIndexed { index, calendar ->
@@ -166,7 +167,7 @@ internal fun CalendarConnectionScreen(
                             val checked = calendar.id in draft.readIds && draft.readIdentities[calendar.id] == calendar.identity
                             CheckRow(
                                 label = calendar.name,
-                                supporting = calendar.account + if (!calendar.syncEnabled) " · eşitleme kapalı" else "",
+                                supporting = calendar.account + if (!calendar.syncEnabled) t(" · eşitleme kapalı") else "",
                                 checked = checked
                             ) {
                                 val identities = if (checked) draft.readIdentities - calendar.id
@@ -177,24 +178,24 @@ internal fun CalendarConnectionScreen(
                     }
 
                     // 2) SEND
-                    CalendarSection("Takvime gönder",
-                        footer = if (draft.exportEnabled) null else "Kapatınca takvimdeki mevcut kayıtlar silinmez.") {
-                        ToggleRow("REAL planlarını takvime gönder", null, draft.exportEnabled) {
+                    CalendarSection(t("Takvime gönder"),
+                        footer = if (draft.exportEnabled) null else t("Kapatınca takvimdeki mevcut kayıtlar silinmez.")) {
+                        ToggleRow(t("REAL planlarını takvime gönder"), null, draft.exportEnabled) {
                             draft = draft.copy(exportEnabled = it)
                         }
                     }
 
                     if (draft.exportEnabled) {
-                        CalendarSection("Hangi takvime?",
-                            footer = if (hasLinks) "Gönderilmiş planlar varken hedef takvim değiştirilemez." else null) {
+                        CalendarSection(t("Hangi takvime?"),
+                            footer = if (hasLinks) t("Gönderilmiş planlar varken hedef takvim değiştirilemez.") else null) {
                             if (!writable) {
-                                ActionRow("Takvime yazmaya izin ver", null) {
+                                ActionRow(t("Takvime yazmaya izin ver"), null) {
                                     writePermission.launch(Manifest.permission.WRITE_CALENDAR)
                                 }
                                 if (writableCalendars.isNotEmpty()) RowDivider()
                             }
                             if (writable && writableCalendars.isEmpty()) {
-                                Text("Yazılabilir takvim bulunamadı.", color = CalendarMuted, fontSize = 14.sp, modifier = Modifier.padding(18.dp))
+                                Text(t("Yazılabilir takvim bulunamadı."), color = CalendarMuted, fontSize = 14.sp, modifier = Modifier.padding(18.dp))
                             }
                             writableCalendars.forEachIndexed { index, calendar ->
                                 if (index > 0) RowDivider()
@@ -208,16 +209,16 @@ internal fun CalendarConnectionScreen(
                             }
                         }
 
-                        CalendarSection("Hangi planlar?",
-                            footer = "Yalnızca tarihi olan kartlar gönderilir. Tekrarlılarda gelecek 90 gün.") {
-                            Segmented(listOf("Tüm planlı kartlar", "Seçtiklerim"), if (draft.exportAll) 0 else 1) {
+                        CalendarSection(t("Hangi planlar?"),
+                            footer = t("Yalnızca tarihi olan kartlar gönderilir. Tekrarlılarda gelecek 90 gün.")) {
+                            Segmented(listOf(t("Tüm planlı kartlar"), t("Seçtiklerim")), if (draft.exportAll) 0 else 1) {
                                 draft = draft.copy(exportAll = it == 0)
                             }
                             if (draft.exportAll) {
-                                Text("Yeni planlar da otomatik gönderilir.", color = CalendarMuted, fontSize = 13.sp,
+                                Text(t("Yeni planlar da otomatik gönderilir."), color = CalendarMuted, fontSize = 13.sp,
                                     modifier = Modifier.padding(horizontal = 18.dp).padding(bottom = 14.dp, top = 2.dp))
                             } else if (planned.isEmpty()) {
-                                Text("Tarihi veya saati olan plan yok.", color = CalendarMuted, fontSize = 13.sp,
+                                Text(t("Tarihi veya saati olan plan yok."), color = CalendarMuted, fontSize = 13.sp,
                                     modifier = Modifier.padding(horizontal = 18.dp).padding(bottom = 14.dp))
                             } else {
                                 planned.forEach { reminder ->
@@ -233,12 +234,12 @@ internal fun CalendarConnectionScreen(
                 }
 
                 // 3) PERMISSIONS
-                CalendarSection("İzinler") {
-                    PermissionRow("Takvimi okuma", readable) { readPermission.launch(Manifest.permission.READ_CALENDAR) }
+                CalendarSection(t("İzinler")) {
+                    PermissionRow(t("Takvimi okuma"), readable) { readPermission.launch(Manifest.permission.READ_CALENDAR) }
                     RowDivider()
-                    PermissionRow("Takvime yazma", writable) { writePermission.launch(Manifest.permission.WRITE_CALENDAR) }
+                    PermissionRow(t("Takvime yazma"), writable) { writePermission.launch(Manifest.permission.WRITE_CALENDAR) }
                     RowDivider()
-                    ActionRow("Uygulama izinlerini aç", null) {
+                    ActionRow(t("Uygulama izinlerini aç"), null) {
                         context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
                     }
                 }
@@ -248,7 +249,7 @@ internal fun CalendarConnectionScreen(
             if (readable) CalendarGlassButton(
                 primary = true, enabled = dirty && !state.busy, onClick = ::trySave,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
-            ) { Text(if (dirty) "Değişiklikleri kaydet" else "Kaydedildi", fontWeight = FontWeight.SemiBold) }
+            ) { Text(if (dirty) t("Değişiklikleri kaydet") else t("Kaydedildi"), fontWeight = FontWeight.SemiBold) }
         }
     }
 }
@@ -349,7 +350,7 @@ private fun PermissionRow(label: String, granted: Boolean, onRequest: () -> Unit
     Row(Modifier.fillMaxWidth().clickable(enabled = !granted, onClick = onRequest).then(RowPadding),
         verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
-        Text(if (granted) "Verildi" else "İzin ver", fontSize = 14.sp, fontWeight = FontWeight.Medium,
+        Text(if (granted) t("Verildi") else t("İzin ver"), fontSize = 14.sp, fontWeight = FontWeight.Medium,
             color = if (granted) CalendarAccent else Color(0xFFFFD79A))
     }
 }

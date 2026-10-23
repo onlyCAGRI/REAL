@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -72,7 +73,7 @@ internal class CalendarCardLinks(private val store: CalendarStore) {
 internal fun calendarOptionKey(options: CardShareClient.Options): String =
     listOf(options.includeAttachments, options.includeLocation, options.includeVoice, options.includeJournal).joinToString(":")
 
-internal fun externalCardLinkBlock(marker: String, url: String) = "REAL kartı: $url\n[REAL-CALENDAR:$marker]"
+internal fun externalCardLinkBlock(marker: String, url: String) = "REAL kartı: ${url}\n[REAL-CALENDAR:${marker}]"
 
 /** Replace only our exact block; retain the user's original description and later additions. */
 internal fun withExternalCardLink(description: String?, association: CalendarCardAssociation, url: String): String {
@@ -80,7 +81,7 @@ internal fun withExternalCardLink(description: String?, association: CalendarCar
     val block = externalCardLinkBlock(association.marker, url)
     val previous = association.publicBlock
     if (previous != null && original.contains(previous)) {
-        check(original.indexOf(previous) == original.lastIndexOf(previous)) { "Takvim bağlantısı birden fazla kez bulunuyor." }
+        check(original.indexOf(previous) == original.lastIndexOf(previous)) { t("Takvim bağlantısı birden fazla kez bulunuyor.") }
         return original.replace(previous, block)
     }
     // Recover a completed provider write whose local block receipt was interrupted.
@@ -89,9 +90,9 @@ internal fun withExternalCardLink(description: String?, association: CalendarCar
         val lines = original.lines()
         val index = lines.indexOf(marker)
         check(index > 0 && lines.count { it == marker } == 1 && lines[index - 1].startsWith("REAL kartı: ")) {
-            "Takvimdeki bağlantı dışarıda değiştirildi; açıklamayı kontrol et."
+            t("Takvimdeki bağlantı dışarıda değiştirildi; açıklamayı kontrol et.")
         }
-        return lines.toMutableList().apply { this[index - 1] = "REAL kartı: $url" }.joinToString("\n")
+        return lines.toMutableList().apply { this[index - 1] = "REAL kartı: ${url}" }.joinToString("\n")
     }
     return if (original.isEmpty()) block else "$original\n\n$block"
 }

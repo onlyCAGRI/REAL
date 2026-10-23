@@ -2020,5 +2020,22 @@
   "EPUB bölümü çok büyük.": "The EPUB chapter is too large.",
   "EPUB kitap yapısı bulunamadı.": "The EPUB book structure wasn't found.",
   "EPUB bölümü eksik.": "The EPUB chapter is missing.",
-  "EPUB bölüm sayısı desteklenmiyor.": "This EPUB chapter count isn't supported."
+  "EPUB bölüm sayısı desteklenmiyor.": "This EPUB chapter count isn't supported.",
+  "Takvim bağlantısı birden fazla kez bulunuyor.": "The calendar link appears more than once.",
+  "REAL hesabı değişti.": "The REAL account changed.",
+  "Bu kartın bağlı bir harici takvim etkinliği yok.": "This card has no linked external calendar event.",
+  "Takvim etkinliği artık bulunamıyor.": "The calendar event can no longer be found.",
+  "Takvim etkinliği aynı anda değişti. REAL kartın kaydedildi; bağlantıyı yeniden dene.": "The calendar event changed at the same time. Your REAL card was saved; try the link again.",
+  "Seçimler kaydedilemedi.": "Couldn't save your choices.",
+  "Cihaz takvim sağlayıcısı kullanılamıyor": "The device calendar provider isn't available",
+  "Etkinlikler okunamadı": "Couldn't read events",
+  "Takvim etkinliği eklenemedi": "Couldn't add the calendar event",
+  "Eklenen etkinlik doğrulanamadı": "Couldn't verify the added event",
+  "Takvim etkinlikleri okunamadı": "Couldn't read calendar events",
+  "Etkinlik ayrıntıları okunamadı. Takvim iznini kontrol et.": "Couldn't read the event details. Check the calendar permission.",
+  "REAL kartı bağlanamadı.": "Couldn't connect the REAL card.",
+  "Etkinliği düzenleyecek takvim uygulaması bulunamadı.": "No calendar app found that can edit the event.",
+  "{0}\nTüm gün": "{0}\nAll day",
+  "{0} – {1}\nTüm gün": "{0} – {1}\nAll day",
+  "Takvim işlemi tamamlanamadı. Bağlantıyı ve izinleri kontrol edip yeniden dene.": "The calendar action couldn't be completed. Check the connection and permissions, then try again."
 }
