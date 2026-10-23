@@ -1,5 +1,6 @@
 package com.cagri.real.sharedcategories
 
+import com.cagri.real.i18n.t
 import com.cagri.real.network.HttpRequest
 import com.cagri.real.platform.android.auth.AndroidBackend
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,7 @@ data class SharedMember(val uid: String, val name: String, val isOwner: Boolean,
 internal class SharedCategoryCardsApi(val uid: String) {
     private val base = AndroidBackend.ORIGIN + "/api/categories/v1/"
     private val uuid = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-    private fun checkAccount() { check(AndroidBackend.auth.currentUser()?.id == uid) { "Hesap değişti." } }
+    private fun checkAccount() { check(AndroidBackend.auth.currentUser()?.id == uid) { t("Hesap değişti.") } }
 
     private suspend fun call(path: String, method: String = "GET", body: JSONObject? = null): SharedCardHttp = withContext(Dispatchers.IO) {
         checkAccount()
@@ -55,7 +56,7 @@ internal class SharedCategoryCardsApi(val uid: String) {
                     o.optString("description", "").takeIf { !o.isNull("description") && it.isNotBlank() })
             }
             after = if (page.isNull("next")) null else page.getString("next")
-            check(after == null || (uuid.matches(after!!) && seen.add(after!!))) { "Kategori listesi okunamadı." }
+            check(after == null || (uuid.matches(after!!) && seen.add(after!!))) { t("Kategori listesi okunamadı.") }
         } while (after != null)
         return out
     }
@@ -96,7 +97,7 @@ internal class SharedCategoryCardsApi(val uid: String) {
 
     /** Uploads one file into the shared category; returns its blob id. */
     suspend fun upload(id: String, file: File, kind: String, mime: String): String = withContext(Dispatchers.IO) {
-        check(file.isFile && file.length() in 1..MAX_BYTES) { "Dosya yüklenemedi." }
+        check(file.isFile && file.length() in 1..MAX_BYTES) { t("Dosya yüklenemedi.") }
         val blob = java.util.UUID.randomUUID().toString()
         val r = ok("shared/${checkId(id)}/assets/$blob", "POST", JSONObject().put("kind", kind).put("mime", mime).put("byte_size", file.length()))
         if (r.optString("state", r.optJSONObject("attachment")?.optString("state") ?: "") != "READY") exchange(id, blob, mime, file.readBytes())
@@ -111,7 +112,7 @@ internal class SharedCategoryCardsApi(val uid: String) {
     private suspend fun exchange(id: String, blob: String, mime: String?, bytes: ByteArray?): ByteArray = withContext(Dispatchers.IO) {
         checkId(id); checkId(blob); checkAccount()
         val headers = AndroidBackend.diagnosticHeaders().toMutableMap()
-        headers["Authorization"] = "Bearer " + checkNotNull(AndroidBackend.auth.idTokenForUser(uid).getOrThrow()) { "Giriş gerekli." }
+        headers["Authorization"] = "Bearer " + checkNotNull(AndroidBackend.auth.idTokenForUser(uid).getOrThrow()) { t("Giriş gerekli.") }
         val c = URL(base + "shared/$id/assets/$blob/content").openConnection() as HttpURLConnection
         try {
             c.instanceFollowRedirects = false; c.connectTimeout = 10_000; c.readTimeout = 60_000
@@ -121,30 +122,30 @@ internal class SharedCategoryCardsApi(val uid: String) {
                 c.doOutput = true; c.setRequestProperty("Content-Type", mime); c.setFixedLengthStreamingMode(bytes.size)
                 c.outputStream.use { it.write(bytes) }
             }
-            check(c.responseCode in 200..299) { "Dosya aktarılamadı." }
+            check(c.responseCode in 200..299) { t("Dosya aktarılamadı.") }
             val result = if (bytes != null) ByteArray(0) else c.inputStream.use { input ->
                 val out = java.io.ByteArrayOutputStream(); val b = ByteArray(65536)
-                while (true) { val n = input.read(b); if (n < 0) break; check(out.size() + n <= 16 * 1024 * 1024) { "Dosya çok büyük." }; out.write(b, 0, n) }
+                while (true) { val n = input.read(b); if (n < 0) break; check(out.size() + n <= 16 * 1024 * 1024) { t("Dosya çok büyük.") }; out.write(b, 0, n) }
                 out.toByteArray()
             }
             checkAccount(); result
         } finally { c.disconnect() }
     }
 
-    private fun checkId(v: String): String { require(uuid.matches(v)) { "Geçersiz kimlik." }; return v }
+    private fun checkId(v: String): String { require(uuid.matches(v)) { t("Geçersiz kimlik.") }; return v }
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8").replace("+", "%20")
 
     companion object {
         const val MAX_BYTES = 10L * 1024 * 1024
         fun failure(status: Int, code: String): String = when {
-            code == "CATEGORY_MEMBER_LIMIT" -> "Bir kategoride en fazla 10 kişi olabilir."
-            code == "CATEGORY_READ_ONLY" -> "Bu kategoride sadece görüntüleme iznin var."
-            code == "CATEGORY_SYNC_REQUIRED" -> "Kategori henüz buluta eşitlenmedi. Biraz sonra tekrar dene."
-            status == 401 || status == 403 -> "Bu işlem için iznin yok."
-            status == 404 -> "Kategoriye artık erişimin yok."
-            status == 429 -> "Çok fazla işlem. Biraz sonra tekrar dene."
-            status == 503 -> "Ortak kategori servisi hazır değil."
-            else -> "Ortak kategori güncellenemedi. İnternet bağlantını kontrol et."
+            code == "CATEGORY_MEMBER_LIMIT" -> t("Bir kategoride en fazla 10 kişi olabilir.")
+            code == "CATEGORY_READ_ONLY" -> t("Bu kategoride sadece görüntüleme iznin var.")
+            code == "CATEGORY_SYNC_REQUIRED" -> t("Kategori henüz buluta eşitlenmedi. Biraz sonra tekrar dene.")
+            status == 401 || status == 403 -> t("Bu işlem için iznin yok.")
+            status == 404 -> t("Kategoriye artık erişimin yok.")
+            status == 429 -> t("Çok fazla işlem. Biraz sonra tekrar dene.")
+            status == 503 -> t("Ortak kategori servisi hazır değil.")
+            else -> t("Ortak kategori güncellenemedi. İnternet bağlantını kontrol et.")
         }
     }
 }

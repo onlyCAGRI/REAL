@@ -1,5 +1,6 @@
 package com.cagri.real.sharedcategories
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import com.cagri.real.data.CategoryRepository
 import com.cagri.real.data.CustomCategory
@@ -264,7 +265,7 @@ object SharedCategorySync {
             list.map { item ->
                 if (item.customCategoryId != own.id || item.sharedCardId == null) item
                 else {
-                    while (next in used) next++
+                    while (next in used || com.cagri.real.platform.android.sync.SyncLocal.cardKeyUsed(next)) next++
                     used += next
                     item.copy(id = next, sharedCardId = null, sharedAuthorUid = null, sharedAuthorName = null)
                 }
@@ -373,7 +374,7 @@ object SharedCategorySync {
      * the server ([progress] = cards moved so far).
      */
     suspend fun share(context: Context, category: CustomCategory, personUid: String, access: String, progress: (Int) -> Unit) = mutex.withLock {
-        val uid = checkNotNull(me()) { "REAL hesabınla giriş yap." }
+        val uid = checkNotNull(me()) { t("REAL hesabınla giriş yap.") }
         val api = SharedCategoryCardsApi(uid)
         var sharedId = category.sharedId
         if (sharedId == null) {

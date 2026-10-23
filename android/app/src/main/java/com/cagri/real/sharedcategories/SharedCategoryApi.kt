@@ -1,5 +1,6 @@
 package com.cagri.real.sharedcategories
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import com.cagri.real.data.CustomCategory
 import com.cagri.real.data.ReminderJson
@@ -21,7 +22,7 @@ import java.net.URLEncoder
 class SharedCategoryApi(private val context: Context, val uid: String) {
     private val base = AndroidBackend.ORIGIN + "/api/categories/v1/"
     private val uuid = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-    private fun checkAccount() { check(AndroidBackend.auth.currentUser()?.id == uid) { "Hesap değişti. Ekranı yeniden aç." } }
+    private fun checkAccount() { check(AndroidBackend.auth.currentUser()?.id == uid) { t("Hesap değişti. Ekranı yeniden aç.") } }
     private fun cacheDirectory(): File {
         val key = java.security.MessageDigest.getInstance("SHA-256").digest(uid.toByteArray()).joinToString("") { "%02x".format(it) }
         return File(context.cacheDir, "shared_categories/$key").apply { mkdirs() }
@@ -32,12 +33,12 @@ class SharedCategoryApi(private val context: Context, val uid: String) {
             mapOf("Content-Type" to "application/json", "Accept" to "application/json"), body.toString(), 15_000, 30_000))
         checkAccount()
         check(response.statusCode in 200..299) { when (response.statusCode) {
-            409 -> "Kategori henüz eşitlenmedi veya başka cihazda değişti. Yenile ve tekrar dene."
-            401, 403 -> "Bu işlem için REAL hesabınla giriş yap."
-            404 -> "Kategoriye erişimin yok veya davet artık geçerli değil."
-            429 -> "Çok fazla işlem. Biraz sonra tekrar dene."
-            503 -> "Ortak kategori servisi hazır değil. Staging migration ve Worker güncellemesini kontrol et."
-            else -> "Kategori güncellenemedi. İnternet bağlantısını kontrol et."
+            409 -> t("Kategori henüz eşitlenmedi veya başka cihazda değişti. Yenile ve tekrar dene.")
+            401, 403 -> t("Bu işlem için REAL hesabınla giriş yap.")
+            404 -> t("Kategoriye erişimin yok veya davet artık geçerli değil.")
+            429 -> t("Çok fazla işlem. Biraz sonra tekrar dene.")
+            503 -> t("Ortak kategori servisi hazır değil. Staging migration ve Worker güncellemesini kontrol et.")
+            else -> t("Kategori güncellenemedi. İnternet bağlantısını kontrol et.")
         } }
         JSONObject(response.body)
     }
@@ -50,7 +51,7 @@ class SharedCategoryApi(private val context: Context, val uid: String) {
             val entries = page.getJSONArray("items")
             for (i in 0 until entries.length()) array.put(entries.getJSONObject(i))
             after = if (page.isNull("next")) null else page.getString("next")
-            check(after == null || (uuid.matches(after!!) && seen.add(after!!))) { "Kategori listesi okunamadı." }
+            check(after == null || (uuid.matches(after!!) && seen.add(after!!))) { t("Kategori listesi okunamadı.") }
         } while (after != null)
         val response = JSONObject().put("items", array)
         val result = (0 until array.length()).map { decodeSharedCategory(array.getJSONObject(it)) }
@@ -58,7 +59,7 @@ class SharedCategoryApi(private val context: Context, val uid: String) {
         val target = File(cacheDirectory(), "catalog.json")
         val temp = File(cacheDirectory(), "catalog.tmp")
         temp.writeText(response.toString())
-        check(temp.renameTo(target)) { "Kategori önbelleği kaydedilemedi." }
+        check(temp.renameTo(target)) { t("Kategori önbelleği kaydedilemedi.") }
         result
     }
     suspend fun cachedList(): List<SharedCategory> = withContext(Dispatchers.IO) {
@@ -93,7 +94,7 @@ class SharedCategoryApi(private val context: Context, val uid: String) {
                 goals += SharedCategoryGoal(item.getString("recordId"), ReminderJson.decode(JSONArray().put(JSONObject(raw)).toString()).single(), raw)
             }
             after = if (page.isNull("next")) null else page.getString("next")
-            check(after == null || (uuid.matches(after!!) && seen.add(after!!))) { "Kategori sayfaları okunamadı." }
+            check(after == null || (uuid.matches(after!!) && seen.add(after!!))) { t("Kategori sayfaları okunamadı.") }
         } while (after != null)
         checkAccount()
         meta.copy(goals = goals)
@@ -108,7 +109,7 @@ class SharedCategoryApi(private val context: Context, val uid: String) {
         val url = request("shared/$id/invites", "POST").getString("url")
         val u = java.net.URI(url)
         check(u.scheme == "https" && u.rawUserInfo == null && u.port == -1 && u.rawQuery == null && u.rawFragment == null &&
-            Regex("/g/[0-9a-f]{64}").matches(u.rawPath)) { "Davet bağlantısı geçersiz." }
+            Regex("/g/[0-9a-f]{64}").matches(u.rawPath)) { t("Davet bağlantısı geçersiz.") }
         return url
     }
     suspend fun preview(token: String): JSONObject { require(Regex("[0-9a-f]{64}").matches(token)); return request("invites/$token") }
@@ -135,7 +136,7 @@ class SharedCategoryApi(private val context: Context, val uid: String) {
     fun open(attachment: com.cagri.real.data.ReminderAttachment) {
         checkAccount()
         val file = File(attachment.localPath)
-        require(file.isFile && file.canonicalFile.parentFile == cacheDirectory().canonicalFile) { "Dosya henüz indirilemedi." }
+        require(file.isFile && file.canonicalFile.parentFile == cacheDirectory().canonicalFile) { t("Dosya henüz indirilemedi.") }
         val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.attachments", file)
         com.cagri.real.data.AttachmentStorage.openContentUri(context, uri, attachment.mimeType, attachment.displayName)
     }
@@ -149,12 +150,12 @@ class SharedCategoryApi(private val context: Context, val uid: String) {
         try {
             connection.instanceFollowRedirects = false; connection.connectTimeout = 10_000; connection.readTimeout = 30_000
             credentials.forEach { (key, value) -> connection.setRequestProperty(key, value) }
-            check(connection.responseCode == 200) { "Dosya alınamadı." }
+            check(connection.responseCode == 200) { t("Dosya alınamadı.") }
             var length = 0L
             connection.inputStream.use { input -> temp.outputStream().use { output ->
                 val buffer = ByteArray(8192)
                 while (true) { val n = input.read(buffer); if (n < 0) break
-                    length += n; check(length <= 16 * 1024 * 1024) { "Dosya çok büyük." }; output.write(buffer, 0, n) }
+                    length += n; check(length <= 16 * 1024 * 1024) { t("Dosya çok büyük.") }; output.write(buffer, 0, n) }
             } }
             checkAccount(); check(length > 0 && temp.renameTo(target)); return target
         } finally { connection.disconnect(); temp.delete() }
