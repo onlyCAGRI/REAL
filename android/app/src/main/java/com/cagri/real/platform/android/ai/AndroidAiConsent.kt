@@ -2,6 +2,7 @@ package com.cagri.real.platform.android.ai
 
 import com.cagri.real.i18n.t
 import android.content.Context
+import android.util.AtomicFile
 import com.cagri.real.ai.*
 import com.cagri.real.platform.android.auth.AndroidBackend
 import kotlinx.coroutines.Dispatchers

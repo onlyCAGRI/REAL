@@ -2,6 +2,7 @@ package com.cagri.real.platform.android.account
 
 import com.cagri.real.i18n.t
 import android.content.Context
+import android.util.AtomicFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

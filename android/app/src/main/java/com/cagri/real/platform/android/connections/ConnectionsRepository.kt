@@ -1,5 +1,6 @@
 package com.cagri.real.platform.android.connections
 
+import com.cagri.real.connections.*
 import com.cagri.real.i18n.t
 import android.content.Context
 import com.cagri.real.platform.android.auth.AndroidBackend

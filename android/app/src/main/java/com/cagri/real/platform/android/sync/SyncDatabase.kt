@@ -2,6 +2,7 @@ package com.cagri.real.platform.android.sync
 
 import com.cagri.real.i18n.t
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.cagri.real.sync.*
 import org.json.JSONObject

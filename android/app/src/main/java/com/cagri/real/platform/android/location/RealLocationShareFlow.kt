@@ -2,6 +2,7 @@ package com.cagri.real.platform.android.location
 
 import com.cagri.real.i18n.t
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import com.cagri.real.boards.BoardTransform

@@ -2,6 +2,7 @@ package com.cagri.real.platform.android.sync
 
 import com.cagri.real.i18n.t
 import android.app.Activity
+import android.app.Application
 import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.content.ComponentName
