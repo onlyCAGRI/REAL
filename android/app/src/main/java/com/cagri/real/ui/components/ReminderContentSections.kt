@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import android.content.Intent
 import android.net.Uri
@@ -354,7 +355,7 @@ private fun fileBadge(file: ReminderAttachment): String = file.displayName?.subs
     ?: when (file.mimeType) { "application/pdf" -> "PDF"; "application/zip" -> "ZIP"; else -> "DOSYA" }
 private fun fileMetadata(file: ReminderAttachment): String = fileBadge(file) + (file.sizeBytes?.let { size ->
     when {
-        size >= 1024 * 1024 -> " · " + String.format(Locale.forLanguageTag("tr"), "%.1f MB", size / (1024.0 * 1024))
+        size >= 1024 * 1024 -> " · " + String.format(I18n.locale, "%.1f MB", size / (1024.0 * 1024))
         size >= 1024 -> t(" · {0} KB", size / 1024)
         else -> " · $size B"
     }

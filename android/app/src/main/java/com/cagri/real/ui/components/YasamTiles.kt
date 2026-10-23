@@ -85,7 +85,6 @@ import com.cagri.real.ui.motion.RealEntranceEase
 import com.cagri.real.ui.motion.RealEntranceMotion
 import com.cagri.real.ui.motion.realEntrance
 import com.cagri.real.ui.theme.RealFont
-import java.util.Locale
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -380,7 +379,7 @@ private fun YasamWaterHero(water: YasamWater?, reduce: Boolean, entrance: RealEn
         Text(t("SU · BUGÜN"), color = YasamMuted, fontSize = 11.sp, fontFamily = Mono, letterSpacing = 1.6.sp)
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                if (water == null) "—" else String.format(Locale("tr"), "%.1f", shownMl / 1000f),
+                if (water == null) "—" else String.format(com.cagri.real.i18n.I18n.locale, "%.1f", shownMl / 1000f),
                 color = Color.White, fontSize = 48.sp, lineHeight = 54.sp, fontWeight = FontWeight.Light, fontFamily = YasamThin
             )
             Text(

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import android.content.Context
 import androidx.compose.animation.core.RepeatMode
@@ -108,7 +109,7 @@ fun CheckRequestSheet(targets: List<CheckTarget>, canClear: Boolean, onDismiss: 
     var target by androidx.compose.runtime.remember { mutableStateOf(targets.first().key) }
     var startDay by androidx.compose.runtime.remember { mutableStateOf<Long?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
-    val dayFormat = java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale("tr"))
+    val dayFormat = java.time.format.DateTimeFormatter.ofPattern("d MMM", I18n.locale)
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         androidx.compose.foundation.layout.Column(
             Modifier.fillMaxWidth().background(Color(0xFF16161A), androidx.compose.foundation.shape.RoundedCornerShape(26.dp)).padding(20.dp),

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -86,7 +87,7 @@ private val WidgetSoft = Color(0xFF9B9BA6)
 private val WidgetBlue = Color(0xFF91B9FF)
 private val WidgetUp = Color(0xFF5ED6A0)
 private val WidgetDown = Color(0xFFFF8A80)
-private val TurkishLocale = Locale.forLanguageTag("tr-TR")
+private val TurkishLocale: Locale get() = I18n.locale
 
 /**
  * The dark REAL content surface of every widget block. It takes exactly the grid's height (placement

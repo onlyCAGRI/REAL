@@ -1,5 +1,6 @@
 package com.cagri.real.ui.alarm
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
@@ -70,7 +71,7 @@ import kotlin.math.sin
 import kotlinx.coroutines.launch
 
 private val AlarmInk = Color(0xFF08080A)
-private val TR: Locale = Locale.forLanguageTag("tr-TR")
+private val TR: Locale get() = I18n.locale
 
 /**
  * The ringing alarm: a breathing glow in the card's colour, a dot grid with waves running out from it,

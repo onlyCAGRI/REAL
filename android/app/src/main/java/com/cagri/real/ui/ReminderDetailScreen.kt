@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import androidx.compose.runtime.mutableLongStateOf
 import com.cagri.real.ui.components.liquidDockChip
@@ -2446,7 +2447,7 @@ internal fun ReminderDetailScreen(
                                                 text = java.time.Instant.ofEpochMilli(createdAt)
                                                     .atZone(java.time.ZoneId.systemDefault())
                                                     .format(java.time.format.DateTimeFormatter.ofPattern(
-                                                        "d MMMM yyyy · HH:mm", java.util.Locale.forLanguageTag("tr-TR")
+                                                        "d MMMM yyyy · HH:mm", I18n.locale
                                                     )),
                                                 color = Color(0xFF8E8E98),
                                                 fontSize = 12.sp,
@@ -3131,7 +3132,7 @@ internal fun ReminderDetailScreen(
                                         }
                                         val currentEndTimeStr = reminder.endAt?.let { end ->
                                             java.time.Instant.ofEpochMilli(end).atZone(ZoneId.systemDefault())
-                                                .format(java.time.format.DateTimeFormatter.ofPattern("d MMM HH:mm", java.util.Locale.forLanguageTag("tr-TR")))
+                                                .format(java.time.format.DateTimeFormatter.ofPattern("d MMM HH:mm", I18n.locale))
                                         }
 
                                         Row(

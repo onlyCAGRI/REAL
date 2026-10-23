@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -40,7 +41,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * Home Mood Tracker landing page.
@@ -199,7 +199,7 @@ private fun MoodHistoryDayHeader(
     count: Int,
     today: LocalDate
 ) {
-    val locale = remember { Locale.forLanguageTag("tr-TR") }
+    val locale = remember { I18n.locale }
     val dateFormatter = remember(locale) { DateTimeFormatter.ofPattern("d MMMM · EEEE", locale) }
     val title = when (date) {
         today -> t("Bugün")
@@ -232,7 +232,7 @@ private fun MoodHistoryDayHeader(
 private fun MoodHistoryEntryCard(entry: MoodTrackerEntry) {
     val accent = moodV2Tint(entry.mood)
     val shape = RoundedCornerShape(26.dp)
-    val formatter = remember { DateTimeFormatter.ofPattern("HH:mm", Locale.forLanguageTag("tr-TR")) }
+    val formatter = remember { DateTimeFormatter.ofPattern("HH:mm", I18n.locale) }
     val timestamp = remember(entry.details.loggedAt) {
         Instant.ofEpochMilli(entry.details.loggedAt)
             .atZone(ZoneId.systemDefault())

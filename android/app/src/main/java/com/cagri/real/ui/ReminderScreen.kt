@@ -2,6 +2,7 @@
 
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import com.cagri.real.contextcards.accent
 
@@ -2097,7 +2098,7 @@ private fun ReminderListScreen(
             if (category == ReminderCategory.JournalEntries) {
                 journalGroups.forEach { (date, items) ->
                     item(key = "journal_date_${date}") {
-                        SectionTitle(date.format(DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("tr"))).lowercase(Locale.forLanguageTag("tr")))
+                        SectionTitle(date.format(DateTimeFormatter.ofPattern("d MMMM yyyy", I18n.locale)).lowercase(I18n.locale))
                     }
                     items(items, key = { it.id }, contentType = { "reminder" }) { reminder ->
                         val isSelected = reminder.id in selectedIds

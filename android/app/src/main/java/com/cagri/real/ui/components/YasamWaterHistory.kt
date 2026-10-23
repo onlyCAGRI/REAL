@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -44,7 +45,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val Mono = FontFamily.Monospace
-private val TR: Locale = Locale.forLanguageTag("tr-TR")
+private val TR: Locale get() = I18n.locale
 private const val HISTORY_PAGE_SIZE = 5
 private const val DRAW_MS = 500
 

@@ -1,5 +1,6 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.I18n
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -78,9 +79,9 @@ object MusicCatalog {
     fun storefront(): String = java.util.Locale.getDefault().country.uppercase()
         .takeIf { it.length == 2 && it.all(Char::isLetter) } ?: "US"
 
-    /** "Almanya", "Türkiye"… in Turkish. */
+    /** "Almanya", "Türkiye"… in the app language. */
     fun storefrontName(): String =
-        java.util.Locale("", storefront()).getDisplayCountry(java.util.Locale("tr")).ifBlank { storefront() }
+        java.util.Locale("", storefront()).getDisplayCountry(I18n.locale).ifBlank { storefront() }
 
     private fun secureUrl(value: String): String? = when {
         value.startsWith("https://") -> value

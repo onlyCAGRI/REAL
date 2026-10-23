@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -314,7 +315,7 @@ fun MoodMonthChartCard(
     val today = remember { java.time.ZonedDateTime.now(zone) }
     val points = remember(entries, range, today) { moodPlotPoints(entries, range, today) }
     val monthName = remember {
-        YearMonth.from(today).month.getDisplayName(java.time.format.TextStyle.FULL, Locale.forLanguageTag("tr"))
+        YearMonth.from(today).month.getDisplayName(java.time.format.TextStyle.FULL, I18n.locale)
     }
     val average = if (points.isEmpty()) null else points.map { it.level }.average().toFloat()
     val progress = rememberDrawIn(listOf(range, points.size), reduceAnimations)
