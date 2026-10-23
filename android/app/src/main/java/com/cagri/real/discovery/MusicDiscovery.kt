@@ -1,6 +1,7 @@
 package com.cagri.real.discovery
 
 import com.cagri.real.i18n.t
+import com.cagri.real.i18n.tIn
 import android.content.Context
 import com.cagri.real.data.MusicBlock
 import com.cagri.real.data.MusicCatalog
@@ -19,12 +20,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /** Apple Music genres (iTunes genre ids). The charts come from the person's own country. */
-enum class MusicGenre(val key: String, val label: String, val itunesId: Int) {
+enum class MusicGenre(val key: String, private val trLabel: String, val itunesId: Int) {
     Pop("pop", "Pop", 14), Rock("rock", "Rock", 21), HipHop("hiphop", "Hip-Hop / Rap", 18),
     Electronic("electronic", "Elektronik", 7), Dance("dance", "Dans / House", 17), Alternative("alternative", "Alternatif", 20),
     RnB("rnb", "R&B / Soul", 15), Jazz("jazz", "Caz", 11), Classical("classical", "Klasik", 5),
     Soundtrack("soundtrack", "Film Müzikleri", 16), Metal("metal", "Metal", 1153), Latin("latin", "Latin", 12),
     Folk("folk", "Folk", 10), Reggae("reggae", "Reggae", 24), Blues("blues", "Blues", 2), Country("country", "Country", 6);
+
+    val label: String get() = tIn("genre", trLabel)
 
     companion object { fun fromKey(key: String) = entries.firstOrNull { it.key == key } }
 }
@@ -104,11 +107,13 @@ internal object MusicSeeds {
  * "Dönem": one era at a time (none = every era). Songs are kept by their release year; Deezer's decade playlists give
  * the era's artists, and the weekly charts only join for 2020+ and every era.
  */
-enum class MusicEra(val key: String, val label: String, val years: IntRange, val terms: List<String>, val title: Regex?) {
+enum class MusicEra(val key: String, private val trLabel: String, val years: IntRange, val terms: List<String>, val title: Regex?) {
     Now("era_2020", "2020+", 2020..9999, emptyList(), null),
     Tens("era_2010", "2010–2020", 2010..2019, listOf("2010s", "10s"), Regex("""(20)?10'?s|2010""", RegexOption.IGNORE_CASE)),
     Noughties("era_2000", "2000–2010", 2000..2009, listOf("2000s"), Regex("""2000'?s|\b00'?s|2000""", RegexOption.IGNORE_CASE)),
     Before("era_old", "2000 öncesi", 0..1999, listOf("90s", "80s"), Regex("""[6-9]0'?s|19\d\d""", RegexOption.IGNORE_CASE));
+
+    val label: String get() = t(trLabel)
 
     companion object { fun of(selection: Set<String>) = entries.firstOrNull { it.key in selection } }
 }

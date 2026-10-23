@@ -1,11 +1,12 @@
 package com.cagri.real.discovery
 
 import com.cagri.real.i18n.t
+import com.cagri.real.i18n.tIn
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** Tür ve hissiyat anahtarları Worker (worker/games/recommendations.mjs) ile birebir aynıdır. */
-enum class GameFilter(val key: String, val label: String, val genre: Boolean) {
+enum class GameFilter(val key: String, private val trLabel: String, val genre: Boolean) {
     Rpg("rpg", "RPG", true), Strategy("strategy", "Strateji", true), Action("action", "Aksiyon", true),
     Platformer("platformer", "Platform", true), Racing("racing", "Yarış", true), Puzzle("puzzle", "Bulmaca", true),
     Adventure("adventure", "Macera", true), Shooter("shooter", "Nişancı", true), Fighting("fighting", "Dövüş", true),
@@ -22,6 +23,8 @@ enum class GameFilter(val key: String, val label: String, val genre: Boolean) {
     Competitive("competitive", "Rekabetçi", false), Atmospheric("atmospheric", "Atmosferik", false),
     ThoughtProvoking("thought-provoking", "Düşündüren", false), Nostalgic("nostalgic", "Nostaljik", false),
     CoOp("co-op", "Birlikte oynanan", false), ShortSession("short-session", "Kısa seanslık", false);
+
+    val label: String get() = tIn("genre", trLabel)
 
     companion object {
         const val MAX_PER_GROUP = 3
@@ -40,12 +43,14 @@ object GameGenres {
         "real time strategy (rts)" to "Gerçek zamanlı strateji", "tactical" to "Taktik", "hack and slash/beat 'em up" to "Aksiyon dövüş",
         "arcade" to "Arcade", "visual novel" to "Görsel roman", "card & board game" to "Kart ve masa oyunu",
         "point-and-click" to "Point-and-click", "music" to "Müzik", "quiz/trivia" to "Bilgi yarışması", "moba" to "MOBA", "pinball" to "Langırt")
-    fun label(name: String): String = tr[name.trim().lowercase()] ?: name
+    fun label(name: String): String = tIn("genre", tr[name.trim().lowercase()] ?: name)
 }
 
-enum class GamePlatformGroup(val key: String, val label: String) {
+enum class GamePlatformGroup(val key: String, private val trLabel: String) {
     Pc("pc", "PC"), PlayStation("playstation", "PlayStation"), Xbox("xbox", "Xbox"), Switch("switch", "Switch"),
     Mobile("mobile", "Mobil"), Retro("retro", "Retro");
+
+    val label: String get() = t(trLabel)
 
     companion object {
         /** What a server from before the split understands: consoles as one group, no mobile. */

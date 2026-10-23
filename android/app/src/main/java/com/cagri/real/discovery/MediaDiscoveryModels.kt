@@ -1,11 +1,12 @@
 package com.cagri.real.discovery
 
 import com.cagri.real.i18n.t
+import com.cagri.real.i18n.tIn
 import com.cagri.real.data.MediaBlock
 import java.text.Normalizer
 import java.util.Locale
 
-enum class DiscoveryFilter(val key: String, val label: String, val genre: Boolean = true, val aliases: List<String> = listOf(key), val themeGroup: String? = null) {
+enum class DiscoveryFilter(val key: String, private val trLabel: String, val genre: Boolean = true, val aliases: List<String> = listOf(key), val themeGroup: String? = null) {
     Action("action", "Aksiyon"), Adventure("adventure", "Macera"), Comedy("comedy", "Komedi"),
     Drama("drama", "Dram"), Romance("romance", "Romantik"),
     ScienceFiction("science-fiction", "Bilim kurgu", aliases = listOf("science fiction", "sci-fi", "science-fiction")),
@@ -47,6 +48,7 @@ enum class DiscoveryFilter(val key: String, val label: String, val genre: Boolea
     Supernatural("supernatural", "Doğaüstü", false, themeGroup = "Fantastik ve doğaüstü"),
     Zombies("zombies", "Zombiler", false, themeGroup = "Fantastik ve doğaüstü"),
     Magic("magic", "Büyü", false, themeGroup = "Fantastik ve doğaüstü");
+    val label: String get() = tIn("genre", trLabel)
     val selectionGroup: Int get() = when {
         genre -> 0
         themeGroup != null -> 1

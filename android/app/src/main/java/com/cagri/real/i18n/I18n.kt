@@ -102,6 +102,16 @@ object I18n {
 /** t("Kaydet"), t("{0} madde kaldı", n) */
 fun t(tr: String): String = I18n.translate(tr)
 
+/**
+ * Bağlam duyarlı çeviri: aynı Türkçe sözcük başka anlamlarda da kullanılıyorsa ("Tarih" = Date/History),
+ * "genre:Tarih" gibi bağlam anahtarına bakar; yoksa normal [t]'ye düşer.
+ */
+fun tIn(context: String, tr: String): String {
+    val key = "$context:$tr"
+    val translated = I18n.translate(key)
+    return if (translated == key) t(tr) else translated
+}
+
 fun t(tr: String, vararg args: Any?): String {
     var out = I18n.translate(tr)
     args.forEachIndexed { i, a -> out = out.replace("{$i}", a?.toString() ?: "") }

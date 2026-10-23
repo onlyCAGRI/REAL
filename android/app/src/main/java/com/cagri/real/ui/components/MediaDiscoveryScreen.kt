@@ -189,7 +189,7 @@ fun MediaDiscoveryScreen(
                     // One question at a time: 2 genres at most, then (optional) one theme and one feeling.
                     val genreOptions = DiscoveryFilter.entries.filter { it.genre }.map { StepOption(it.key, it.label) }
                     val themeGroups = DiscoveryFilter.entries.filter { it.themeGroup != null }.groupBy { it.themeGroup }
-                        .map { (name, options) -> name to options.map { StepOption(it.key, it.label) } }
+                        .map { (name, options) -> name?.let { t(it) } to options.map { StepOption(it.key, it.label) } }
                     val feelingOptions = DiscoveryFilter.entries.filter { !it.genre && it.themeGroup == null }.map { StepOption(it.key, it.label) }
                     DiscoveryStepper(
                         steps = listOf(
