@@ -1,5 +1,6 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.content.SharedPreferences
 import org.json.JSONArray
@@ -155,7 +156,7 @@ class CategoryRepository(private val preferences: SharedPreferences) {
             )
         }
         val raw = array.toString()
-        check(preferences.edit().putString(KEY_CATEGORIES, raw).commit()) { "Kategori kaydedilemedi" }
+        check(preferences.edit().putString(KEY_CATEGORIES, raw).commit()) { t("Kategori kaydedilemedi") }
         cachedRaw = raw
         cachedItems = items
     }
@@ -211,7 +212,7 @@ class CategoryRepository(private val preferences: SharedPreferences) {
             json.remove(category.name)
         }
         val newRaw = json.toString()
-        check(preferences.edit().putString(KEY_BUILTIN_CATEGORY_COLORS, newRaw).commit()) { "Kategori rengi kaydedilemedi" }
+        check(preferences.edit().putString(KEY_BUILTIN_CATEGORY_COLORS, newRaw).commit()) { t("Kategori rengi kaydedilemedi") }
         getBuiltInCategoryColors()
     }
 

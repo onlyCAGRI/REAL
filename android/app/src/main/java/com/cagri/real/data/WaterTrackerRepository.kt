@@ -1,5 +1,6 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.t
 import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -84,7 +85,7 @@ class WaterTrackerRepository(private val preferences: SharedPreferences) {
                 val goals = JSONObject().apply { updated.dailyGoals.forEach { (day, goal) -> put(day.toString(), goal) } }
                 val json = JSONObject().put("schemaVersion", 3).put("goalMl", updated.goalMl).put("dailyGoals", goals)
                     .put("entries", array).toString()
-                check(preferences.edit().putString(KEY, json).commit()) { "İçecek kaydı kaydedilemedi" }
+                check(preferences.edit().putString(KEY, json).commit()) { t("İçecek kaydı kaydedilemedi") }
     }
 
     private fun read(): WaterTrackerSnapshot {

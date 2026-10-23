@@ -1,5 +1,6 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.t
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -23,7 +24,7 @@ object AttachmentStorage {
     
     fun importUri(context: Context, uri: Uri, flags: Int, mimeHint: String? = null, forceImage: Boolean = false, maxCopyBytes: Long = MAX_COPY_BYTES, requireLocalCopy: Boolean = false): ReminderAttachment {
         require(maxCopyBytes in 1..MAX_COPY_BYTES)
-        require(uri.scheme == "content" && uri.authority != "${context.packageName}.attachments") { "Dosya bağlantısı desteklenmiyor" }
+        require(uri.scheme == "content" && uri.authority != "${context.packageName}.attachments") { t("Dosya bağlantısı desteklenmiyor") }
         val resolver = context.contentResolver
         var name: String? = null
         var size: Long? = null
@@ -48,12 +49,12 @@ object AttachmentStorage {
                 runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             }
             if (resolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }) {
-                resolver.openFileDescriptor(uri, "r")?.use { } ?: error("Dosya okunamadı")
+                resolver.openFileDescriptor(uri, "r")?.use { } ?: error(t("Dosya okunamadı"))
                 return ReminderAttachment(id, type = AttachmentType.FILE, uri = uri.toString(), mimeType = mime,
                     displayName = displayName, sizeBytes = size)
             }
         }
-        require(size == null || size!! <= maxCopyBytes) { "Kopyalanacak dosya en fazla ${maxCopyBytes / (1024 * 1024)} MB olabilir" }
+        require(size == null || size!! <= maxCopyBytes) { t("Kopyalanacak dosya en fazla {0} MB olabilir", maxCopyBytes / (1024 * 1024)) }
         val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
             ?: extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: if (image) "jpg" else "bin"
         var target = File(getAttachmentsDir(context), "att_$id.$ext")
@@ -68,18 +69,18 @@ object AttachmentStorage {
                         val count = input.read(buffer)
                         if (count < 0) break
                         copied += count
-                        require(copied <= maxCopyBytes) { "Kopyalanacak dosya en fazla ${maxCopyBytes / (1024 * 1024)} MB olabilir" }
+                        require(copied <= maxCopyBytes) { t("Kopyalanacak dosya en fazla {0} MB olabilir", maxCopyBytes / (1024 * 1024)) }
                         output.write(buffer, 0, count)
                     }
                     output.fd.sync()
                 }
-            } ?: error("Dosya okunamadı")
+            } ?: error(t("Dosya okunamadı"))
             var resultMime = mime
             var resultName = displayName
             if (forceImage) {
                 val result = com.cagri.real.storage.PhotoOptimizer.optimize(part, optimized)
                 if (result != null) {
-                    require(optimized.length() in 1..maxCopyBytes) { "Fotoğraf küçültülemedi." }
+                    require(optimized.length() in 1..maxCopyBytes) { t("Fotoğraf küçültülemedi.") }
                     check(part.delete())
                     check(optimized.renameTo(part))
                     target = File(target.parentFile, "att_$id.${result.extension}")
@@ -88,7 +89,7 @@ object AttachmentStorage {
                     copied = part.length()
                 }
             }
-            check(part.renameTo(target)) { "Dosya kaydedilemedi" }
+            check(part.renameTo(target)) { t("Dosya kaydedilemedi") }
             return ReminderAttachment(id, target.absolutePath, if (image) AttachmentType.IMAGE else AttachmentType.FILE,
                 mimeType = resultMime, displayName = resultName, sizeBytes = copied)
         } catch (e: Exception) {
@@ -144,8 +145,8 @@ object AttachmentStorage {
     
     fun open(context: Context, item: ReminderAttachment) {
         val uri = item.uri?.let(Uri::parse) ?: run {
-            require(isOwnedPath(getAttachmentsDir(context), item.localPath)) { "Dosya artık mevcut değil" }
-            check(File(item.localPath).isFile) { "Dosya artık mevcut değil" }
+            require(isOwnedPath(getAttachmentsDir(context), item.localPath)) { t("Dosya artık mevcut değil") }
+            check(File(item.localPath).isFile) { t("Dosya artık mevcut değil") }
             FileProvider.getUriForFile(context, "${context.packageName}.attachments", File(item.localPath))
         }
         openContentUri(context, uri, item.mimeType, item.displayName)

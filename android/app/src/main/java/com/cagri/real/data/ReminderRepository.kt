@@ -1,5 +1,6 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.content.SharedPreferences
 import com.cagri.real.ui.components.ReminderColorChoices
@@ -48,17 +49,17 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         val trimmedTitle = typedTitle.ifBlank {
             voiceRecordings.firstOrNull()?.let { voiceRecordingPresentationTitle(it.createdAt) }.orEmpty()
         }
-        require(trimmedTitle.isNotBlank()) { "Başlık boş olamaz" }
+        require(trimmedTitle.isNotBlank()) { t("Başlık boş olamaz") }
         val validItems = if (isChecklist) {
             checklistItems.filter { it.text.isNotBlank() }
         } else emptyList()
         if (isChecklist) {
-            require(validItems.isNotEmpty()) { "En az bir madde olmalı" }
+            require(validItems.isNotEmpty()) { t("En az bir madde olmalı") }
         }
         val now = System.currentTimeMillis()
         require(alertAt == null || alertAt > now)
         val previous = load()
-        val id = maxOf(now, (previous.maxOfOrNull { it.id } ?: 0L) + 1L)
+        val id = newCardId(previous, now)
         val normalizedItems = validItems.mapIndexed { index, item ->
             if (item.id > 0L) item.copy(text = item.text.trim())
             else ChecklistItem(id = now + index + 1L, text = item.text.trim(), completedAt = item.completedAt)
@@ -94,7 +95,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
     fun addDivider(categoryId: Long, title: String): ReminderItem = synchronized(mutationLock) {
         val now = System.currentTimeMillis()
         val previous = load()
-        val item = ReminderItem(id = maxOf(now, (previous.maxOfOrNull { it.id } ?: 0L) + 1L), text = title.trim().take(DIVIDER_TITLE_MAX),
+        val item = ReminderItem(id = newCardId(previous, now), text = title.trim().take(DIVIDER_TITLE_MAX),
             createdAt = now, customCategoryId = categoryId, sendImmediateNotification = false, isDivider = true)
         save(listOf(item) + previous)
         item
@@ -132,6 +133,12 @@ class ReminderRepository(private val preferences: SharedPreferences) {
             }
             reminder.copy(checklistItems = updatedItems, updatedAt = now)
         }
+    }
+
+    /** Yer aç: takes one photo / file / voice recording off a card (its local file is cleaned up as an orphan). */
+    fun removeFile(id: Long, fileId: String): List<ReminderItem> = update(id) { reminder ->
+        reminder.copy(attachments = reminder.attachments.filterNot { it.id == fileId },
+            voiceRecordings = reminder.voiceRecordings.filterNot { it.id == fileId })
     }
 
     fun toggleCompleted(id: Long): List<ReminderItem> = update(id) {
@@ -321,6 +328,16 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         )
     }
 
+    /** "Konuma varınca / ayrılınca hatırlat" set or cleared (null). */
+    fun setLocationTrigger(id: Long, trigger: LocationTrigger?): List<ReminderItem> = update(id) { item ->
+        item.copy(locationTrigger = trigger, updatedAt = System.currentTimeMillis())
+    }
+
+    /** Alarm on/off; only a card with a clock time can ring. */
+    fun setAlarm(id: Long, on: Boolean): List<ReminderItem> = update(id) { item ->
+        item.copy(isAlarm = on && item.alertAt != null, updatedAt = System.currentTimeMillis())
+    }
+
     /** Early warning and end ("Bitiş"). The end is kept only when it is after the start. */
     fun setTiming(id: Long, earlyAlertMinutes: Int?, endAt: Long?): List<ReminderItem> = update(id) { item ->
         val start = item.alertAt
@@ -351,6 +368,7 @@ class ReminderRepository(private val preferences: SharedPreferences) {
                 // Removing the date removes its end and early warning; a new start keeps an end that is still after it.
                 endAt = if (alertAt != null) it.endAt?.takeIf { end -> end > alertAt } else null,
                 earlyAlertMinutes = if (alertAt != null) it.earlyAlertMinutes else null,
+                isAlarm = alertAt != null && it.isAlarm,
                 updatedAt = System.currentTimeMillis()
             )
             // Deleted occurrences survive unless the set of occurrence days actually changed.
@@ -676,10 +694,10 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         voiceRecordings: List<ReminderVoiceRecording> = emptyList(), musicBlocks: List<MusicBlock> = emptyList()
     ): ReminderItem =
         synchronized(mutationLock) {
-            val current = load().firstOrNull { it.id == id } ?: error("Hatırlatıcı artık mevcut değil")
+            val current = load().firstOrNull { it.id == id } ?: error(t("Hatırlatıcı artık mevcut değil"))
             val merged = (current.attachments + Companion.limitPhotos(attachments, current.attachments.count { it.type == AttachmentType.IMAGE }))
                 .distinctBy { it.id }
-            require(merged.count { it.type == AttachmentType.IMAGE } <= 3) { "Bir hatırlatıcıya en fazla 3 fotoğraf eklenebilir" }
+            require(merged.count { it.type == AttachmentType.IMAGE } <= 3) { t("Bir hatırlatıcıya en fazla 3 fotoğraf eklenebilir") }
             val updated = current.copy(attachments = merged,
                 referenceUrl = referenceUrl ?: current.referenceUrl,
                 voiceRecordings = (current.voiceRecordings + voiceRecordings).distinctBy { it.id },
@@ -725,11 +743,19 @@ class ReminderRepository(private val preferences: SharedPreferences) {
     private fun update(id: Long, change: (ReminderItem) -> ReminderItem): List<ReminderItem> =
         synchronized(mutationLock) { load().map { if (it.id == id) change(it) else it }.also(::save) }
 
+    /** After every card here, and never the id of a deleted card: the account keeps its deletion under that id, so a new
+     *  card reusing it would arrive as "Hesapta silinmiş" (ids run ahead of the clock once one card is far ahead). */
+    private fun newCardId(previous: List<ReminderItem>, now: Long): Long {
+        var id = maxOf(now, (previous.maxOfOrNull { it.id } ?: 0L) + 1L)
+        while (com.cagri.real.platform.android.sync.SyncLocal.cardKeyUsed(id)) id++
+        return id
+    }
+
     private fun save(items: List<ReminderItem>) {
         // Another repository instance or restore may have changed storage since this cache was filled.
         if (cachedRaw != null && items == cachedItems && preferences.getString(KEY_REMINDERS, null) == cachedRaw) return
         val raw = ReminderJson.encode(items)
-        check(preferences.edit().putString(KEY_REMINDERS, raw).commit()) { "Not kaydedilemedi" }
+        check(preferences.edit().putString(KEY_REMINDERS, raw).commit()) { t("Not kaydedilemedi") }
         cachedRaw = raw
         cachedItems = items.toList()
     }

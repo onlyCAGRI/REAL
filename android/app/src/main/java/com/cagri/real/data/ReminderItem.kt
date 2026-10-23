@@ -1,5 +1,7 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.t
+
 enum class AttachmentType { IMAGE, FILE, TEXT_SNIPPET }
 enum class SnippetSource(val label: String) {
     WHATSAPP_TEXT("WhatsApp"), EMAIL_TEXT("E-posta"), PLAIN_TEXT("Not")
@@ -106,6 +108,10 @@ data class ReminderItem(
     val endAt: Long? = null,
     /** Early warning ("Erken uyarı"): a heads-up this many minutes before [alertAt]. Null = none. */
     val earlyAlertMinutes: Int? = null,
+    /** Alarm: at [alertAt] the card rings full screen until it is slid away (or snoozed), instead of a plain notification. */
+    val isAlarm: Boolean = false,
+    /** "Konuma varınca / ayrılınca hatırlat": one-shot, cleared when it fires. */
+    val locationTrigger: LocationTrigger? = null,
     /**
      * Ayraç: not a card but a divider line in its category's list, [text] being its title (may be empty). It sits at
      * its [createdAt] among the cards and is left out of every other list, count, alert and share.
@@ -288,7 +294,7 @@ fun buildReminderShareText(reminder: ReminderItem, selectedCardIds: Set<String>)
         val parts = buildList {
             card.title.trim().takeIf { it.isNotBlank() }?.let(::add)
             card.body.trim().takeIf { it.isNotBlank() }?.let(::add)
-            if (isEmpty() && !card.imageUri.isNullOrBlank()) add("[Görsel kart]")
+            if (isEmpty() && !card.imageUri.isNullOrBlank()) add(t("[Görsel kart]"))
         }
         parts.joinToString("\n")
     }.filter { it.isNotBlank() }

@@ -1,5 +1,6 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.t
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -45,7 +46,7 @@ fun voiceRecordingPresentationTitle(createdAt: Long): String {
     val time = Instant.ofEpochMilli(createdAt)
         .atZone(ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("HH:mm"))
-    return "Ses kaydı · $time"
+    return t("Ses kaydı · {0}", time)
 }
 
 fun formatVoiceDuration(durationMillis: Long): String {

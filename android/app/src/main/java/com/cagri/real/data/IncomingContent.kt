@@ -1,5 +1,6 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.t
 import android.content.Intent
 import android.net.Uri
 import org.json.JSONObject
@@ -50,7 +51,7 @@ object IncomingContentParser {
     fun text(text: String?, subject: String? = null): IncomingContent {
         val value = text?.trim().orEmpty()
         if (value.isEmpty()) return IncomingContent()
-        require(value.length <= MAX_TEXT_CHARS) { "Metin çok uzun (en fazla 100.000 karakter)" }
+        require(value.length <= MAX_TEXT_CHARS) { t("Metin çok uzun (en fazla 100.000 karakter)") }
         ShareParser.parseUrlOnly(value)?.let { return IncomingContent(referenceUrl = it.url) }
         return IncomingContent(attachments = listOf(ReminderAttachment(
             id = UUID.randomUUID().toString(), type = AttachmentType.TEXT_SNIPPET,
@@ -70,7 +71,7 @@ object IncomingContentParser {
         val value = text?.trim().orEmpty()
         val cleanSubject = subject?.trim()?.replace(Regex("\\s+"), " ")?.takeIf { it.isNotBlank() }?.take(200)
         if (value.isEmpty()) return IncomingContent(suggestedTitle = cleanSubject)
-        require(value.length <= MAX_TEXT_CHARS) { "Metin çok uzun (en fazla 100.000 karakter)" }
+        require(value.length <= MAX_TEXT_CHARS) { t("Metin çok uzun (en fazla 100.000 karakter)") }
         ShareParser.parseUrlOnly(value)?.let { return IncomingContent(referenceUrl = it.url, suggestedTitle = cleanSubject) }
         val links = URL_REGEX.findAll(value).map { it.value.trimEnd('.', ',', ')', '!', '?', ';', ':', '»', '"', '\'') }.distinct().toList()
         val link = links.singleOrNull()?.takeIf { ShareParser.parseUrlOnly(it) != null }
@@ -96,13 +97,13 @@ object IncomingContentParser {
             intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let(uris::addAll)
         } else intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let(uris::add)
         intent.clipData?.let { clip ->
-            require(clip.itemCount <= MAX_STREAMS) { "Bir seferde en fazla 20 dosya paylaşabilirsin" }
+            require(clip.itemCount <= MAX_STREAMS) { t("Bir seferde en fazla 20 dosya paylaşabilirsin") }
             for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let(uris::add)
         }
         // Another app could hand REAL a link to REAL's own private files; those are left out.
         val result = uris.distinct().filterNot { it.authority?.startsWith(com.cagri.real.BuildConfig.APPLICATION_ID) == true }
-        require(result.size <= MAX_STREAMS) { "Bir seferde en fazla 20 dosya paylaşabilirsin" }
-        require(result.all { it.scheme == "content" }) { "Yalnızca güvenli içerik bağlantıları desteklenir" }
+        require(result.size <= MAX_STREAMS) { t("Bir seferde en fazla 20 dosya paylaşabilirsin") }
+        require(result.all { it.scheme == "content" }) { t("Yalnızca güvenli içerik bağlantıları desteklenir") }
         return result
     }
 }

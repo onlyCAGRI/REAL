@@ -1,5 +1,8 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.I18n
+import com.cagri.real.i18n.t
+
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -9,43 +12,43 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 fun RecurrenceRule.descriptionFor(alertTimestamp: Long?, zone: ZoneId = ZoneId.systemDefault()): String {
-    if (alertTimestamp == null) return "Yok"
+    if (alertTimestamp == null) return t("Yok")
     val date = Instant.ofEpochMilli(alertTimestamp).atZone(zone).toLocalDate()
-    val tr = Locale.forLanguageTag("tr-TR")
+    val tr = I18n.locale
     return when (this) {
-        RecurrenceRule.NONE -> "Yok"
-        RecurrenceRule.DAILY -> "Her gün"
+        RecurrenceRule.NONE -> t("Yok")
+        RecurrenceRule.DAILY -> t("Her gün")
         RecurrenceRule.WEEKLY -> {
             val dayName = when (date.dayOfWeek) {
-                DayOfWeek.MONDAY -> "Pazartesi"
-                DayOfWeek.TUESDAY -> "Salı"
-                DayOfWeek.WEDNESDAY -> "Çarşamba"
-                DayOfWeek.THURSDAY -> "Perşembe"
-                DayOfWeek.FRIDAY -> "Cuma"
-                DayOfWeek.SATURDAY -> "Cumartesi"
-                DayOfWeek.SUNDAY -> "Pazar"
+                DayOfWeek.MONDAY -> t("Pazartesi")
+                DayOfWeek.TUESDAY -> t("Salı")
+                DayOfWeek.WEDNESDAY -> t("Çarşamba")
+                DayOfWeek.THURSDAY -> t("Perşembe")
+                DayOfWeek.FRIDAY -> t("Cuma")
+                DayOfWeek.SATURDAY -> t("Cumartesi")
+                DayOfWeek.SUNDAY -> t("Pazar")
                 else -> date.format(DateTimeFormatter.ofPattern("EEEE", tr))
             }
-            "Her $dayName"
+            t("Her {0}", dayName)
         }
-        RecurrenceRule.MONTHLY -> "Her ayın ${date.dayOfMonth}'i"
+        RecurrenceRule.MONTHLY -> t("Her ayın {0}'i", date.dayOfMonth)
         RecurrenceRule.YEARLY -> {
             val monthName = when (date.monthValue) {
-                1 -> "Ocak"
-                2 -> "Şubat"
-                3 -> "Mart"
-                4 -> "Nisan"
-                5 -> "Mayıs"
-                6 -> "Haziran"
-                7 -> "Temmuz"
-                8 -> "Ağustos"
-                9 -> "Eylül"
-                10 -> "Ekim"
-                11 -> "Kasım"
-                12 -> "Aralık"
+                1 -> t("Ocak")
+                2 -> t("Şubat")
+                3 -> t("Mart")
+                4 -> t("Nisan")
+                5 -> t("Mayıs")
+                6 -> t("Haziran")
+                7 -> t("Temmuz")
+                8 -> t("Ağustos")
+                9 -> t("Eylül")
+                10 -> t("Ekim")
+                11 -> t("Kasım")
+                12 -> t("Aralık")
                 else -> date.format(DateTimeFormatter.ofPattern("MMMM", tr))
             }
-            "Her yıl ${date.dayOfMonth} $monthName"
+            t("Her yıl {0} {1}", date.dayOfMonth, monthName)
         }
     }
 }
@@ -55,48 +58,38 @@ fun RecurrenceRule.repeatSummary(alertTimestamp: Long?, zone: ZoneId = ZoneId.sy
     val date = Instant.ofEpochMilli(alertTimestamp).atZone(zone).toLocalDate()
     return when (this) {
         RecurrenceRule.NONE -> null
-        RecurrenceRule.DAILY -> "Her gün tekrarlanacak"
+        RecurrenceRule.DAILY -> t("Her gün tekrarlanacak")
         RecurrenceRule.WEEKLY -> {
             val dayName = when (date.dayOfWeek) {
-                DayOfWeek.MONDAY -> "Pazartesi"
-                DayOfWeek.TUESDAY -> "Salı"
-                DayOfWeek.WEDNESDAY -> "Çarşamba"
-                DayOfWeek.THURSDAY -> "Perşembe"
-                DayOfWeek.FRIDAY -> "Cuma"
-                DayOfWeek.SATURDAY -> "Cumartesi"
-                DayOfWeek.SUNDAY -> "Pazar"
+                DayOfWeek.MONDAY -> t("Pazartesi")
+                DayOfWeek.TUESDAY -> t("Salı")
+                DayOfWeek.WEDNESDAY -> t("Çarşamba")
+                DayOfWeek.THURSDAY -> t("Perşembe")
+                DayOfWeek.FRIDAY -> t("Cuma")
+                DayOfWeek.SATURDAY -> t("Cumartesi")
+                DayOfWeek.SUNDAY -> t("Pazar")
                 else -> date.dayOfWeek.name
             }
-            "Her $dayName tekrarlanacak"
+            t("Her {0} tekrarlanacak", dayName)
         }
-        RecurrenceRule.MONTHLY -> {
-            val suffix = when (date.dayOfMonth) {
-                1, 5, 8, 11, 15, 18, 21, 25, 28, 31 -> "'i"
-                2, 7, 12, 17, 20, 22, 27 -> "'si"
-                3, 4, 13, 14, 23, 24 -> "'ü"
-                9, 10, 19, 29, 30 -> "'u"
-                6, 16, 26 -> "'sı"
-                else -> "'i"
-            }
-            "Her ayın ${date.dayOfMonth}$suffix tekrarlanacak"
-        }
+        RecurrenceRule.MONTHLY -> t("Her ay {0}. gün tekrarlanacak", date.dayOfMonth)
         RecurrenceRule.YEARLY -> {
             val monthName = when (date.monthValue) {
-                1 -> "Ocak"
-                2 -> "Şubat"
-                3 -> "Mart"
-                4 -> "Nisan"
-                5 -> "Mayıs"
-                6 -> "Haziran"
-                7 -> "Temmuz"
-                8 -> "Ağustos"
-                9 -> "Eylül"
-                10 -> "Ekim"
-                11 -> "Kasım"
-                12 -> "Aralık"
+                1 -> t("Ocak")
+                2 -> t("Şubat")
+                3 -> t("Mart")
+                4 -> t("Nisan")
+                5 -> t("Mayıs")
+                6 -> t("Haziran")
+                7 -> t("Temmuz")
+                8 -> t("Ağustos")
+                9 -> t("Eylül")
+                10 -> t("Ekim")
+                11 -> t("Kasım")
+                12 -> t("Aralık")
                 else -> ""
             }
-            "Her yıl ${date.dayOfMonth} $monthName tekrarlanacak"
+            t("Her yıl {0} {1} tekrarlanacak", date.dayOfMonth, monthName)
         }
     }
 }
@@ -248,13 +241,13 @@ fun occurrenceEpochDay(millis: Long, zone: ZoneId = ZoneId.systemDefault()): Lon
     Instant.ofEpochMilli(millis).atZone(zone).toLocalDate().toEpochDay()
 
 private fun turkishDayShort(day: DayOfWeek): String = when (day) {
-    DayOfWeek.MONDAY -> "Pzt"
-    DayOfWeek.TUESDAY -> "Sal"
-    DayOfWeek.WEDNESDAY -> "Çar"
-    DayOfWeek.THURSDAY -> "Per"
-    DayOfWeek.FRIDAY -> "Cum"
-    DayOfWeek.SATURDAY -> "Cmt"
-    DayOfWeek.SUNDAY -> "Paz"
+    DayOfWeek.MONDAY -> t("Pzt")
+    DayOfWeek.TUESDAY -> t("Sal")
+    DayOfWeek.WEDNESDAY -> t("Çar")
+    DayOfWeek.THURSDAY -> t("Per")
+    DayOfWeek.FRIDAY -> t("Cum")
+    DayOfWeek.SATURDAY -> t("Cmt")
+    DayOfWeek.SUNDAY -> t("Paz")
 }
 
 private val TURKISH_MONTHS = listOf(
@@ -267,11 +260,11 @@ fun ReminderItem.patternLabel(): String? {
     if (repeatRule == RecurrenceRule.NONE) return null
     val hasDays = repeatWeekdaysMask and 0x7F != 0
     if (!hasDays && repeatUntilEpochDay == null) return null
-    val days = if (hasDays) "Her " + maskToWeekdays(repeatWeekdaysMask).joinToString(", ") { turkishDayShort(it) }
+    val days = if (hasDays) t("Her {0}", maskToWeekdays(repeatWeekdaysMask).joinToString(", ") { turkishDayShort(it) })
     else repeatRule.descriptionFor(anchorAlertAt ?: alertAt)
     val until = repeatUntilEpochDay?.let {
         val d = LocalDate.ofEpochDay(it)
-        " · ${d.dayOfMonth} ${TURKISH_MONTHS[d.monthValue - 1]}'e kadar"
+        t(" · {0} {1}'e kadar", d.dayOfMonth, t(TURKISH_MONTHS[d.monthValue - 1]))
     }.orEmpty()
     return days + until
 }

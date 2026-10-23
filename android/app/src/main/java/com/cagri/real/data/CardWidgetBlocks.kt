@@ -1,5 +1,6 @@
 package com.cagri.real.data
 
+import com.cagri.real.i18n.t
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +31,7 @@ fun ReminderAttachment.isCounterBlock(): Boolean = type == AttachmentType.TEXT_S
 fun ReminderAttachment.isMarketBlock(): Boolean = type == AttachmentType.TEXT_SNIPPET && sourceTitle == REAL_MARKET_SOURCE
 
 fun ReminderAttachment.counterConfig(): CounterConfig = CounterConfig(
-    title = displayName?.takeIf { it.isNotBlank() } ?: "Sayaç",
+    title = displayName?.takeIf { it.isNotBlank() } ?: t("Sayaç"),
     value = text?.trim()?.toLongOrNull() ?: 0L,
     steps = normalizedCounterSteps(mimeType?.removePrefix(COUNTER_MIME_PREFIX)?.split(',')?.mapNotNull { it.trim().toIntOrNull() })
 )

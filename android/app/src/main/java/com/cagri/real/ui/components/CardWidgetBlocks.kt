@@ -259,7 +259,7 @@ fun MarketBlockView(
             ) {
                 Column {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(asset.label, color = WidgetSoft, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                        Text(t(asset.label), color = WidgetSoft, fontSize = 14.sp, fontWeight = FontWeight.Medium,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         if (change != null) {
                             Text(
