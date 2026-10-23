@@ -2,9 +2,11 @@
 
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import com.cagri.real.contextcards.accent
 
 import com.cagri.real.ui.components.liquidChrome
+import com.cagri.real.ui.components.label
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -257,11 +259,11 @@ private fun categoryHeaderDetail(items: List<ReminderItem>, today: LocalDate): P
         r.id >= 0 && ((r.alertAt != null && r.alertAt < now && r.notifiedAlertAt == r.alertAt) ||
             (r.alertAt == null && r.plannedDateEpochDay != null && r.plannedDateEpochDay < todayDay && r.quick24HourUntilAt == null))
     }
-    if (overdue > 0) return "$overdue gecikmiş" to true
+    if (overdue > 0) return t("{0} gecikmiş", overdue) to true
     fun day(r: ReminderItem): Long? = r.alertAt?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate().toEpochDay() }
         ?: r.plannedDateEpochDay
     val todayCount = open.count { day(it) == todayDay }
-    return if (todayCount > 0) "$todayCount tanesi bugün" to false else null
+    return if (todayCount > 0) t("{0} tanesi bugün", todayCount) to false else null
 }
 
 private fun ReminderItem.isStandaloneJournal(): Boolean =
@@ -789,7 +791,7 @@ fun ReminderScreen(
                                     alertAt = draftAlertAt, repeatRule = draftRepeatRule,
                                     onAlertChange = { at, rule ->
                                         draftAlertAt = at; draftRepeatRule = rule
-                                        if (at == null) ComposerTimingDraft.clear()
+                                        if (at == null) ComposerTimingDraft.clearTiming()
                                     },
                                     exactAlarmsAllowed = exactAlarmsAllowed, onRequestExactAlarms = onRequestExactAlarms,
                                     notificationsAllowed = notificationsAllowed,
@@ -1036,6 +1038,14 @@ private fun ReminderListScreen(
     var voiceCategoryExplicit by composerState.voiceCategoryExplicit
     var draftCategoryId by composerState.draftCategoryId
     var showCategoryPicker by rememberSaveable { mutableStateOf(false) }
+    var showComposerLocation by remember { mutableStateOf(false) }
+    var showAlarmPermission by remember { mutableStateOf(false) }
+    var showOverPhoneAsk by remember { mutableStateOf(false) }
+    // Composer pin: plain place or "Konuma varınca hatırlat".
+    var showLocationChoice by remember { mutableStateOf(false) }
+    var locationPickForTrigger by remember { mutableStateOf(false) }
+    /** A place reminder is waiting, so location is being watched: the pin shows a small dot. */
+    val locationWatching = remember(reminders) { com.cagri.real.notifications.LocationReminders.active(reminders).isNotEmpty() }
     var showBulkCategoryPicker by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by composerState.showDatePicker
     var showNotificationPermissionSheet by rememberSaveable { mutableStateOf(false) }
@@ -1311,7 +1321,7 @@ private fun ReminderListScreen(
         checkScope.launch {
             val others = runCatching { com.cagri.real.sharedcategories.SharedCategorySync.members(shared) }.getOrDefault(emptyList())
                 .filter { it.uid != me }.map { com.cagri.real.ui.components.CheckTarget(it.uid, it.name) }
-            checkTargets = listOf(self) + others + if (others.size > 1) listOf(com.cagri.real.ui.components.CheckTarget(com.cagri.real.data.CheckRequest.EVERYONE, "Herkes")) else emptyList()
+            checkTargets = listOf(self) + others + if (others.size > 1) listOf(com.cagri.real.ui.components.CheckTarget(com.cagri.real.data.CheckRequest.EVERYONE, t("Herkes"))) else emptyList()
         }
     }
     checkTargets?.let { targets ->
@@ -1333,7 +1343,9 @@ private fun ReminderListScreen(
         customCategories, reminders, draftAttachments, draftReferenceUrl, reduceAnimations)
     val composerCallbacks = ReminderComposerCallbacks(onAddReminder, onDraftChange, onAlertChange,
         onDraftAttachmentsChange, onDraftReferenceUrlChange, onShareDraftChange, onSetRepeatPattern,
-        com.cagri.real.ui.components.LocalSetReminderTiming.current)
+        com.cagri.real.ui.components.LocalSetReminderTiming.current,
+        com.cagri.real.ui.components.LocalSetReminderAlarm.current,
+        com.cagri.real.ui.components.LocalSetReminderLocationTrigger.current)
     val latestVoiceReminders by rememberUpdatedState(reminders)
     val composerServices = ReminderComposerServices(context, view, focusManager, keyboard, scope,
         plannerRepository, entryTracker, whatsAppRecipientRepo, { latestVoiceReminders })
@@ -1833,7 +1845,7 @@ private fun ReminderListScreen(
                                 keyboard?.hide()
                                 showAccountMenu = true
                             },
-                            modifier = Modifier.then(if (designStyle == DesignStyle.LiquidGlass) Modifier.pressScale(profileInteraction, reduceAnimations = reduceAnimations, targetScale = 0.97f).liquidChrome() else Modifier).semantics { contentDescription = "Hesap menüsünü aç" }
+                            modifier = Modifier.then(if (designStyle == DesignStyle.LiquidGlass) Modifier.pressScale(profileInteraction, reduceAnimations = reduceAnimations, targetScale = 0.97f).liquidChrome() else Modifier).semantics { contentDescription = t("Hesap menüsünü aç") }
                         ) {
                             ProfileAvatar(
                                 modifier = Modifier.size(48.dp),
@@ -1854,9 +1866,9 @@ private fun ReminderListScreen(
                         }
                         val saveCategorySort: (ReminderSortOrder) -> Unit = { next ->
                             sortHint = (sortHint?.first ?: 0) + 1 to when (next) {
-                                ReminderSortOrder.OLDEST_FIRST -> "Son eklenen altta"
-                                ReminderSortOrder.NEAREST_DATE, ReminderSortOrder.REMINDER_TIME -> "Tarihi en yakın üstte"
-                                else -> "Son eklenen üstte"
+                                ReminderSortOrder.OLDEST_FIRST -> t("Son eklenen altta")
+                                ReminderSortOrder.NEAREST_DATE, ReminderSortOrder.REMINDER_TIME -> t("Tarihi en yakın üstte")
+                                else -> t("Son eklenen üstte")
                             }
                             categorySortOrder = next
                             uiPreferences.edit().putString(
@@ -1894,7 +1906,7 @@ private fun ReminderListScreen(
                             },
                             onPeople = customCategory?.let { { showPeopleSheet = true } },
                             onAddDivider = customCategory?.takeIf { !it.isReadOnlyShared }?.let { { dividerAdding = true } },
-                            editLabel = if (customCategory != null) "Kategoriyi düzenle" else "Kategori rengini düzenle",
+                            editLabel = if (customCategory != null) t("Kategoriyi düzenle") else t("Kategori rengini düzenle"),
                             onGoals = customCategory?.let { c -> { plannerGoalCategoryId = c.id; showPlanner = true } },
                             sharedTransitionScope = if (categorySharedTransitionsEnabled) sharedTransitionScope else null,
                             animatedVisibilityScope = if (categorySharedTransitionsEnabled) animatedVisibilityScope else null,
@@ -2024,9 +2036,9 @@ private fun ReminderListScreen(
                             onSortSelected = { picked ->
                                 val next = if (picked == ReminderSortOrder.NEAREST_DATE) ReminderSortOrder.REMINDER_TIME else picked
                                 homeSortHint = (homeSortHint?.first ?: 0) + 1 to when (next) {
-                                    ReminderSortOrder.OLDEST_FIRST -> "Son eklenen altta"
-                                    ReminderSortOrder.REMINDER_TIME -> "Tarihi en yakın üstte"
-                                    else -> "Son eklenen üstte"
+                                    ReminderSortOrder.OLDEST_FIRST -> t("Son eklenen altta")
+                                    ReminderSortOrder.REMINDER_TIME -> t("Tarihi en yakın üstte")
+                                    else -> t("Son eklenen üstte")
                                 }
                                 sortOrder = next
                                 uiPreferences.edit().putString(
@@ -2071,12 +2083,12 @@ private fun ReminderListScreen(
                 item(key = "empty") {
                     Box(Modifier.fillMaxWidth().height(104.dp).padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
                         val emptyMsg = when {
-                            category == ReminderCategory.JournalEntries -> "Henüz günlük eklenmemiş"
-                            searchingHome -> "Bununla eşleşen kart yok"
-                            (category != null || customCategory != null) && categoryColorFilter != null -> "Bu renkte hatırlatıcı yok"
-                            customCategory != null -> "Bu kategoride henüz hatırlatıcı yok"
+                            category == ReminderCategory.JournalEntries -> t("Henüz günlük eklenmemiş")
+                            searchingHome -> t("Bununla eşleşen kart yok")
+                            (category != null || customCategory != null) && categoryColorFilter != null -> t("Bu renkte hatırlatıcı yok")
+                            customCategory != null -> t("Bu kategoride henüz hatırlatıcı yok")
                             category != null -> category.emptyMessage
-                            else -> "Henüz hatırlatıcı yok"
+                            else -> t("Henüz hatırlatıcı yok")
                         }
                         Text(emptyMsg, color = Color(0xFF888890), fontSize = 14.sp)
                     }
@@ -2134,6 +2146,7 @@ private fun ReminderListScreen(
                     item(key = "context_card") {
                         Box(if (reduceAnimations) Modifier else Modifier.animateItem()) { renderContextCard() }
                     }
+                    item(key = "guest_backup_nudge") { com.cagri.real.ui.auth.GuestBackupNudge(reminders.size) }
                 }
                 // Ayraçlar sit between the cards at the moment they were added (category screens, added-time orders).
                 val slots = if (customCategory != null && !searching) dividerSlots(active, dividers, effectiveSortOrder) else emptyMap()
@@ -2195,7 +2208,7 @@ private fun ReminderListScreen(
                             category != ReminderCategory.Today -> ({ scope.launch { onMoveTo24Hour(reminder.id) } })
                             else -> null
                         },
-                        swipeRightLabel = if (!plainHomeCards) "Move 24 hour" else if (reminder.isCompleted) "Geri aç" else "Tamamla",
+                        swipeRightLabel = if (!plainHomeCards) "Move 24 hour" else if (reminder.isCompleted) t("Geri aç") else t("Tamamla"),
                         // A completed card leaves the list; a repeating one stays (it moves to its next time).
                         swipeRightKeepsCard = !plainHomeCards || reminder.hasRepeat,
                         plainStyle = plainHomeCards,
@@ -2214,7 +2227,7 @@ private fun ReminderListScreen(
             }
             if (completed.isNotEmpty() && category != ReminderCategory.JournalEntries) {
                 item(key = "completed_heading") {
-                    Spacer(Modifier.height(18.dp)); SectionTitle("Tamamlandı")
+                    Spacer(Modifier.height(18.dp)); SectionTitle(t("Tamamlandı"))
                 }
                 if (limitCompleted) {
                     item(key = "home_completed_preview_container") {
@@ -2256,7 +2269,7 @@ private fun ReminderListScreen(
                                             // Sade kartlar: no circle here either; a right swipe undoes the completion.
                                             plainStyle = plainHomeCards,
                                             onSwipeRightTo24Hour = if (plainHomeCards && !underGlass) ({ onToggleCompleted(reminder.id) }) else null,
-                                            swipeRightLabel = "Geri al",
+                                            swipeRightLabel = t("Geri al"),
                                             swipeRightKeepsCard = false,
                                             onLongClick = {
                                                 if (!isCategorySelectionMode) {
@@ -2277,7 +2290,7 @@ private fun ReminderListScreen(
                                             // Swallow taps on the faded card; only the pill acts.
                                             Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { } })
                                             Text(
-                                                "Daha fazla",
+                                                t("Daha fazla"),
                                                 color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
                                                 // In the middle of the card (its 8 dp bottom gap left out).
                                                 modifier = Modifier.align(Alignment.Center).padding(bottom = 8.dp)
@@ -2316,7 +2329,7 @@ private fun ReminderListScreen(
                             showCategoryStripes = false,
                             plainStyle = plainHomeCards,
                             onSwipeRightTo24Hour = if (plainHomeCards) ({ onToggleCompleted(reminder.id) }) else null,
-                            swipeRightLabel = "Geri al",
+                            swipeRightLabel = t("Geri al"),
                             swipeRightKeepsCard = false,
                             onLongClick = {
                                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
@@ -2419,14 +2432,14 @@ private fun ReminderListScreen(
                             role = Role.Button,
                             onClick = { selectedIds = emptySet() }
                         )
-                        .semantics { contentDescription = "Seçimi kapat" },
+                        .semantics { contentDescription = t("Seçimi kapat") },
                     contentAlignment = Alignment.Center
                 ) {
                     ActionIcon(ActionGlyph.Close, Modifier.size(18.dp), Color(0xFFF3F3F5))
                 }
 
                 Text(
-                    text = "${selectedIds.size} seçildi",
+                    text = t("{0} seçildi", selectedIds.size),
                     color = Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
@@ -2459,14 +2472,14 @@ private fun ReminderListScreen(
                                 showBulkCategoryPicker = true
                             }
                         )
-                        .semantics { contentDescription = "Kategoriye ekle" }
+                        .semantics { contentDescription = t("Kategoriye ekle") }
                         .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     ActionIcon(ActionGlyph.Category, Modifier.size(16.dp), Color(0xFF91B9FF))
                     Text(
-                        text = "Kategori",
+                        text = t("Kategori"),
                         color = Color(0xFF91B9FF),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
@@ -2674,7 +2687,9 @@ private fun ReminderListScreen(
                 }
             },
             sendImmediateNotification = sendImmediateNotification,
+            isAlarm = ComposerTimingDraft.alarm,
             onToggleImmediateNotification = {
+                // The bell is notification only; the alarm is picked in the date sheet (Saat pushed right).
                 if (!sendImmediateNotification) {
                     if (notificationsAllowed) {
                         sendImmediateNotification = true
@@ -2693,7 +2708,14 @@ private fun ReminderListScreen(
             isVoiceDraft = isVoiceDraft,
             voiceDurationMinutes = pendingVoiceDurationMinutes,
             voicePeople = pendingVoicePeople,
-            voiceLocationName = pendingVoiceLocation?.placeName,
+            voiceLocationName = ComposerTimingDraft.locationTrigger?.label() ?: pendingVoiceLocation?.placeName,
+            // The panel explains location once; with permission granted the pin goes straight to the map.
+            onPickLocation = {
+                voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
+                if (com.cagri.real.notifications.LocationReminders.hasLocation(context)) { locationPickForTrigger = true; showComposerLocation = true }
+                else showLocationChoice = true
+            },
+            locationWatching = locationWatching,
             isShareDraft = isShareDraft,
             isHomeReady = isHomeReadyForShimmer && category == null && customCategory == null && !isSettingsOpen,
             isLabsOpen = isLabsOpen,
@@ -2742,6 +2764,130 @@ private fun ReminderListScreen(
                     .padding(start = 16.dp, end = 16.dp).deferredBottomPadding { composerHeightState.value + bottomGapState.value + 16.dp }
             )
         }
+        // Alarm needs two system switches: full-screen alerts (Android 14+) and exact alarms.
+        com.cagri.real.ui.components.PermissionSheet(
+            visible = showAlarmPermission,
+            title = t("Alarm için izin ver"),
+            description = t("Alarmın kilit ekranında tam ekran açılıp tam saatinde çalabilmesi için REAL'e tam ekran bildirim ve alarm izni gerekiyor."),
+            onAllow = {
+                showAlarmPermission = false
+                if (!com.cagri.real.notifications.RealAlarm.canRingFullScreen(context)) com.cagri.real.notifications.RealAlarm.openFullScreenSettings(context)
+                else if (!exactAlarmsAllowed) onRequestExactAlarms()
+                // Waits underneath; it is there when the person comes back from the system page.
+                if (com.cagri.real.notifications.RealAlarm.shouldAskOverPhone(context)) showOverPhoneAsk = true
+            },
+            onLater = {
+                showAlarmPermission = false
+                if (com.cagri.real.notifications.RealAlarm.shouldAskOverPhone(context)) showOverPhoneAsk = true
+            },
+            reduceAnimations = reduceAnimations,
+            glyph = com.cagri.real.ui.components.PermissionGlyph.Bell
+        )
+        // Optional, asked once: full screen also while the phone is in use (otherwise Android shows a heads-up).
+        com.cagri.real.ui.components.PermissionSheet(
+            visible = showOverPhoneAsk && !showAlarmPermission,
+            title = t("Telefon açıkken de tam ekran?"),
+            description = t("Telefonu kullanırken Android alarmı üstte bildirim olarak gösterir. \"Diğer uygulamaların üzerinde göster\" iznini açarsan alarm her zaman tam ekran açılır. İstediğin zaman Ayarlar'dan değiştirebilirsin."),
+            onAllow = {
+                showOverPhoneAsk = false
+                com.cagri.real.notifications.RealAlarm.markOverPhoneAsked(context)
+                com.cagri.real.notifications.RealAlarm.openOverPhoneSettings(context)
+            },
+            onLater = {
+                showOverPhoneAsk = false
+                com.cagri.real.notifications.RealAlarm.markOverPhoneAsked(context)
+            },
+            reduceAnimations = reduceAnimations,
+            primaryLabel = t("İzni aç"),
+            secondaryLabel = t("Gerek yok"),
+            glyph = com.cagri.real.ui.components.PermissionGlyph.Bell
+        )
+        // Composer "Konum": the card detail's map picker; the pin rides on the draft until the card is saved.
+        // The pin opens a permission-style panel that also is the disclosure Google asks for. "Konuma varınca
+        // hatırlat" then goes straight to Android's own dialogs: precise/approximate + while using, then
+        // "all the time" so the reminder works with REAL closed.
+        fun openTriggerPicker() { locationPickForTrigger = true; showComposerLocation = true }
+        val backgroundLocationLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            if (!granted) android.widget.Toast.makeText(context, t("\"Her zaman izin ver\" seçilmezse hatırlatma REAL kapalıyken gelmez."), android.widget.Toast.LENGTH_LONG).show()
+            openTriggerPicker()
+        }
+        val locationLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+        ) { result ->
+            val precise = result[android.Manifest.permission.ACCESS_FINE_LOCATION] == true
+            val approximate = result[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            when {
+                precise && !com.cagri.real.notifications.LocationReminders.hasBackground(context) ->
+                    backgroundLocationLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                precise -> openTriggerPicker()
+                approximate -> android.widget.Toast.makeText(context, t("Konuma varınca hatırlatma için \"Tam konum\" gerekir."), android.widget.Toast.LENGTH_LONG).show()
+                // Denied twice before: Android answers "no" without showing its dialog, so only Settings is left.
+                (context as? android.app.Activity)?.let {
+                    !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(it, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                } == true -> {
+                    android.widget.Toast.makeText(context, t("Konum izni kapalı. Ayarlar > İzinler > Konum'dan açabilirsin."), android.widget.Toast.LENGTH_LONG).show()
+                    context.startActivity(android.content.Intent(
+                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:${context.packageName}")
+                    ))
+                }
+            }
+        }
+        com.cagri.real.ui.components.PermissionSheet(
+            visible = showLocationChoice,
+            title = t("Konum"),
+            description = t("Yeri karta ekleyebilir ya da o yere varınca (veya oradan ayrılınca) bir kere hatırlatılabilirsin. Hatırlatma için REAL konumunu yalnızca bekleyen bir konum hatırlatman varken kullanır; REAL kapalıyken de çalışması için \"Her zaman izin ver\"i seç. Hatırlatma gelince takip biter, konum kullanılırken konum düğmesinde küçük bir nokta görünür."),
+            // First choice: just add the place; reminding on arrival / departure is the second one.
+            onAllow = { showLocationChoice = false; locationPickForTrigger = false; showComposerLocation = true },
+            onLater = {
+                showLocationChoice = false
+                when {
+                    !com.cagri.real.notifications.LocationReminders.hasLocation(context) -> locationLauncher.launch(arrayOf(
+                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    ))
+                    !com.cagri.real.notifications.LocationReminders.hasBackground(context) ->
+                        backgroundLocationLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    else -> openTriggerPicker()
+                }
+            },
+            onDismiss = { showLocationChoice = false },
+            reduceAnimations = reduceAnimations,
+            primaryLabel = t("Konum ekle"),
+            secondaryLabel = t("Varınca / ayrılınca hatırlat"),
+            glyph = com.cagri.real.ui.components.PermissionGlyph.Pin
+        )
+        // The pin closed the keyboard; once the map is done the composer comes back up so the person keeps typing.
+        var refocusComposer by remember { mutableIntStateOf(0) }
+        LaunchedEffect(refocusComposer) {
+            if (refocusComposer == 0) return@LaunchedEffect
+            kotlinx.coroutines.delay(260)
+            runCatching { inputFocus.requestFocus() }
+            keyboard?.show()
+        }
+        com.cagri.real.ui.components.LocationPickerSheet(
+            visible = showComposerLocation,
+            initial = pendingVoiceLocation,
+            onSave = { place ->
+                showComposerLocation = false
+                pendingVoiceLocation = place
+                ComposerTimingDraft.locationTrigger = null
+                refocusComposer++
+            },
+            // "Varınca / Ayrılınca hatırlat" on the map itself, offered once location permission is there.
+            initialTrigger = ComposerTimingDraft.locationTrigger,
+            onRemind = if (locationPickForTrigger) { place, trigger ->
+                showComposerLocation = false
+                pendingVoiceLocation = place
+                ComposerTimingDraft.locationTrigger = trigger
+                refocusComposer++
+            } else null,
+            // The Google Maps share hand-off needs a saved card, so for a draft it only closes the picker.
+            onShareFromGoogleMaps = { showComposerLocation = false },
+            onCancel = { showComposerLocation = false; refocusComposer++ }
+        )
         CategorySelectionOverlay(
             visible = showCategoryPicker,
             modifier = Modifier.zIndex(20f),
@@ -2870,6 +3016,15 @@ private fun ReminderListScreen(
             initialEarlyAlertMinutes = ComposerTimingDraft.earlyAlertMinutes,
             initialEndAt = ComposerTimingDraft.endAt,
             onConfirmTiming = { early, end -> ComposerTimingDraft.earlyAlertMinutes = early; ComposerTimingDraft.endAt = end },
+            initialAlarm = ComposerTimingDraft.alarm,
+            onConfirmAlarm = { on ->
+                val turnedOn = on && !ComposerTimingDraft.alarm
+                ComposerTimingDraft.alarm = on
+                if (turnedOn) {
+                    if (!com.cagri.real.notifications.RealAlarm.canRingFullScreen(context) || !exactAlarmsAllowed) showAlarmPermission = true
+                    else if (com.cagri.real.notifications.RealAlarm.shouldAskOverPhone(context)) showOverPhoneAsk = true
+                }
+            },
             backdrop = scene, backdropPosition = { scenePosition },
             designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
@@ -3293,7 +3448,7 @@ private fun VoiceBulkConfirmChip(
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Uygula",
+                    t("Uygula"),
                     color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
                         .background(Color(0xFF3D8BFF), RoundedCornerShape(14.dp))
@@ -3301,7 +3456,7 @@ private fun VoiceBulkConfirmChip(
                         .padding(horizontal = 18.dp, vertical = 9.dp)
                 )
                 Text(
-                    "Vazgeç",
+                    t("Vazgeç"),
                     color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp,
                     modifier = Modifier
                         .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))

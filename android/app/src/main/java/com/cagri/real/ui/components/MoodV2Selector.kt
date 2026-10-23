@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.app.Activity
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -68,39 +69,40 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 internal data class MoodFamilyV2(
-    val title: String,
+    private val trTitle: String,
     val tint: Color,
     val defaultMood: JournalMood,
     val moods: List<JournalMood>
-)
-
-internal val MoodFamiliesV2 = listOf(
+) {
+    val title: String get() = t(trTitle)
+}
+internal val MoodFamiliesV2 get() = listOf(
     MoodFamilyV2(
-        title = "Kötü",
+        trTitle = t("Kötü"),
         tint = Color(0xFFF05B5B),
         defaultMood = JournalMood.BAD,
         moods = listOf(JournalMood.BAD, JournalMood.SAD, JournalMood.ANGRY)
     ),
     MoodFamilyV2(
-        title = "Zor",
+        trTitle = t("Zor"),
         tint = Color(0xFFF1A13D),
         defaultMood = JournalMood.HARD,
         moods = listOf(JournalMood.HARD, JournalMood.TIRED, JournalMood.STRESSED, JournalMood.LOW)
     ),
     MoodFamilyV2(
-        title = "Normal",
+        trTitle = t("Normal"),
         tint = Color(0xFFAEB8CC),
         defaultMood = JournalMood.NEUTRAL,
         moods = listOf(JournalMood.NEUTRAL, JournalMood.BORED)
     ),
     MoodFamilyV2(
-        title = "İyi",
+        trTitle = t("İyi"),
         tint = Color(0xFF55D3B4),
         defaultMood = JournalMood.GOOD,
         moods = listOf(JournalMood.GOOD, JournalMood.CALM)
     ),
     MoodFamilyV2(
-        title = "Çok iyi",
+        trTitle = t("Çok iyi"),
         tint = Color(0xFFB8E85C),
         defaultMood = JournalMood.VERY_GOOD,
         moods = listOf(JournalMood.VERY_GOOD, JournalMood.HAPPY, JournalMood.EXCITED)
@@ -112,119 +114,119 @@ internal data class MoodDescriptorOption(val key: String, val label: String)
 internal data class MoodFactorOption(val key: String, val label: String)
 internal data class MoodFactorGroup(val title: String, val options: List<MoodFactorOption>)
 
-internal val MoodDescriptorsV2: Map<Int, List<MoodDescriptorOption>> = mapOf(
+internal val MoodDescriptorsV2: Map<Int, List<MoodDescriptorOption>> get() = mapOf(
     0 to listOf(
-        MoodDescriptorOption("sad", "Üzgün"),
-        MoodDescriptorOption("angry", "Sinirli"),
-        MoodDescriptorOption("anxious", "Kaygılı"),
-        MoodDescriptorOption("scared", "Korkmuş"),
-        MoodDescriptorOption("overwhelmed", "Bunalmış"),
-        MoodDescriptorOption("ashamed", "Utanmış"),
-        MoodDescriptorOption("disgusted", "İğrenmiş"),
-        MoodDescriptorOption("frustrated", "Hayal kırıklığı"),
-        MoodDescriptorOption("lonely", "Yalnız"),
-        MoodDescriptorOption("hopeless", "Umutsuz"),
-        MoodDescriptorOption("guilty", "Suçlu"),
-        MoodDescriptorOption("drained", "Bitkin"),
-        MoodDescriptorOption("stressed", "Stresli"),
+        MoodDescriptorOption("sad", t("Üzgün")),
+        MoodDescriptorOption("angry", t("Sinirli")),
+        MoodDescriptorOption("anxious", t("Kaygılı")),
+        MoodDescriptorOption("scared", t("Korkmuş")),
+        MoodDescriptorOption("overwhelmed", t("Bunalmış")),
+        MoodDescriptorOption("ashamed", t("Utanmış")),
+        MoodDescriptorOption("disgusted", t("İğrenmiş")),
+        MoodDescriptorOption("frustrated", t("Hayal kırıklığı")),
+        MoodDescriptorOption("lonely", t("Yalnız")),
+        MoodDescriptorOption("hopeless", t("Umutsuz")),
+        MoodDescriptorOption("guilty", t("Suçlu")),
+        MoodDescriptorOption("drained", t("Bitkin")),
+        MoodDescriptorOption("stressed", t("Stresli")),
         MoodDescriptorOption("fuck_off", "F*ck off")
     ),
     1 to listOf(
-        MoodDescriptorOption("tired", "Yorgun"),
-        MoodDescriptorOption("stressed", "Stresli"),
-        MoodDescriptorOption("low", "Keyifsiz"),
-        MoodDescriptorOption("tense", "Gergin"),
-        MoodDescriptorOption("worried", "Endişeli"),
-        MoodDescriptorOption("pressured", "Baskı altında"),
-        MoodDescriptorOption("restless", "Huzursuz"),
-        MoodDescriptorOption("impatient", "Sabırsız"),
-        MoodDescriptorOption("distracted", "Dalgın"),
-        MoodDescriptorOption("overwhelmed", "Bunalmış"),
-        MoodDescriptorOption("anxious", "Kaygılı"),
-        MoodDescriptorOption("drained", "Bitkin"),
-        MoodDescriptorOption("sad", "Üzgün"),
-        MoodDescriptorOption("uncertain", "Kararsız")
+        MoodDescriptorOption("tired", t("Yorgun")),
+        MoodDescriptorOption("stressed", t("Stresli")),
+        MoodDescriptorOption("low", t("Keyifsiz")),
+        MoodDescriptorOption("tense", t("Gergin")),
+        MoodDescriptorOption("worried", t("Endişeli")),
+        MoodDescriptorOption("pressured", t("Baskı altında")),
+        MoodDescriptorOption("restless", t("Huzursuz")),
+        MoodDescriptorOption("impatient", t("Sabırsız")),
+        MoodDescriptorOption("distracted", t("Dalgın")),
+        MoodDescriptorOption("overwhelmed", t("Bunalmış")),
+        MoodDescriptorOption("anxious", t("Kaygılı")),
+        MoodDescriptorOption("drained", t("Bitkin")),
+        MoodDescriptorOption("sad", t("Üzgün")),
+        MoodDescriptorOption("uncertain", t("Kararsız"))
     ),
     2 to listOf(
-        MoodDescriptorOption("neutral", "Normal"),
-        MoodDescriptorOption("bored", "Sıkılmış"),
-        MoodDescriptorOption("balanced", "Dengeli"),
-        MoodDescriptorOption("blank", "Boş"),
-        MoodDescriptorOption("distracted", "Dalgın"),
-        MoodDescriptorOption("steady", "Sakin"),
-        MoodDescriptorOption("uncertain", "Kararsız"),
-        MoodDescriptorOption("tired", "Yorgun"),
-        MoodDescriptorOption("low", "Keyifsiz"),
-        MoodDescriptorOption("focused", "Odaklı"),
-        MoodDescriptorOption("content", "Memnun")
+        MoodDescriptorOption("neutral", t("Normal")),
+        MoodDescriptorOption("bored", t("Sıkılmış")),
+        MoodDescriptorOption("balanced", t("Dengeli")),
+        MoodDescriptorOption("blank", t("Boş")),
+        MoodDescriptorOption("distracted", t("Dalgın")),
+        MoodDescriptorOption("steady", t("Sakin")),
+        MoodDescriptorOption("uncertain", t("Kararsız")),
+        MoodDescriptorOption("tired", t("Yorgun")),
+        MoodDescriptorOption("low", t("Keyifsiz")),
+        MoodDescriptorOption("focused", t("Odaklı")),
+        MoodDescriptorOption("content", t("Memnun"))
     ),
     3 to listOf(
-        MoodDescriptorOption("calm", "Sakin"),
-        MoodDescriptorOption("relieved", "Rahatlamış"),
-        MoodDescriptorOption("hopeful", "Umutlu"),
-        MoodDescriptorOption("content", "Memnun"),
-        MoodDescriptorOption("focused", "Odaklı"),
-        MoodDescriptorOption("safe", "Güvende"),
-        MoodDescriptorOption("grateful", "Minnettar"),
-        MoodDescriptorOption("energized", "Enerjik"),
-        MoodDescriptorOption("happy", "Mutlu"),
-        MoodDescriptorOption("motivated", "Motive"),
-        MoodDescriptorOption("excited", "Heyecanlı"),
-        MoodDescriptorOption("balanced", "Dengeli")
+        MoodDescriptorOption("calm", t("Sakin")),
+        MoodDescriptorOption("relieved", t("Rahatlamış")),
+        MoodDescriptorOption("hopeful", t("Umutlu")),
+        MoodDescriptorOption("content", t("Memnun")),
+        MoodDescriptorOption("focused", t("Odaklı")),
+        MoodDescriptorOption("safe", t("Güvende")),
+        MoodDescriptorOption("grateful", t("Minnettar")),
+        MoodDescriptorOption("energized", t("Enerjik")),
+        MoodDescriptorOption("happy", t("Mutlu")),
+        MoodDescriptorOption("motivated", t("Motive")),
+        MoodDescriptorOption("excited", t("Heyecanlı")),
+        MoodDescriptorOption("balanced", t("Dengeli"))
     ),
     4 to listOf(
-        MoodDescriptorOption("happy", "Mutlu"),
-        MoodDescriptorOption("excited", "Heyecanlı"),
-        MoodDescriptorOption("joyful", "Neşeli"),
-        MoodDescriptorOption("proud", "Gururlu"),
-        MoodDescriptorOption("motivated", "Motive"),
-        MoodDescriptorOption("grateful", "Minnettar"),
-        MoodDescriptorOption("loved", "Sevgi dolu"),
-        MoodDescriptorOption("energetic", "Enerjik"),
-        MoodDescriptorOption("hopeful", "Umutlu"),
-        MoodDescriptorOption("relieved", "Rahatlamış")
+        MoodDescriptorOption("happy", t("Mutlu")),
+        MoodDescriptorOption("excited", t("Heyecanlı")),
+        MoodDescriptorOption("joyful", t("Neşeli")),
+        MoodDescriptorOption("proud", t("Gururlu")),
+        MoodDescriptorOption("motivated", t("Motive")),
+        MoodDescriptorOption("grateful", t("Minnettar")),
+        MoodDescriptorOption("loved", t("Sevgi dolu")),
+        MoodDescriptorOption("energetic", t("Enerjik")),
+        MoodDescriptorOption("hopeful", t("Umutlu")),
+        MoodDescriptorOption("relieved", t("Rahatlamış"))
     )
 )
 
-internal val MoodFactorGroupsV2 = listOf(
+internal val MoodFactorGroupsV2 get() = listOf(
     MoodFactorGroup(
-        "Kendim",
+        t("Kendim"),
         listOf(
-            MoodFactorOption("health", "Sağlık"),
-            MoodFactorOption("sleep", "Uyku"),
-            MoodFactorOption("fitness", "Spor"),
-            MoodFactorOption("self_care", "Öz bakım"),
-            MoodFactorOption("hobbies", "Hobiler"),
-            MoodFactorOption("goals", "Hedefler"),
-            MoodFactorOption("appearance", "Görünüş"),
-            MoodFactorOption("spirituality", "Maneviyat")
+            MoodFactorOption("health", t("Sağlık")),
+            MoodFactorOption("sleep", t("Uyku")),
+            MoodFactorOption("fitness", t("Spor")),
+            MoodFactorOption("self_care", t("Öz bakım")),
+            MoodFactorOption("hobbies", t("Hobiler")),
+            MoodFactorOption("goals", t("Hedefler")),
+            MoodFactorOption("appearance", t("Görünüş")),
+            MoodFactorOption("spirituality", t("Maneviyat"))
         )
     ),
     MoodFactorGroup(
-        "İnsanlar",
+        t("İnsanlar"),
         listOf(
-            MoodFactorOption("family", "Aile"),
-            MoodFactorOption("friends", "Arkadaşlar"),
-            MoodFactorOption("partner", "Partner"),
-            MoodFactorOption("dating", "Flört"),
-            MoodFactorOption("communication", "İletişim"),
-            MoodFactorOption("conflict", "Tartışma"),
-            MoodFactorOption("closeness", "Yakınlık"),
-            MoodFactorOption("crowds", "Kalabalık")
+            MoodFactorOption("family", t("Aile")),
+            MoodFactorOption("friends", t("Arkadaşlar")),
+            MoodFactorOption("partner", t("Partner")),
+            MoodFactorOption("dating", t("Flört")),
+            MoodFactorOption("communication", t("İletişim")),
+            MoodFactorOption("conflict", t("Tartışma")),
+            MoodFactorOption("closeness", t("Yakınlık")),
+            MoodFactorOption("crowds", t("Kalabalık"))
         )
     ),
     MoodFactorGroup(
-        "Hayat",
+        t("Hayat"),
         listOf(
-            MoodFactorOption("work", "İş"),
-            MoodFactorOption("education", "Eğitim"),
-            MoodFactorOption("money", "Para"),
-            MoodFactorOption("tasks", "Görevler"),
-            MoodFactorOption("weather", "Hava"),
-            MoodFactorOption("travel", "Seyahat"),
-            MoodFactorOption("current_events", "Güncel olaylar"),
-            MoodFactorOption("routine", "Rutin"),
-            MoodFactorOption("future", "Gelecek")
+            MoodFactorOption("work", t("İş")),
+            MoodFactorOption("education", t("Eğitim")),
+            MoodFactorOption("money", t("Para")),
+            MoodFactorOption("tasks", t("Görevler")),
+            MoodFactorOption("weather", t("Hava")),
+            MoodFactorOption("travel", t("Seyahat")),
+            MoodFactorOption("current_events", t("Güncel olaylar")),
+            MoodFactorOption("routine", t("Rutin")),
+            MoodFactorOption("future", t("Gelecek"))
         )
     )
 )
@@ -232,62 +234,62 @@ internal val MoodFactorGroupsV2 = listOf(
 /* Labels for factors saved by earlier 0.7.8 builds. They stay readable in history/detail,
  * but are intentionally not shown as choices anymore because most duplicated the mood
  * descriptors above (for example lonely, bored, restless, hopeful, grateful). */
-private val LegacyMoodFactorLabelsV2 = mapOf(
-    "self" to "Kendim",
-    "community" to "Topluluk",
-    "self_blank" to "Boş hissediyorum",
-    "mind_full" to "Kafam dolu",
-    "self_overwhelmed" to "Bunaldım",
-    "fed_up" to "Bıktım",
-    "self_restless" to "Huzursuzum",
-    "cant_sit_still" to "Yerimde duramıyorum",
-    "no_energy" to "Enerjim yok",
-    "high_energy" to "Enerjim yüksek",
-    "unfocused" to "Odaksızım",
-    "indecisive" to "Kararsızım",
-    "angry_at_self" to "Kendime kızgınım",
-    "good_with_self" to "Kendimle iyiyim",
-    "proud_of_self" to "Gururluyum",
-    "confident" to "Özgüvenliyim",
-    "curious" to "Meraklıyım",
-    "want_to_do_something" to "Bir şey yapmak istiyorum",
-    "want_to_do_nothing" to "Hiçbir şey yapmak istemiyorum",
-    "stuck" to "Sıkışmış hissediyorum",
-    "want_change" to "Değişiklik istiyorum",
-    "feel_lonely" to "Yalnız hissediyorum",
-    "tired_of_people" to "İnsanlardan yoruldum",
-    "want_solitude" to "Biraz yalnız kalmak istiyorum",
-    "want_to_talk" to "Konuşmak istiyorum",
-    "miss_someone" to "Birini özledim",
-    "angry_at_someone" to "Birine kızgınım",
-    "hurt_by_people" to "Kırıldım",
-    "feel_unseen" to "Görülmüyorum",
-    "feel_misunderstood" to "Anlaşılmıyorum",
-    "feel_excluded" to "Dışlanmış hissediyorum",
-    "feel_close_to_someone" to "Birine yakın hissediyorum",
-    "feel_social" to "Sosyal hissediyorum",
-    "want_people" to "İnsan görmek istiyorum",
-    "too_many_people" to "Fazla insan geldi",
-    "want_distance" to "Mesafe istiyorum",
-    "feel_disconnected" to "Bağlantım kopmuş gibi",
-    "life_routine" to "Her şey çok rutin",
-    "life_bored" to "Sıkıldım",
-    "everything_piling_up" to "Her şey üst üste geliyor",
-    "chaotic" to "Kaotik",
-    "uncertain_life" to "Belirsiz",
-    "not_in_control" to "Kontrol bende değil",
-    "life_fast" to "Hayat hızlı akıyor",
-    "something_missing" to "Bir şey eksik",
-    "want_something_new" to "Yeni bir şey istiyorum",
-    "going_well" to "Yolunda gidiyor",
-    "hopeful_life" to "Umutluyum",
-    "excited_life" to "Heyecanlıyım",
-    "feel_lucky" to "Şanslı hissediyorum",
-    "grateful_life" to "Minnettarım",
-    "same_things" to "Aynı şeyleri yapıyorum",
-    "want_life_change" to "Bir şey değişsin istiyorum",
-    "nothing_happened_today" to "Bugün hiçbir şey olmadı",
-    "too_much_happening" to "Çok şey oluyor"
+private val LegacyMoodFactorLabelsV2 get() = mapOf(
+    "self" to t("Kendim"),
+    "community" to t("Topluluk"),
+    "self_blank" to t("Boş hissediyorum"),
+    "mind_full" to t("Kafam dolu"),
+    "self_overwhelmed" to t("Bunaldım"),
+    "fed_up" to t("Bıktım"),
+    "self_restless" to t("Huzursuzum"),
+    "cant_sit_still" to t("Yerimde duramıyorum"),
+    "no_energy" to t("Enerjim yok"),
+    "high_energy" to t("Enerjim yüksek"),
+    "unfocused" to t("Odaksızım"),
+    "indecisive" to t("Kararsızım"),
+    "angry_at_self" to t("Kendime kızgınım"),
+    "good_with_self" to t("Kendimle iyiyim"),
+    "proud_of_self" to t("Gururluyum"),
+    "confident" to t("Özgüvenliyim"),
+    "curious" to t("Meraklıyım"),
+    "want_to_do_something" to t("Bir şey yapmak istiyorum"),
+    "want_to_do_nothing" to t("Hiçbir şey yapmak istemiyorum"),
+    "stuck" to t("Sıkışmış hissediyorum"),
+    "want_change" to t("Değişiklik istiyorum"),
+    "feel_lonely" to t("Yalnız hissediyorum"),
+    "tired_of_people" to t("İnsanlardan yoruldum"),
+    "want_solitude" to t("Biraz yalnız kalmak istiyorum"),
+    "want_to_talk" to t("Konuşmak istiyorum"),
+    "miss_someone" to t("Birini özledim"),
+    "angry_at_someone" to t("Birine kızgınım"),
+    "hurt_by_people" to t("Kırıldım"),
+    "feel_unseen" to t("Görülmüyorum"),
+    "feel_misunderstood" to t("Anlaşılmıyorum"),
+    "feel_excluded" to t("Dışlanmış hissediyorum"),
+    "feel_close_to_someone" to t("Birine yakın hissediyorum"),
+    "feel_social" to t("Sosyal hissediyorum"),
+    "want_people" to t("İnsan görmek istiyorum"),
+    "too_many_people" to t("Fazla insan geldi"),
+    "want_distance" to t("Mesafe istiyorum"),
+    "feel_disconnected" to t("Bağlantım kopmuş gibi"),
+    "life_routine" to t("Her şey çok rutin"),
+    "life_bored" to t("Sıkıldım"),
+    "everything_piling_up" to t("Her şey üst üste geliyor"),
+    "chaotic" to t("Kaotik"),
+    "uncertain_life" to t("Belirsiz"),
+    "not_in_control" to t("Kontrol bende değil"),
+    "life_fast" to t("Hayat hızlı akıyor"),
+    "something_missing" to t("Bir şey eksik"),
+    "want_something_new" to t("Yeni bir şey istiyorum"),
+    "going_well" to t("Yolunda gidiyor"),
+    "hopeful_life" to t("Umutluyum"),
+    "excited_life" to t("Heyecanlıyım"),
+    "feel_lucky" to t("Şanslı hissediyorum"),
+    "grateful_life" to t("Minnettarım"),
+    "same_things" to t("Aynı şeyleri yapıyorum"),
+    "want_life_change" to t("Bir şey değişsin istiyorum"),
+    "nothing_happened_today" to t("Bugün hiçbir şey olmadı"),
+    "too_much_happening" to t("Çok şey oluyor")
 )
 
 internal fun moodDescriptorLabelV2(key: String): String =
@@ -565,7 +567,7 @@ fun MoodV2FullScreen(
     }
 
     val ctaEnabled = step != 0 || scope != null
-    val ctaText = if (step >= 2) "Kaydet" else "İleri"
+    val ctaText = if (step >= 2) t("Kaydet") else t("İleri")
 
     Box(
         modifier = Modifier
@@ -605,7 +607,7 @@ fun MoodV2FullScreen(
                     0 -> {
                         Spacer(Modifier.height(20.dp))
                         Text(
-                            text = "Bir iz bırak",
+                            text = t("Bir iz bırak"),
                             color = Color(0xFFF4F4F6),
                             fontSize = 30.sp,
                             lineHeight = 34.sp,
@@ -614,7 +616,7 @@ fun MoodV2FullScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Neyi kaydetmek istiyorsun?",
+                            text = t("Neyi kaydetmek istiyorsun?"),
                             color = Color(0xFF9A9AA3),
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center
@@ -622,8 +624,8 @@ fun MoodV2FullScreen(
                         Spacer(Modifier.height(34.dp))
 
                         MoodScopeCardV2(
-                            title = "Anlık his",
-                            subtitle = "Şu anda ya da belirli bir anda nasıl hissettiğin",
+                            title = t("Anlık his"),
+                            subtitle = t("Şu anda ya da belirli bir anda nasıl hissettiğin"),
                             selected = scope == MoodScope.MOMENT,
                             ambient = ambient,
                             onClick = {
@@ -633,8 +635,8 @@ fun MoodV2FullScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         MoodScopeCardV2(
-                            title = "Günün havası",
-                            subtitle = "Bugünün genel hissi",
+                            title = t("Günün havası"),
+                            subtitle = t("Bugünün genel hissi"),
                             selected = scope == MoodScope.DAILY,
                             ambient = ambient,
                             onClick = {
@@ -647,9 +649,9 @@ fun MoodV2FullScreen(
                     1 -> {
                         Text(
                             text = when {
-                                isReminderMoodFlow -> "How did this REAL feel?"
-                                scope == MoodScope.MOMENT -> "Şu an içeride hava nasıl?"
-                                else -> "Bugünün havası nasıldı?"
+                                isReminderMoodFlow -> t("Bu REAL nasıl hissettirdi?")
+                                scope == MoodScope.MOMENT -> t("Şu an içeride hava nasıl?")
+                                else -> t("Bugünün havası nasıldı?")
                             },
                             color = Color(0xFFE0E0E5),
                             fontSize = 18.sp,
@@ -669,7 +671,7 @@ fun MoodV2FullScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(216.dp)
-                                        .semantics { contentDescription = "F*ck off orta parmak işareti" },
+                                        .semantics { contentDescription = t("F*ck off orta parmak işareti") },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     ActionIcon(
@@ -683,7 +685,7 @@ fun MoodV2FullScreen(
                                     faceParams = faceParams,
                                     ambient = ambient,
                                     size = 216.dp,
-                                    description = "${family.title} mood yüzü"
+                                    description = t("{0} mood yüzü", family.title)
                                 )
                             }
                         }
@@ -735,7 +737,7 @@ fun MoodV2FullScreen(
                         Spacer(Modifier.height(28.dp))
 
                         Text(
-                            text = "Biraz daha netleştir",
+                            text = t("Biraz daha netleştir"),
                             color = Color(0xFFE6E6EB),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium,
@@ -743,7 +745,7 @@ fun MoodV2FullScreen(
                         )
                         Spacer(Modifier.height(5.dp))
                         Text(
-                            text = "Bu hissi en iyi anlatanları seç. En fazla 3 tane.",
+                            text = t("Bu hissi en iyi anlatanları seç. En fazla 3 tane."),
                             color = Color(0xFF85858E),
                             fontSize = 12.sp,
                             modifier = Modifier.fillMaxWidth()
@@ -796,7 +798,7 @@ fun MoodV2FullScreen(
                         )
                         Spacer(Modifier.height(22.dp))
                         Text(
-                            text = "Bunu en çok ne etkiledi?",
+                            text = t("Bunu en çok ne etkiledi?"),
                             color = Color(0xFFF1F1F4),
                             fontSize = 22.sp,
                             lineHeight = 28.sp,
@@ -805,7 +807,7 @@ fun MoodV2FullScreen(
                         )
                         Spacer(Modifier.height(7.dp))
                         Text(
-                            text = "Hissi değil, kaynağını seç. Birden fazla olabilir.",
+                            text = t("Hissi değil, kaynağını seç. Birden fazla olabilir."),
                             color = Color(0xFF85858E),
                             fontSize = 12.sp,
                             modifier = Modifier.fillMaxWidth()
@@ -846,7 +848,7 @@ fun MoodV2FullScreen(
                                 }
                                 if (group.options.size > compactCount) {
                                     MoodExpansionChipV2(
-                                        label = if (expanded) "Daha az" else "+ ${group.options.size - compactCount} daha",
+                                        label = if (expanded) t("Daha az") else t("+ {0} daha", group.options.size - compactCount),
                                         ambient = ambient,
                                         onClick = {
                                             expandedFactorGroups = if (expanded) {
@@ -1008,7 +1010,7 @@ private fun MoodFlowSummaryV2(
         }
         Column(Modifier.weight(1f)) {
             Text(
-                text = contextLabel?.takeIf { it.isNotBlank() } ?: detailsScope?.label ?: "Mood",
+                text = contextLabel?.takeIf { it.isNotBlank() } ?: detailsScope?.label ?: t("Mood"),
                 color = Color(0xFF85858E),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium

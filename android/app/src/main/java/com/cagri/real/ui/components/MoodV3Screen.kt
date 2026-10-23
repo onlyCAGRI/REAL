@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -194,7 +195,7 @@ fun MoodV3FullScreen(
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             // Top: close on the left, the Şu an / Bugün switch on the right (not in a card's mood flow).
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(44.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Kapat") {
+                Box(Modifier.size(44.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = t("Kapat")) {
                     if (details) details = false else onDismiss()
                 }, contentAlignment = Alignment.Center) {
                     Text(if (details) "‹" else "×", color = ink, fontSize = 28.sp, lineHeight = 28.sp)
@@ -202,7 +203,7 @@ fun MoodV3FullScreen(
                 Spacer(Modifier.weight(1f))
                 if (!isReminderMoodFlow) {
                     Row(Modifier.clip(RoundedCornerShape(20.dp)).background(ink.copy(alpha = 0.10f)).padding(3.dp)) {
-                        listOf(MoodScope.MOMENT to "Şu an", MoodScope.DAILY to "Bugün").forEach { (value, label) ->
+                        listOf(MoodScope.MOMENT to t("Şu an"), MoodScope.DAILY to t("Bugün")).forEach { (value, label) ->
                             val on = scope == value
                             Text(label, color = if (on) paper else ink.copy(alpha = 0.75f), fontSize = 13.sp, fontWeight = FontWeight.Medium,
                                 modifier = Modifier.clip(RoundedCornerShape(17.dp)).background(if (on) ink else Color.Transparent)
@@ -222,9 +223,9 @@ fun MoodV3FullScreen(
                     Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             when {
-                                isReminderMoodFlow -> "Bu REAL nasıl hissettirdi?"
-                                scope == MoodScope.MOMENT -> "Şu an nasılsın?"
-                                else -> "Bugün genel olarak nasıldı?"
+                                isReminderMoodFlow -> t("Bu REAL nasıl hissettirdi?")
+                                scope == MoodScope.MOMENT -> t("Şu an nasılsın?")
+                                else -> t("Bugün genel olarak nasıldı?")
                             },
                             color = ink, fontSize = 20.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 18.dp)
@@ -235,7 +236,7 @@ fun MoodV3FullScreen(
                             if (hand) Box(Modifier.size(300.dp), contentAlignment = Alignment.Center) {
                                 ActionIcon(ActionGlyph.MoodFuckOff, Modifier.size(200.dp), ink)
                             } else MoodV3Face(faceParamsAtV2(progress.value, if (dragging) null else selectedMood), ink, 300.dp,
-                                "${MoodFamiliesV2[family].title} mood yüzü")
+                                t("{0} mood yüzü", MoodFamiliesV2[family].title))
                         }
                         Spacer(Modifier.weight(0.4f))
                         // The feeling in big, soft letters; a new word slides in from the side the mood moved to.
@@ -281,12 +282,12 @@ fun MoodV3FullScreen(
                 } else {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                            MoodV3Face(faceParamsAtV2(family.toFloat(), selectedMood), ink, 54.dp, "${MoodFamiliesV2[family].title} mood yüzü")
+                            MoodV3Face(faceParamsAtV2(family.toFloat(), selectedMood), ink, 54.dp, t("{0} mood yüzü", MoodFamiliesV2[family].title))
                             Spacer(Modifier.width(12.dp))
                             Text(MoodFamiliesV2[family].title, color = ink, fontSize = 30.sp, fontWeight = FontWeight.Black)
                         }
-                        Text("Bunu en iyi ne anlatır?", color = ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 26.dp))
-                        Text("En fazla 3 tane", color = ink.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+                        Text(t("Bunu en iyi ne anlatır?"), color = ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 26.dp))
+                        Text(t("En fazla 3 tane"), color = ink.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             MoodDescriptorsV2[family].orEmpty().forEach { o ->
                                 val on = o.key in descriptorKeys
@@ -296,8 +297,8 @@ fun MoodV3FullScreen(
                                 }
                             }
                         }
-                        Text("Ne etkiledi?", color = ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 30.dp))
-                        Text("Hissin kaynağı; birden fazla olabilir", color = ink.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        Text(t("Ne etkiledi?"), color = ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 30.dp))
+                        Text(t("Hissin kaynağı; birden fazla olabilir"), color = ink.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                         MoodFactorGroupsV2.forEach { group ->
                             Text(group.title, color = ink.copy(alpha = 0.55f), fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -318,12 +319,12 @@ fun MoodV3FullScreen(
                     val count = descriptorKeys.size + factorKeys.size
                     Box(Modifier.weight(1f).heightIn(min = 52.dp).clip(RoundedCornerShape(26.dp)).border(1.5.dp, ink.copy(alpha = 0.5f), RoundedCornerShape(26.dp))
                         .clickable(role = Role.Button) { details = true }, contentAlignment = Alignment.Center) {
-                        Text(if (count > 0) "Ayrıntılar · $count" else "Ayrıntı ekle", color = ink, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text(if (count > 0) t("Ayrıntılar · {0}", count) else t("Ayrıntı ekle"), color = ink, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                 }
                 Box(Modifier.weight(1f).heightIn(min = 52.dp).clip(RoundedCornerShape(26.dp)).background(ink)
                     .clickable(role = Role.Button) { RealHaptics.tick(view); save() }, contentAlignment = Alignment.Center) {
-                    Text("Kaydet", color = paper, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(t("Kaydet"), color = paper, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -395,9 +396,9 @@ private fun MoodV3Slider(value: Float, ink: Color, paper: Color, onTap: (Float) 
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Kötü", color = ink.copy(alpha = 0.6f), fontSize = 12.sp)
-            Text("Normal", color = ink.copy(alpha = 0.6f), fontSize = 12.sp)
-            Text("Çok iyi", color = ink.copy(alpha = 0.6f), fontSize = 12.sp)
+            Text(t("Kötü"), color = ink.copy(alpha = 0.6f), fontSize = 12.sp)
+            Text(t("Normal"), color = ink.copy(alpha = 0.6f), fontSize = 12.sp)
+            Text(t("Çok iyi"), color = ink.copy(alpha = 0.6f), fontSize = 12.sp)
         }
     }
 }

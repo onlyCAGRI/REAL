@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -111,11 +112,11 @@ internal fun ratingColors(v: Double?): Pair<Color, Color> = when {
 private val RatingScale = listOf(Color(0xFF5A1A1F), Color(0xFF8A3A1C), Color(0xFF9A6A1A), Color(0xFF5D7A22), Color(0xFF9CC63A), Color(0xFFD9F27A))
 private val Faded = Color(0xFF5C5C5C)
 internal fun scoreText(v: Double) = if (v % 1.0 == 0.0) v.toInt().toString() else String.format(java.util.Locale.ROOT, "%.1f", v).replace('.', ',')
-private fun verdict(v: Double) = when { v >= 9 -> "Efsane"; v >= 7 -> "İyi"; v >= 5 -> "İdare eder"; else -> "Beğenmedim" }
+private fun verdict(v: Double) = when { v >= 9 -> t("Efsane"); v >= 7 -> t("İyi"); v >= 5 -> t("İdare eder"); else -> t("Beğenmedim") }
 
 private data class Period(val short: String, val long: String, val days: Int?)
-private val Periods = listOf(Period("7", "Son 7 gün", 7), Period("30", "Son 30 gün", 30), Period("3 ay", "Son 3 ay", 90),
-    Period("6 ay", "Son 6 ay", 180), Period("1 yıl", "Son 1 yıl", 365), Period("Tümü", "Tümü", null))
+private val Periods get() = listOf(Period("7", t("Son 7 gün"), 7), Period("30", t("Son 30 gün"), 30), Period(t("3 ay"), t("Son 3 ay"), 90),
+    Period(t("6 ay"), t("Son 6 ay"), 180), Period(t("1 yıl"), t("Son 1 yıl"), 365), Period(t("Tümü"), t("Tümü"), null))
 
 private sealed interface RateTarget {
     data class Film(val media: MediaBlock, val initial: Double?, val past: Boolean, val inList: Boolean) : RateTarget
@@ -142,13 +143,17 @@ internal fun RatingsScreen(reduceAnimations: Boolean, onDismiss: () -> Unit, des
     var searching by remember { mutableStateOf(false) }
     var addPast by remember { mutableStateOf(true) }
     LaunchedEffect(repo) {
-        if (repo == null) { error = "Puanlar için REAL'e giriş yap."; entries = emptyList(); return@LaunchedEffect }
-        entries = try { repo.load() } catch (e: CancellationException) { throw e } catch (_: Exception) { error = "Puanlar okunamadı."; emptyList() }
+        if (repo == null) {
+            error = t("Puanlar için REAL'e giriş yap."); entries = emptyList()
+            com.cagri.real.ui.auth.SignInRequired.needed(com.cagri.real.ui.auth.SignInRequired.Reason.Ratings)
+            return@LaunchedEffect
+        }
+        entries = try { repo.load() } catch (e: CancellationException) { throw e } catch (_: Exception) { error = t("Puanlar okunamadı."); emptyList() }
     }
     fun save(block: suspend MediaRatingRepository.() -> List<RatingEntry>) {
         val r = repo ?: return
         scope.launch {
-            try { entries = r.block(); error = null } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message ?: "Kaydedilemedi." }
+            try { entries = r.block(); error = null } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message ?: t("Kaydedilemedi.") }
         }
     }
     val series = entries?.firstOrNull { it.key == seriesKey }
@@ -177,9 +182,9 @@ internal fun RatingsScreen(reduceAnimations: Boolean, onDismiss: () -> Unit, des
                     Text("ortalaman", color = Color(0xFF888888), fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 2.dp))
                     // One row: genres pull in from the left of "Hepsi", periods from the right of "Tümü".
                     Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 16.dp)) {
-                        val genreLabels = remember(genres) { genres.reversed() + "Hepsi" }
+                        val genreLabels = remember(genres) { genres.reversed() + t("Hepsi") }
                         Box(Modifier.weight(1f)) {
-                            AnchoredPicker(genreLabels, genreLabels.indexOf(genre ?: "Hepsi").takeIf { it >= 0 } ?: genreLabels.lastIndex,
+                            AnchoredPicker(genreLabels, genreLabels.indexOf(genre ?: t("Hepsi")).takeIf { it >= 0 } ?: genreLabels.lastIndex,
                                 rtl = false, reduce = reduceAnimations) { i -> genre = genreLabels[i].takeIf { i != genreLabels.lastIndex } }
                         }
                         Box(Modifier.weight(1f)) {
@@ -189,13 +194,13 @@ internal fun RatingsScreen(reduceAnimations: Boolean, onDismiss: () -> Unit, des
                     }
                     error?.let { Text(it, color = Color(0xFFFFB4AB), fontSize = 13.sp, modifier = Modifier.padding(bottom = 10.dp)) }
                     if (shown.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(start = 46.dp, bottom = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        listOf("altında", "ortalama", "üstünde").forEach { Text(it, color = Color(0xFF555555), fontSize = 10.sp) }
+                        listOf(t("altında"), t("ortalama"), t("üstünde")).forEach { Text(it, color = Color(0xFF555555), fontSize = 10.sp) }
                     }
                 }
             }
             if (entries != null && shown.isEmpty()) item(key = "empty") {
-                Text(if (days == null) "Keşifte İzledim dediğin film ve diziler burada puanlanır. İzlediklerini aşağıdan da ekleyebilirsin."
-                    else "Bu aralıkta eklenen yok.", color = Color(0xFF777777), fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(vertical = 20.dp))
+                Text(if (days == null) t("Keşifte İzledim dediğin film ve diziler burada puanlanır. İzlediklerini aşağıdan da ekleyebilirsin.")
+                    else t("Bu aralıkta eklenen yok."), color = Color(0xFF777777), fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(vertical = 20.dp))
             }
             items(shown, key = { it.key }) { e ->
                 RatingRow(e, avg, now) {
@@ -208,7 +213,7 @@ internal fun RatingsScreen(reduceAnimations: Boolean, onDismiss: () -> Unit, des
             item(key = "add") {
                 // "Ekle": watched now (today's date); "Geçmişten ekle": no date ("eskiden").
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 40.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf(false to "Ekle", true to "Geçmişten ekle").forEach { (past, label) ->
+                    listOf(false to t("Ekle"), true to t("Geçmişten ekle")).forEach { (past, label) ->
                         Row(Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).border(1.dp, Color(0xFF2E2E2E), RoundedCornerShape(22.dp))
                             .clickable(role = Role.Button) { addPast = past; searching = true }.padding(vertical = 14.dp),
                             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -220,7 +225,7 @@ internal fun RatingsScreen(reduceAnimations: Boolean, onDismiss: () -> Unit, des
                 }
             }
         }
-        RealBackButton(onDismiss, Modifier.statusBarsPadding().padding(start = 20.dp, top = 10.dp), "Yaşam'a dön")
+        RealBackButton(onDismiss, Modifier.statusBarsPadding().padding(start = 20.dp, top = 10.dp), t("Yaşam'a dön"))
 
         AnimatedVisibility(series != null,
             enter = if (reduceAnimations) EnterTransition.None else slideInHorizontally(tween(380)) { it } + fadeIn(tween(200)),
@@ -242,10 +247,10 @@ internal fun RatingsScreen(reduceAnimations: Boolean, onDismiss: () -> Unit, des
         when (t) {
             is RateTarget.Film -> {
                 val film = rememberFilmReminder(repo, t.media)
-                RatingSheet(t.media.title, listOfNotNull(t.media.year?.toString(), "Film").joinToString(" · "),
+                RatingSheet(t.media.title, listOfNotNull(t.media.year?.toString(), t("Film")).joinToString(" · "),
                     film.text, t.initial, onDismiss = { target = null },
                     onRemove = if (t.inList) ({ target = null; save { remove(com.cagri.real.discovery.ratingKey(t.media)) } }) else null,
-                    removeLabel = "Listeden çıkar", reminderLoading = film.loading, onSkipLoading = film.skip) { v ->
+                    removeLabel = t("Listeden çıkar"), reminderLoading = film.loading, onSkipLoading = film.skip) { v ->
                     target = null; save { rate(t.media, v, t.past) }
                 }
             }
@@ -268,8 +273,8 @@ internal fun RatingsScreen(reduceAnimations: Boolean, onDismiss: () -> Unit, des
                 target = null; save { rateEpisodes(t.media, mapOf(t.episode.key to v)) }
             }
             }
-            is RateTarget.Season -> RatingSheet("${t.season}. sezonun tamamı", t.media.title,
-                "Bütün bölümlere aynı puan verilir. Sonra istediğin bölümü tek tek değiştirebilirsin.", null,
+            is RateTarget.Season -> RatingSheet(t("{0}. sezonun tamamı", t.season), t.media.title,
+                t("Bütün bölümlere aynı puan verilir. Sonra istediğin bölümü tek tek değiştirebilirsin."), null,
                 onDismiss = { target = null }, onRemove = null) { v ->
                 target = null; save { rateEpisodes(t.media, t.episodes.associate { it.key to v }) }
             }
@@ -288,10 +293,10 @@ private fun tasteLine(list: List<RatingEntry>): String? {
     if (byGenre.size < 2) return null
     val best = byGenre.maxBy { it.value }; val worst = byGenre.minBy { it.value }
     fun f(v: Double) = scoreText((v * 10).roundToInt() / 10.0)
-    return "En sevdiğin tür ${best.key} (${f(best.value)}), en az sevdiğin ${worst.key} (${f(worst.value)})."
+    return t("En sevdiğin tür {0} ({1}), en az sevdiğin {2} ({3}).", best.key, f(best.value), worst.key, f(worst.value))
 }
 
-private val PeriodLabels = Periods.map { if (it.days != null && it.days <= 30) it.short + " gün" else it.short }
+private val PeriodLabels get() = Periods.map { if (it.days != null && it.days <= 30) t("{0} gün", it.short) else t(it.short) }
 /** Picker order: "Tümü" at the edge, then 7 gün, 30 gün, 3 ay… as they come in from the right (nearest first). */
 private val PeriodOrder = Periods.indices.filter { Periods[it].days != null }.reversed() + Periods.indexOfFirst { it.days == null }
 
@@ -356,7 +361,7 @@ private fun RatingRow(e: RatingEntry, avg: Double?, now: Long, onClick: () -> Un
                 if (e.series) Text("dizi", color = Color(0xFF9A9A9A), fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp)
                     .border(1.dp, Color(0xFF333333), RoundedCornerShape(6.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
                 Spacer(Modifier.weight(1f))
-                Text(v?.let(::scoreText) ?: if (e.series) "Bölümleri puanla" else "Puan ver",
+                Text(v?.let(::scoreText) ?: if (e.series) t("Bölümleri puanla") else t("Puan ver"),
                     color = if (v != null) tone else Color(0xFF9A9A9A), fontSize = if (v != null) 15.sp else 12.sp, fontWeight = FontWeight.Medium)
             }
             val diff = if (v != null && avg != null) v - avg else null
@@ -388,10 +393,10 @@ private fun SeriesGrid(entry: RatingEntry, repo: MediaRatingRepository?, onBack:
     var confirmRemove by remember(entry.key) { mutableStateOf(false) }
     if (confirmRemove) RealAlertDialog(
         onDismissRequest = { confirmRemove = false },
-        title = { Text("Diziyi listeden çıkarmak istediğine emin misin?") },
-        text = { Text("${entry.media.title} ve bölüm puanları Puanlarım'dan silinir.", color = Color(0xFFA5A5AF), fontSize = 14.sp) },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { confirmRemove = false; onRemove() }) { Text("Çıkar", color = Color(0xFFFF8A80)) } },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmRemove = false }) { Text("Vazgeç", color = Color.White) } }
+        title = { Text(t("Diziyi listeden çıkarmak istediğine emin misin?")) },
+        text = { Text(t("{0} ve bölüm puanları Puanlarım'dan silinir.", entry.media.title), color = Color(0xFFA5A5AF), fontSize = 14.sp) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { confirmRemove = false; onRemove() }) { Text(t("Çıkar"), color = Color(0xFFFF8A80)) } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmRemove = false }) { Text(t("Vazgeç"), color = Color.White) } }
     )
     var episodes by remember(entry.key) { mutableStateOf<List<SeriesEpisode>?>(null) }
     var error by remember(entry.key) { mutableStateOf<String?>(null) }
@@ -413,12 +418,12 @@ private fun SeriesGrid(entry: RatingEntry, repo: MediaRatingRepository?, onBack:
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 16.dp))
                     val list = episodes
                     Text(listOfNotNull(entry.media.year?.toString(),
-                        if (list == null) "Bölümler yükleniyor…" else "${list.map { it.season }.distinct().size} sezon · ${list.size} bölüm").joinToString(" · "),
+                        if (list == null) t("Bölümler yükleniyor…") else t("{0} sezon · {1} bölüm", list.map { it.season }.distinct().size, list.size)).joinToString(" · "),
                         color = Color(0xFF999999), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                     Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.Bottom) {
                         Text(entry.value?.let(::scoreText) ?: "–", color = if (entry.value != null) ratingColors(entry.value).first else Color(0xFF555555),
                             fontSize = 44.sp, fontWeight = FontWeight.Medium, lineHeight = 44.sp)
-                        Text(if (entry.value != null) "  bölüm ortalaman" else "  henüz bölüm puanı yok", color = Color(0xFF888888), fontSize = 12.sp,
+                        Text(if (entry.value != null) t("  bölüm ortalaman") else t("  henüz bölüm puanı yok"), color = Color(0xFF888888), fontSize = 12.sp,
                             modifier = Modifier.padding(bottom = 7.dp))
                     }
                 }
@@ -448,17 +453,17 @@ private fun SeriesGrid(entry: RatingEntry, repo: MediaRatingRepository?, onBack:
             item {
                 if (!episodes.isNullOrEmpty()) {
                     Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Kötü", color = Color(0xFF777777), fontSize = 10.sp)
+                        Text(t("Kötü"), color = Color(0xFF777777), fontSize = 10.sp)
                         Box(Modifier.weight(1f).padding(horizontal = 8.dp).height(6.dp).clip(CircleShape).background(Brush.horizontalGradient(RatingScale)))
-                        Text("Efsane", color = Color(0xFF777777), fontSize = 10.sp)
+                        Text(t("Efsane"), color = Color(0xFF777777), fontSize = 10.sp)
                     }
                 }
-                Text("Listeden çıkar", color = Color(0xFFFF8A80), fontSize = 14.sp,
+                Text(t("Listeden çıkar"), color = Color(0xFFFF8A80), fontSize = 14.sp,
                     modifier = Modifier.padding(top = 28.dp, bottom = 40.dp).clip(RoundedCornerShape(10.dp))
                         .clickable(role = Role.Button) { confirmRemove = true }.padding(vertical = 8.dp))
             }
         }
-        RealBackButton(onBack, Modifier.statusBarsPadding().padding(start = 20.dp, top = 10.dp), "Puanlarım'a dön")
+        RealBackButton(onBack, Modifier.statusBarsPadding().padding(start = 20.dp, top = 10.dp), t("Puanlarım'a dön"))
     }
 }
 
@@ -468,7 +473,7 @@ private fun SeriesGrid(entry: RatingEntry, repo: MediaRatingRepository?, onBack:
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun RatingSheet(title: String, meta: String, reminder: String?, initial: Double?, onDismiss: () -> Unit,
-                         onRemove: (() -> Unit)?, removeLabel: String = "Puanı kaldır", reminderLoading: Boolean = false,
+                         onRemove: (() -> Unit)?, removeLabel: String = t("Puanı kaldır"), reminderLoading: Boolean = false,
                          titleLoading: Boolean = false, onSkipLoading: (() -> Unit)? = null, onSave: (Double) -> Unit) {
     var value by remember { mutableDoubleStateOf(initial ?: 7.0) }
     var expanded by remember { mutableStateOf(false) }
@@ -493,7 +498,7 @@ internal fun RatingSheet(title: String, meta: String, reminder: String?, initial
                         Text(reminder, color = Color(0xFFB0B0B0), fontSize = 13.sp, lineHeight = 19.sp)
                     } else Text(reminder, color = Color(0xFF9A9A9A), fontSize = 13.sp, lineHeight = 19.sp, maxLines = 3,
                         overflow = TextOverflow.Ellipsis, onTextLayout = { overflows = it.hasVisualOverflow })
-                    if (overflows || expanded) Text(if (expanded) "Daha az" else "Devamı", color = Color(0xFF6A6A6A), fontSize = 11.sp,
+                    if (overflows || expanded) Text(if (expanded) t("Daha az") else t("Devamı"), color = Color(0xFF6A6A6A), fontSize = 11.sp,
                         modifier = Modifier.padding(top = 4.dp))
                 }
             }
@@ -523,11 +528,11 @@ internal fun RatingSheet(title: String, meta: String, reminder: String?, initial
                     }
                 }
             }
-            Text("Sürükle veya bas", color = Color(0xFF666666), fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+            Text(t("Sürükle veya bas"), color = Color(0xFF666666), fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
             Row(Modifier.fillMaxWidth().padding(top = 22.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 // "Listeden çıkar" needs the room at large font sizes (it wrapped and got clipped at 1 : 2).
-                SheetButton(if (onRemove != null) removeLabel else "Vazgeç", Modifier.weight(1f), filled = false) { (onRemove ?: onDismiss)() }
-                SheetButton("Kaydet", Modifier.weight(1.3f), filled = true) { onSave(value) }
+                SheetButton(if (onRemove != null) removeLabel else t("Vazgeç"), Modifier.weight(1f), filled = false) { (onRemove ?: onDismiss)() }
+                SheetButton(t("Kaydet"), Modifier.weight(1.3f), filled = true) { onSave(value) }
             }
         }
     }

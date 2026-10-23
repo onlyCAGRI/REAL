@@ -1898,5 +1898,22 @@
   "Şarkı veya sanatçı ara": "Search for a song or artist",
   "{0}'te aç ↗": "Open in {0} ↗",
   "{0}'da aç ↗": "Open in {0} ↗",
-  "Şarkılar alınamadı.": "Couldn't get songs."
+  "Şarkılar alınamadı.": "Couldn't get songs.",
+  "İş": "Work",
+  "Şu an içeride hava nasıl?": "How's the mood in here right now?",
+  "Şu an nasılsın?": "How are you right now?",
+  "Puanlar okunamadı.": "Couldn't load ratings.",
+  "Kaydedilemedi.": "Couldn't save.",
+  "Keşifte İzledim dediğin film ve diziler burada puanlanır. İzlediklerini aşağıdan da ekleyebilirsin.": "Films and series you mark as Watched in Discover get rated here. You can also add what you've watched below.",
+  "Bölümler yükleniyor…": "Loading episodes…",
+  "{0} sezon · {1} bölüm": "{0} seasons · {1} episodes",
+  "Bu dosyayı açabilecek bir uygulama bulunamadı": "No app found that can open this file",
+  "Dosyaya erişilemiyor. Silinmiş veya erişim izni kaldırılmış olabilir.": "Can't access the file. It may have been deleted or the permission removed.",
+  "Yapıştırılamadı": "Couldn't paste",
+  "{0} fotoğraf": "{0} photos",
+  "Süre: {0} dk": "Duration: {0} min",
+  "Hesap menüsünü aç": "Open account menu",
+  "Henüz günlük eklenmemiş": "No journal entries yet",
+  "Bu renkte hatırlatıcı yok": "No reminders in this color",
+  "Bu kategoride henüz hatırlatıcı yok": "No reminders in this category yet"
 }

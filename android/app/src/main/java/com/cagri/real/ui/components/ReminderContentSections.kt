@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -114,21 +115,21 @@ fun ReminderContentSections(
             val saved = runCatching { onUpdateSnippet(snippet, text) }.getOrDefault(false)
             snippetSaving = false
             if (saved) { editingSnippet = null; snippetError = null }
-            else snippetError = "Not kaydedilemedi. Yeniden dene."
+            else snippetError = t("Not kaydedilemedi. Yeniden dene.")
         }
     }
 
     if (files.isNotEmpty() || !referenceUrl.isNullOrBlank()) {
         TimelineContent(designStyle) {
-            Text("Ekler", color = Color(0xFFE2E2E8), style = RealType.detailBlockHeader)
+            Text(t("Ekler"), color = Color(0xFFE2E2E8), style = RealType.detailBlockHeader)
             files.forEachIndexed { index, file ->
                 key(file.id) {
                     if (index > 0) HorizontalDivider(color = Color(0xFF303035))
-                    FileContentRow(fileBadge(file), file.displayName ?: "Dosya", fileMetadata(file), editing,
+                    FileContentRow(fileBadge(file), file.displayName ?: t("Dosya"), fileMetadata(file), editing,
                         onOpen = {
                             try { if (onOpenAttachment != null) onOpenAttachment(file) else AttachmentStorage.open(context, file) }
-                            catch (_: android.content.ActivityNotFoundException) { com.cagri.real.ui.components.RealToast.show(context, "Bu dosyayı açabilecek bir uygulama bulunamadı", long = true) }
-                            catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, "Dosyaya erişilemiyor. Silinmiş veya erişim izni kaldırılmış olabilir.", long = true) }
+                            catch (_: android.content.ActivityNotFoundException) { com.cagri.real.ui.components.RealToast.show(context, t("Bu dosyayı açabilecek bir uygulama bulunamadı"), long = true) }
+                            catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, t("Dosyaya erişilemiyor. Silinmiş veya erişim izni kaldırılmış olabilir."), long = true) }
                         }, onRemove = { onRemove(file) })
                 }
             }
@@ -137,7 +138,7 @@ fun ReminderContentSections(
                 val domain = remember(referenceUrl) { runCatching { Uri.parse(referenceUrl).host?.removePrefix("www.") }.getOrNull() ?: referenceUrl }
                 FileContentRow("LINK", domain, referenceUrl, editing, onOpen = {
                     try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(referenceUrl))) }
-                    catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, "Bağlantı açılamadı") }
+                    catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, t("Bağlantı açılamadı")) }
                 }, onRemove = onRemoveLink)
             }
         }
@@ -154,7 +155,7 @@ fun ReminderContentSections(
                         modifier = Modifier.weight(1f).padding(start = 8.dp), maxLines = if (LocalCardContentComposition.current) 1 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
                     // Editing happens in place: tap the text, type, "Bitti" (or tap elsewhere) saves.
                     if (inlineEditing) Text(
-                        if (snippetSaving) "Kaydediliyor…" else "Bitti",
+                        if (snippetSaving) t("Kaydediliyor…") else t("Bitti"),
                         color = Color(0xFFE6E6EC),
                         style = RealType.detailBlockMetaSecondary,
                         modifier = Modifier
@@ -162,7 +163,7 @@ fun ReminderContentSections(
                             .clickable(enabled = !snippetSaving) { saveInlineSnippet(snippet) }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                     )
-                    if (editing) IconButton(onClick = { onRemove(snippet) }, modifier = Modifier.semantics { contentDescription = "Metin alıntısını kaldır" }) {
+                    if (editing) IconButton(onClick = { onRemove(snippet) }, modifier = Modifier.semantics { contentDescription = t("Metin alıntısını kaldır") }) {
                         ActionIcon(ActionGlyph.Close, Modifier.size(17.dp), Color(0xFFAEAFB8))
                     }
                 }
@@ -228,7 +229,7 @@ fun ReminderContentSections(
                             onNonLinkClick = { startEditing() }
                         )
                         if (long) Text(
-                            if (open) "Daralt" else "Metni aç",
+                            if (open) t("Daralt") else t("Metni aç"),
                             color = Color(0xFFCAD3D9),
                             style = RealType.detailBlockMetaSecondary,
                             modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).clickable { toggle() }
@@ -259,7 +260,7 @@ private fun openExternalNoteUrl(context: android.content.Context, rawUrl: String
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(normalized)))
     } catch (_: Exception) {
-        com.cagri.real.ui.components.RealToast.show(context, "Bağlantı açılamadı")
+        com.cagri.real.ui.components.RealToast.show(context, t("Bağlantı açılamadı"))
     }
 }
 
@@ -342,7 +343,7 @@ private fun FileContentRow(badge: String, title: String, metadata: String, editi
             }
             ActionIcon(ActionGlyph.ChevronRight, Modifier.size(14.dp), Color(0xFF8E8E98))
         }
-        if (editing) IconButton(onClick = onRemove, modifier = Modifier.semantics { contentDescription = "$title ekini kaldır" }) {
+        if (editing) IconButton(onClick = onRemove, modifier = Modifier.semantics { contentDescription = t("{0} ekini kaldır", title) }) {
             ActionIcon(ActionGlyph.Close, Modifier.size(16.dp), Color(0xFFADB0BA))
         }
     }
@@ -354,7 +355,7 @@ private fun fileBadge(file: ReminderAttachment): String = file.displayName?.subs
 private fun fileMetadata(file: ReminderAttachment): String = fileBadge(file) + (file.sizeBytes?.let { size ->
     when {
         size >= 1024 * 1024 -> " · " + String.format(Locale.forLanguageTag("tr"), "%.1f MB", size / (1024.0 * 1024))
-        size >= 1024 -> " · ${size / 1024} KB"
+        size >= 1024 -> t(" · {0} KB", size / 1024)
         else -> " · $size B"
     }
 } ?: "")

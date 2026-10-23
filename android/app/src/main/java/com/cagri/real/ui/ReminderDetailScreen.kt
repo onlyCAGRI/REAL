@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import androidx.compose.runtime.mutableLongStateOf
 import com.cagri.real.ui.components.liquidDockChip
 
@@ -551,7 +552,7 @@ internal fun ReminderDetailScreen(
             try {
                 val pasted = source?.invoke() ?: if (source == null) ClipboardPaste.read(context) else null
                 if (pasted == null || (pasted.content.isEmpty && pasted.location == null)) {
-                    com.cagri.real.ui.components.RealToast.show(context, "Yapıştırılacak bir şey bulunamadı")
+                    com.cagri.real.ui.components.RealToast.show(context, t("Yapıştırılacak bir şey bulunamadı"))
                     return@launch
                 }
                 val c = pasted.content
@@ -588,10 +589,10 @@ internal fun ReminderDetailScreen(
                             r.contentBlockOrder, cardLayoutForKeys(r.contentBlockLayout, updated.cardContentKeys()), r.useDarkText)
                     } finally { savingDetail = false }
                 }
-                com.cagri.real.ui.components.RealToast.show(context, "Yapıştırıldı · ${pasted.label}")
+                com.cagri.real.ui.components.RealToast.show(context, t("Yapıştırıldı · {0}", pasted.label))
                 afterwards()
             } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, "Yapıştırılamadı") }
+            catch (_: Exception) { com.cagri.real.ui.components.RealToast.show(context, t("Yapıştırılamadı")) }
             finally { pasting = false }
         }
     }
@@ -646,7 +647,7 @@ internal fun ReminderDetailScreen(
             cameraFile?.delete()
             return
         }
-        if (uris.size > 20) { attachmentError = "Bir seferde en fazla 20 dosya seçebilirsin"; return }
+        if (uris.size > 20) { attachmentError = t("Bir seferde en fazla 20 dosya seçebilirsin"); return }
         val generation = editGeneration
         val slots = 3 - editedAttachments.count { it.type == AttachmentType.IMAGE }
         attachmentBusy = true; attachmentError = null
@@ -676,7 +677,7 @@ internal fun ReminderDetailScreen(
                     if (screenAlive && editing && generation == editGeneration) {
                         editedAttachments = editedAttachments + imported
                         newlyAddedAttachments = newlyAddedAttachments + imported
-                        if (failed > 0) attachmentError = "$failed ek eklenemedi. Fotoğraf sınırı: 3; kopyalama sınırı: 100 MB."
+                        if (failed > 0) attachmentError = t("{0} ek eklenemedi. Fotoğraf sınırı: 3; kopyalama sınırı: 100 MB.", failed)
                     } else discardDraft(imported)
                     attachmentBusy = false
                 }
@@ -824,7 +825,7 @@ internal fun ReminderDetailScreen(
     val saveDraftAndClose: () -> Unit = save@ {
         if (savingDetail || attachmentBusy || voiceRecordingActive) return@save
         if (editedText.isBlank() && editedVoiceRecordings.isEmpty()) {
-            attachmentError = "REAL metni boş bırakılamaz."
+            attachmentError = t("REAL metni boş bırakılamaz.")
             return@save
         }
         val finalItems = if (reminder.isChecklist || checklistBlockOpen || editedChecklistItems.isNotEmpty()) {
@@ -874,7 +875,7 @@ internal fun ReminderDetailScreen(
                 }
                 finishEditing()
             } else {
-                attachmentError = "Değişiklikler kaydedilemedi. Yeniden dene."
+                attachmentError = t("Değişiklikler kaydedilemedi. Yeniden dene.")
             }
         }
     }
@@ -927,9 +928,9 @@ internal fun ReminderDetailScreen(
                         }
                     },
                     description = when {
-                        editing -> "Düzenlemeyi iptal et"
-                        inlineCardStackEditing -> "Yazıyı kaydet"
-                        else -> "Geri"
+                        editing -> t("Düzenlemeyi iptal et")
+                        inlineCardStackEditing -> t("Yazıyı kaydet")
+                        else -> t("Geri")
                     },
                     visualSize = 40.dp,
                     glyphSize = 21.dp,
@@ -958,7 +959,7 @@ internal fun ReminderDetailScreen(
                             }
                             .padding(horizontal = 10.dp)
                             .semantics { contentDescription = if (calendarSyncPublished)
-                                "Takvim web bağlantısı güncel" else "İçerik yalnız REAL'de veya web bağlantısı güncel değil" },
+                                t("Takvim web bağlantısı güncel") else t("İçerik yalnız REAL'de veya web bağlantısı güncel değil") },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
@@ -988,7 +989,7 @@ internal fun ReminderDetailScreen(
                                     pasteIntoCard()
                                 }
                                 .padding(horizontal = 14.dp)
-                                .semantics { contentDescription = "Yapıştır: ${shownKind?.label.orEmpty()}" },
+                                .semantics { contentDescription = t("Yapıştır: {0}", shownKind?.label.orEmpty()) },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
@@ -1041,8 +1042,8 @@ internal fun ReminderDetailScreen(
                                     indication = androidx.compose.material3.ripple(bounded = false),
                                     enabled = !pasting,
                                     role = Role.Button,
-                                    onClickLabel = "Yapıştır",
-                                    onLongClickLabel = "Panodan ekle",
+                                    onClickLabel = t("Yapıştır"),
+                                    onLongClickLabel = t("Panodan ekle"),
                                     onLongClick = { clipboardTrayOpen = true },
                                     // Always lit: an empty clipboard opens "Panodan ekle" instead.
                                     onClick = {
@@ -1051,7 +1052,7 @@ internal fun ReminderDetailScreen(
                                     }
                                 )
                                 .semantics {
-                                    contentDescription = pasteKind?.let { "Yapıştır: ${it.label}" } ?: "Yapıştır"
+                                    contentDescription = pasteKind?.let { t("Yapıştır: {0}", it.label) } ?: t("Yapıştır")
                                 },
                             contentAlignment = Alignment.Center
                         ) {
@@ -1079,10 +1080,10 @@ internal fun ReminderDetailScreen(
                                 .background(if (nowBarPinned && nowBarAvailable) Color(0xFF91B9FF).copy(alpha = 0.10f) else Color.Transparent)
                                 .semantics {
                                     contentDescription = when {
-                                        reminder.isCompleted -> "Tamamlanan hatırlatıcı Now Bar'a sabitlenemez"
-                                        !nowBarEnabled -> "Now Bar ayarlardan kapalı"
-                                        nowBarPinned -> "Now Bar sabitlemesini kaldır"
-                                        else -> "Now Bar'a sabitle"
+                                        reminder.isCompleted -> t("Tamamlanan hatırlatıcı Now Bar'a sabitlenemez")
+                                        !nowBarEnabled -> t("Now Bar ayarlardan kapalı")
+                                        nowBarPinned -> t("Now Bar sabitlemesini kaldır")
+                                        else -> t("Now Bar'a sabitle")
                                     }
                                 }
                         ) {
@@ -1099,7 +1100,7 @@ internal fun ReminderDetailScreen(
                                 .size(48.dp)
                                 .pressScale(starInteractionSource, reduceAnimations = reduceAnimations, targetScale = 0.95f)
                                 .background(if (reminder.isImportant) Color(0xFFEACB75).copy(alpha = 0.08f) else Color.Transparent)
-                                .semantics { contentDescription = if (reminder.isImportant) "Önemli işaretini kaldır" else "Önemli olarak işaretle" }
+                                .semantics { contentDescription = if (reminder.isImportant) t("Önemli işaretini kaldır") else t("Önemli olarak işaretle") }
                         ) {
                             ActionIcon(
                                 ActionGlyph.Star,
@@ -1183,7 +1184,13 @@ internal fun ReminderDetailScreen(
             }
     ) {
         DetailLayoutBox(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
+        // Hava durumu: a block like the others (Sırala, size), but only while it has a forecast to show.
+        var weatherHidden by remember(reminder.id) { mutableStateOf(false) }
+        val weatherShown = remember(reminder.id, reminder.alertAt, reminder.plannedDateEpochDay, weatherHidden) {
+            !weatherHidden && com.cagri.real.ui.components.CardWeatherRepository.mayShow(context, reminder)
+        }
         val activeBlockKeys = remember(
+            weatherShown,
             editing, checklistBlockOpen, editedChecklistItems, reminder.isChecklist, reminder.checklistItems,
             editedAttachments, reminder.attachments, editedReferenceUrl, reminder.referenceUrl,
             editedVoiceRecordings, reminder.voiceRecordings, voiceRecorderOpen,
@@ -1203,7 +1210,7 @@ internal fun ReminderDetailScreen(
                 includeEmptyChecklist = editing && (checklistBlockOpen || reminder.isChecklist),
                 includeVoiceRecorder = editing && voiceRecorderOpen,
                 includeJournal = journalCreating || (editing && journalEditing)
-            )
+            ).let { if (weatherShown) it else it - "weather" }
         }
 
         LaunchedEffect(activeBlockKeys, editing) {
@@ -1233,78 +1240,84 @@ internal fun ReminderDetailScreen(
             val sections = mapOf(
                 "text" to ContentBlockDescriptor(
                     key = "text",
-                    title = "Not Metni",
-                    subtitle = if (editing) editedText.ifBlank { "Boş not" } else reminder.text.ifBlank { "Boş not" },
+                    title = t("Not Metni"),
+                    subtitle = if (editing) editedText.ifBlank { t("Boş not") } else reminder.text.ifBlank { t("Boş not") },
                     glyph = ActionGlyph.Note
                 ),
                 "card_stack" to ContentBlockDescriptor(
                     key = "card_stack",
-                    title = "Kart Yığını",
-                    subtitle = "${(if (editing || inlineCardStackEditing) editedCardStack else reminder.cardStack)?.cards?.size ?: 0} kart",
+                    title = t("Kart Yığını"),
+                    subtitle = t("{0} kart", (if (editing || inlineCardStackEditing) editedCardStack else reminder.cardStack)?.cards?.size ?: 0),
                     glyph = ActionGlyph.Cards
                 ),
                 "checklist" to ContentBlockDescriptor(
                     key = "checklist",
-                    title = "Checklist",
-                    subtitle = "${(if (editing) editedChecklistItems else reminder.checklistItems).size} madde",
+                    title = t("Checklist"),
+                    subtitle = t("{0} madde", (if (editing) editedChecklistItems else reminder.checklistItems).size),
                     glyph = ActionGlyph.Checklist
                 ),
                 "photos" to ContentBlockDescriptor(
                     key = "photos",
-                    title = "Fotoğraflar",
-                    subtitle = "${(if (editing) editedAttachments else reminder.attachments).count { it.type == AttachmentType.IMAGE }} fotoğraf",
+                    title = t("Fotoğraflar"),
+                    subtitle = t("{0} fotoğraf", (if (editing) editedAttachments else reminder.attachments).count { it.type == AttachmentType.IMAGE }),
                     glyph = ActionGlyph.Photo
                 ),
                 "files" to ContentBlockDescriptor(
                     key = "files",
-                    title = "Dosyalar & Bağlantılar",
+                    title = t("Dosyalar & Bağlantılar"),
                     subtitle = run {
                         val fCount = (if (editing) editedAttachments else reminder.attachments).count { it.type != AttachmentType.IMAGE }
                         val hasUrl = (if (editing) editedReferenceUrl else reminder.referenceUrl) != null
-                        if (fCount > 0 && hasUrl) "$fCount dosya • 1 bağlantı" else if (fCount > 0) "$fCount dosya" else "1 bağlantı"
+                        if (fCount > 0 && hasUrl) t("{0} dosya • 1 bağlantı", fCount) else if (fCount > 0) t("{0} dosya", fCount) else t("1 bağlantı")
                     },
                     glyph = ActionGlyph.File
                 ),
                 "voice" to ContentBlockDescriptor(
                     key = "voice",
-                    title = "Ses Kaydı",
-                    subtitle = "${(if (editing) editedVoiceRecordings else reminder.voiceRecordings).size} kayıt",
+                    title = t("Ses Kaydı"),
+                    subtitle = t("{0} kayıt", (if (editing) editedVoiceRecordings else reminder.voiceRecordings).size),
                     glyph = ActionGlyph.AudioWave
                 ),
                 "music" to ContentBlockDescriptor(
                     key = "music",
-                    title = "Müzik",
-                    subtitle = "${(if (editing) editedMusicBlocks else reminder.musicBlocks).size} parça",
+                    title = t("Müzik"),
+                    subtitle = t("{0} parça", (if (editing) editedMusicBlocks else reminder.musicBlocks).size),
                     glyph = ActionGlyph.Music
                 ),
                 "media" to ContentBlockDescriptor(
                     key = "media",
-                    title = "Film & Dizi",
-                    subtitle = "${(if (editing) editedMediaBlocks else reminder.mediaBlocks).size} içerik",
+                    title = t("Film & Dizi"),
+                    subtitle = t("{0} içerik", (if (editing) editedMediaBlocks else reminder.mediaBlocks).size),
                     glyph = ActionGlyph.Video
                 ),
                 "game" to ContentBlockDescriptor(
                     key = "game",
-                    title = "Oyun",
-                    subtitle = "${reminder.gameBlocks.size} oyun",
+                    title = t("Oyun"),
+                    subtitle = t("{0} oyun", reminder.gameBlocks.size),
                     glyph = ActionGlyph.Play
                 ),
                 "location" to ContentBlockDescriptor(
                     key = "location",
-                    title = "Konum",
-                    subtitle = (if (editing) editedLocation else reminder.location)?.placeName?.ifBlank { "Konum" } ?: "Konum",
+                    title = t("Konum"),
+                    subtitle = (if (editing) editedLocation else reminder.location)?.placeName?.ifBlank { t("Konum") } ?: t("Konum"),
                     glyph = ActionGlyph.Pin
+                ),
+                "weather" to ContentBlockDescriptor(
+                    key = "weather",
+                    title = t("Hava durumu"),
+                    subtitle = t("Apple Weather"),
+                    glyph = ActionGlyph.Calendar
                 ),
                 "mood" to ContentBlockDescriptor(
                     key = "mood",
-                    title = "Mood",
-                    subtitle = reminder.mood?.label ?: "Mood",
+                    title = t("Mood"),
+                    subtitle = reminder.mood?.label ?: t("Mood"),
                     glyph = ActionGlyph.MoodVeryGood
                 ),
                 "journal" to ContentBlockDescriptor(
                     key = "journal",
-                    title = "Günlük",
-                    subtitle = "Günlük notu",
+                    title = t("Günlük"),
+                    subtitle = t("Günlük notu"),
                     glyph = ActionGlyph.Note
                 )
             )
@@ -1317,9 +1330,9 @@ internal fun ReminderDetailScreen(
                 when (key.substringBefore(':')) {
                     "music" -> section.copy(key = key, title = music?.title ?: section.title, subtitle = music?.artist ?: "")
                     "media" -> section.copy(key = key, title = media?.title ?: section.title, subtitle = media?.type?.name ?: "")
-                    "game" -> section.copy(key = key, title = reminder.gameBlocks.firstOrNull { it.id == id }?.title ?: "Oyun", subtitle = "Oyun")
-                    "photos" -> section.copy(key = key, title = "Fotoğraf", subtitle = attachment?.displayName.orEmpty())
-                    "files" -> section.copy(key = key, title = if (key == "files:reference") "Bağlantı" else attachment?.displayName ?: section.title)
+                    "game" -> section.copy(key = key, title = reminder.gameBlocks.firstOrNull { it.id == id }?.title ?: t("Oyun"), subtitle = t("Oyun"))
+                    "photos" -> section.copy(key = key, title = t("Fotoğraf"), subtitle = attachment?.displayName.orEmpty())
+                    "files" -> section.copy(key = key, title = if (key == "files:reference") t("Bağlantı") else attachment?.displayName ?: section.title)
                     else -> section.copy(key = key)
                 }
             }
@@ -1352,7 +1365,7 @@ internal fun ReminderDetailScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column {
-                        Text("İçerik Sıralaması", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        Text(t("İçerik Sıralaması"), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -1404,7 +1417,7 @@ internal fun ReminderDetailScreen(
                             editedContentBlockLayout = withHero(editedContentBlockLayout, key, !heroOn)
                             heroOwner = if (heroOn) null else key
                         }
-                        .semantics { stateDescription = if (heroOn) "Açık" else "Kapalı" }
+                        .semantics { stateDescription = if (heroOn) t("Açık") else t("Kapalı") }
                         .padding(horizontal = 6.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1419,8 +1432,8 @@ internal fun ReminderDetailScreen(
                         ActionIcon(ActionGlyph.Check, Modifier.size(13.dp).graphicsLayer { alpha = tick; scaleX = 0.6f + 0.4f * tick; scaleY = 0.6f + 0.4f * tick }, Color(0xFF0B0B0D))
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("En üstteki içeriği büyüt", color = Color(0xFFE8E8EE), fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        Text("Listenin başındaki içerik kartın tepesinde tam genişlikte, büyük görünür.",
+                        Text(t("En üstteki içeriği büyüt"), color = Color(0xFFE8E8EE), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text(t("Listenin başındaki içerik kartın tepesinde tam genişlikte, büyük görünür."),
                             color = Color(0xFF8E8E98), fontSize = 12.sp, lineHeight = 16.sp)
                     }
                 }
@@ -1735,7 +1748,7 @@ internal fun ReminderDetailScreen(
                                         modifier = Modifier.fillMaxWidth()
                                             .heightIn(min = if (titleHeight > 0) 0.dp else 96.dp)
                                             .onFocusChanged { if (it.isFocused) secondaryPanelsExpanded = false }
-                                            .semantics { contentDescription = "Hatırlatıcı metni" },
+                                            .semantics { contentDescription = t("Hatırlatıcı metni") },
                                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                                             color = if (shownUseDarkText) Color(0xFF101010) else Color.White,
                                             fontSize = 21.sp,
@@ -1830,9 +1843,9 @@ internal fun ReminderDetailScreen(
                                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                                 modifier = Modifier.padding(top = 2.dp)
                                                             ) {
-                                                                if (dur != null) Text("Süre: $dur dk", color = Color(0xFFA5A5B0), style = RealType.detailBlockMetaSecondary)
+                                                                if (dur != null) Text(t("Süre: {0} dk", dur), color = Color(0xFFA5A5B0), style = RealType.detailBlockMetaSecondary)
                                                                 if (dur != null && shownEnd != null) Text("•", color = Color(0xFF6B6B75), style = RealType.detailBlockMetaSecondary)
-                                                                if (shownEnd != null) Text("Bitiş: $shownEnd", color = Color(0xFFA5A5B0), style = RealType.detailBlockMetaSecondary)
+                                                                if (shownEnd != null) Text(t("Bitiş: {0}", shownEnd), color = Color(0xFFA5A5B0), style = RealType.detailBlockMetaSecondary)
                                                             }
                                                             val repeatText = reminder.repeatRule.repeatSummary(reminder.anchorAlertAt ?: reminder.alertAt)
                                                             if (repeatText != null) {
@@ -1874,6 +1887,18 @@ internal fun ReminderDetailScreen(
                                                         Text(assignedCategory.name, color = Color(0xFFC4C4CE), style = RealType.detailBlockMetaSecondary)
                                                     }
                                                 }
+                                                // Varınca / Ayrılınca: the place and how close counts, under the time (same arrow as on Home).
+                                                reminder.locationTrigger?.takeIf { !reminder.isCompleted }?.let { trigger ->
+                                                    val tone = if (trigger.onExit) Color(0xFFFFB86F) else Color(0xFF5DCAA5)
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                        com.cagri.real.ui.components.PlaceTriggerGlyph(trigger.onExit, tone, Modifier.size(12.dp))
+                                                        Text(
+                                                            (if (trigger.onExit) t("Ayrılınca · ") else t("Varınca · ")) + trigger.placeName +
+                                                                (if (trigger.onExit) t(" · {0} m dışına çıkınca", trigger.radiusMeters) else t(" · {0} m içinde", trigger.radiusMeters)),
+                                                            color = tone, style = RealType.detailBlockMetaSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -1904,7 +1929,7 @@ internal fun ReminderDetailScreen(
                                         tint = moodTint)
                                     if (!narrowBlock) Column(Modifier.weight(1f)) {
                                         val details = reminder.moodDetails
-                                        Text(details?.scope?.label ?: "Mood", color = moodTint, fontSize = 12.sp,
+                                        Text(details?.scope?.label ?: t("Mood"), color = moodTint, fontSize = 12.sp,
                                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text(moodV2FamilyTitle(mood), color = Color(0xFFF7F7F9), fontSize = 21.sp,
                                             lineHeight = 26.sp, fontWeight = FontWeight.SemiBold,
@@ -2203,13 +2228,33 @@ internal fun ReminderDetailScreen(
                                 }
                             }
                         }
+                        "weather" -> {
+                            val slot = displayedLayout[blockKey]?.minHeight?.takeIf { it > 0 }
+                            com.cagri.real.ui.components.CardWeatherBlock(
+                                reminder, reduceAnimations,
+                                if (slot != null) Modifier.height(slot.dp) else Modifier,
+                                compact = narrowBlock || (slot != null && slot < 150),
+                                interactive = !editing,
+                                onHide = { weatherHidden = true }
+                            )
+                        }
                         "location" -> {
                             val place = if (editing) editedLocation else reminder.location
                             if (place != null) {
                                 val locCardShape = RoundedCornerShape(22.dp)
                                 if (place.latitude != null && place.longitude != null) {
+                                    // Yol: within an hour of the card's time, the driving route from the phone (taller map).
+                                    var route by remember(reminder.id, place.latitude, place.longitude) {
+                                        mutableStateOf<com.cagri.real.notifications.DepartureReminder.Route?>(null)
+                                    }
+                                    LaunchedEffect(reminder.id, reminder.alertAt, place.latitude, place.longitude, editing) {
+                                        val left = (reminder.alertAt ?: 0L) - System.currentTimeMillis()
+                                        route = if (!editing && !reminder.isCompleted && left in 0L..60 * 60_000L)
+                                            com.cagri.real.notifications.DepartureReminder.route(context, place.latitude, place.longitude) else null
+                                    }
+                                    Column(Modifier.fillMaxWidth()) {
                                     Box(
-                                        Modifier.fillMaxWidth().height((displayedLayout[blockKey]?.minHeight?.takeIf { it > 0 } ?: 180).coerceAtLeast(120).dp)
+                                        Modifier.fillMaxWidth().height((displayedLayout[blockKey]?.minHeight?.takeIf { it > 0 } ?: 180).coerceAtLeast(if (route != null) 280 else 120).dp)
                                             .clip(locCardShape)
                                             .background(if (designStyle == DesignStyle.LiquidGlass) LiquidGlassTokens.contentColor else Color(0xFF131820))
                                     ) {
@@ -2245,11 +2290,20 @@ internal fun ReminderDetailScreen(
                                             cameraZoom = place.mapZoom,
                                             onOpen = {
                                                 if (!openReminderLocationInMaps(context, place))
-                                                    com.cagri.real.ui.components.RealToast.show(context, "Harita uygulaması açılamadı")
+                                                    com.cagri.real.ui.components.RealToast.show(context, t("Harita uygulaması açılamadı"))
                                             },
                                             previewScale = { pinchScale },
-                                            onSnapshotShown = { if (awaitingSnapshot) { awaitingSnapshot = false; pinchScale = 1f } }
+                                            onSnapshotShown = { if (awaitingSnapshot) { awaitingSnapshot = false; pinchScale = 1f } },
+                                            route = route
                                         )
+                                        route?.minutes?.let { minutes ->
+                                            Text(
+                                                t("Trafikle {0} dk", minutes), color = Color(0xFFF3F1F4), fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.align(Alignment.TopStart).padding(10.dp)
+                                                    .background(Color(0xD90B0B0D), RoundedCornerShape(14.dp))
+                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                            )
+                                        }
                                         // The picked place in small type at the bottom right (its name, or the street).
                                         com.cagri.real.ui.components.reminderLocationLabel(place)?.let { label ->
                                             Text(
@@ -2276,7 +2330,7 @@ internal fun ReminderDetailScreen(
                                                                 pinchScale = if (step > 0) 2f else 0.5f
                                                                 commitZoom(baseZoom + step)
                                                             }
-                                                            .semantics { contentDescription = if (step > 0) "Haritayı yakınlaştır" else "Haritayı uzaklaştır" },
+                                                            .semantics { contentDescription = if (step > 0) t("Haritayı yakınlaştır") else t("Haritayı uzaklaştır") },
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         ActionIcon(glyph, Modifier.size(15.dp), Color(0xFFF1F1F4))
@@ -2299,6 +2353,9 @@ internal fun ReminderDetailScreen(
                                             }
                                         }
                                     }
+                                    // Look Around, Ara, Web sitesi (Apple Maps), as on iOS.
+                                    if (!editing) com.cagri.real.ui.components.PlaceDetails(place, Modifier.padding(top = 10.dp))
+                                    }
                                 } else {
                                     Box(
                                         Modifier.fillMaxWidth().cardBlockSurface()
@@ -2316,7 +2373,7 @@ internal fun ReminderDetailScreen(
                                                     .weight(1f)
                                                     .clickable {
                                                         if (!openReminderLocationInMaps(context, place)) {
-                                                            com.cagri.real.ui.components.RealToast.show(context, "Harita uygulaması açılamadı")
+                                                            com.cagri.real.ui.components.RealToast.show(context, t("Harita uygulaması açılamadı"))
                                                         }
                                                     },
                                                 verticalAlignment = Alignment.CenterVertically,
@@ -2329,11 +2386,11 @@ internal fun ReminderDetailScreen(
                                                     }
                                                     if (place.address.isNotBlank()) {
                                                         Text(place.address, color = Color(0xFFA5A5B0), style = RealType.detailBlockMeta, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                                        Text("Haritada aç", color = Color(0xFF9E9EA4), style = RealType.detailBlockMetaSecondary, modifier = Modifier.padding(top = 2.dp))
+                                                        Text(t("Haritada aç"), color = Color(0xFF9E9EA4), style = RealType.detailBlockMetaSecondary, modifier = Modifier.padding(top = 2.dp))
                                                     } else if (!place.mapsUrl.isNullOrBlank()) {
-                                                        Text("Haritada aç", color = Color(0xFFA5A5B0), style = RealType.detailBlockMeta)
+                                                        Text(t("Haritada aç"), color = Color(0xFFA5A5B0), style = RealType.detailBlockMeta)
                                                     } else {
-                                                        Text("Konum ayrıntısı bulunamadı", color = Color(0xFFA5A5B0), style = RealType.detailBlockMeta)
+                                                        Text(t("Konum ayrıntısı bulunamadı"), color = Color(0xFFA5A5B0), style = RealType.detailBlockMeta)
                                                     }
                                                 }
                                             }
@@ -2377,7 +2434,7 @@ internal fun ReminderDetailScreen(
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 Text(
-                                                    text = "Günlük",
+                                                    text = t("Günlük"),
                                                     color = Color(0xFFA5A5B0),
                                                     fontSize = 14.sp,
                                                     fontWeight = FontWeight.Medium
@@ -2403,13 +2460,13 @@ internal fun ReminderDetailScreen(
                                                 onValueChange = { editedJournalText = it },
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .semantics { contentDescription = "Günlük notu" },
+                                                    .semantics { contentDescription = t("Günlük notu") },
                                                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color(0xFFF4F4F6), fontSize = 16.sp, lineHeight = 22.sp),
                                                 cursorBrush = SolidColor(Color(0xFF82B3FF)),
                                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                                                 decorationBox = { innerTextField ->
                                                     if (editedJournalText.isEmpty()) {
-                                                        Text("Bir not bırak...", color = Color(0xFF6E6E77), fontSize = 16.sp)
+                                                        Text(t("Bir not bırak..."), color = Color(0xFF6E6E77), fontSize = 16.sp)
                                                     }
                                                     innerTextField()
                                                 }
@@ -2422,12 +2479,12 @@ internal fun ReminderDetailScreen(
                                             ) {
                                                 if (journalEditing) {
                                                     TextButton(onClick = { onDeleteJournal(); journalEditing = false }) {
-                                                        Text("Sil", color = Color(0xFFF87171), fontSize = 14.sp)
+                                                        Text(t("Sil"), color = Color(0xFFF87171), fontSize = 14.sp)
                                                     }
                                                     Spacer(Modifier.weight(1f))
                                                 } else {
                                                     TextButton(onClick = { finishEditing() }) {
-                                                        Text("İptal", color = Color(0xFFA5A5B0), fontSize = 14.sp)
+                                                        Text(t("İptal"), color = Color(0xFFA5A5B0), fontSize = 14.sp)
                                                     }
                                                     TextButton(
                                                         onClick = {
@@ -2438,7 +2495,7 @@ internal fun ReminderDetailScreen(
                                                         },
                                                         enabled = editedJournalText.trim().isNotBlank()
                                                     ) {
-                                                        Text("Kaydet", color = Color(0xFF91B9FF), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                                        Text(t("Kaydet"), color = Color(0xFF91B9FF), fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                                     }
                                                 }
                                             }
@@ -2550,7 +2607,7 @@ internal fun ReminderDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "Oluşturuldu · ${detailReminderDate(reminder.createdAt)}",
+                        text = t("Oluşturuldu · {0}", detailReminderDate(reminder.createdAt)),
                         color = Color(0xFF8E8E98),
                         fontSize = 12.sp,
                         lineHeight = 18.sp,
@@ -2558,7 +2615,7 @@ internal fun ReminderDetailScreen(
                     )
                     if (reminder.completedAt != null) {
                         Text(
-                            text = "Tamamlandı · ${detailReminderDate(reminder.completedAt)}",
+                            text = t("Tamamlandı · {0}", detailReminderDate(reminder.completedAt)),
                             color = Color(0xFF8E8E98),
                             fontSize = 12.sp,
                             lineHeight = 18.sp,
@@ -2567,7 +2624,7 @@ internal fun ReminderDetailScreen(
                     }
                     if (reminder.journal != null) {
                         Text(
-                            text = "Günlüğe eklendi · ${detailReminderDate(reminder.journal.createdAt)}",
+                            text = t("Günlüğe eklendi · {0}", detailReminderDate(reminder.journal.createdAt)),
                             color = Color(0xFF8E8E98),
                             fontSize = 12.sp,
                             lineHeight = 18.sp,
@@ -2590,7 +2647,7 @@ internal fun ReminderDetailScreen(
         if (deleting) {
             Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.16f))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { deleting = false }
-                .semantics { contentDescription = "Silme sorusunu kapat" })
+                .semantics { contentDescription = t("Silme sorusunu kapat") })
         }
         DetailLayoutColumn(
             Modifier
@@ -2688,7 +2745,7 @@ internal fun ReminderDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Kategori", color = Color(0xFFB7B7C0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                    Text(t("Kategori"), color = Color(0xFFB7B7C0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(7.dp)
@@ -2706,7 +2763,7 @@ internal fun ReminderDetailScreen(
                                             }
                                             Text(currentCat.name, color = Color.White, style = RealType.categoryPill)
                                         } else {
-                                            Text("Kategori yok", color = Color(0xFF8E8E98), style = RealType.detailBlockMeta)
+                                            Text(t("Kategori yok"), color = Color(0xFF8E8E98), style = RealType.detailBlockMeta)
                                         }
                                         ActionIcon(ActionGlyph.ChevronRight, Modifier.size(14.dp), Color(0xFF8E8E98))
                                     }
@@ -2746,7 +2803,7 @@ internal fun ReminderDetailScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Text("Renk ve kategori", color = Color(0xFFB7B7C0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                        Text(t("Renk ve kategori"), color = Color(0xFFB7B7C0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                         ActionIcon(
                                             ActionGlyph.ChevronRight,
                                             Modifier.size(14.dp).graphicsLayer {
@@ -2776,7 +2833,7 @@ internal fun ReminderDetailScreen(
                                                 keyboard?.hide()
                                                 isReorderingBlocks = !isReorderingBlocks
                                             }
-                                            .semantics { contentDescription = "Sırala" },
+                                            .semantics { contentDescription = t("Sırala") },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         ActionIcon(
@@ -2806,7 +2863,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Calendar,
-                                    description = "Tarih / Saat",
+                                    description = t("Tarih / Saat"),
                                     enabled = !savingDetail && !reminder.isCompleted,
                                     active = reminder.alertAt != null || reminder.plannedDateEpochDay != null,
                                     onClick = requestPermissionForDatePicker
@@ -2815,14 +2872,14 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Photo,
-                                    description = "Fotoğraf ekle",
+                                    description = t("Fotoğraf ekle"),
                                     enabled = !savingDetail && !attachmentBusy,
                                     active = photoCount > 0,
                                     count = if (photoCount > 0) photoCount else null,
                                     isFull = photoCount >= 3,
                                     onClick = {
                                         if (photoCount >= 3) {
-                                            com.cagri.real.ui.components.RealToast.show(context, "En fazla 3 fotoğraf eklenebilir")
+                                            com.cagri.real.ui.components.RealToast.show(context, t("En fazla 3 fotoğraf eklenebilir"))
                                         } else {
                                             detailPhotoPickerLauncher.launch(
                                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -2834,12 +2891,12 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Camera,
-                                    description = "Kamera ile fotoğraf ekle",
+                                    description = t("Kamera ile fotoğraf ekle"),
                                     enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
                                     active = showCamera,
                                     isFull = photoCount >= 3,
                                     onClick = {
-                                        if (photoCount >= 3) com.cagri.real.ui.components.RealToast.show(context, "En fazla 3 fotoğraf eklenebilir")
+                                        if (photoCount >= 3) com.cagri.real.ui.components.RealToast.show(context, t("En fazla 3 fotoğraf eklenebilir"))
                                         else {
                                             focusManager.clearFocus()
                                             keyboard?.hide()
@@ -2851,7 +2908,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Checklist,
-                                    description = "Checklist",
+                                    description = t("Checklist"),
                                     enabled = !savingDetail,
                                     active = checklistCount > 0,
                                     count = if (checklistCount > 0) checklistCount else null,
@@ -2867,7 +2924,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Cards,
-                                    description = "Kart Yığını",
+                                    description = t("Kart Yığını"),
                                     enabled = !savingDetail,
                                     active = editedCardStack != null,
                                     count = editedCardStack?.layoutStacks()?.size?.takeIf { it > 0 },
@@ -2892,7 +2949,7 @@ internal fun ReminderDetailScreen(
                                 )
                                 DetailQuickActionButton(
                                     designStyle = designStyle, reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.Note, description = "Metin kutusu ekle",
+                                    glyph = ActionGlyph.Note, description = t("Metin kutusu ekle"),
                                     enabled = !savingDetail && !voiceRecordingActive,
                                     active = editedAttachments.any { it.sourceTitle == "REAL_TEXT_BLOCK" },
                                     onClick = {
@@ -2900,7 +2957,7 @@ internal fun ReminderDetailScreen(
                                         val id = java.util.UUID.randomUUID().toString()
                                         editedAttachments = editedAttachments + com.cagri.real.data.ReminderAttachment(
                                             id = id, type = AttachmentType.TEXT_SNIPPET, mimeType = "text/plain",
-                                            displayName = "Metin", text = "", sourceTitle = "REAL_TEXT_BLOCK"
+                                            displayName = t("Metin"), text = "", sourceTitle = t("REAL_TEXT_BLOCK")
                                         )
                                         val key = "files:$id"
                                         editedContentBlockOrder = (editedContentBlockOrder + key).distinct()
@@ -2912,7 +2969,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Pin,
-                                    description = "Konum",
+                                    description = t("Konum"),
                                     enabled = !savingDetail,
                                     active = editedLocation != null,
                                     onClick = { showLocationGuide = true }
@@ -2921,7 +2978,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.AudioWave,
-                                    description = "Ses",
+                                    description = t("Ses"),
                                     enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
                                     active = voiceCount > 0,
                                     count = if (voiceCount > 0) voiceCount else null,
@@ -2931,7 +2988,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Music,
-                                    description = "Müzik",
+                                    description = t("Müzik"),
                                     enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
                                     active = musicCount > 0,
                                     count = if (musicCount > 0) musicCount else null,
@@ -2941,7 +2998,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Video,
-                                    description = "Film & Dizi",
+                                    description = t("Film & Dizi"),
                                     enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
                                     active = mediaCount > 0,
                                     count = if (mediaCount > 0) mediaCount else null,
@@ -2951,7 +3008,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Play,
-                                    description = "Oyun",
+                                    description = t("Oyun"),
                                     enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
                                     active = reminder.gameBlocks.isNotEmpty(),
                                     count = reminder.gameBlocks.size.takeIf { it > 0 },
@@ -2961,7 +3018,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.File,
-                                    description = "Dosya ekle",
+                                    description = t("Dosya ekle"),
                                     enabled = !savingDetail && !attachmentBusy,
                                     active = fileCount > 0,
                                     count = if (fileCount > 0) fileCount else null,
@@ -2978,7 +3035,7 @@ internal fun ReminderDetailScreen(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.MoodVeryGood,
-                                    description = "Mood",
+                                    description = t("Mood"),
                                     enabled = !savingDetail,
                                     active = reminder.mood != null,
                                     onClick = {
@@ -2990,8 +3047,8 @@ internal fun ReminderDetailScreen(
                                 )
                                 // Counter (value box + step buttons) and market tile (Bitcoin, gram altın, Euro, Dolar).
                                 listOf(
-                                    Triple(ActionGlyph.Add, "Sayaç ekle") { com.cagri.real.data.newCounterAttachment() },
-                                    Triple(ActionGlyph.AudioWave, "Piyasa ekle") { com.cagri.real.data.newMarketAttachment() }
+                                    Triple(ActionGlyph.Add, t("Sayaç ekle")) { com.cagri.real.data.newCounterAttachment() },
+                                    Triple(ActionGlyph.AudioWave, t("Piyasa ekle")) { com.cagri.real.data.newMarketAttachment() }
                                 ).forEach { (glyph, label, create) ->
                                     DetailQuickActionButton(
                                         designStyle = designStyle, reduceAnimations = reduceAnimations,
@@ -3069,7 +3126,7 @@ internal fun ReminderDetailScreen(
                                                 horizontalArrangement = Arrangement.spacedBy(5.dp)
                                             ) {
                                                 ActionIcon(ActionGlyph.Bell, Modifier.size(14.dp), Color(0xFF91B9FF))
-                                                Text(com.cagri.real.ui.components.earlyAlertLabel(early) + " önce", color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
+                                                Text(com.cagri.real.ui.components.earlyAlertLabel(early) + t(" önce"), color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
                                             }
                                         }
                                         val currentEndTimeStr = reminder.endAt?.let { end ->
@@ -3105,7 +3162,7 @@ internal fun ReminderDetailScreen(
                                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                                         ) {
                                             ActionIcon(ActionGlyph.Note, Modifier.size(14.dp), Color(0xFF91B9FF))
-                                            Text(if (detailDurationMinutes != null) "Süre: $detailDurationMinutes min" else "Süre ekle", color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
+                                            Text(if (detailDurationMinutes != null) t("Süre: {0} min", detailDurationMinutes) else t("Süre ekle"), color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
                                         }
 
                                         Row(
@@ -3121,17 +3178,17 @@ internal fun ReminderDetailScreen(
                                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                                         ) {
                                             ActionIcon(ActionGlyph.Calendar, Modifier.size(14.dp), Color(0xFF91B9FF))
-                                            Text(currentEndTimeStr?.let { "Bitiş: $it" } ?: "+ Bitiş", color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
+                                            Text(currentEndTimeStr?.let { t("Bitiş: {0}", it) } ?: t("+ Bitiş"), color = Color(0xFFD2D2DA), style = RealType.composerAuxiliaryPill)
                                             if (currentEndTimeStr != null) {
                                                 ActionIcon(ActionGlyph.Close, Modifier.size(12.dp).clip(CircleShape)
                                                     .clickable { setReminderTiming(reminder.id, reminder.earlyAlertMinutes, null) }
-                                                    .semantics { contentDescription = "Bitişi kaldır" }, Color(0xFFA7A7AF))
+                                                    .semantics { contentDescription = t("Bitişi kaldır") }, Color(0xFFA7A7AF))
                                             }
                                         }
                                     }
                                     IconButton(
                                         onClick = { onSetAlert(null, RecurrenceRule.NONE) },
-                                        modifier = Modifier.semantics { contentDescription = "Tarih ve saati kaldır" }
+                                        modifier = Modifier.semantics { contentDescription = t("Tarih ve saati kaldır") }
                                     ) {
                                         ActionIcon(ActionGlyph.Close, Modifier.size(18.dp))
                                     }
@@ -3162,14 +3219,14 @@ internal fun ReminderDetailScreen(
                                     Spacer(Modifier.weight(1f))
                                     IconButton(
                                         onClick = { onSetAlert(null, RecurrenceRule.NONE) },
-                                        modifier = Modifier.semantics { contentDescription = "Tarihi kaldır" }
+                                        modifier = Modifier.semantics { contentDescription = t("Tarihi kaldır") }
                                     ) {
                                         ActionIcon(ActionGlyph.Close, Modifier.size(18.dp))
                                     }
                                 }
                             }
                         }
-                            if (attachmentBusy) Text("Ek hazırlanıyor…", color = Color(0xFFB4B4BE), style = RealType.detailBlockMetaSecondary)
+                            if (attachmentBusy) Text(t("Ek hazırlanıyor…"), color = Color(0xFFB4B4BE), style = RealType.detailBlockMetaSecondary)
                             attachmentError?.let { Text(it, color = Color(0xFFE0B5A8), style = RealType.detailBlockMetaSecondary) }
                             }
                         }
@@ -3240,8 +3297,8 @@ internal fun ReminderDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("Günlük ekle", color = Color(0xFFD3D3D9), fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                            Text("Nasıl geçti? Aklında kalanı yaz.", color = Color(0xFF8E8E98), fontSize = 12.sp)
+                            Text(t("Günlük ekle"), color = Color(0xFFD3D3D9), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Text(t("Nasıl geçti? Aklında kalanı yaz."), color = Color(0xFF8E8E98), fontSize = 12.sp)
                         }
                         ActionIcon(ActionGlyph.Add, Modifier.size(16.dp), Color(0xFF91B9FF))
                     }
@@ -3284,7 +3341,7 @@ internal fun ReminderDetailScreen(
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 0.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (inlineCardStackEditing && !editing) {
                         DetailAction(
-                            "Bitti",
+                            t("Bitti"),
                             ActionGlyph.Check,
                             Modifier.weight(1f),
                             enabled = !savingDetail,
@@ -3293,9 +3350,9 @@ internal fun ReminderDetailScreen(
                             onClick = saveDraftAndClose
                         )
                     } else if (editing) {
-                        DetailAction("Vazgeç", ActionGlyph.Close, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = finishEditing)
+                        DetailAction(t("Vazgeç"), ActionGlyph.Close, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = finishEditing)
                         DetailAction(
-                            "Kaydet",
+                            t("Kaydet"),
                             ActionGlyph.Check,
                             Modifier.weight(1f),
                             enabled = !attachmentBusy && !savingDetail && !voiceRecordingActive &&
@@ -3306,7 +3363,7 @@ internal fun ReminderDetailScreen(
                             onClick = saveDraftAndClose
                         )
                     } else {
-                        DetailAction(if (reminder.isCompleted) "Geri al" else "Tamamla",
+                        DetailAction(if (reminder.isCompleted) t("Geri al") else t("Tamamla"),
                             if (reminder.isCompleted) ActionGlyph.Undo else ActionGlyph.Check,
                             Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
                                 if (!reminder.isCompleted) {
@@ -3314,7 +3371,7 @@ internal fun ReminderDetailScreen(
                                 }
                                 onToggleCompleted()
                             })
-                        DetailAction("Düzenle", ActionGlyph.Edit, Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
+                        DetailAction(t("Düzenle"), ActionGlyph.Edit, Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
                             focusManager.clearFocus()
                             keyboard?.hide()
                             loadReminderIntoDraft()
@@ -3334,7 +3391,7 @@ internal fun ReminderDetailScreen(
                                 showRealShareDialog = true
                             }
                         })
-                        DetailAction("Sil", ActionGlyph.Delete, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = { deleting = !deleting })
+                        DetailAction(t("Sil"), ActionGlyph.Delete, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = { deleting = !deleting })
                     }
                 }
             }
@@ -3416,7 +3473,7 @@ internal fun ReminderDetailScreen(
             onConfirm = { at, _ ->
                 // Bitiş is its own day and time; the duration chip stays as it is ("4 gün, her gün 60 dk").
                 if (at > (reminder.alertAt ?: 0L)) setReminderTiming(reminder.id, reminder.earlyAlertMinutes, at)
-                else com.cagri.real.ui.components.RealToast.show(context, "Bitiş, başlangıçtan sonra olmalı.")
+                else com.cagri.real.ui.components.RealToast.show(context, t("Bitiş, başlangıçtan sonra olmalı."))
                 showDetailEndPicker = false
             },
             exactAlarmsAllowed = exactAlarmsAllowed,
@@ -3666,7 +3723,7 @@ private const val COMPLETED_JOURNAL_CARD_ID_PREFIX = "completed_journal_"
 @Composable
 private fun DetailPreview() {
     RealTheme {
-        ReminderDetailScreen(ReminderItem(1, "Akşam için birkaç küçük not", 1789610400000), {}, {}, {}, { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> true }, {})
+        ReminderDetailScreen(ReminderItem(1, t("Akşam için birkaç küçük not"), 1789610400000), {}, {}, {}, { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> true }, {})
     }
 }
 
@@ -3682,7 +3739,7 @@ fun reminderDetailStatusText(
     reminder: ReminderItem,
     hasCategory: Boolean = (reminder.customCategoryId != null)
 ): String? = when {
-    reminder.isCompleted -> "Tamamlandı"
+    reminder.isCompleted -> t("Tamamlandı")
     reminder.isQuick24HourActive() -> "24 hour"
     reminder.alertAt == null && reminder.plannedDateEpochDay == null -> if (!hasCategory) "No alert" else null
     else -> "Planned"

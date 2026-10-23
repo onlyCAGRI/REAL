@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -93,7 +94,7 @@ fun MoodTrackerHistoryScreen(
                 RealBackButton(onDismiss)
                 Spacer(Modifier.weight(1f))
                 Text(
-                    text = "Moods",
+                    text = t("Moods"),
                     color = Color(0xFFF4F4F6),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold
@@ -118,13 +119,13 @@ fun MoodTrackerHistoryScreen(
                 item(key = "mood_tracker_history_title") {
                     Column(Modifier.padding(top = 10.dp, bottom = 2.dp)) {
                         Text(
-                            text = "Geçmiş izlerin",
+                            text = t("Geçmiş izlerin"),
                             color = Color(0xFFF3F3F5),
                             fontSize = 22.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = if (sortedEntries.isEmpty()) "Henüz bir mood kaydın yok." else "Moodların günlere göre birlikte gösteriliyor.",
+                            text = if (sortedEntries.isEmpty()) t("Henüz bir mood kaydın yok.") else t("Moodların günlere göre birlikte gösteriliyor."),
                             color = Color(0xFF85858E),
                             fontSize = 12.sp,
                             modifier = Modifier.padding(top = 4.dp)
@@ -178,9 +179,9 @@ private fun MoodTrackerAddCard(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Yeni bir iz bırak", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Medium)
+            Text(t("Yeni bir iz bırak"), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Medium)
             Text(
-                "Şu an nasıl hissediyorsun ya da bugünün havası nasıldı?",
+                t("Şu an nasıl hissediyorsun ya da bugünün havası nasıldı?"),
                 color = Color(0xFFC2C2C9),
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
@@ -201,8 +202,8 @@ private fun MoodHistoryDayHeader(
     val locale = remember { Locale.forLanguageTag("tr-TR") }
     val dateFormatter = remember(locale) { DateTimeFormatter.ofPattern("d MMMM · EEEE", locale) }
     val title = when (date) {
-        today -> "Bugün"
-        today.minusDays(1) -> "Dün"
+        today -> t("Bugün")
+        today.minusDays(1) -> t("Dün")
         else -> date.format(dateFormatter)
     }
 
@@ -220,7 +221,7 @@ private fun MoodHistoryDayHeader(
         )
         Spacer(Modifier.weight(1f))
         Text(
-            text = "$count iz",
+            text = t("{0} iz", count),
             color = Color(0xFF777780),
             fontSize = 11.sp
         )
@@ -261,7 +262,7 @@ private fun MoodHistoryEntryCard(entry: MoodTrackerEntry) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = if (entry.details.scope == MoodScope.MOMENT) "Anlık his" else "Günün havası",
+                    text = if (entry.details.scope == MoodScope.MOMENT) t("Anlık his") else t("Günün havası"),
                     color = accent.copy(alpha = 0.94f),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
