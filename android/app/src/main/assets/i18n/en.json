@@ -1851,5 +1851,15 @@
   "Düzenleme: {0}": "Edited: {0}",
   "İçerik önizlenemedi. Sürümler korunuyor.": "Couldn't preview the content. Versions are kept.",
   "Hesap bu kaydı kabul etmedi ({0}).": "The account didn't accept this record ({0}).",
-  "GIF'ler": "GIFs"
+  "GIF'ler": "GIFs",
+  "Bildirim gönderilemedi.": "Couldn't send the report.",
+  "Hesabını Google ile bağla": "Link your account with Google",
+  "Giriş yap ya da hesap oluştur": "Sign in or create an account",
+  "E-posta ile giriş": "Sign in with email",
+  "Adı kaydet ve devam et": "Save name and continue",
+  "Şifremi unuttum": "Forgot password",
+  "Yeni hesap oluştur": "Create a new account",
+  "Zaten hesabım var": "I already have an account",
+  "Apple Music şarkısı": "Apple Music song",
+  "{0} şarkısı": "{0} song"
 }

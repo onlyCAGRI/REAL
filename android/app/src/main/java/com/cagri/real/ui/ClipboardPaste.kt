@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
@@ -17,7 +18,10 @@ import kotlinx.coroutines.withContext
  * is read in [read], only when the person taps.
  */
 internal object ClipboardPaste {
-    enum class Kind(val label: String) { Text("Metin"), Link("Bağlantı"), Photo("Fotoğraf"), File("Dosya") }
+    enum class Kind(private val trLabel: String) {
+        Text("Metin"), Link("Bağlantı"), Photo("Fotoğraf"), File("Dosya");
+        val label: String get() = t(trLabel)
+    }
 
     private fun manager(context: Context) = context.getSystemService(ClipboardManager::class.java)
 
@@ -67,14 +71,14 @@ internal object ClipboardPaste {
             else AttachmentStorage.importUri(context, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }.getOrNull() ?: return@withContext null
         Pasted(IncomingContent(attachments = listOf(attachment)), null,
-            if (attachment.type == AttachmentType.IMAGE) "Fotoğraf" else "Dosya")
+            if (attachment.type == AttachmentType.IMAGE) t("Fotoğraf") else t("Dosya"))
     }
 
     /** Converts copied text into the right block (the clipboard's, or one taken from the keyboard's clipboard). */
     suspend fun fromText(text: String): Pasted = withContext(Dispatchers.IO) {
         GoogleMapsShareParser.sharedUrl(text)?.let { maps ->
             runCatching { GoogleMapsShareParser.parse(maps) }.getOrNull()?.let { place ->
-                return@withContext Pasted(IncomingContent(), place, "Konum")
+                return@withContext Pasted(IncomingContent(), place, t("Konum"))
             }
         }
         var content = IncomingContentParser.smart(text)
@@ -87,10 +91,10 @@ internal object ClipboardPaste {
             val found = SharedLinkResolver.resolve(link)
             found.music?.let { music ->
                 return@withContext Pasted(IncomingContent(musicBlocks = listOf(music)), null,
-                    if (music.provider == "iTunes") "Apple Music şarkısı" else "${music.provider} şarkısı")
+                    if (music.provider == "iTunes") t("Apple Music şarkısı") else t("{0} şarkısı", music.provider))
             }
-            return@withContext Pasted(content, null, "Bağlantı")
+            return@withContext Pasted(content, null, t("Bağlantı"))
         }
-        Pasted(content, null, source.label.let { if (source == SnippetSource.PLAIN_TEXT) "Not" else it })
+        Pasted(content, null, t(source.label))
     }
 }

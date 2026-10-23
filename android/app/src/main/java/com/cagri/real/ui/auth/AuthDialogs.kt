@@ -1,5 +1,6 @@
 package com.cagri.real.ui.auth
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
@@ -59,7 +60,10 @@ private enum class EmailAuthMode { SignIn, Create }
 @Composable
 fun AuthChoiceDialog(
     onDismiss: () -> Unit,
-    onAuthenticated: (AuthUser) -> Unit = {}
+    onAuthenticated: (AuthUser) -> Unit = {},
+    /** SignInRequired: what the guest tapped asks for an account. */
+    title: String = t("Hesap ekle"),
+    subtitle: String = t("Notların bu cihazda kalır. Hesap; eşitleme ve yedekleme için kullanılır.")
 ) {
     val controller = LocalAuthUiController.current
     val scope = rememberCoroutineScope()
@@ -75,10 +79,10 @@ fun AuthChoiceDialog(
                 onAuthenticated = { showEmail = false; onAuthenticated(it); onDismiss() },
                 onBusy = { emailBusy = it }
             ) else Column(Modifier.fillMaxWidth().animateContentSize(tween(220)), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                AuthTitle("Hesap ekle", "Notların bu cihazda kalır. Hesap; eşitleme ve yedekleme için kullanılır.")
+                AuthTitle(title, subtitle)
                 Spacer(Modifier.height(6.dp))
-                AuthMethodRow(AuthGlyph.Google, ConnectionPalette.Accent, if (busy) "Google açılıyor…" else "Google ile devam et",
-                    "Hesabını Google ile bağla", enabled = !busy && controller != null) {
+                AuthMethodRow(AuthGlyph.Google, ConnectionPalette.Accent, if (busy) t("Google açılıyor…") else t("Google ile devam et"),
+                    t("Hesabını Google ile bağla"), enabled = !busy && controller != null) {
                     val active = controller ?: return@AuthMethodRow
                     busy = true
                     error = null
@@ -90,13 +94,13 @@ fun AuthChoiceDialog(
                             onDismiss()
                         }.onFailure { throwable ->
                             if (throwable !is AuthCancelled) {
-                                error = throwable.message ?: "Google ile giriş yapılamadı."
+                                error = throwable.message ?: t("Google ile giriş yapılamadı.")
                             }
                         }
                     }
                 }
-                AuthMethodRow(AuthGlyph.Mail, Color(0xFFB59BFF), "E-posta ile devam et",
-                    "Giriş yap ya da hesap oluştur", enabled = !busy && controller != null) {
+                AuthMethodRow(AuthGlyph.Mail, Color(0xFFB59BFF), t("E-posta ile devam et"),
+                    t("Giriş yap ya da hesap oluştur"), enabled = !busy && controller != null) {
                     error = null
                     showEmail = true
                 }
@@ -105,7 +109,7 @@ fun AuthChoiceDialog(
                     com.cagri.real.ui.components.RealSpinner(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
                 }
                 Spacer(Modifier.height(4.dp))
-                ConnectionPill("Vazgeç", { if (!busy) onDismiss() }, Modifier.fillMaxWidth(), enabled = !busy, small = true)
+                ConnectionPill(t("Vazgeç"), { if (!busy) onDismiss() }, Modifier.fillMaxWidth(), enabled = !busy, small = true)
             }
         }
     }
@@ -145,23 +149,23 @@ private fun EmailAuthContent(
     fun submit() {
         if (busy) return
         val active = controller ?: run {
-            error = "Hesap servisi hazır değil."
+            error = t("Hesap servisi hazır değil.")
             return
         }
         val normalizedEmail = email.trim()
         if (createdUid == null && (normalizedEmail.isBlank() || password.isBlank())) {
-            error = "E-posta ve şifreyi doldurun."
+            error = t("E-posta ve şifreyi doldurun.")
             return
         }
         if (mode == EmailAuthMode.Create) {
             try { profileDisplayName(firstName, lastName) }
             catch (failure: IllegalArgumentException) { error = failure.message; return }
             if (createdUid == null && password.length < 6) {
-                error = "Şifre en az 6 karakter olmalı."
+                error = t("Şifre en az 6 karakter olmalı.")
                 return
             }
             if (createdUid == null && password != confirmPassword) {
-                error = "Şifreler eşleşmiyor."
+                error = t("Şifreler eşleşmiyor.")
                 return
             }
         }
@@ -182,31 +186,31 @@ private fun EmailAuthContent(
                 onAuthenticated(it)
             }.onFailure {
                 if (it is com.cagri.real.auth.AuthProfileFailure) createdUid = it.createdUid
-                error = it.message ?: "İşlem tamamlanamadı."
+                error = it.message ?: t("İşlem tamamlanamadı.")
             }
         }
     }
 
     Column(Modifier.fillMaxWidth().animateContentSize(tween(220)), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 8.dp)) { com.cagri.real.ui.components.RealBackButton(onBack, enabled = !busy) }
-        Text(if (mode == EmailAuthMode.SignIn) "E-posta ile giriş" else "Hesap oluştur", color = Color.White,
+        Text(if (mode == EmailAuthMode.SignIn) t("E-posta ile giriş") else t("Hesap oluştur"), color = Color.White,
             fontSize = 28.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
 
         if (mode == EmailAuthMode.Create) {
-            AuthTextField(firstName, { if (!busy) { firstName = it; error = null } }, "Ad (zorunlu)", KeyboardType.Text, imeAction = ImeAction.Next)
-            AuthTextField(lastName, { if (!busy) { lastName = it; error = null } }, "Soyad (isteğe bağlı)", KeyboardType.Text, imeAction = ImeAction.Next)
+            AuthTextField(firstName, { if (!busy) { firstName = it; error = null } }, t("Ad (zorunlu)"), KeyboardType.Text, imeAction = ImeAction.Next)
+            AuthTextField(lastName, { if (!busy) { lastName = it; error = null } }, t("Soyad (isteğe bağlı)"), KeyboardType.Text, imeAction = ImeAction.Next)
         }
         AuthTextField(
             value = email,
             onValueChange = { if (!busy && createdUid == null) { email = it; error = null; info = null } },
-            placeholder = "E-posta",
+            placeholder = t("E-posta"),
             keyboardType = KeyboardType.Email,
             imeAction = ImeAction.Next
         )
         AuthTextField(
             value = password,
             onValueChange = { password = it; error = null; info = null },
-            placeholder = "Şifre",
+            placeholder = t("Şifre"),
             keyboardType = KeyboardType.Password,
             visualTransformation = PasswordVisualTransformation(),
             imeAction = if (mode == EmailAuthMode.Create) ImeAction.Next else ImeAction.Done,
@@ -216,7 +220,7 @@ private fun EmailAuthContent(
             AuthTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it; error = null; info = null },
-                placeholder = "Şifreyi tekrar yaz",
+                placeholder = t("Şifreyi tekrar yaz"),
                 keyboardType = KeyboardType.Password,
                 visualTransformation = PasswordVisualTransformation(),
                 imeAction = ImeAction.Done,
@@ -230,10 +234,10 @@ private fun EmailAuthContent(
         Spacer(Modifier.height(4.dp))
         AuthActionButton(
             label = when {
-                busy -> "Bekleyin…"
-                createdUid != null -> "Adı kaydet ve devam et"
-                mode == EmailAuthMode.SignIn -> "Giriş yap"
-                else -> "Hesap oluştur"
+                busy -> t("Bekleyin…")
+                createdUid != null -> t("Adı kaydet ve devam et")
+                mode == EmailAuthMode.SignIn -> t("Giriş yap")
+                else -> t("Hesap oluştur")
             },
             enabled = !busy && controller != null,
             emphasized = true,
@@ -241,10 +245,10 @@ private fun EmailAuthContent(
         )
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (mode == EmailAuthMode.SignIn) ConnectionPill("Şifremi unuttum", {
+            if (mode == EmailAuthMode.SignIn) ConnectionPill(t("Şifremi unuttum"), {
                 val normalizedEmail = email.trim()
                 if (normalizedEmail.isBlank()) {
-                    error = "Önce e-posta adresini yazın."
+                    error = t("Önce e-posta adresini yazın.")
                     return@ConnectionPill
                 }
                 val active = controller ?: return@ConnectionPill
@@ -255,13 +259,13 @@ private fun EmailAuthContent(
                     val result = active.sendPasswordReset(normalizedEmail)
                     busy = false
                     result.onSuccess {
-                        info = "Şifre sıfırlama bağlantısı e-posta adresine gönderildi."
+                        info = t("Şifre sıfırlama bağlantısı e-posta adresine gönderildi.")
                     }.onFailure {
-                        error = it.message ?: "Sıfırlama e-postası gönderilemedi."
+                        error = it.message ?: t("Sıfırlama e-postası gönderilemedi.")
                     }
                 }
             }, Modifier.weight(1f), enabled = !busy, small = true)
-            ConnectionPill(if (mode == EmailAuthMode.SignIn) "Yeni hesap oluştur" else "Zaten hesabım var", {
+            ConnectionPill(if (mode == EmailAuthMode.SignIn) t("Yeni hesap oluştur") else t("Zaten hesabım var"), {
                 if (!busy && createdUid == null) {
                     mode = if (mode == EmailAuthMode.SignIn) EmailAuthMode.Create else EmailAuthMode.SignIn
                     password = ""
@@ -311,7 +315,8 @@ private fun AuthMethodRow(glyph: AuthGlyph, tone: Color, title: String, subtitle
         .heightIn(min = 68.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(40.dp).clip(CircleShape).background(tone.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
             when (glyph) {
-                AuthGlyph.Google -> Text("G", color = tone, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                AuthGlyph.Google -> androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.cagri.real.R.drawable.ic_logo_google),
+                    contentDescription = null, modifier = Modifier.size(20.dp))
                 AuthGlyph.Mail -> Canvas(Modifier.size(20.dp)) {
                     val w = size.width; val h = size.height
                     val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
@@ -391,7 +396,7 @@ private fun AuthErrorText(message: String) = AuthMessage(message, ConnectionPale
 private fun providerLabel(providerIds: List<String>): String = providerIds.mapNotNull {
     when (it) {
         "google.com" -> "Google"
-        "password" -> "E-posta ve şifre"
+        "password" -> t("E-posta ve şifre")
         "apple.com" -> "Apple"
         else -> null
     }
@@ -406,20 +411,20 @@ fun ProfileNameForm(user: AuthUser, onSaved: (AuthUser) -> Unit) {
     var busy by remember(user.id) { mutableStateOf(false) }
     var error by remember(user.id) { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth()) {
-        Text("REAL profilini tamamla", color = Color.White, fontSize = 20.sp)
-        Text("Bağlantılarınız ve gönderdiğiniz kartlar bu isimle görünür.", color = Color(0xFFA9A9B2), fontSize = 13.sp)
+        Text(t("REAL profilini tamamla"), color = Color.White, fontSize = 20.sp)
+        Text(t("Bağlantılarınız ve gönderdiğiniz kartlar bu isimle görünür."), color = Color(0xFFA9A9B2), fontSize = 13.sp)
         Spacer(Modifier.height(10.dp))
-        AuthTextField(first, { if (!busy) first = it }, "Ad (zorunlu)", KeyboardType.Text, imeAction = ImeAction.Next)
+        AuthTextField(first, { if (!busy) first = it }, t("Ad (zorunlu)"), KeyboardType.Text, imeAction = ImeAction.Next)
         Spacer(Modifier.height(10.dp))
-        AuthTextField(last, { if (!busy) last = it }, "Soyad (isteğe bağlı)", KeyboardType.Text, imeAction = ImeAction.Done)
+        AuthTextField(last, { if (!busy) last = it }, t("Soyad (isteğe bağlı)"), KeyboardType.Text, imeAction = ImeAction.Done)
         Spacer(Modifier.height(10.dp))
-        AuthActionButton(if (busy) "Kaydediliyor…" else "Kaydet ve devam et", !busy, emphasized = true) {
+        AuthActionButton(if (busy) t("Kaydediliyor…") else t("Kaydet ve devam et"), !busy, emphasized = true) {
             busy = true; error = null
             scope.launch {
                 try {
                     com.cagri.real.platform.android.auth.AndroidBackend.auth
                         .updateProfileName(user.id, first, last)
-                        .onSuccess(onSaved).onFailure { error = it.message ?: "İsim kaydedilemedi." }
+                        .onSuccess(onSaved).onFailure { error = it.message ?: t("İsim kaydedilemedi.") }
                 } finally { busy = false }
             }
         }
@@ -471,7 +476,7 @@ fun GoogleProfileNamePrompt(reduceAnimations: Boolean = false) {
             try {
                 auth.updateProfileName(current.id, name, "")
                     .onSuccess { confirm() }
-                    .onFailure { error = it.message ?: "Ad kaydedilemedi." }
+                    .onFailure { error = it.message ?: t("Ad kaydedilemedi.") }
             } finally { busy = false }
         }
     }
@@ -484,19 +489,19 @@ fun GoogleProfileNamePrompt(reduceAnimations: Boolean = false) {
         LaunchedEffect(Unit) { shown = true }
         com.cagri.real.ui.components.PermissionSheet(
             visible = shown,
-            title = "REAL'de adın ne olsun?",
-            description = "Ortak kategorilerde ve paylaştığın kartlarda bu ad görünür.",
+            title = t("REAL'de adın ne olsun?"),
+            description = t("Ortak kategorilerde ve paylaştığın kartlarda bu ad görünür."),
             onAllow = ::save,
             onLater = { if (!busy) confirm() },
             reduceAnimations = reduceAnimations,
             modifier = Modifier.imePadding(),
-            primaryLabel = if (busy) "Kaydediliyor…" else "Kaydet",
-            secondaryLabel = if (forced) "Vazgeç" else "Google adım kalsın",
+            primaryLabel = if (busy) t("Kaydediliyor…") else t("Kaydet"),
+            secondaryLabel = if (forced) t("Vazgeç") else t("Google adım kalsın"),
             glyph = null,
             primaryEnabled = !busy && name.isNotBlank(),
             extraContent = {
                 Spacer(Modifier.height(14.dp))
-                AuthTextField(name, { if (!busy) { name = it.take(80); error = null } }, "Adın", KeyboardType.Text,
+                AuthTextField(name, { if (!busy) { name = it.take(80); error = null } }, t("Adın"), KeyboardType.Text,
                     imeAction = ImeAction.Done, onDone = ::save)
                 error?.let { AuthErrorText(it) }
             }

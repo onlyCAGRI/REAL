@@ -1,5 +1,6 @@
 package com.cagri.real.ui.ai
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,7 +27,7 @@ fun AiReportButton(feature: AiReportFeature,title: String,content: String,modifi
     val uid=AndroidBackend.auth.currentUser()?.id
     var open by remember(uid,feature,title,content) { mutableStateOf(false) }
     TextButton(onClick={open=true},modifier=modifier,enabled=uid!=null) {
-        Text("Öneriyi bildir",style=RealType.cardMetaPrimary,color=Color.White.copy(alpha=.58f))
+        Text(t("Öneriyi bildir"),style=RealType.cardMetaPrimary,color=Color.White.copy(alpha=.58f))
     }
     if(open && uid!=null) key(uid,feature,title,content) {
         val scope=rememberCoroutineScope()
@@ -37,21 +38,21 @@ fun AiReportButton(feature: AiReportFeature,title: String,content: String,modifi
         var sent by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
         Dialog(onDismissRequest={if(!busy)open=false},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
-            PermissionSheet(visible=true,title=if(sent) "Bildirimin alındı" else "Bu öneriyi bildir",
-                description=if(sent) "Teşekkürler. Bildirimin inceleme için kaydedildi." else "Yalnız bu önerinin başlığı, gösterilen metni ve bildirim nedeni REAL'e gönderilir.",
-                glyph=PermissionGlyph.Brand,primaryLabel=if(sent) "Bitti" else if(busy) "Gönderiliyor…" else "Bildirimi gönder",
-                primaryEnabled=sent || (!busy && reason!=null),secondaryLabel=if(sent) "Kapat" else "Vazgeç",
+            PermissionSheet(visible=true,title=if(sent) t("Bildirimin alındı") else t("Bu öneriyi bildir"),
+                description=if(sent) t("Teşekkürler. Bildirimin inceleme için kaydedildi.") else t("Yalnız bu önerinin başlığı, gösterilen metni ve bildirim nedeni REAL'e gönderilir."),
+                glyph=PermissionGlyph.Brand,primaryLabel=if(sent) t("Bitti") else if(busy) t("Gönderiliyor…") else t("Bildirimi gönder"),
+                primaryEnabled=sent || (!busy && reason!=null),secondaryLabel=if(sent) t("Kapat") else t("Vazgeç"),
                 onLater={if(!busy)open=false},onAllow={
                     if(sent)open=false
                     else if(!busy && reason!=null) { busy=true;error=null;scope.launch {
                         try { client.submit(id,feature,reason!!,title,content);sent=true }
                         catch(cancelled:CancellationException) { throw cancelled }
-                        catch(failure:Exception) { error=failure.message ?: "Bildirim gönderilemedi." }
+                        catch(failure:Exception) { error=failure.message ?: t("Bildirim gönderilemedi.") }
                         finally { busy=false }
                     } }
                 },extraContent={
                     if(!sent) Column(Modifier.fillMaxWidth().heightIn(max=210.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                        Text("Konuşman, duygu seçimlerin ve diğer kartların otomatik eklenmez.",style=RealType.cardMetaPrimary,color=Color.White.copy(alpha=.65f))
+                        Text(t("Konuşman, duygu seçimlerin ve diğer kartların otomatik eklenmez."),style=RealType.cardMetaPrimary,color=Color.White.copy(alpha=.65f))
                         Text(title.take(300),style=RealType.cardBodyProminent,color=Color.White)
                         if(content.isNotBlank())Text(content.take(4000),style=RealType.cardMetaPrimary,color=Color.White.copy(alpha=.65f))
                         AiReportReason.entries.forEach { option ->
@@ -64,9 +65,9 @@ fun AiReportButton(feature: AiReportFeature,title: String,content: String,modifi
     }
 }
 private fun AiReportReason.label()=when(this) {
-    AiReportReason.HARMFUL -> "Tehlikeli veya zararlı"
-    AiReportReason.HARASSMENT -> "Nefret veya taciz"
-    AiReportReason.SEXUAL -> "Uygunsuz cinsel içerik"
-    AiReportReason.INACCURATE -> "Yanlış veya yanıltıcı"
-    AiReportReason.OTHER -> "Diğer uygunsuz içerik"
+    AiReportReason.HARMFUL -> t("Tehlikeli veya zararlı")
+    AiReportReason.HARASSMENT -> t("Nefret veya taciz")
+    AiReportReason.SEXUAL -> t("Uygunsuz cinsel içerik")
+    AiReportReason.INACCURATE -> t("Yanlış veya yanıltıcı")
+    AiReportReason.OTHER -> t("Diğer uygunsuz içerik")
 }
