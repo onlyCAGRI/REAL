@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.annotation.SuppressLint
 
 import androidx.activity.compose.BackHandler
@@ -36,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -68,12 +70,18 @@ private enum class PickerSubScreen {
  */
 val LocalSetReminderTiming = staticCompositionLocalOf<(Long, Int?, Long?) -> Unit> { { _, _, _ -> } }
 
+/** Alarm on/off for a card: (reminderId, on). Provided by the activity. */
+val LocalSetReminderAlarm = staticCompositionLocalOf<(Long, Boolean) -> Unit> { { _, _ -> } }
+
+/** "Konuma varınca hatırlat" for a card: (reminderId, trigger or null). Provided by the activity. */
+val LocalSetReminderLocationTrigger = staticCompositionLocalOf<(Long, com.cagri.real.data.LocationTrigger?) -> Unit> { { _, _ -> } }
+
 /** "15 dk", "1 saat", "1 gün" … for an early warning. */
 fun earlyAlertLabel(minutes: Int): String = when {
-    minutes >= 1440 && minutes % 1440 == 0 -> "${minutes / 1440} gün"
-    minutes >= 60 && minutes % 60 == 0 -> "${minutes / 60} saat"
-    minutes > 60 -> "${minutes / 60} sa ${minutes % 60} dk"
-    else -> "$minutes dk"
+    minutes >= 1440 && minutes % 1440 == 0 -> t("{0} gün", minutes / 1440)
+    minutes >= 60 && minutes % 60 == 0 -> t("{0} saat", minutes / 60)
+    minutes > 60 -> t("{0} sa {1} dk", minutes / 60, minutes % 60)
+    else -> t("{0} dk", minutes)
 }
 
 private val DAYS_CACHE = (28..31).associateWith { len -> (1..len).toList() }
@@ -104,7 +112,10 @@ fun AnimatedDateTimePickerOverlay(
     initialEarlyAlertMinutes: Int? = null,
     initialEndAt: Long? = null,
     /** When set, "Erken uyarı" and "+ Bitiş" are offered; called with them just after [onConfirm]. */
-    onConfirmTiming: ((Int?, Long?) -> Unit)? = null
+    onConfirmTiming: ((Int?, Long?) -> Unit)? = null,
+    initialAlarm: Boolean = false,
+    /** When set, Saat can be pushed right to "Alarm"; called with the choice just after [onConfirm]. */
+    onConfirmAlarm: ((Boolean) -> Unit)? = null
 ) {
     var sessionKey by rememberSaveable { mutableIntStateOf(0) }
     var sessionOpen by rememberSaveable { mutableStateOf(false) }
@@ -147,7 +158,9 @@ fun AnimatedDateTimePickerOverlay(
                 sessionKey = sessionKey,
                 initialEarlyAlertMinutes = initialEarlyAlertMinutes,
                 initialEndAt = initialEndAt,
-                onConfirmTiming = onConfirmTiming
+                onConfirmTiming = onConfirmTiming,
+                initialAlarm = initialAlarm,
+                onConfirmAlarm = onConfirmAlarm
             )
         }
     }
@@ -204,7 +217,9 @@ fun DateTimePickerOverlay(
     sessionKey: Int = 0,
     initialEarlyAlertMinutes: Int? = null,
     initialEndAt: Long? = null,
-    onConfirmTiming: ((Int?, Long?) -> Unit)? = null
+    onConfirmTiming: ((Int?, Long?) -> Unit)? = null,
+    initialAlarm: Boolean = false,
+    onConfirmAlarm: ((Boolean) -> Unit)? = null
 ) {
     val zone = ZoneId.systemDefault()
     val seed = remember(initial, sessionKey) { Instant.ofEpochMilli(initial ?: (System.currentTimeMillis() + 3_600_000)).atZone(zone) }
@@ -218,6 +233,25 @@ fun DateTimePickerOverlay(
     var currentSubScreen by rememberSaveable(sessionKey, initial) { mutableStateOf(PickerSubScreen.Main) }
     var selectedRepeatRule by rememberSaveable(sessionKey, initialRepeatRule) { mutableStateOf(initialRepeatRule) }
     val timingEnabled = onConfirmTiming != null
+    val alarmEnabled = onConfirmAlarm != null
+    var alarm by rememberSaveable(sessionKey) { mutableStateOf(alarmEnabled && initialAlarm) }
+    // First three sheets that show Saat: the thumb is pushed once towards the alarm with a short hint.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val hintPrefs = remember { context.getSharedPreferences("real_picker_hints", android.content.Context.MODE_PRIVATE) }
+    var alarmNudged by remember(sessionKey) { mutableStateOf(false) }
+    var alarmHint by remember(sessionKey) { mutableStateOf(false) }
+    LaunchedEffect(sessionKey, timeTab) {
+        if (alarmEnabled && timeTab && !alarm && !alarmNudged) {
+            alarmNudged = true
+            val seen = hintPrefs.getInt("alarm_nudge", 0)
+            if (seen < 3) {
+                hintPrefs.edit().putInt("alarm_nudge", seen + 1).apply()
+                alarmHint = true
+                delay(3200)
+                alarmHint = false
+            }
+        }
+    }
     var earlyMinutes by rememberSaveable(sessionKey) { mutableStateOf(initialEarlyAlertMinutes) }
     // Bitiş is edited on the same wheels: the header reads "Başlangıç → Bitiş" and tapping a side picks what they move.
     val endSeed = remember(sessionKey) { Instant.ofEpochMilli(initialEndAt ?: (seed.toInstant().toEpochMilli() + 3_600_000L)).atZone(zone) }
@@ -232,13 +266,14 @@ fun DateTimePickerOverlay(
     var error by remember { mutableStateOf<String?>(null) }
     var moving by remember { mutableStateOf(emptySet<String>()) }
     val tr = remember { Locale.forLanguageTag("tr-TR") }
-    val months = remember { listOf("OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA") }
+    val months = remember { listOf("OCA", t("ŞUB"), "MAR", t("NİS"), "MAY", "HAZ", "TEM", t("AĞU"), "EYL", t("EKİ"), "KAS", "ARA") }
     val currentYear = LocalDate.now(zone).year
     val firstYear = minOf(seed.year, currentYear)
     val years = remember(firstYear, currentYear) { (firstYear..currentYear + 20).toList() }
     val now = System.currentTimeMillis()
-    val candidateThisYear = reminderTimestamp(clampedDate(currentYear, month, day), hour, minute, zone)
-    val inferredYear = if (candidateThisYear != null && candidateThisYear > now) currentYear else currentYear + 1
+    // The year follows the day alone: today with a past clock time stays today (confirm says so) instead of jumping a
+    // year while the date wheels still hold the default time.
+    val inferredYear = if (clampedDate(currentYear, month, day) >= java.time.LocalDate.now(zone)) currentYear else currentYear + 1
     // Without the year option the picked date keeps the year it was opened with (no guessing next year).
     val effectiveYear = when {
         !allowYearSelection -> seed.year
@@ -297,7 +332,7 @@ fun DateTimePickerOverlay(
                 } else {
                     onDismiss()
                 }
-            }).semantics { contentDescription = "Tarih seçimini kapat" })
+            }).semantics { contentDescription = t("Tarih seçimini kapat") })
         DesignPanel(
             backdrop = backdrop,
             backdropPosition = backdropPosition,
@@ -307,7 +342,7 @@ fun DateTimePickerOverlay(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 8.dp).heightIn(max = panelMax)
             .pointerInput(Unit) { detectTapGestures(onTap = {}) }
-                .semantics { paneTitle = "Hatırlatıcı tarihi ve saati" }
+                .semantics { paneTitle = t("Hatırlatıcı tarihi ve saati") }
         ) {
             AnimatedContent(
                 targetState = currentSubScreen,
@@ -330,7 +365,8 @@ fun DateTimePickerOverlay(
                 label = "pickerSubScreenContent"
             ) { subScreen ->
                 when (subScreen) {
-                    PickerSubScreen.Main -> {
+                    PickerSubScreen.Main -> Box(Modifier.fillMaxWidth()) {
+                        AlarmBreathGlow(alarm && alarmEnabled, reduceAnimations, Modifier.matchParentSize())
                         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(Modifier.size(34.dp, 3.dp).background(Color(0xFF666669), RoundedCornerShape(2.dp)))
@@ -350,20 +386,28 @@ fun DateTimePickerOverlay(
                                 ) {
                                     val startText = if (hasEnd) date.format(shortDate) + " · " + String.format(tr, "%02d:%02d", hour, minute)
                                         else weekdayLabel + " · " + date.format(dateFormat) + " · " + String.format(tr, "%02d:%02d", hour, minute)
+                                    // An alarm warms the start time a little, in the glow's colour.
+                                    val startColor by animateColorAsState(
+                                        when {
+                                            editingEnd -> Color(0xFFD9D9DE).copy(alpha = 0.5f)
+                                            alarm -> Color(0xFFFFCFBA)
+                                            else -> Color(0xFFF2F2F5)
+                                        }, tween(if (reduceAnimations) 0 else 320), label = "pickerStartColor"
+                                    )
                                     Text(
                                         startText,
-                                        color = if (!editingEnd) Color(0xFFF2F2F5) else Color(0xFFD9D9DE).copy(alpha = 0.5f),
+                                        color = startColor,
                                         fontSize = 13.sp,
                                         fontWeight = if (!editingEnd && hasEnd) FontWeight.SemiBold else FontWeight.Medium,
                                         maxLines = 1,
                                         modifier = Modifier.clip(RoundedCornerShape(8.dp))
                                             .clickable(enabled = moving.isEmpty()) { editingEnd = false }
                                             .padding(horizontal = 4.dp, vertical = 4.dp)
-                                            .semantics { contentDescription = "Başlangıç $startText" }
+                                            .semantics { contentDescription = t("Başlangıç {0}", startText) }
                                     )
                                     if (timingEnabled) {
                                         Text("→", color = Color(0xFF8E8E93), fontSize = 13.sp, modifier = Modifier.padding(horizontal = 4.dp))
-                                        val endText = if (hasEnd) endDate.format(shortDate) + " · " + String.format(tr, "%02d:%02d", endHour, endMinute) else "Bitiş"
+                                        val endText = if (hasEnd) endDate.format(shortDate) + " · " + String.format(tr, "%02d:%02d", endHour, endMinute) else t("Bitiş")
                                         Text(
                                             endText,
                                             color = when {
@@ -393,22 +437,32 @@ fun DateTimePickerOverlay(
                                                 )
                                                 .padding(horizontal = 4.dp, vertical = 4.dp)
                                                 .semantics {
-                                                    contentDescription = if (hasEnd) "Bitiş $endText" else "Bitiş ekle"
-                                                    if (hasEnd) customActions = listOf(CustomAccessibilityAction("Bitişi kaldır") { hasEnd = false; editingEnd = false; true })
+                                                    contentDescription = if (hasEnd) t("Bitiş {0}", endText) else t("Bitiş ekle")
+                                                    if (hasEnd) customActions = listOf(CustomAccessibilityAction(t("Bitişi kaldır")) { hasEnd = false; editingEnd = false; true })
                                                 }
                                         )
                                     }
                                 }
                             }
-                            if (designStyle == DesignStyle.LiquidGlass) {
+                            if (alarmEnabled) {
+                                DateTimeAlarmSegment(
+                                    timeTab = timeTab, alarm = alarm,
+                                    onTimeTab = { timeTab = it },
+                                    onAlarm = { alarm = it; if (it) alarmHint = false },
+                                    liquid = designStyle == DesignStyle.LiquidGlass,
+                                    trackFill = controlFill, thumbFill = selectedFill,
+                                    enabled = moving.isEmpty(), nudge = alarmHint,
+                                    reduceAnimations = reduceAnimations
+                                )
+                            } else if (designStyle == DesignStyle.LiquidGlass) {
                                 LiquidSegmentedControl(
-                                    labels = listOf("Tarih", "Saat"), selectedIndex = if (timeTab) 1 else 0,
+                                    labels = listOf(t("Tarih"), t("Saat")), selectedIndex = if (timeTab) 1 else 0,
                                     onSelect = { timeTab = it == 1 }, enabled = moving.isEmpty(),
                                     reduceAnimations = reduceAnimations
                                 )
                             } else {
                             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(controlFill).padding(4.dp)) {
-                                listOf(false to "Tarih", true to "Saat").forEach { (time, label) ->
+                                listOf(false to t("Tarih"), true to t("Saat")).forEach { (time, label) ->
                                     TextButton(onClick = { timeTab = time }, enabled = moving.isEmpty(), modifier = Modifier.weight(1f)
                                         .background(if (timeTab == time) selectedFill else Color.Transparent, RoundedCornerShape(22.dp))) {
                                         Text(label, color = Color.White)
@@ -416,7 +470,15 @@ fun DateTimePickerOverlay(
                                 }
                             }
                             }
-                            Spacer(Modifier.height(18.dp))
+                            // The hint sits in the gap under the control, so nothing below moves.
+                            Box(Modifier.fillMaxWidth().height(18.dp), contentAlignment = Alignment.Center) {
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = alarmHint,
+                                    enter = fadeIn(tween(260)), exit = fadeOut(tween(360))
+                                ) {
+                                    Text(t("Alarm için Saat'i sağa it"), color = Color(0xFF9A9AA3), fontSize = 11.sp, maxLines = 1)
+                                }
+                            }
                             AnimatedContent(
                                 targetState = timeTab,
                                 transitionSpec = {
@@ -450,7 +512,7 @@ fun DateTimePickerOverlay(
 
                                         val wheelDate = if (editingEnd) endDate else date
                                         NumberWheel(
-                                            "Gün", daysForMonthLength(wheelDate.lengthOfMonth()), wheelDate.dayOfMonth, { it.toString() },
+                                            t("Gün"), daysForMonthLength(wheelDate.lengthOfMonth()), wheelDate.dayOfMonth, { it.toString() },
                                             { if (editingEnd) endDay = it else day = it; error = null }, { scrollChanged("day", it) },
                                             Modifier.weight(1f),
                                             animateInitial = shouldAnimateDate,
@@ -460,7 +522,7 @@ fun DateTimePickerOverlay(
                                             reduceAnimations = reduceAnimations
                                         )
                                         NumberWheel(
-                                            "Ay", MONTH_VALUES, if (editingEnd) endMonth else month, { months[it - 1] }, {
+                                            t("Ay"), MONTH_VALUES, if (editingEnd) endMonth else month, { months[it - 1] }, {
                                                 if (editingEnd) { endMonth = it; endDay = clampedDate(endYear, it, endDay).dayOfMonth }
                                                 else { month = it; day = clampedDate(effectiveYear, it, day).dayOfMonth }
                                                 error = null
@@ -472,12 +534,18 @@ fun DateTimePickerOverlay(
                                             initialScrollDurationMs = 500,
                                             reduceAnimations = reduceAnimations
                                         )
-                                        if (includeYear && !editingEnd) {
+                                        // "Yıl gir" grows the year column in (and out) instead of popping it.
+                                        val yearWeight by animateFloatAsState(
+                                            if (includeYear && !editingEnd) 1.3f else 0f,
+                                            if (reduceAnimations) snap() else tween(280, easing = RealMotion.Emphasized),
+                                            label = "pickerYearColumn"
+                                        )
+                                        if (yearWeight > 0.01f) {
                                             NumberWheel(
-                                                "Yıl", years, year, { it.toString() }, {
+                                                t("Yıl"), years, year, { it.toString() }, {
                                                     year = it; day = clampedDate(it, month, day).dayOfMonth; error = null
                                                 }, { scrollChanged("year", it) },
-                                                Modifier.weight(1.3f),
+                                                Modifier.weight(yearWeight).clipToBounds().graphicsLayer { alpha = yearWeight / 1.3f },
                                                 animateInitial = shouldAnimateDate,
                                                 initialScrollDelayMs = 100L,
                                                 reduceAnimations = reduceAnimations
@@ -490,7 +558,7 @@ fun DateTimePickerOverlay(
                                         }
 
                                         NumberWheel(
-                                            "Saat", HOUR_VALUES, if (editingEnd) endHour else hour, { it.toString().padStart(2, '0') },
+                                            t("Saat"), HOUR_VALUES, if (editingEnd) endHour else hour, { it.toString().padStart(2, '0') },
                                             { if (editingEnd) endHour = it else hour = it; error = null }, { scrollChanged("hour", it) },
                                             Modifier.weight(1f),
                                             animateInitial = shouldAnimateTime,
@@ -502,7 +570,7 @@ fun DateTimePickerOverlay(
                                             modifier = Modifier.align(Alignment.CenterVertically)
                                         )
                                         NumberWheel(
-                                            "Dakika", MINUTE_VALUES, if (editingEnd) endMinute else minute, { it.toString().padStart(2, '0') },
+                                            t("Dakika"), MINUTE_VALUES, if (editingEnd) endMinute else minute, { it.toString().padStart(2, '0') },
                                             { if (editingEnd) endMinute = it else minute = it; error = null }, { scrollChanged("minute", it) },
                                             Modifier.weight(1f),
                                             animateInitial = shouldAnimateTime,
@@ -542,7 +610,7 @@ fun DateTimePickerOverlay(
                                             if (includeYear) ActionIcon(ActionGlyph.Check, Modifier.size(13.dp), Color(0xFF111216))
                                         }
                                         Text(
-                                            "Yıl gir",
+                                            t("Yıl gir"),
                                             color = if (includeYear) Color.White else Color(0xFFE1E1E6),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Medium,
@@ -570,7 +638,7 @@ fun DateTimePickerOverlay(
                                         ActionIcon(ActionGlyph.Repeat, Modifier.size(11.dp), if (repeatSelected) Color.White else Color(0xFF9A9AA3))
                                     }
                                     Text(
-                                        "Tekrarlama",
+                                        t("Tekrarlama"),
                                         color = if (repeatSelected) Color.White else Color(0xFFE1E1E6),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
@@ -596,7 +664,7 @@ fun DateTimePickerOverlay(
                                         ActionIcon(ActionGlyph.Bell, Modifier.size(11.dp), if (earlySelected) Color.White else Color(0xFF9A9AA3))
                                     }
                                     Text(
-                                        earlyMinutes?.let { earlyAlertLabel(it) + " önce" } ?: "Erken uyarı",
+                                        earlyMinutes?.let { earlyAlertLabel(it) + t(" önce") } ?: t("Erken uyarı"),
                                         color = when {
                                             earlySelected -> Color.White
                                             timingEnabled -> Color(0xFFE1E1E6)
@@ -610,26 +678,27 @@ fun DateTimePickerOverlay(
                                 }
                             }
                             if (!exactAlarmsAllowed) {
-                                Text("Tam saatinde bildirim için Alarmlar ve hatırlatıcılar iznini açabilirsin. İzin kapalıysa Android geciktirebilir.",
+                                Text(t("Tam saatinde bildirim için Alarmlar ve hatırlatıcılar iznini açabilirsin. İzin kapalıysa Android geciktirebilir."),
                                     color = Color(0xFFA8A8B0), fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 14.dp))
-                                TextButton(onClick = onRequestExactAlarms) { Text("İzni aç", color = Color(0xFF91B9FF)) }
+                                TextButton(onClick = onRequestExactAlarms) { Text(t("İzni aç"), color = Color(0xFF91B9FF)) }
                             }
                             error?.let { Text(it, color = Color(0xFFFFA4AA), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp)) }
                             Row(Modifier.fillMaxWidth().padding(top = 12.dp).then(if (designStyle == DesignStyle.LiquidGlass) Modifier.liquidChrome(24.dp) else Modifier), verticalAlignment = Alignment.CenterVertically) {
-                                TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("İptal", color = Color.White, fontSize = 18.sp) }
+                                TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(t("İptal"), color = Color.White, fontSize = 18.sp) }
                                 Box(Modifier.size(1.dp, 22.dp).background(Color(0xFF555559)))
                                 TextButton(enabled = moving.isEmpty(), onClick = {
                                     val selectedDate = clampedDate(effectiveYear, month, day)
                                     val at = reminderTimestamp(selectedDate, hour, minute, zone)
-                                    if (at == null) error = "Bu saat, saat değişimi nedeniyle kullanılamıyor."
-                                    else if (at <= System.currentTimeMillis()) error = "Gelecekte bir tarih ve saat seç."
-                                    else if (hasEnd && endAt == null) error = "Bitiş saati, saat değişimi nedeniyle kullanılamıyor."
-                                    else if (endAt != null && endAt <= at) error = "Bitiş, başlangıçtan sonra olmalı."
+                                    if (at == null) error = t("Bu saat, saat değişimi nedeniyle kullanılamıyor.")
+                                    else if (at <= System.currentTimeMillis()) error = t("Gelecekte bir tarih ve saat seç.")
+                                    else if (hasEnd && endAt == null) error = t("Bitiş saati, saat değişimi nedeniyle kullanılamıyor.")
+                                    else if (endAt != null && endAt <= at) error = t("Bitiş, başlangıçtan sonra olmalı.")
                                     else {
                                         onConfirm(at, selectedRepeatRule)
                                         onConfirmTiming?.invoke(earlyMinutes, endAt)
+                                        onConfirmAlarm?.invoke(alarm)
                                     }
-                                }, modifier = Modifier.weight(1f)) { Text("Bitti", color = if (moving.isEmpty()) Color.White else Color.Gray, fontSize = 18.sp) }
+                                }, modifier = Modifier.weight(1f)) { Text(t("Bitti"), color = if (moving.isEmpty()) Color.White else Color.Gray, fontSize = 18.sp) }
                             }
                         }
                     }
@@ -678,9 +747,9 @@ private fun RepeatSelectionScreen(
             Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            RealBackButton(onBack, description = "Geri dön")
+            RealBackButton(onBack, description = t("Geri dön"))
             Text(
-                "Tekrarlama",
+                t("Tekrarlama"),
                 color = Color.White,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -692,11 +761,11 @@ private fun RepeatSelectionScreen(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(cardFill)
         ) {
             val options = listOf(
-                RecurrenceRule.NONE to "Yok",
-                RecurrenceRule.DAILY to "Her gün",
-                RecurrenceRule.WEEKLY to (alertTimestamp?.let { RecurrenceRule.WEEKLY.descriptionFor(it, zone) } ?: "Her hafta"),
-                RecurrenceRule.MONTHLY to (alertTimestamp?.let { RecurrenceRule.MONTHLY.descriptionFor(it, zone) } ?: "Her ay"),
-                RecurrenceRule.YEARLY to (alertTimestamp?.let { RecurrenceRule.YEARLY.descriptionFor(it, zone) } ?: "Her yıl")
+                RecurrenceRule.NONE to t("Yok"),
+                RecurrenceRule.DAILY to t("Her gün"),
+                RecurrenceRule.WEEKLY to (alertTimestamp?.let { RecurrenceRule.WEEKLY.descriptionFor(it, zone) } ?: t("Her hafta")),
+                RecurrenceRule.MONTHLY to (alertTimestamp?.let { RecurrenceRule.MONTHLY.descriptionFor(it, zone) } ?: t("Her ay")),
+                RecurrenceRule.YEARLY to (alertTimestamp?.let { RecurrenceRule.YEARLY.descriptionFor(it, zone) } ?: t("Her yıl"))
             )
 
             options.forEachIndexed { index, (rule, title) ->
@@ -727,15 +796,17 @@ private fun RepeatSelectionScreen(
 
         Spacer(Modifier.height(24.dp))
         TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Kapat", color = Color.White, fontSize = 16.sp)
+            Text(t("Kapat"), color = Color.White, fontSize = 16.sp)
         }
     }
 }
 
-private enum class EarlyUnit(val minutes: Int, val word: String, val range: IntRange, val step: Int, val default: Int) {
+private enum class EarlyUnit(val minutes: Int, private val trWord: String, val range: IntRange, val step: Int, val default: Int) {
     Minutes(1, "dakika", 5..180, 5, 15),
     Hours(60, "saat", 1..72, 1, 1),
-    Days(1440, "gün", 1..30, 1, 1)
+    Days(1440, t("gün"), 1..30, 1, 1);
+
+    val word: String get() = t(trWord)
 }
 
 /** Which row a saved early warning belongs to: whole days, then whole hours, else minutes. */
@@ -773,8 +844,8 @@ private fun EarlyAlertSelectionScreen(
     ) {
         Box(Modifier.size(34.dp, 3.dp).background(Color(0xFF666669), RoundedCornerShape(2.dp)))
         Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            RealBackButton(onBack, description = "Geri dön")
-            Text("Erken uyarı", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+            RealBackButton(onBack, description = t("Geri dön"))
+            Text(t("Erken uyarı"), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(start = 8.dp))
         }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(cardFill)) {
@@ -828,10 +899,10 @@ private fun EarlyAlertSelectionScreen(
                             )
                         }
                         .semantics {
-                            contentDescription = "$amount ${unit.word} önce"
+                            contentDescription = t("{0} {1} önce", amount, unit.word)
                             customActions = listOf(
-                                CustomAccessibilityAction("Arttır") { active = unit; step(true); true },
-                                CustomAccessibilityAction("Azalt") { active = unit; step(false); true }
+                                CustomAccessibilityAction(t("Arttır")) { active = unit; step(true); true },
+                                CustomAccessibilityAction(t("Azalt")) { active = unit; step(false); true }
                             )
                         }
                         .padding(horizontal = 18.dp, vertical = 4.dp),
@@ -846,14 +917,14 @@ private fun EarlyAlertSelectionScreen(
                         ActionIcon(ActionGlyph.ChevronRight, Modifier.size(14.dp).graphicsLayer { rotationZ = 90f; alpha = arrowAlpha }
                             .clickable(enabled = isActive) { step(false) }, Color.White)
                     }
-                    Text(" ${unit.word} önce", color = if (isActive) Color.White else Color.White.copy(alpha = 0.72f), fontSize = 16.sp,
+                    Text(t(" {0} önce", unit.word), color = if (isActive) Color.White else Color.White.copy(alpha = 0.72f), fontSize = 16.sp,
                         fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
                 }
             }
         }
         Spacer(Modifier.height(24.dp))
         TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Tamam", color = Color.White, fontSize = 16.sp)
+            Text(t("Tamam"), color = Color.White, fontSize = 16.sp)
         }
     }
 }
@@ -983,8 +1054,8 @@ private fun NumberWheel(
             contentDescription = label
             stateDescription = format(value)
             customActions = listOf(
-                CustomAccessibilityAction("Önceki") { values.getOrNull(values.indexOf(value) - 1)?.let(onValue); true },
-                CustomAccessibilityAction("Sonraki") { values.getOrNull(values.indexOf(value) + 1)?.let(onValue); true }
+                CustomAccessibilityAction(t("Önceki")) { values.getOrNull(values.indexOf(value) - 1)?.let(onValue); true },
+                CustomAccessibilityAction(t("Sonraki")) { values.getOrNull(values.indexOf(value) + 1)?.let(onValue); true }
             )
         }
     ) {
@@ -1020,7 +1091,7 @@ private fun NumberWheel(
                 Text(
                     format(item),
                     color = itemColor,
-                    fontSize = if (label == "Yıl") 26.sp else 28.sp,
+                    fontSize = if (label == t("Yıl")) 26.sp else 28.sp,
                     maxLines = 1,
                     fontWeight = if (isCentered) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier.graphicsLayer {

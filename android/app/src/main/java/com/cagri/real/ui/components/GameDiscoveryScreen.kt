@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -108,8 +109,12 @@ fun GameDiscoveryScreen(
     }
     BackHandler(onBack = ::back)
     LaunchedEffect(repo) {
-        if (repo == null) { error = "Öneriler için REAL'e giriş yap."; ready = true; return@LaunchedEffect }
-        try { snapshot = repo.load() } catch (e: CancellationException) { throw e } catch (_: Exception) { error = "Kaydedilmiş öneriler okunamadı." }
+        if (repo == null) {
+            error = t("Öneriler için REAL'e giriş yap."); ready = true
+            com.cagri.real.ui.auth.SignInRequired.needed(com.cagri.real.ui.auth.SignInRequired.Reason.Suggestions)
+            return@LaunchedEffect
+        }
+        try { snapshot = repo.load() } catch (e: CancellationException) { throw e } catch (_: Exception) { error = t("Kaydedilmiş öneriler okunamadı.") }
         ready = true
     }
     fun discover(saved: Boolean = false) {
@@ -122,13 +127,15 @@ fun GameDiscoveryScreen(
                 if (!com.cagri.real.platform.android.access.ProAccess.allowed(com.cagri.real.access.RealFeature.GameDiscovery)) return@launch
                 snapshot = fetchWideningGames(repo, f, p)
                 if (page == GamePage.FILTERS || page == GamePage.DECK) page = GamePage.DECK
-            } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message ?: "Öneriler alınamadı." }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message ?: t("Öneriler alınamadı.") }
             finally { loading = false }
         }
     }
 
     val listMode = page == GamePage.LIST
     val cards = if (listMode) snapshot?.list.orEmpty() else snapshot?.cards.orEmpty()
+    // Shaking the phone brings the last swiped game back on top.
+    ShakeToUndo(page == GamePage.DECK) { scope.launch { runCatching { repo?.undo() }.getOrNull()?.let { snapshot = it; error = null } } }
     Box(Modifier.fillMaxSize().background(Color.Black).pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent(PointerEventPass.Final) } }) {
         if (page == GamePage.ENTRY) GameGlow(reduceAnimations)
         else PosterAmbient(if (page == GamePage.DECK || listMode) cards.firstOrNull()?.game?.artworkUrl else null, reduceAnimations, reduceDynamicBlur)
@@ -153,22 +160,22 @@ fun GameDiscoveryScreen(
                     val platformKeys = GamePlatformGroup.entries.map { it.key }.toSet()
                     DiscoveryStepper(
                         steps = listOf(
-                            DiscoveryStep("Hangi türde bir oyun?", "En fazla 2 tür", 2, false,
+                            DiscoveryStep(t("Hangi türde bir oyun?"), t("En fazla 2 tür"), 2, false,
                                 listOf(null to GameFilter.entries.filter { it.genre }.map { StepOption(it.key, it.label) })),
-                            DiscoveryStep("Nasıl hissettirsin?", "İstersen bir tane", 1, true,
+                            DiscoveryStep(t("Nasıl hissettirsin?"), t("İstersen bir tane"), 1, true,
                                 listOf(null to GameFilter.entries.filter { !it.genre }.map { StepOption(it.key, it.label) })),
-                            DiscoveryStep("Nerede oynayacaksın?", "İstersen bir platform", 1, true,
+                            DiscoveryStep(t("Nerede oynayacaksın?"), t("İstersen bir platform"), 1, true,
                                 listOf(null to GamePlatformGroup.entries.map { StepOption(it.key, it.label) })),
                         ),
                         selection = filters.toSet() + platforms.toSet(),
                         onSelection = { all -> filters = ArrayList(all.filter { it !in platformKeys }); platforms = ArrayList(all.filter { it in platformKeys }) },
                         accent = GameAccent, loading = loading, enabled = ready && repo != null, reduceAnimations = reduceAnimations,
-                        doneLabel = "oyunları getir", modifier = Modifier.weight(1f).then(filterBodyModifier),
+                        doneLabel = t("oyunları getir"), modifier = Modifier.weight(1f).then(filterBodyModifier),
                         rare = { chosen, key -> DiscoveryRarePairs.rare(DiscoveryRarePairs.game, chosen, key) }
                     ) { discover() }
                 }
                 GamePage.DECK, GamePage.LIST -> {
-                    GameHeadline(if (listMode) "OYNANACAK LİSTEM" else "SANA GÖRE", Modifier.padding(top = 2.dp, bottom = 6.dp), small = listMode)
+                    GameHeadline(if (listMode) t("OYNANACAK LİSTEM") else t("SANA GÖRE"), Modifier.padding(top = 2.dp, bottom = 6.dp), small = listMode)
                     if (cards.isNotEmpty()) {
                         com.cagri.real.ui.ai.AiReportButton(com.cagri.real.platform.android.ai.AiReportFeature.GAME,
                             cards.first().game.title, cards.first().reason, Modifier.align(Alignment.CenterHorizontally))
@@ -177,13 +184,13 @@ fun GameDiscoveryScreen(
                             error = null
                             try { snapshot = repo?.act(card, action); true }
                             catch (e: CancellationException) { throw e }
-                            catch (e: Exception) { error = if (e is IllegalArgumentException) e.message else "İşlem tamamlanamadı. Tekrar deneyebilirsin."; false }
+                            catch (e: Exception) { error = if (e is IllegalArgumentException) e.message else t("İşlem tamamlanamadı. Tekrar deneyebilirsin."); false }
                         }
                     } else Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                         Column(Modifier.padding(top = 36.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             // Kayıtlı liste okunana kadar "boş" yazısı gösterilmez (listeye doğrudan açılışta kısa yanıp sönmesin).
-                            if (ready) Text(if (listMode) "Oynanacak listen henüz boş." else "Bu destenin sonuna geldin.", color = Color.White)
-                            if (ready && !listMode) GameChip(if (loading) "Hazırlanıyor…" else "Daha fazla öner", false, ready && !loading) { discover(saved = true) }
+                            if (ready) Text(if (listMode) t("Oynanacak listen henüz boş.") else t("Bu destenin sonuna geldin."), color = Color.White)
+                            if (ready && !listMode) GameChip(if (loading) t("Hazırlanıyor…") else t("Daha fazla öner"), false, ready && !loading) { discover(saved = true) }
                         }
                     }
                 }
@@ -230,29 +237,29 @@ private fun GameEntryContent(covers: List<String>, savedCount: Int, canContinue:
         Row(verticalAlignment = Alignment.CenterVertically) {
             ActionIcon(ActionGlyph.Play, Modifier.size(20.dp), Color.White)
             Spacer(Modifier.width(8.dp))
-            Text("Oyun", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("Oyun"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(14.dp))
         val title = RealType.editorialTitle.copy(fontSize = 44.sp, lineHeight = 48.sp, fontWeight = FontWeight.Medium, letterSpacing = (-1.4).sp)
-        Text("Bu gece ne", style = title.copy(color = Color.White))
+        Text(t("Bu gece ne"), style = title.copy(color = Color.White))
         Text("oynasak?", style = title.copy(color = GameAccent))
         Spacer(Modifier.height(10.dp))
         Text(when {
-            loading -> "Önerilerin hazırlanıyor…"
-            savedCount > 0 -> "Oynanacak listende $savedCount oyun var. Yeni bir tür seç ya da kaldığın yerden devam et."
-            else -> "Türünü, hissini ve platformunu seç; sana uyan oyunları keşfet."
+            loading -> t("Önerilerin hazırlanıyor…")
+            savedCount > 0 -> t("Oynanacak listende {0} oyun var. Yeni bir tür seç ya da kaldığın yerden devam et.", savedCount)
+            else -> t("Türünü, hissini ve platformunu seç; sana uyan oyunları keşfet.")
         }, color = Color.White.copy(alpha = .55f), fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(end = 24.dp))
         Spacer(Modifier.height(28.dp))
         if (canContinue) {
-            GameChip("Keşfetmeye devam et", false, enabled, primary = true, modifier = Modifier.fillMaxWidth()) { onContinue() }
+            GameChip(t("Keşfetmeye devam et"), false, enabled, primary = true, modifier = Modifier.fillMaxWidth()) { onContinue() }
             Spacer(Modifier.height(10.dp))
-            GameChip("Tür seç", false, enabled, modifier = Modifier.fillMaxWidth(), tall = true) { onPick() }
-        } else GameChip("Tür seç", false, enabled, primary = true, modifier = Modifier.fillMaxWidth()) { onPick() }
+            GameChip(t("Tür seç"), false, enabled, modifier = Modifier.fillMaxWidth(), tall = true) { onPick() }
+        } else GameChip(t("Tür seç"), false, enabled, primary = true, modifier = Modifier.fillMaxWidth()) { onPick() }
         Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(28.dp)).clickable(enabled = enabled, role = Role.Button, onClick = onList), contentAlignment = Alignment.Center) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ActionIcon(ActionGlyph.Calendar, Modifier.size(18.dp), if (enabled) Color.White else Color(0xFF66666C))
                 Spacer(Modifier.width(8.dp))
-                Text("Oynanacak listem ($savedCount)", color = if (enabled) Color.White else Color(0xFF66666C), fontSize = 15.sp)
+                Text(t("Oynanacak listem ({0})", savedCount), color = if (enabled) Color.White else Color(0xFF66666C), fontSize = 15.sp)
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -291,7 +298,7 @@ private fun GameLabel(text: String) {
         modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Color.Black.copy(alpha = .85f)).border(.5.dp, Color.White.copy(alpha = .12f), RoundedCornerShape(20.dp)).padding(horizontal = 9.dp, vertical = 4.dp))
 }
 
-private fun kindLabel(kind: String) = when (kind) { "remake" -> "Remake"; "remaster" -> "Remaster"; "port" -> "Port"; "expanded" -> "Genişletilmiş"; else -> null }
+private fun kindLabel(kind: String) = when (kind) { "remake" -> "Remake"; "remaster" -> "Remaster"; "port" -> "Port"; "expanded" -> t("Genişletilmiş"); else -> null }
 
 @Composable
 private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimations: Boolean, listMode: Boolean, modifier: Modifier,
@@ -381,12 +388,12 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
                     }
                     if (depth == 0) {
                         Column(Modifier.align(Alignment.TopStart).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            GameLabel(item.game.year?.toString() ?: "Oyun")
+                            GameLabel(item.game.year?.toString() ?: t("Oyun"))
                             item.game.genres.firstOrNull()?.let { GameLabel(GameGenres.label(it)) }
                             kindLabel(item.game.kind)?.let { GameLabel(it) }
                         }
                         Column(Modifier.align(Alignment.TopEnd).padding(14.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            GameLabel("Oyun")
+                            GameLabel(t("Oyun"))
                             if (filters.isNotEmpty()) GameLabel("${filters.count { it in item.tags }}/${filters.size} · AI")
                         }
                         if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(32.dp).align(Alignment.Center), color = Color.White, strokeWidth = 2.dp)
@@ -394,7 +401,7 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
                 }
             }
         }
-        DiscoveryActionBar("Oynadım", busy, onDone = { decide(GameAction.PLAYED, Offset(0f, -threshold * 9)) },
+        DiscoveryActionBar(t("Oynadım"), busy, artworkUrl = card.game.artworkUrl, onDone = { decide(GameAction.PLAYED, Offset(0f, -threshold * 9)) },
             onSave = {
                 if (!busy) scope.launch {
                     busy = true
@@ -404,12 +411,12 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
                             genres = g.genres, platforms = g.platforms, artworkUrl = g.artworkUrl, description = g.description,
                             providerUrl = g.providerUrl)
                         if (latestAddGame(block) != null) RealToast.show(context, "REAL'e eklendi")
-                        else RealToast.show(context, "Kart eklenemedi. Tekrar deneyebilirsin.")
+                        else RealToast.show(context, t("Kart eklenemedi. Tekrar deneyebilirsin."))
                     } finally { busy = false }
                 }
             },
             modifier = Modifier.align(Alignment.TopCenter).offset(y = coverHeight + 12.dp), accent = GameAccent)
-        if (listMode) SwipeTutorial("game_list", "Kaldır", "Sona at") else SwipeTutorial("game", "Kaydet", "Geç")
+        if (listMode) SwipeTutorial("game_list", t("Kaldır"), t("Sona at")) else SwipeTutorial("game", t("Kaydet"), t("Geç"))
     }
 }
 
@@ -418,28 +425,29 @@ private fun GameDeck(cards: List<GameCard>, filters: Set<String>, reduceAnimatio
 private fun GameDetailPanel(card: GameCard, onClose: () -> Unit) {
     val g = card.game
     Box(Modifier.fillMaxSize().background(Color.Black).pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent(PointerEventPass.Final) } }) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { RealBackButton(onClose, description = "Kapat") }
+        val scroll = rememberScrollState()
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(scroll).padding(horizontal = 20.dp)) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { RealBackButton(onClose, description = t("Kapat")) }
             AsyncImage(bigCover(g.artworkUrl), g.title, Modifier.align(Alignment.CenterHorizontally).width(220.dp).aspectRatio(CoverAspect)
                 .clip(RoundedCornerShape(18.dp)).background(Color(0xFF1B1B20)), contentScale = ContentScale.Crop)
             Spacer(Modifier.height(20.dp))
             Text(g.title, style = RealType.editorialTitle.copy(color = Color.White, fontSize = 30.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                g.year?.let { GameLabel("İlk çıkış $it") }
+                g.year?.let { GameLabel(t("İlk çıkış {0}", it)) }
                 kindLabel(g.kind)?.let { GameLabel(it) }
                 g.genres.forEach { GameLabel(GameGenres.label(it)) }
             }
             if (g.releases.any { it.year != null }) {
                 Spacer(Modifier.height(18.dp))
-                Text("Çıktığı platformlar", style = RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
+                Text(t("Çıktığı platformlar"), style = RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
                 Spacer(Modifier.height(8.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     g.releases.take(16).forEach { GameLabel(if (it.year != null) "${it.platform} · ${it.year}" else it.platform) }
                 }
             } else if (g.platforms.isNotEmpty()) {
                 Spacer(Modifier.height(18.dp))
-                Text("Çıktığı platformlar", style = RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
+                Text(t("Çıktığı platformlar"), style = RealType.editorialSubtitle, color = Color.White.copy(alpha = .8f))
                 Spacer(Modifier.height(8.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { g.platforms.take(16).forEach { GameLabel(it) } }
             }
@@ -454,9 +462,15 @@ private fun GameDetailPanel(card: GameCard, onClose: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             GameMediaSection(g.providerId, GameAccent)
             Spacer(Modifier.height(14.dp))
-            Text("Kaynak: IGDB", color = Color(0xFF85858E), fontSize = 12.sp)
+            Text(t("Kaynak: IGDB"), color = Color(0xFF85858E), fontSize = 12.sp)
             Spacer(Modifier.height(32.dp))
         }
+        // Same as the film detail: no glass, content just fades out softly under the status bar while scrolling.
+        Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().height(28.dp)
+            .graphicsLayer { alpha = (scroll.value / 60f).coerceIn(0f, 1f) }
+            .background(Brush.verticalGradient(listOf(Color.Black, Color.Transparent))))
+        Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars)
+            .graphicsLayer { alpha = (scroll.value / 60f).coerceIn(0f, 1f) }.background(Color.Black))
     }
 }
 
@@ -479,5 +493,5 @@ private suspend fun fetchWideningGames(repo: com.cagri.real.discovery.GameDiscov
         snapshot = try { repo.fetch(f, p, deckFilters = filters, deckPlatforms = platforms, append = snapshot != null) }
             catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { snapshot }
     }
-    return snapshot ?: throw (first ?: java.io.IOException("Öneriler alınamadı."))
+    return snapshot ?: throw (first ?: java.io.IOException(t("Öneriler alınamadı.")))
 }

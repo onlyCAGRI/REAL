@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -53,16 +54,16 @@ fun GameContentSection(
                     placeholder = ActionGlyph.Play, ambience = ambience, onAmbience = { ambience = it },
                     description = block.platforms.take(6).joinToString(" · ")
                 ) {
-                    if (showActions) HeroOpenRow("Oyun sayfasını aç ↗", onOpen = {
+                    if (showActions) HeroOpenRow(t("Oyun sayfasını aç ↗"), onOpen = {
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(block.providerUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                            .onFailure { RealToast.show(context, "Oyun sayfası açılamadı") }
+                            .onFailure { RealToast.show(context, t("Oyun sayfası açılamadı")) }
                     }) { Text(block.provider, color = Color(0xFF8E8E98), fontSize = 12.sp) }
                 }
             } else {
                 TimelineContent(designStyle, GameBlockTone.copy(alpha = .6f)) {
                     if (editing) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         IconButton(onClick = { onRemove(block.id) }, modifier = Modifier.size(40.dp)) {
-                            ActionIcon(ActionGlyph.Close, Modifier.size(15.dp).semantics { contentDescription = "Oyunu kaldır" }, Color(0xFFB8B8C2))
+                            ActionIcon(ActionGlyph.Close, Modifier.size(15.dp).semantics { contentDescription = t("Oyunu kaldır") }, Color(0xFFB8B8C2))
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
@@ -77,14 +78,14 @@ fun GameContentSection(
                     }
                     if (showActions) {
                         Spacer(Modifier.height(10.dp))
-                        Text("Oyun sayfasını aç ↗", color = Color(0xFFD0D0D8), style = RealType.detailBlockMetaSecondary,
+                        Text(t("Oyun sayfasını aç ↗"), color = Color(0xFFD0D0D8), style = RealType.detailBlockMetaSecondary,
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color.White.copy(alpha = 0.07f))
                                 .clickable {
                                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(block.providerUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                                        .onFailure { RealToast.show(context, "Oyun sayfası açılamadı") }
+                                        .onFailure { RealToast.show(context, t("Oyun sayfası açılamadı")) }
                                 }
                                 .padding(vertical = 12.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                        Text("Kaynak: ${block.provider}", color = Color(0xFF6E6E78), fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
+                        Text(t("Kaynak: {0}", block.provider), color = Color(0xFF6E6E78), fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
                     }
                 }
             }
@@ -114,10 +115,10 @@ fun GameSearchSheet(designStyle: DesignStyle, onDismiss: () -> Unit, onSelect: (
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         val panel = if (designStyle == DesignStyle.LiquidGlass) Modifier.liquidChrome(corners = 24.dp) else Modifier
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).then(panel).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Oyun", style = RealType.detailDialogTitle)
+            Text(t("Oyun"), style = RealType.detailDialogTitle)
             androidx.compose.material3.OutlinedTextField(value = query, onValueChange = { query = it.take(120) },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
-                placeholder = { Text("Oyun ara") }, shape = RoundedCornerShape(24.dp),
+                placeholder = { Text(t("Oyun ara")) }, shape = RoundedCornerShape(24.dp),
                 colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF85858D),
                     unfocusedBorderColor = Color(0xFF424248), cursorColor = Color.White))
@@ -129,14 +130,14 @@ fun GameSearchSheet(designStyle: DesignStyle, onDismiss: () -> Unit, onSelect: (
                 searching = true; message = null
                 try {
                     results = GameSearch.search(q)
-                    if (results.isEmpty()) message = "Sonuç bulunamadı. Oyunun adını farklı yazmayı dene."
+                    if (results.isEmpty()) message = t("Sonuç bulunamadı. Oyunun adını farklı yazmayı dene.")
                 } catch (c: kotlinx.coroutines.CancellationException) { throw c }
-                catch (e: Exception) { message = e.message ?: "Oyun araması yapılamadı." }
+                catch (e: Exception) { message = e.message ?: t("Oyun araması yapılamadı.") }
                 finally { searching = false }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(if (searching) "Aranıyor…" else "", style = RealType.detailBlockMeta, color = Color(0xFFA5A5B0))
-                androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Kapat", color = Color(0xFFBCBCC5)) }
+                Text(if (searching) t("Aranıyor…") else "", style = RealType.detailBlockMeta, color = Color(0xFFA5A5B0))
+                androidx.compose.material3.TextButton(onClick = onDismiss) { Text(t("Kapat"), color = Color(0xFFBCBCC5)) }
             }
             message?.let { Text(it, style = RealType.detailBlockMeta, color = Color(0xFFBCBCC5)) }
             androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -154,7 +155,7 @@ fun GameSearchSheet(designStyle: DesignStyle, onDismiss: () -> Unit, onSelect: (
                     }
                 }
             }
-            Text("Kaynak: IGDB", style = RealType.detailAttribution, color = Color(0xFF95959F))
+            Text(t("Kaynak: IGDB"), style = RealType.detailAttribution, color = Color(0xFF95959F))
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -168,9 +169,9 @@ object GameSearch {
             .postJson("${com.cagri.real.platform.android.auth.AndroidBackend.ORIGIN}/api/game-search", body, 12_000, 20_000, readErrorBody = true)
         when (response.statusCode) {
             in 200..299 -> {}
-            503 -> throw java.io.IOException("Oyun kataloğu şu anda hazır değil.")
-            404 -> throw java.io.IOException("Oyun araması için sunucunun güncellenmesi gerekiyor.")
-            else -> throw java.io.IOException("Oyun araması yapılamadı. Bağlantını kontrol edip yeniden dene.")
+            503 -> throw java.io.IOException(t("Oyun kataloğu şu anda hazır değil."))
+            404 -> throw java.io.IOException(t("Oyun araması için sunucunun güncellenmesi gerekiyor."))
+            else -> throw java.io.IOException(t("Oyun araması yapılamadı. Bağlantını kontrol edip yeniden dene."))
         }
         val array = org.json.JSONObject(response.body).optJSONArray("games") ?: return@withContext emptyList()
         (0 until array.length()).mapNotNull { i -> array.optJSONObject(i)?.let(com.cagri.real.discovery.GameCodec::fromWorker) }.map { c ->

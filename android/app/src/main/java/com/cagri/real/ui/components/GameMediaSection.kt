@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -62,7 +63,7 @@ private suspend fun loadGameMedia(providerId: String): GameMedia = withContext(D
     mediaCache[providerId]?.let { return@withContext it }
     val body = JSONObject().put("provider", "IGDB").put("providerId", providerId).toString()
     val response = WorkerClient(AndroidBackend.workerTransport).postJson("${AndroidBackend.ORIGIN}/api/game-details", body, 10_000, 20_000, readErrorBody = false)
-    check(response.statusCode in 200..299) { "Görseller şu anda alınamadı." }
+    check(response.statusCode in 200..299) { t("Görseller şu anda alınamadı.") }
     val game = JSONObject(response.body).optJSONObject("game") ?: JSONObject()
     val shots = game.optJSONArray("screenshots")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf { u -> u.startsWith("https://") } } }.orEmpty()
     val videos = game.optJSONArray("videos")?.let { a ->
@@ -92,14 +93,14 @@ internal fun GameMediaSection(providerId: String, accent: Color) {
                 if (open && media == null && !loading) {
                     loading = true; error = null
                     scope.launch {
-                        try { media = loadGameMedia(providerId) } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message ?: "Görseller şu anda alınamadı." }
+                        try { media = loadGameMedia(providerId) } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message ?: t("Görseller şu anda alınamadı.") }
                         loading = false
                     }
                 }
             }.padding(horizontal = 18.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (open) "▾" else "▶", color = accent, fontSize = 13.sp)
             Spacer(Modifier.width(8.dp))
-            Text(if (open) "Oynanışı gizle" else "Oynanışı gör", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(if (open) t("Oynanışı gizle") else t("Oynanışı gör"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
         AnimatedVisibility(open, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
@@ -109,7 +110,7 @@ internal fun GameMediaSection(providerId: String, accent: Color) {
                         contentAlignment = Alignment.Center) { RealSpinner(Modifier.size(28.dp), color = Color.White) }
                     error != null -> Text(error!!, color = Color(0xFFE6BCB1), fontSize = 13.sp)
                     m == null || m.screenshots.isEmpty() ->
-                        Text("Bu oyun için görsel yok.", color = Color(0xFF85858E), fontSize = 13.sp)
+                        Text(t("Bu oyun için görsel yok."), color = Color(0xFF85858E), fontSize = 13.sp)
                     else -> {
                         val shots = m.screenshots
                         // The stage swipes too; the strip and the stage follow each other.

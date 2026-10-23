@@ -1879,5 +1879,16 @@
   "En fazla {0} seçim": "At most {0} choices",
   "{0} ile {1} birlikte nadir": "{0} and {1} are rare together",
   "Atla": "Skip",
-  "Atla ve {0}": "Skip and {0}"
+  "Atla ve {0}": "Skip and {0}",
+  "{0} saat": "{0} hours",
+  "Bu saat, saat değişimi nedeniyle kullanılamıyor.": "This time can't be used because of the clock change.",
+  "Bitiş saati, saat değişimi nedeniyle kullanılamıyor.": "The end time can't be used because of the clock change.",
+  "Oyun kataloğu şu anda hazır değil.": "The game catalog isn't ready right now.",
+  "Oyun araması için sunucunun güncellenmesi gerekiyor.": "The server needs an update for game search.",
+  "Oyun araması yapılamadı. Bağlantını kontrol edip yeniden dene.": "Couldn't search games. Check your connection and try again.",
+  "Kaydedilmiş öneriler okunamadı.": "Couldn't read saved suggestions.",
+  "Öneriler alınamadı.": "Couldn't get suggestions.",
+  "İşlem tamamlanamadı. Tekrar deneyebilirsin.": "Couldn't complete the action. You can try again.",
+  "Genişletilmiş": "Expanded",
+  "Görseller şu anda alınamadı.": "Images aren't available right now."
 }
