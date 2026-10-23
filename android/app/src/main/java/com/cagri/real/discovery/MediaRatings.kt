@@ -1,5 +1,6 @@
 package com.cagri.real.discovery
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import androidx.core.text.HtmlCompat
 import com.cagri.real.data.MediaBlock
@@ -74,7 +75,7 @@ class MediaRatingRepository(context: Context, private val uid: String) {
             list.put(o)
         }
         val j = JSONObject().put("entries", list).put("removed", JSONArray(s.removed.toList().takeLast(2000))).put("imported", s.imported)
-        if (!prefs.edit().putString("state", j.toString()).commit()) throw IOException("Puanlar kaydedilemedi.")
+        if (!prefs.edit().putString("state", j.toString()).commit()) throw IOException(t("Puanlar kaydedilemedi."))
     }
 
     private fun mutate(block: (State) -> State): List<RatingEntry> { val next = block(read()); write(next); return next.entries }
@@ -157,7 +158,7 @@ class MediaRatingRepository(context: Context, private val uid: String) {
             tvdbId = show.optJSONObject("externals")?.opt("thetvdb")?.toString()?.takeIf { it.isNotBlank() && it.all(Char::isDigit) && it != "0" }
         } catch (e: IOException) {
             if (cached != null) return@withContext decodeEpisodes(cached.optJSONArray("list"))
-            throw IOException("Bölümler alınamadı. Bağlantını kontrol edip tekrar dene.")
+            throw IOException(t("Bölümler alınamadı. Bağlantını kontrol edip tekrar dene."))
         }
         val turkish = tvdbId?.let { runCatching { tvdbTurkish(it) }.getOrNull() }.orEmpty()
         val merged = list.map { ep ->
@@ -257,7 +258,7 @@ class MediaRatingRepository(context: Context, private val uid: String) {
         val number = o.optInt("number", -1).takeIf { it > 0 } ?: return@mapNotNull null // Specials have no number.
         val summary = o.optString("summary").takeIf { it.isNotBlank() && it != "null" }
             ?.let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim() }?.takeIf { it.isNotBlank() }
-        SeriesEpisode(season, number, o.optString("name").takeIf { it.isNotBlank() && it != "null" } ?: "Bölüm $number", summary)
+        SeriesEpisode(season, number, o.optString("name").takeIf { it.isNotBlank() && it != "null" } ?: t("Bölüm {0}", number), summary)
     }.distinctBy { it.key }.sortedWith(compareBy({ it.season }, { it.number }))
 
     private fun get(url: String): String {

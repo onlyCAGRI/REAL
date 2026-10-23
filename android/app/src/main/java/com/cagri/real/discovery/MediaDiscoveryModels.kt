@@ -1,5 +1,6 @@
 package com.cagri.real.discovery
 
+import com.cagri.real.i18n.t
 import com.cagri.real.data.MediaBlock
 import java.text.Normalizer
 import java.util.Locale
@@ -118,7 +119,7 @@ object DiscoveryQueueTransitions {
             DiscoveryAction.SKIP, DiscoveryAction.SAVE_DISCOVERY -> state.copy(cards = remainder,
                 excluded = (state.excluded + card.seenTitles).distinct().takeLast(DISCOVERY_SEEN_LIMIT))
             DiscoveryAction.ADD_TO_WATCHLIST -> {
-                require(state.watchlist.size < 40 || state.watchlist.any { it.key == card.key }) { "İzlenecek listen dolu. Önce bir afiş çıkar." }
+                require(state.watchlist.size < 40 || state.watchlist.any { it.key == card.key }) { t("İzlenecek listen dolu. Önce bir afiş çıkar.") }
                 state.copy(cards = remainder, watchlist = if (state.watchlist.any { it.key == card.key }) state.watchlist else state.watchlist + card,
                     excluded = (state.excluded + card.seenTitles).distinct().takeLast(DISCOVERY_SEEN_LIMIT))
             }

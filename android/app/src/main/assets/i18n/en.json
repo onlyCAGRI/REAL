@@ -2037,5 +2037,21 @@
   "Etkinliği düzenleyecek takvim uygulaması bulunamadı.": "No calendar app found that can edit the event.",
   "{0}\nTüm gün": "{0}\nAll day",
   "{0} – {1}\nTüm gün": "{0} – {1}\nAll day",
-  "Takvim işlemi tamamlanamadı. Bağlantıyı ve izinleri kontrol edip yeniden dene.": "The calendar action couldn't be completed. Check the connection and permissions, then try again."
+  "Takvim işlemi tamamlanamadı. Bağlantıyı ve izinleri kontrol edip yeniden dene.": "The calendar action couldn't be completed. Check the connection and permissions, then try again.",
+  "Öneriler kaydedilemedi.": "Couldn't save suggestions.",
+  "Öneri yanıtı geçersiz.": "The suggestion response is invalid.",
+  "IGDB'de doğrulanmış bir oyun bulunamadı. Tekrar deneyebilirsin.": "No verified game found on IGDB. You can try again.",
+  "Oynanacak listen dolu. Önce bir oyun çıkar.": "Your to-play list is full. Take a game out first.",
+  "Bu yapım için oyuncu bilgisi bulunamadı.": "No cast information found for this title.",
+  "Bu kaynağın oyuncu bilgisi desteklenmiyor.": "Cast information isn't supported for this source.",
+  "Katalog yanıtı çok büyük.": "The catalog response is too large.",
+  "İzlenecek listen dolu. Önce bir afiş çıkar.": "Your watchlist is full. Take a poster out first.",
+  "Bu seçimlerle yeni afiş kalmadı. Bir iki seçimi kaldırıp tekrar dene.": "No new posters are left with these choices. Remove a choice or two and try again.",
+  "Puanlar kaydedilemedi.": "Couldn't save the ratings.",
+  "Bölümler alınamadı. Bağlantını kontrol edip tekrar dene.": "Couldn't load the episodes. Check your connection and try again.",
+  "Bölüm {0}": "Episode {0}",
+  "Müzik önerileri kaydedilemedi.": "Couldn't save music suggestions.",
+  "Müzik listeleri alınamadı. Bağlantını kontrol edip yeniden dene.": "Couldn't load the music charts. Check your connection and try again.",
+  "Bu dönemde yeni şarkı bulunamadı. Biraz sonra tekrar dene ya da başka bir tür seç.": "No new songs found for this era. Try again later or pick another genre.",
+  "Bu seçimlerde yeni şarkı kalmadı. Başka bir tür dene.": "No new songs are left with these choices. Try another genre."
 }

@@ -1,5 +1,6 @@
 package com.cagri.real.discovery
 
+import com.cagri.real.i18n.t
 import android.os.SystemClock
 import android.text.Html
 import com.cagri.real.data.MediaBlock
@@ -19,7 +20,8 @@ import java.net.URL
 import kotlin.coroutines.coroutineContext
 
 data class MediaCastMember(val id: String, val name: String, val role: String?, val imageUrl: String?)
-data class MediaDetail(val description: String?, val durationMillis: Long?, val cast: List<MediaCastMember>)
+/** [trailerUrl]: a YouTube trailer (TheTVDB movies), opened in the YouTube app or the browser. */
+data class MediaDetail(val description: String?, val durationMillis: Long?, val cast: List<MediaCastMember>, val trailerUrl: String? = null)
 
 /** Screen-scoped bounded catalog cache; details never alter or sync a REAL card. */
 class MediaDetailRepository {
@@ -27,7 +29,7 @@ class MediaDetailRepository {
     private val cache = LinkedHashMap<String, Cached>()
     suspend fun load(media: MediaBlock): MediaDetail = withContext(Dispatchers.IO) {
         val id = media.providerId?.takeIf { it.matches(Regex("[1-9]\\d{0,9}")) }
-            ?: throw IOException("Bu yapım için oyuncu bilgisi bulunamadı.")
+            ?: throw IOException(t("Bu yapım için oyuncu bilgisi bulunamadı."))
         val key = "${media.type}:${media.provider}:$id"
         synchronized(cache) { cache[key] }?.takeIf { SystemClock.elapsedRealtime() - it.savedAt < 3_600_000L }
             ?.let { return@withContext it.detail }
@@ -37,12 +39,12 @@ class MediaDetailRepository {
                 val body = JSONObject().put("provider", "TheTVDB").put("type", "MOVIE").put("providerId", id).toString()
                 val response = WorkerClient(AndroidBackend.workerTransport).postJson(
                     "${AndroidBackend.ORIGIN}/api/media-details", body, 15_000, 18_000, readErrorBody = false)
-                if (response.statusCode !in 200..299) throw IOException("Oyuncular şu anda alınamadı.")
+                if (response.statusCode !in 200..299) throw IOException(t("Oyuncular şu anda alınamadı."))
                 val result = JSONObject(response.body)
-                if (!result.optBoolean("ok")) throw IOException("Oyuncular şu anda alınamadı.")
+                if (!result.optBoolean("ok")) throw IOException(t("Oyuncular şu anda alınamadı."))
                 parseMovie(result.getJSONObject("details"), id)
             }
-            else -> throw IOException("Bu kaynağın oyuncu bilgisi desteklenmiyor.")
+            else -> throw IOException(t("Bu kaynağın oyuncu bilgisi desteklenmiyor."))
         }
         coroutineContext.ensureActive()
         synchronized(cache) {
@@ -57,14 +59,14 @@ class MediaDetailRepository {
             connection.connectTimeout = 10_000; connection.readTimeout = 15_000
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "REAL-Android/MediaDetails")
-            if (connection.responseCode !in 200..299) throw IOException("Oyuncular şu anda alınamadı.")
+            if (connection.responseCode !in 200..299) throw IOException(t("Oyuncular şu anda alınamadı."))
             return connection.inputStream.use { stream ->
                 val output = ByteArrayOutputStream()
                 val buffer = ByteArray(8192)
                 while (true) {
                     val count = stream.read(buffer)
                     if (count < 0) break
-                    if (output.size() + count > 1_048_576) throw IOException("Katalog yanıtı çok büyük.")
+                    if (output.size() + count > 1_048_576) throw IOException(t("Katalog yanıtı çok büyük."))
                     output.write(buffer, 0, count)
                 }
                 output.toByteArray().toString(Charsets.UTF_8)
@@ -110,7 +112,11 @@ class MediaDetailRepository {
                 }
             }.distinctBy { it.id }
             val duration = json.optLong("durationMillis").takeIf { it in 60_000L..86_400_000L }
-            return MediaDetail(string(json, "description")?.take(6000), duration, cast)
+            val trailer = string(json, "trailerUrl")?.takeIf { url ->
+                runCatching { URI(url) }.getOrNull()?.let { it.scheme == "https" && it.host.orEmpty().lowercase().let { h ->
+                    h == "youtube.com" || h.endsWith(".youtube.com") || h == "youtu.be" } } == true
+            }
+            return MediaDetail(string(json, "description")?.take(6000), duration, cast, trailer)
         }
     }
 }

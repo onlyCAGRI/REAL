@@ -1,5 +1,6 @@
 package com.cagri.real.discovery
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import com.cagri.real.data.MusicBlock
 import com.cagri.real.data.MusicCatalog
@@ -7,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -121,9 +123,18 @@ data class MusicCard(val music: MusicBlock, val genre: String, val year: Int? = 
  * no key; covers, 30 s previews, Apple Music links). Right swipe saves to "Müzik listem", left passes; passed and saved
  * songs never come back. Local, per REAL user.
  */
+private const val DISCOVER_ENDPOINT = "https://real-backend-staging.cagrigul1907.workers.dev/api/music-discover"
+
+/** Selection key of "Sana özel" (only offered with Apple Music connected): Apple's picks for the person in the deck. */
+const val MusicPersonalKey = "personal_apple"
+
 class MusicDiscoveryRepository(context: Context, uid: String) {
+    private val appContext = context.applicationContext
+    private val libraryScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
     private val prefs = context.applicationContext.getSharedPreferences("real_music_discovery_$uid", Context.MODE_PRIVATE)
     private val lock = Mutex()
+    /** Songs swiped off the deck, newest last (a shake brings the last one back). */
+    private val swiped = ArrayDeque<Pair<MusicCard, Snapshot>>()
 
     data class Snapshot(val selection: Set<String>, val cards: List<MusicCard>, val list: List<MusicCard>, val excluded: List<String>)
 
@@ -149,7 +160,7 @@ class MusicDiscoveryRepository(context: Context, uid: String) {
     private fun write(s: Snapshot) {
         val j = JSONObject().put("selection", JSONArray(s.selection.toList())).put("cards", encode(s.cards, 120))
             .put("list", encode(s.list, 500)).put("excluded", JSONArray(s.excluded.takeLast(3000)))
-        if (!prefs.edit().putString("snapshot", j.toString()).commit()) throw IOException("Müzik önerileri kaydedilemedi.")
+        if (!prefs.edit().putString("snapshot", j.toString()).commit()) throw IOException(t("Müzik önerileri kaydedilemedi."))
     }
 
     suspend fun load(): Snapshot = withContext(Dispatchers.IO) { lock.withLock { read() } }
@@ -172,6 +183,12 @@ class MusicDiscoveryRepository(context: Context, uid: String) {
         val budget = java.util.concurrent.atomic.AtomicInteger(12)
         val perGenre = coroutineScope {
             genres.map { g -> async {
+                // Apple Music charts + Apple's own playlists through the REAL Worker (explicit originals too); the
+                // iTunes charts + artist songs below only when the Worker fails.
+                val apple = runCatching { appleMusic(country, g, era) }.getOrDefault(emptyList())
+                    .filter { it.key !in known && inEra(it) }
+                if (apple.isNotEmpty()) return@async apple.chunked(6)
+                    .flatMap { window -> window.shuffled().sortedBy { if (it.music.previewUrl != null) 0 else 1 } }
                 // The weekly charts only fit today's music; an older era is built from its artists alone.
                 val withCharts = era == null || era == MusicEra.Now
                 val local = async { if (withCharts) runCatching { chart(country, g) }.getOrDefault(emptyList()) else emptyList() }
@@ -182,10 +199,14 @@ class MusicDiscoveryRepository(context: Context, uid: String) {
                 weave(seeds.await(), charts)
             } }.awaitAll()
         }
-        if (perGenre.all { it.isEmpty() }) throw IOException("Müzik listeleri alınamadı. Bağlantını kontrol edip yeniden dene.")
+        // "Sana özel": Apple's picks for the person within the genres, woven in as one more list.
+        val personal = if (MusicPersonalKey !in selection) emptyList() else runCatching {
+            AppleMusicAccount.personalSongs(appContext, genres.map { it.itunesId })?.let { cardsOf(it, genres.first().key) }.orEmpty()
+        }.getOrDefault(emptyList()).filter { it.key !in known && inEra(it) }
+        if (perGenre.all { it.isEmpty() } && personal.isEmpty()) throw IOException(t("Müzik listeleri alınamadı. Bağlantını kontrol edip yeniden dene."))
         // Interleave the genres so the deck is mixed. Each genre keeps Apple's ranking (most played first), only
         // mixed inside small windows; songs with a preview come first within a window.
-        val queues = perGenre.map { list -> list.filter { it.key !in known }.toMutableList() }
+        val queues = (listOf(personal) + perGenre).map { list -> list.filter { it.key !in known }.toMutableList() }
         val fresh = mutableListOf<MusicCard>()
         val seen = HashSet<String>()
         while (fresh.size < 40 && queues.any { it.isNotEmpty() }) {
@@ -194,13 +215,40 @@ class MusicDiscoveryRepository(context: Context, uid: String) {
                 if (seen.add(next.key)) fresh += next
             }
         }
-        if (fresh.isEmpty()) throw IOException(if (era != null) "Bu dönemde yeni şarkı bulunamadı. Biraz sonra tekrar dene ya da başka bir tür seç."
-            else "Bu seçimlerde yeni şarkı kalmadı. Başka bir tür dene.")
+        if (fresh.isEmpty()) throw IOException(if (era != null) t("Bu dönemde yeni şarkı bulunamadı. Biraz sonra tekrar dene ya da başka bir tür seç.")
+            else t("Bu seçimlerde yeni şarkı kalmadı. Başka bir tür dene."))
         lock.withLock {
             val cur = read()
             val same = cur.selection == selection
             val next = cur.copy(selection = selection, cards = (if (same) cur.cards else emptyList()) + fresh)
             write(next); next
+        }
+    }
+
+    /** Up to 250 songs of the genre (and era) from the Worker's /api/music-discover, cached there for 12 hours. */
+    private suspend fun appleMusic(country: String, genre: MusicGenre, era: MusicEra?): List<MusicCard> {
+        val payload = JSONObject().put("storefront", country).put("genre", genre.itunesId).apply { era?.let { put("era", it.key) } }
+        val response = com.cagri.real.network.WorkerClient(com.cagri.real.platform.android.auth.AndroidBackend.workerTransport)
+            .postJson(DISCOVER_ENDPOINT, payload.toString(), 10_000, 20_000, readErrorBody = false)
+        check(response.statusCode in 200..299) { "HTTP ${response.statusCode} from REAL Worker music-discover" }
+        return cardsOf(JSONObject(response.body).optJSONArray("songs") ?: return emptyList(), genre.key)
+    }
+
+    /** The Worker's song objects (music-discover, music-me) as deck cards. */
+    private fun cardsOf(songs: JSONArray, genreKey: String): List<MusicCard> {
+        fun text(o: JSONObject, name: String) = o.optString(name).takeIf { it.isNotBlank() && it != "null" }
+        return buildList {
+            for (i in 0 until songs.length()) {
+                val o = songs.optJSONObject(i) ?: continue
+                val title = text(o, "title") ?: continue
+                val link = text(o, "providerUrl")?.takeIf { it.startsWith("https://") } ?: continue
+                val preview = text(o, "previewUrl")?.takeIf { it.startsWith("https://") }
+                add(MusicCard(MusicBlock(title = title, artist = o.optString("artist"), album = text(o, "album"),
+                    artworkUrl = text(o, "artworkUrl")?.takeIf { it.startsWith("https://") }, provider = "iTunes",
+                    providerTrackId = text(o, "providerTrackId"), providerUrl = link, previewUrl = preview,
+                    previewDurationMillis = if (preview != null) 30_000L else null, explicit = o.optBoolean("explicit", false)),
+                    genreKey, o.optInt("year", 0).takeIf { it > 0 }))
+            }
         }
     }
 
@@ -365,8 +413,17 @@ class MusicDiscoveryRepository(context: Context, uid: String) {
 
     enum class Action { SAVE, SKIP, KEEP, REMOVE }
 
-    suspend fun act(card: MusicCard, action: Action): Snapshot = withContext(Dispatchers.IO) { com.cagri.real.updates.AppUpdateGate.requireWritable(); lock.withLock {
+    suspend fun act(card: MusicCard, action: Action): Snapshot = withContext(Dispatchers.IO) { com.cagri.real.updates.AppUpdateGate.requireWritable()
+        // Apple Music connected: a saved song also goes to the person's library (best effort, the list is the record).
+        val trackId = card.music.providerTrackId
+        if (action == Action.SAVE && trackId != null && AppleMusicAccount.isConnected(appContext)) {
+            libraryScope.launch { runCatching { AppleMusicAccount.addToLibrary(appContext, trackId) } }
+        }
+        lock.withLock {
         val s = read()
+        if (s.cards.any { it.key == card.key } && (action == Action.SAVE || action == Action.SKIP)) {
+            swiped.addLast(card to s); if (swiped.size > 10) swiped.removeFirst()
+        }
         val rest = s.cards.filterNot { it.key == card.key }
         val excluded = (s.excluded + card.key).distinct()
         val next = when (action) {
@@ -375,6 +432,17 @@ class MusicDiscoveryRepository(context: Context, uid: String) {
             Action.KEEP -> s.copy(list = s.list.filterNot { it.key == card.key } + card)
             Action.REMOVE -> s.copy(list = s.list.filterNot { it.key == card.key })
         }
+        write(next); next
+    } }
+
+    /** Shake: the last swiped song is back on top, and out of the list / passed songs again (only what that swipe did). */
+    suspend fun undo(): Snapshot? = withContext(Dispatchers.IO) { lock.withLock {
+        val (card, before) = swiped.removeLastOrNull() ?: return@withLock null
+        val s = read()
+        val next = s.copy(
+            cards = listOf(card) + s.cards.filterNot { it.key == card.key },
+            list = if (before.list.any { it.key == card.key }) s.list else s.list.filterNot { it.key == card.key },
+            excluded = if (card.key in before.excluded) s.excluded else s.excluded.filterNot { it == card.key })
         write(next); next
     } }
 

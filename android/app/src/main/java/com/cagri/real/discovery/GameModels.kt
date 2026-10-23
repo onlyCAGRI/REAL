@@ -1,5 +1,6 @@
 package com.cagri.real.discovery
 
+import com.cagri.real.i18n.t
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -127,7 +128,7 @@ object GameQueueTransitions {
             GameAction.PLAYED -> s.copy(cards = rest, list = s.list.filterNot { it.key == card.key }, excluded = excluded)
             GameAction.SKIP -> s.copy(cards = rest, excluded = excluded)
             GameAction.ADD_TO_LIST -> {
-                require(s.list.size < 40 || s.list.any { it.key == card.key }) { "Oynanacak listen dolu. Önce bir oyun çıkar." }
+                require(s.list.size < 40 || s.list.any { it.key == card.key }) { t("Oynanacak listen dolu. Önce bir oyun çıkar.") }
                 s.copy(cards = rest, list = if (s.list.any { it.key == card.key }) s.list else s.list + card, excluded = excluded)
             }
         }

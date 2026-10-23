@@ -1,5 +1,6 @@
 package com.cagri.real.discovery
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import com.cagri.real.data.MediaBlock
 import com.cagri.real.data.MediaCatalog
@@ -28,6 +29,8 @@ private const val WATCHED_LIMIT = 2000
 class MediaDiscoveryRepository(context: Context, uid: String) {
     private val prefs = context.applicationContext.getSharedPreferences("real_media_discovery_$uid", Context.MODE_PRIVATE)
     private val lock = Mutex()
+    /** Titles swiped off the deck, newest last (a shake brings the last one back). */
+    private val swiped = ArrayDeque<Pair<DiscoveryCard, Snapshot>>()
     data class Snapshot(val type: String, val filters: Set<String>, val cards: List<DiscoveryCard>, val later: List<DiscoveryCard>, val excluded: List<String>,
                         /** "İzledim": kept for the coming rating list; never suggested again. */
                         val watched: List<DiscoveryCard> = emptyList())
@@ -55,7 +58,7 @@ class MediaDiscoveryRepository(context: Context, uid: String) {
         val json = JSONObject().put("type", s.type).put("filters", JSONArray(s.filters.toList())).put("cards", encode(s.cards))
             .put("later", encode(s.later)).put("excluded", JSONArray(s.excluded.takeLast(DISCOVERY_SEEN_LIMIT)))
             .put("watched", encode(s.watched.takeLast(WATCHED_LIMIT), WATCHED_LIMIT))
-        if (!prefs.edit().putString("snapshot", json.toString()).commit()) throw IOException("Öneriler kaydedilemedi.")
+        if (!prefs.edit().putString("snapshot", json.toString()).commit()) throw IOException(t("Öneriler kaydedilemedi."))
     }
     suspend fun load(): Snapshot = withContext(Dispatchers.IO) { lock.withLock { read() } }
     /**
@@ -106,7 +109,7 @@ class MediaDiscoveryRepository(context: Context, uid: String) {
                 if (fresh.isEmpty() && keep.isEmpty()) throw e
                 lastError = e; break
             }
-            val array = JSONObject(response.body).optJSONArray("candidates") ?: throw IOException("Öneri yanıtı geçersiz.")
+            val array = JSONObject(response.body).optJSONArray("candidates") ?: throw IOException(t("Öneri yanıtı geçersiz."))
             val items = (0 until array.length()).mapNotNull { array.optJSONObject(it) }
             asked += items.map { it.optString("title").trim() }.filter { it.isNotBlank() }
             val unseen = items.filter { norm(it.optString("title")) !in known }
@@ -136,7 +139,7 @@ class MediaDiscoveryRepository(context: Context, uid: String) {
         }
         // Nothing new also ends an automatic refill, so a repeating recommender can never loop the request.
         if (fresh.isEmpty()) {
-            throw lastError ?: IOException("Bu seçimlerle yeni afiş kalmadı. Bir iki seçimi kaldırıp tekrar dene.")
+            throw lastError ?: IOException(t("Bu seçimlerle yeni afiş kalmadı. Bir iki seçimi kaldırıp tekrar dene."))
         }
         lock.withLock {
             val current = read()
@@ -150,9 +153,22 @@ class MediaDiscoveryRepository(context: Context, uid: String) {
 
     suspend fun act(card: DiscoveryCard, action: DiscoveryAction): Snapshot = withContext(Dispatchers.IO) { com.cagri.real.updates.AppUpdateGate.requireWritable(); lock.withLock {
         val s = read()
+        if (s.cards.any { it.key == card.key }) { swiped.addLast(card to s); if (swiped.size > 10) swiped.removeFirst() }
         val queues = DiscoveryQueueTransitions.apply(DiscoveryQueues(s.cards, s.later, s.excluded), card, action)
         val watched = if (action == DiscoveryAction.WATCHED) s.watched.filterNot { it.key == card.key } + card else s.watched
         val next = s.copy(cards = queues.cards, later = queues.watchlist, excluded = queues.excluded, watched = watched)
+        write(next); next
+    } }
+
+    /** Shake: the last swiped title is back on top, and out of Sonra izle / İzledim / passed again (only what that swipe did). */
+    suspend fun undo(): Snapshot? = withContext(Dispatchers.IO) { lock.withLock {
+        val (card, before) = swiped.removeLastOrNull() ?: return@withLock null
+        val s = read()
+        val next = s.copy(
+            cards = listOf(card) + s.cards.filterNot { it.key == card.key },
+            later = if (before.later.any { it.key == card.key }) s.later else s.later.filterNot { it.key == card.key },
+            watched = if (before.watched.any { it.key == card.key }) s.watched else s.watched.filterNot { it.key == card.key },
+            excluded = if (card.key in before.excluded) s.excluded else s.excluded.filterNot { it == card.key })
         write(next); next
     } }
 }
