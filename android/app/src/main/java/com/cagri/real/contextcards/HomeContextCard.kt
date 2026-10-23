@@ -1,5 +1,6 @@
 package com.cagri.real.contextcards
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
@@ -355,7 +356,7 @@ private fun ContextCardTile(
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(card.message, color = Color.White.copy(alpha = .6f), fontSize = 12.sp,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-                Text("REAL önerisi · ${card.eyebrow.lowercase()}", color = accent.copy(alpha = .8f), fontSize = 11.sp,
+                Text(t("REAL önerisi · {0}", card.eyebrow.lowercase()), color = accent.copy(alpha = .8f), fontSize = 11.sp,
                     modifier = Modifier.padding(top = 3.dp))
                 card.progress?.let { progress ->
                     Box(

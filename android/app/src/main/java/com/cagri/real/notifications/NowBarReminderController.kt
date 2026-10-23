@@ -1,5 +1,7 @@
 package com.cagri.real.notifications
 
+import com.cagri.real.i18n.t
+
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -136,11 +138,11 @@ object NowBarReminderController {
         manuallyPinned: Boolean
     ): String {
         val alertAt = reminder.alertAt ?: return ""
-        if (now >= alertAt) return "Şimdi"
+        if (now >= alertAt) return t("Şimdi")
         val remainingMillis = alertAt - now
         if (manuallyPinned && remainingMillis > 5 * 60 * 1000L) return ""
         val remainingMins = (remainingMillis / 60000L).coerceAtLeast(1)
-        return "$remainingMins dk kaldı"
+        return t("{0} dk kaldı", remainingMins)
     }
 
     internal fun shouldShowSnoozeAction(reminder: ReminderItem, now: Long): Boolean {
@@ -158,7 +160,7 @@ object NowBarReminderController {
 
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "REAL Hatırlatıcılar",
+            t("REAL Hatırlatıcılar"),
             NotificationManager.IMPORTANCE_HIGH
         )
         nm.createNotificationChannel(channel)
@@ -235,9 +237,9 @@ object NowBarReminderController {
 
         
         
-        builder.addAction(0, "Tamamla", completePending)
+        builder.addAction(0, t("Tamamla"), completePending)
         if (shouldShowSnoozeAction(reminder, now)) {
-            builder.addAction(0, "10 dk ertele", snoozePending)
+            builder.addAction(0, t("10 dk ertele"), snoozePending)
         }
 
         try {

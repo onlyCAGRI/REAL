@@ -1,5 +1,7 @@
 package com.cagri.real.notifications
 
+import com.cagri.real.i18n.t
+
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -37,17 +39,17 @@ object ReminderNotifications {
         val manager = context.getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Hatırlatıcılar",
+            t("Hatırlatıcılar"),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Zamanlanmış ve anlık hatırlatıcı bildirimleri."
+            description = t("Zamanlanmış ve anlık hatırlatıcı bildirimleri.")
             enableVibration(true)
         }
         manager.createNotificationChannel(channel)
         manager.createNotificationChannel(NotificationChannel(
-            PINNED_CHANNEL_ID, "Sabit önemli hatırlatıcılar", NotificationManager.IMPORTANCE_LOW
+            PINNED_CHANNEL_ID, t("Sabit önemli hatırlatıcılar"), NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Yıldızladığın aktif notlar. Uygulamadan yıldızı kaldırınca bildirim de kaldırılır."
+            description = t("Yıldızladığın aktif notlar. Uygulamadan yıldızı kaldırınca bildirim de kaldırılır.")
             enableVibration(false)
             setShowBadge(false)
         })
@@ -93,7 +95,7 @@ object ReminderNotifications {
         )
 
         val subText = when {
-            pinned -> "Önemli"
+            pinned -> t("Önemli")
             reminder.hasRepeat -> reminder.repeatRule.displayName
             else -> null
         }
@@ -144,13 +146,13 @@ object ReminderNotifications {
 
         val completeAction = android.app.Notification.Action.Builder(
             null,
-            "Tamamla",
+            t("Tamamla"),
             completePendingIntent
         ).build()
 
         val snoozeAction = android.app.Notification.Action.Builder(
             null,
-            "10 dk ertele",
+            t("10 dk ertele"),
             snoozePendingIntent
         ).build()
 
@@ -212,9 +214,9 @@ object ReminderNotifications {
             }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val minutes = ((at - System.currentTimeMillis() + 30_000L) / 60_000L).coerceAtLeast(1L)
         val lead = when {
-            minutes >= 24 * 60 && minutes % (24 * 60) == 0L -> "${minutes / (24 * 60)} gün sonra"
-            minutes >= 60 && minutes % 60 == 0L -> "${minutes / 60} saat sonra"
-            else -> "$minutes dk sonra"
+            minutes >= 24 * 60 && minutes % (24 * 60) == 0L -> t("{0} gün sonra", minutes / (24 * 60))
+            minutes >= 60 && minutes % 60 == 0L -> t("{0} saat sonra", minutes / 60)
+            else -> t("{0} dk sonra", minutes)
         }
         val metadata = resolveNotificationMetadata(reminder, CategoryRepository(context), context.getString(R.string.app_name))
         val builder = android.app.Notification.Builder(context, CHANNEL_ID)
@@ -223,7 +225,7 @@ object ReminderNotifications {
             .setContentText("$lead · ${metadata.text}")
             .setContentIntent(pendingIntent)
             .setCategory(android.app.Notification.CATEGORY_REMINDER)
-            .setSubText("Erken uyarı")
+            .setSubText(t("Erken uyarı"))
             .setAutoCancel(true)
             .setShowWhen(true)
             .setWhen(at)

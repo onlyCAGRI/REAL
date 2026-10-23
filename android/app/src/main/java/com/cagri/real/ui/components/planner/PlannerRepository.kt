@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.i18n.t
 import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,7 +20,7 @@ internal class PlannerRepository(private val preferences: SharedPreferences) {
                     .put("people", JSONArray(value.people))) }
             }
             val raw = JSONObject().put("version", 1).put("events", entries).toString()
-            check(preferences.edit().putString("event_details", raw).commit()) { "Plan ayrıntıları kaydedilemedi" }
+            check(preferences.edit().putString("event_details", raw).commit()) { t("Plan ayrıntıları kaydedilemedi") }
             updated
         }
     }

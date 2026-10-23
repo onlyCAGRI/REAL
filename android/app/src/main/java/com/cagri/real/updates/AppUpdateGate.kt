@@ -1,5 +1,6 @@
 package com.cagri.real.updates
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -44,7 +45,7 @@ import org.json.JSONObject
  * writes from this version too, with 426 UPDATE_REQUIRED).
  */
 object AppUpdateGate {
-    const val BLOCKED_MESSAGE = "Bu sürümde ekleme yapılamaz. Önce REAL'i güncelle."
+    val BLOCKED_MESSAGE get() = t("Bu sürümde ekleme yapılamaz. Önce REAL'i güncelle.")
     val required = MutableStateFlow(false)
     val sheetOpen = MutableStateFlow(false)
     private var app: Context? = null
@@ -99,16 +100,16 @@ fun RequiredUpdateHost(uid: String?) {
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         PermissionSheet(
             visible = true,
-            title = "Güncelleme gerekli",
-            description = "Bu REAL sürümü artık desteklenmiyor. Güncelleyince her şey kaldığı yerden devam eder; kartların telefonunda güvende.",
+            title = t("Güncelleme gerekli"),
+            description = t("Bu REAL sürümü artık desteklenmiyor. Güncelleyince her şey kaldığı yerden devam eder; kartların telefonunda güvende."),
             glyph = PermissionGlyph.Brand,
             primaryEnabled = !busy,
             primaryLabel = when {
-                busy -> "İndiriliyor · ${(progress * 100).toInt()}%"
-                ready?.exists() == true -> "Kur"
-                else -> "Güncelle"
+                busy -> t("İndiriliyor · {0}%", (progress * 100).toInt())
+                ready?.exists() == true -> t("Kur")
+                else -> t("Güncelle")
             },
-            secondaryLabel = "Şimdilik sadece görüntüle",
+            secondaryLabel = t("Şimdilik sadece görüntüle"),
             onLater = { if (!busy) AppUpdateGate.sheetOpen.value = false },
             onAllow = {
                 if (busy) return@PermissionSheet
@@ -116,24 +117,24 @@ fun RequiredUpdateHost(uid: String?) {
                 val apk = ready
                 when {
                     apk != null && apk.exists() -> try {
-                        if (!client.install(apk)) error = "İzni açtıktan sonra buraya dönüp Kur’a bas."
-                    } catch (_: Exception) { error = "Android kurulum ekranı açılamadı." }
+                        if (!client.install(apk)) error = t("İzni açtıktan sonra buraya dönüp Kur’a bas.")
+                    } catch (_: Exception) { error = t("Android kurulum ekranı açılamadı.") }
                     BuildConfig.REAL_TESTER_UPDATES_ENABLED -> {
                         busy = true; progress = 0f
                         scope.launch {
                             try {
                                 val r = client.cachedLatest()?.takeIf { it.versionCode > BuildConfig.VERSION_CODE && it.minSdk <= Build.VERSION.SDK_INT }
-                                if (r == null) error = "Yeni sürüm henüz hazır değil. Biraz sonra tekrar dene."
+                                if (r == null) error = t("Yeni sürüm henüz hazır değil. Biraz sonra tekrar dene.")
                                 else ready = client.download(r) { progress = it }
                             } catch (e: CancellationException) { throw e }
-                            catch (e: Exception) { error = e.message?.take(180) ?: "İndirme tamamlanamadı." }
+                            catch (e: Exception) { error = e.message?.take(180) ?: t("İndirme tamamlanamadı.") }
                             finally { busy = false }
                         }
                     }
                     else -> runCatching {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}"))
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }.onFailure { error = "Mağaza açılamadı." }
+                    }.onFailure { error = t("Mağaza açılamadı.") }
                 }
             },
             extraContent = {

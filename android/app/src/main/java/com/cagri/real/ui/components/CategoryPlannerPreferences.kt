@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.*
@@ -23,11 +24,11 @@ internal class CategoryPlannerPreferences(context: Context, val workspace: Strin
     // An explicit choice stored earlier, on or off, is kept as it is.
     fun visible(key: String?): Boolean = key != null && prefs.getBoolean("calendar_$key", true)
     fun setVisible(key: String, visible: Boolean) {
-        check(SyncLocal.workspaceToken() == workspace) { "Hesap değişti." }
+        check(SyncLocal.workspaceToken() == workspace) { t("Hesap değişti.") }
         if (this.visible(key) != visible) prefs.edit().putBoolean("calendar_$key", visible).apply()
     }
     fun link(key: String): String = prefs.getString("link_$key", "").orEmpty()
-    fun setLink(key: String, value: String) { check(SyncLocal.workspaceToken() == workspace) { "Hesap değişti." }; prefs.edit().putString("link_$key", value).apply() }
+    fun setLink(key: String, value: String) { check(SyncLocal.workspaceToken() == workspace) { t("Hesap değişti.") }; prefs.edit().putString("link_$key", value).apply() }
 }
 
 @Composable

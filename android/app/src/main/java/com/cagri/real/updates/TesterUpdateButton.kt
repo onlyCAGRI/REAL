@@ -1,5 +1,6 @@
 package com.cagri.real.updates
 
+import com.cagri.real.i18n.t
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -81,7 +82,7 @@ fun TesterUpdateButton() {
         exit = if (reduceMotion) ExitTransition.None else fadeOut()) {
         Box(Modifier.heightIn(min = 48.dp).padding(horizontal = 6.dp)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = true })
-            .semantics { contentDescription = "Yeni REAL güncellemesi" }, contentAlignment = Alignment.Center) {
+            .semantics { contentDescription = t("Yeni REAL güncellemesi") }, contentAlignment = Alignment.Center) {
             Text("update", style = RealType.actionLabel.copy(fontSize = 14.sp), color = Color.White)
         }
     }
@@ -92,31 +93,31 @@ fun TesterUpdateButton() {
         )) {
             PermissionSheet(
                 visible = true,
-                title = "REAL güncellendi",
+                title = t("REAL güncellendi"),
                 description = "${r.versionName} · ${r.sizeBytes / (1024*1024)} MB",
                 glyph = PermissionGlyph.Brand,
                 primaryEnabled = !busy,
                 primaryLabel = when {
-                    busy -> "İndiriliyor · ${(progress * 100).toInt()}%"
-                    ready?.exists() == true -> "Kur"
-                    error != null -> "Tekrar indir"
-                    else -> "Güncellemeyi indir"
+                    busy -> t("İndiriliyor · {0}%", (progress * 100).toInt())
+                    ready?.exists() == true -> t("Kur")
+                    error != null -> t("Tekrar indir")
+                    else -> t("Güncellemeyi indir")
                 },
-                secondaryLabel = if (busy) "İptal et" else "Daha sonra",
+                secondaryLabel = if (busy) t("İptal et") else t("Daha sonra"),
                 onLater = { dismiss() },
                 onAllow = {
                     if (!busy) {
                         error = null
                         val apk = ready
                         if (apk != null && apk.exists()) {
-                            try { if (!client.install(apk)) error = "İzni açtıktan sonra buraya dönüp Kur’a bas." }
-                            catch (_: Exception) { error = "Android kurulum ekranı açılamadı." }
+                            try { if (!client.install(apk)) error = t("İzni açtıktan sonra buraya dönüp Kur’a bas.") }
+                            catch (_: Exception) { error = t("Android kurulum ekranı açılamadı.") }
                         } else {
                             busy = true; progress = 0f
                             job = scope.launch {
                                 try { ready = client.download(r) { progress = it } }
                                 catch (e: CancellationException) { throw e }
-                                catch (e: Exception) { error = e.message?.take(180) ?: "İndirme tamamlanamadı." }
+                                catch (e: Exception) { error = e.message?.take(180) ?: t("İndirme tamamlanamadı.") }
                                 finally { busy = false }
                             }
                         }

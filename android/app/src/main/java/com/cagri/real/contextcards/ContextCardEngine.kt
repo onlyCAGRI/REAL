@@ -1,5 +1,6 @@
 package com.cagri.real.contextcards
 
+import com.cagri.real.i18n.t
 import com.cagri.real.data.JournalMood
 import java.time.DayOfWeek
 import java.time.ZonedDateTime
@@ -38,7 +39,7 @@ data class ContextCard(
     val title: String,
     val message: String,
     val primaryLabel: String,
-    val secondaryLabel: String = "Şimdi değil",
+    val secondaryLabel: String = t("Şimdi değil"),
     /** 0..1, only used by the water card. */
     val progress: Float? = null
 )
@@ -214,60 +215,60 @@ object ContextCardEngine {
             val ml = s.waterTodayMl ?: 0
             val goal = s.waterGoalMl.coerceAtLeast(1)
             ContextCard(
-                type = type, eyebrow = "Bugün",
-                title = if (ml == 0) "Bugün su tarafı sessiz" else "Su hedefinin biraz gerisindesin",
-                message = if (ml == 0) "Henüz hiç su içmedin. Bir bardakla başlayalım."
-                else "$ml / $goal ml. Bir bardak iyi gelir.",
+                type = type, eyebrow = t("Bugün"),
+                title = if (ml == 0) t("Bugün su tarafı sessiz") else t("Su hedefinin biraz gerisindesin"),
+                message = if (ml == 0) t("Henüz hiç su içmedin. Bir bardakla başlayalım.")
+                else t("{0} / {1} ml. Bir bardak iyi gelir.", ml, goal),
                 primaryLabel = "+250 ml",
                 progress = (ml.toFloat() / goal).coerceIn(0f, 1f)
             )
         }
         ContextCardType.MOOD -> ContextCard(
-            type = type, eyebrow = "Bugün",
-            title = "Bugün nasıl hissediyorsun?",
-            message = "Günün havasını tek dokunuşla kaydet.",
-            primaryLabel = "Kaydet"
+            type = type, eyebrow = t("Bugün"),
+            title = t("Bugün nasıl hissediyorsun?"),
+            message = t("Günün havasını tek dokunuşla kaydet."),
+            primaryLabel = t("Kaydet")
         )
         ContextCardType.BOOK -> ContextCard(
-            type = type, eyebrow = "Akşam",
-            title = "Kaldığın yerden devam",
+            type = type, eyebrow = t("Akşam"),
+            title = t("Kaldığın yerden devam"),
             message = listOfNotNull(s.unfinishedBookTitle, s.unfinishedBookAuthor?.takeIf { it.isNotBlank() })
-                .joinToString(" · ").ifBlank { "Kitaplığındaki kitap" } + " seni bekliyor.",
-            primaryLabel = "Oku"
+                .joinToString(" · ").ifBlank { t("Kitaplığındaki kitap") } + t(" seni bekliyor."),
+            primaryLabel = t("Oku")
         )
         ContextCardType.MEDIA -> ContextCard(
-            type = type, eyebrow = "Akşam",
-            title = "Bu akşam ne izlesek?",
-            message = if (isLowMood(s)) "Yorucu bir gün gibi. Hafif bir şey bulalım."
-            else "Türünü seç, afişleri keşfet.",
-            primaryLabel = "Keşfet"
+            type = type, eyebrow = t("Akşam"),
+            title = t("Bu akşam ne izlesek?"),
+            message = if (isLowMood(s)) t("Yorucu bir gün gibi. Hafif bir şey bulalım.")
+            else t("Türünü seç, afişleri keşfet."),
+            primaryLabel = t("Keşfet")
         )
         ContextCardType.WATCH -> ContextCard(
-            type = type, eyebrow = "Akşam",
-            title = "Sıradaki bölüm",
+            type = type, eyebrow = t("Akşam"),
+            title = t("Sıradaki bölüm"),
             message = s.seriesInProgress?.let { series ->
-                s.lastEpisode?.let { (season, number) -> "$series · $season. sezon ${number + 1}. bölüm seni bekliyor." }
-                    ?: "$series seni bekliyor."
-            } ?: "Yarım kalan dizin seni bekliyor.",
-            primaryLabel = "Puanlarım"
+                s.lastEpisode?.let { (season, number) -> t("{0} · {1}. sezon {2}. bölüm seni bekliyor.", series, season, number + 1) }
+                    ?: t("{0} seni bekliyor.", series)
+            } ?: t("Yarım kalan dizin seni bekliyor."),
+            primaryLabel = t("Puanlarım")
         )
         ContextCardType.LISTEN -> ContextCard(
-            type = type, eyebrow = if (minutes(s) < 12 * 60) "Sabah" else "Yolda",
-            title = "Ne dinlesek?",
-            message = "Türünü seç, kartları kaydır.",
-            primaryLabel = "Keşfet"
+            type = type, eyebrow = if (minutes(s) < 12 * 60) t("Sabah") else t("Yolda"),
+            title = t("Ne dinlesek?"),
+            message = t("Türünü seç, kartları kaydır."),
+            primaryLabel = t("Keşfet")
         )
         ContextCardType.PLAY -> ContextCard(
-            type = type, eyebrow = if (isWeekend(s)) "Hafta sonu" else "Akşam",
-            title = "Ne oynasak?",
-            message = if (isLowMood(s)) "Kafa dağıtacak hafif bir oyun bulalım." else "Bir tür seç, sana uyanları bulalım.",
-            primaryLabel = "Keşfet"
+            type = type, eyebrow = if (isWeekend(s)) t("Hafta sonu") else t("Akşam"),
+            title = t("Ne oynasak?"),
+            message = if (isLowMood(s)) t("Kafa dağıtacak hafif bir oyun bulalım.") else t("Bir tür seç, sana uyanları bulalım."),
+            primaryLabel = t("Keşfet")
         )
         ContextCardType.JOURNAL -> ContextCard(
-            type = type, eyebrow = "Gece",
-            title = "Bugünü iki satırla yaz",
-            message = "Kısa bir not, yarına güzel bir iz bırakır.",
-            primaryLabel = "Yaz"
+            type = type, eyebrow = t("Gece"),
+            title = t("Bugünü iki satırla yaz"),
+            message = t("Kısa bir not, yarına güzel bir iz bırakır."),
+            primaryLabel = t("Yaz")
         )
     }
 }

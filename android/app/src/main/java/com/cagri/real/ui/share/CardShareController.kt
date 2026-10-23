@@ -38,7 +38,7 @@ class CardShareController(
         mutable.value = mutable.value.copy(message = t("Gönderildi. Kart, alıcının REAL'i eşitlendiğinde görünür. REAL kullanmıyorsa bağlantıyı paylaş."))
     }
     suspend fun sendConnection(uid: String, options: CardShareClient.Options) {
-        check(!mutable.value.busy && !mutable.value.revoked) { "Paylaşım meşgul veya kapatılmış." }
+        check(!mutable.value.busy && !mutable.value.revoked) { t("Paylaşım meşgul veya kapatılmış.") }
         mutable.value = mutable.value.copy(busy = true, message = null)
         try {
             val link = mutable.value.link ?: client.create(cardId, options.copy(selectedIds = selectedIds), requestId)

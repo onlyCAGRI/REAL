@@ -1,5 +1,6 @@
 package com.cagri.real.profile
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -24,13 +25,13 @@ object ProfilePhotoStorage {
         try {
             context.contentResolver.openInputStream(uri)?.use { input -> source.outputStream().use { output ->
                 val buffer=ByteArray(32*1024);var total=0
-                while(true){val n=input.read(buffer);if(n<0)break;total+=n;require(total<=20*1024*1024){"Fotoğraf en fazla 20 MB olabilir."};output.write(buffer,0,n)}
-            }} ?: error("Fotoğraf açılamadı.")
+                while(true){val n=input.read(buffer);if(n<0)break;total+=n;require(total<=20*1024*1024){t("Fotoğraf en fazla 20 MB olabilir.")};output.write(buffer,0,n)}
+            }} ?: error(t("Fotoğraf açılamadı."))
             val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true};BitmapFactory.decodeFile(source.path,bounds)
-            require(bounds.outWidth>0 && bounds.outHeight>0 && bounds.outWidth.toLong()*bounds.outHeight<=80_000_000L){"Fotoğraf boyutu desteklenmiyor."}
+            require(bounds.outWidth>0 && bounds.outHeight>0 && bounds.outWidth.toLong()*bounds.outHeight<=80_000_000L){t("Fotoğraf boyutu desteklenmiyor.")}
             var sample=1
             while(minOf(bounds.outWidth,bounds.outHeight)/sample>1024 || (bounds.outWidth.toLong()/sample)*(bounds.outHeight/sample)>4_000_000L)sample*=2
-            decoded=BitmapFactory.decodeFile(source.path,BitmapFactory.Options().apply{inSampleSize=sample}) ?: error("Fotoğraf okunamadı.")
+            decoded=BitmapFactory.decodeFile(source.path,BitmapFactory.Options().apply{inSampleSize=sample}) ?: error(t("Fotoğraf okunamadı."))
             val original=decoded!!
             val matrix=Matrix()
             val orientation=runCatching{ExifInterface(source.path).getAttributeInt(ExifInterface.TAG_ORIENTATION,ExifInterface.ORIENTATION_NORMAL)}.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
@@ -53,7 +54,7 @@ object ProfilePhotoStorage {
                 result.outputStream().use{check(scaled!!.compress(Bitmap.CompressFormat.JPEG,quality,it))}
                 quality-=10
             }while(result.length()>MAX_BYTES && quality>=40)
-            require(result.length() in 1..MAX_BYTES.toLong()){ "Fotoğraf küçültülemedi." }
+            require(result.length() in 1..MAX_BYTES.toLong()){ t("Fotoğraf küçültülemedi.") }
             result
         }catch(e:Exception){result.delete();throw e}
         finally{

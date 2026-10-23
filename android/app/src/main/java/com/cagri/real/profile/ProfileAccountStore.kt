@@ -1,5 +1,6 @@
 package com.cagri.real.profile
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.AtomicFile
@@ -23,7 +24,7 @@ object ProfileAccountStore {
         val root = directory(context, owner).canonicalFile
         File(it).canonicalFile.takeIf { file -> file.parentFile == root && file.isFile }
     }
-    private fun ensureOwner(owner: String?) = check(currentOwner() == owner) { "Hesap değişti. Profilini yeniden aç." }
+    private fun ensureOwner(owner: String?) = check(currentOwner() == owner) { t("Hesap değişti. Profilini yeniden aç.") }
     private fun migrationFile(context: Context) = AtomicFile(File(context.noBackupFilesDir, "profile_migration.json"))
     private fun readMigration(context: Context): JSONObject? {
         val file = migrationFile(context)
@@ -72,7 +73,7 @@ object ProfileAccountStore {
                     .putString(AvatarEditorActivity.KEY_STATE_JSON, old.getString(AvatarEditorActivity.KEY_STATE_JSON, null))
                     .putString(ProfilePhotoStorage.KEY_KIND, old.getString(ProfilePhotoStorage.KEY_KIND, null))
                     .putLong(AvatarEditorActivity.KEY_REVISION, old.getLong(AvatarEditorActivity.KEY_REVISION, 0L)).commit()) {
-                    "Profil geçişi kaydedilemedi."
+                    t("Profil geçişi kaydedilemedi.")
                 }
             }
         }
@@ -93,7 +94,7 @@ object ProfileAccountStore {
         val oldRevision = prefs.getLong(AvatarEditorActivity.KEY_REVISION, 0L)
         try {
             writeImage(target)
-            check(target.isFile && target.length() > 0) { "Profil görseli boş." }
+            check(target.isFile && target.length() > 0) { t("Profil görseli boş.") }
             ensureOwner(owner)
             val editor = prefs.edit().putString(AvatarEditorActivity.KEY_IMAGE_PATH, target.path)
                 .putString(ProfilePhotoStorage.KEY_KIND, kind)
@@ -105,7 +106,7 @@ object ProfileAccountStore {
                     .putString(ProfilePhotoStorage.KEY_KIND, oldKind)
                     .putString(AvatarEditorActivity.KEY_STATE_JSON, oldState)
                     .putLong(AvatarEditorActivity.KEY_REVISION, oldRevision).apply()
-                error("Profil kaydedilemedi.")
+                error(t("Profil kaydedilemedi."))
             }
         } catch (failure: Exception) { target.delete(); throw failure }
         previous?.takeIf { it != target }?.let {
@@ -115,17 +116,17 @@ object ProfileAccountStore {
 
     /** Account deletion only. Sign-out and CLOUD deletion preserve the local profile. */
     fun erase(context: Context, uid: String) = synchronized(lock) {
-        check(currentOwner() != uid) { "Önce hesap kapatılmalı." }
+        check(currentOwner() != uid) { t("Önce hesap kapatılmalı.") }
         val root = directory(context, uid).canonicalFile
         check(root.parentFile == File(context.filesDir, "profiles").canonicalFile)
-        if (root.exists()) check(root.deleteRecursively()) { "Profil dosyaları temizlenemedi." }
-        check(preferences(context, uid).edit().clear().commit()) { "Profil kaydı temizlenemedi." }
+        if (root.exists()) check(root.deleteRecursively()) { t("Profil dosyaları temizlenemedi.") }
+        check(preferences(context, uid).edit().clear().commit()) { t("Profil kaydı temizlenemedi.") }
         val migration = readMigration(context)
         if (migration != null && !migration.isNull("owner") && migration.optString("owner") == uid) {
             // Only the legacy directory whose owner was recorded at upgrade is deleted.
             val legacy = File(context.filesDir, "profile").canonicalFile
             check(legacy.parentFile == context.filesDir.canonicalFile)
-            if (legacy.exists()) check(legacy.deleteRecursively()) { "Eski profil temizlenemedi." }
+            if (legacy.exists()) check(legacy.deleteRecursively()) { t("Eski profil temizlenemedi.") }
             check(context.getSharedPreferences(AvatarEditorActivity.PROFILE_PREFS, 0).edit().clear().commit())
             writeMigration(context, migration.put("complete", true).put("erased", true))
         }

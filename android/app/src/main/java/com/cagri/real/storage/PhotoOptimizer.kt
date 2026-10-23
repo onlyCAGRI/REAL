@@ -1,5 +1,6 @@
 package com.cagri.real.storage
 
+import com.cagri.real.i18n.t
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -18,10 +19,10 @@ internal object PhotoOptimizer {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(source.path, bounds)
         if (bounds.outMimeType !in setOf("image/jpeg", "image/png", "image/webp")) return null
-        require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outWidth.toLong() * bounds.outHeight <= 100_000_000L) { "Fotoğraf boyutu desteklenmiyor." }
+        require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outWidth.toLong() * bounds.outHeight <= 100_000_000L) { t("Fotoğraf boyutu desteklenmiyor.") }
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_EDGE * 2 || (bounds.outWidth.toLong() / sample) * (bounds.outHeight / sample) > 4_000_000L) sample *= 2
-        val decoded = BitmapFactory.decodeFile(source.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: error("Fotoğraf okunamadı.")
+        val decoded = BitmapFactory.decodeFile(source.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: error(t("Fotoğraf okunamadı."))
         var oriented: Bitmap? = null; var resized: Bitmap? = null
         try {
             val m = Matrix()

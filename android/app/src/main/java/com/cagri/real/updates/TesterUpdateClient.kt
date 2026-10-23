@@ -1,5 +1,6 @@
 package com.cagri.real.updates
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -60,7 +61,7 @@ class TesterUpdateClient(private val context: Context) {
         val c = connection("/api/updates/v1/latest")
         try {
             if (c.responseCode == 204 || c.responseCode == 403) return@withContext null
-            check(c.responseCode == 200) { "Güncelleme bilgisi alınamadı." }
+            check(c.responseCode == 200) { t("Güncelleme bilgisi alınamadı.") }
             val bytes = c.inputStream.use { input ->
                 val out = java.io.ByteArrayOutputStream()
                 val buffer = ByteArray(2048)
@@ -78,7 +79,7 @@ class TesterUpdateClient(private val context: Context) {
         file.delete(); part.delete()
         val c = connection("/api/updates/v1/apk/${r.versionCode}/${r.sha256}")
         try {
-            check(c.responseCode == 200) { "İndirme şu an kullanılamıyor." }
+            check(c.responseCode == 200) { t("İndirme şu an kullanılamıyor.") }
             val digest = MessageDigest.getInstance("SHA-256")
             var total = 0L; var lastPercent = -1
             c.inputStream.use { input -> part.outputStream().use { output ->
@@ -86,16 +87,16 @@ class TesterUpdateClient(private val context: Context) {
                 while (true) {
                     currentCoroutineContext().ensureActive()
                     val count = input.read(buffer); if (count < 0) break
-                    total += count; check(total <= r.sizeBytes) { "Dosya boyutu uyuşmuyor." }
+                    total += count; check(total <= r.sizeBytes) { t("Dosya boyutu uyuşmuyor.") }
                     output.write(buffer,0,count); digest.update(buffer,0,count)
                     val percent = (total * 100 / r.sizeBytes).toInt()
                     if (percent != lastPercent) { lastPercent = percent; withContext(Dispatchers.Main) { progress(total.toFloat()/r.sizeBytes) } }
                 }
             } }
             val hash = digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
-            check(total == r.sizeBytes && hash == r.sha256) { "Dosya doğrulanamadı. Tekrar indir." }
+            check(total == r.sizeBytes && hash == r.sha256) { t("Dosya doğrulanamadı. Tekrar indir.") }
             validateApk(part,r)
-            check(part.renameTo(file)) { "Dosya kaydedilemedi." }
+            check(part.renameTo(file)) { t("Dosya kaydedilemedi.") }
             file
         } finally { c.disconnect(); part.delete() }
     }
@@ -103,14 +104,14 @@ class TesterUpdateClient(private val context: Context) {
     private fun validateApk(file: File, r: TesterRelease) {
         val pm = context.packageManager
         val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
-        val archive = checkNotNull(pm.getPackageArchiveInfo(file.absolutePath,flags)) { "APK okunamadı." }
+        val archive = checkNotNull(pm.getPackageArchiveInfo(file.absolutePath,flags)) { t("APK okunamadı.") }
         val installed = pm.getPackageInfo(context.packageName,flags)
         val version = if (Build.VERSION.SDK_INT >= 28) archive.longVersionCode else archive.versionCode.toLong()
         val current = if (Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
-        check(archive.packageName == context.packageName && version == r.versionCode && version > current) { "Paket veya sürüm uyuşmuyor." }
+        check(archive.packageName == context.packageName && version == r.versionCode && version > current) { t("Paket veya sürüm uyuşmuyor.") }
         val a = if (Build.VERSION.SDK_INT >= 28) archive.signingInfo?.apkContentsSigners else archive.signatures
         val b = if (Build.VERSION.SDK_INT >= 28) installed.signingInfo?.apkContentsSigners else installed.signatures
-        check(!a.isNullOrEmpty() && !b.isNullOrEmpty() && a.toSet() == b.toSet()) { "İmza uyuşmuyor. Mevcut uygulamanın imzasıyla derle." }
+        check(!a.isNullOrEmpty() && !b.isNullOrEmpty() && a.toSet() == b.toSet()) { t("İmza uyuşmuyor. Mevcut uygulamanın imzasıyla derle.") }
     }
     fun install(file: File): Boolean {
         if (!context.packageManager.canRequestPackageInstalls()) {
