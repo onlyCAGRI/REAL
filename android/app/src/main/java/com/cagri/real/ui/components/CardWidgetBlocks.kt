@@ -156,7 +156,7 @@ fun CounterBlockView(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text(config.title, color = WidgetSoft, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(t(config.title), color = WidgetSoft, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(2.dp))
                     RollingNumberText(
                         value.toIntSafe(), WidgetInk,
