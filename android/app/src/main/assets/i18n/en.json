@@ -1824,5 +1824,8 @@
   "Davet 7 gün geçerli ve bir kişi tarafından kullanılabilir. Kaldırmak, kişinin REAL bağlantısını silmez.": "The invite is valid for 7 days and can be used by one person. Removing it doesn't delete the person's REAL connection.",
   "Varınca / ayrılınca hatırlat": "Remind on arrival / leaving",
   "SU": "WATER",
-  "Eski hedef kaydı yoksa güncel hedef kullanılır": "If no old goal was recorded, the current goal is used"
+  "Eski hedef kaydı yoksa güncel hedef kullanılır": "If no old goal was recorded, the current goal is used",
+  "Kategorileri seç": "Select categories",
+  "Kategori rengini düzenle": "Edit category color",
+  " kart": " cards"
 }

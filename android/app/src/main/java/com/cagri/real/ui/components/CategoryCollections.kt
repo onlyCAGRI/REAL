@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -201,7 +202,7 @@ fun CategoryCollections(
         if (showAll && !selectionMode) {
             TextButton(onClick = onAddCategory, modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp)
                 .border(0.75.dp, Color(0xFF35353A), RoundedCornerShape(24.dp))) {
-                Text("＋  Yeni kategori", color = Color(0xFFCCCCD3), modifier = Modifier.padding(6.dp))
+                Text(t("＋  Yeni kategori"), color = Color(0xFFCCCCD3), modifier = Modifier.padding(6.dp))
             }
         }
         if (!selectionMode && showAllControlVisible) TextButton(
@@ -211,7 +212,7 @@ fun CategoryCollections(
                 .realPetPerch(REAL_PET_PERCH_SHOW_ALL)
         ) {
             Text(
-                showAllPetOverride ?: if (expanded) "Daha az göster" else "Tümünü göster",
+                showAllPetOverride ?: if (expanded) t("Daha az göster") else t("Tümünü göster"),
                 color = Color(0xFFB7B7C0),
                 style = RealType.categoryShowAllAction
             )
@@ -308,7 +309,7 @@ internal fun MoodTrackerCategoryCard(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Moods",
+                text = t("Moods"),
                 color = Color.White,
                 style = RealType.categoryTitleMoods,
                 modifier = Modifier.weight(1f).offset(x = 10.dp)
@@ -319,7 +320,7 @@ internal fun MoodTrackerCategoryCard(
         Spacer(Modifier.height(13.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             CategoryPill(
-                text = latest?.let { "Son: ${moodV2FamilyTitle(it.mood)}" } ?: "İlk izini bırak",
+                text = latest?.let { t("Son: {0}", moodV2FamilyTitle(it.mood)) } ?: t("İlk izini bırak"),
                 foreground = Color.White,
                 reduceAnimations = reduceAnimations
             )
@@ -364,9 +365,10 @@ fun CategoryPill(
             return@LaunchedEffect
         }
         RealPetRuntime.consumePrank(prank.token)
-        val target = if (text.endsWith(" kart")) {
-            val count = text.removeSuffix(" kart")
-            listOf("$count pati", "$count miav", "$count meaw")[prank.token % 3]
+        val countSuffix = t(" kart")
+        val target = if (text.endsWith(countSuffix)) {
+            val count = text.removeSuffix(countSuffix)
+            listOf(t("{0} pati", count), t("{0} miav", count), t("{0} meaw", count))[prank.token % 3]
         } else {
             "MEAWWW"
         }
@@ -550,7 +552,7 @@ fun CollectionCategoryCard(
         )
         .then(if (onClick != null) Modifier.combinedClickable(interactionSource = interaction,
             indication = null /* pressScale already gives the press feedback */, role = Role.Button, onClick = onClick,
-            onLongClick = onLongClick, onLongClickLabel = if (customCategory != null) "Kategorileri seç" else "Kategori rengini düzenle") else Modifier)
+            onLongClick = onLongClick, onLongClickLabel = if (customCategory != null) t("Kategorileri seç") else t("Kategori rengini düzenle")) else Modifier)
         .then(if (selectionMode) Modifier.semantics { selected = isSelected } else Modifier)
         .heightIn(min = if (hero) 156.dp else 108.dp)
         .padding(
@@ -583,7 +585,7 @@ fun CollectionCategoryCard(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (showCount) CategoryPill(
-                        text = "$count kart", foreground = foreground,
+                        text = t("{0} kart", count), foreground = foreground,
                         petPerchId = realPetCategoryPillPerchId(petPerchId, "count"),
                         reduceAnimations = reduceAnimations
                     )
@@ -600,7 +602,7 @@ fun CollectionCategoryCard(
         } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (showCount) {
                 CategoryPill(
-                    text = "$count kart",
+                    text = t("{0} kart", count),
                     foreground = foreground,
                     petPerchId = realPetCategoryPillPerchId(petPerchId, "count"),
                     reduceAnimations = reduceAnimations
@@ -619,7 +621,7 @@ fun CollectionCategoryCard(
             }
             Spacer(Modifier.weight(1f))
             if (selectionMode) Text(
-                if (isSelected) "  ✓ Seçili" else "  ○ Seç",
+                if (isSelected) t("  ✓ Seçili") else t("  ○ Seç"),
                 color = foreground,
                 style = RealType.categorySelectionLabel,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(textSurface).padding(4.dp)

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
@@ -103,14 +104,14 @@ internal fun HomeCardsSearchTitle(
             Row(
                 Modifier.fillMaxWidth().height(44.dp)
                     .semantics {
-                        customActions = listOf(CustomAccessibilityAction("Kartlarda ara") { onOpen(); true })
+                        customActions = listOf(CustomAccessibilityAction(t("Kartlarda ara")) { onOpen(); true })
                     },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     // Pulling left: the title slides out with the finger and "Kartlarda ara" comes up in its place.
                     Text(
-                        "Kartlarda ara…", color = Color(0xFF9A9AA4), fontSize = 17.sp,
+                        t("Kartlarda ara…"), color = Color(0xFF9A9AA4), fontSize = 17.sp,
                         modifier = Modifier.graphicsLayer {
                             val p = (-drag.value / threshold).coerceIn(0f, 1f)
                             alpha = p
@@ -140,7 +141,7 @@ internal fun HomeCardsSearchTitle(
                         },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Kartlarım", color = Color(0xFFF2F2F4), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                        Text(t("Kartlarım"), color = Color(0xFFF2F2F4), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                         titleAccessory()
                     }
                 }
@@ -170,16 +171,16 @@ internal fun HomeCardsSearchTitle(
                     cursorBrush = SolidColor(Color.White),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
-                    modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = "Kartlarda ara" },
+                    modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = t("Kartlarda ara") },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
-                            if (query.isEmpty()) Text("Kartlarda ara…", color = Color(0xFF77777F), fontSize = 17.sp)
+                            if (query.isEmpty()) Text(t("Kartlarda ara…"), color = Color(0xFF77777F), fontSize = 17.sp)
                             inner()
                         }
                     }
                 )
                 Box(
-                    Modifier.size(38.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Aramayı kapat") {
+                    Modifier.size(38.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = t("Aramayı kapat")) {
                         keyboard?.hide(); onClose()
                     },
                     contentAlignment = Alignment.Center

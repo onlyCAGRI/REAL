@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import com.cagri.real.ui.components.RealSheetHandle
 import com.cagri.real.ui.components.realSheetSurface
 import androidx.compose.foundation.background
@@ -90,7 +91,7 @@ internal fun CategoryOrderEditorDialog(
     fun title(key: String): String = when (val item = allItems[key]) {
         is OrderedCategoryItem.BuiltIn -> item.category.title
         is OrderedCategoryItem.Custom -> item.category.name
-        else -> "Tümünü göster"
+        else -> t("Tümünü göster")
     }
     fun slot(): Int? {
         if (!listBounds.contains(pointer)) return null
@@ -153,9 +154,9 @@ internal fun CategoryOrderEditorDialog(
                 Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp)) {
                     RealSheetHandle(Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Kategoriler", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold,
+                        Text(t("Kategoriler"), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f))
-                        Text("Tamam", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                        Text(t("Tamam"), color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.clip(CircleShape).background(Color.White)
                                 .clickable { onSave(categoryOrderWithVisibility(draft, hidden.toSet()), previewCount) }
                                 .padding(horizontal = 18.dp, vertical = 9.dp))
@@ -164,7 +165,7 @@ internal fun CategoryOrderEditorDialog(
                     Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp).clip(RoundedCornerShape(18.dp))
                         .background(Color.White.copy(alpha = 0.05f)).padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        Text("Ana sayfada", color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        Text(t("Ana sayfada"), color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, modifier = Modifier.weight(1f))
                         OrderStepButton("−", previewCount > 1) { previewCount-- }
                         com.cagri.real.ui.components.RollingNumberText(previewCount, color = Color.White,
                             style = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
@@ -227,13 +228,13 @@ internal fun CategoryOrderEditorDialog(
                                     Modifier.graphicsLayer { alpha = if (active) 0.16f else 1f }
                                         .semantics {
                                             customActions = listOf(
-                                                CustomAccessibilityAction("Gizle") { hidden.add(key); true },
-                                                CustomAccessibilityAction("Yukarı taşı") {
+                                                CustomAccessibilityAction(t("Gizle")) { hidden.add(key); true },
+                                                CustomAccessibilityAction(t("Yukarı taşı")) {
                                                     val moved = moveCategoryToSlot(visible, key, (index - 1).coerceAtLeast(0))
                                                     val rest = draft.filter { it in hidden }
                                                     draft.clear(); draft.addAll(moved + rest); true
                                                 },
-                                                CustomAccessibilityAction("Aşağı taşı") {
+                                                CustomAccessibilityAction(t("Aşağı taşı")) {
                                                     val moved = moveCategoryToSlot(visible, key, index + 2)
                                                     val rest = draft.filter { it in hidden }
                                                     draft.clear(); draft.addAll(moved + rest); true
@@ -258,10 +259,10 @@ internal fun CategoryOrderEditorDialog(
                         }),
                         contentAlignment = Alignment.Center) {
                         if (dragging) {
-                            Text("Gizle", color = if (overHide) Color(0xFFFFB4AB) else Color.White.copy(alpha = 0.7f),
+                            Text(t("Gizle"), color = if (overHide) Color(0xFFFFB4AB) else Color.White.copy(alpha = 0.7f),
                                 fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         } else {
-                            Text("Varsayılan", color = Color.White.copy(alpha = 0.45f), fontSize = 13.sp,
+                            Text(t("Varsayılan"), color = Color.White.copy(alpha = 0.45f), fontSize = 13.sp,
                                 modifier = Modifier.clip(CircleShape).clickable {
                                     draft.clear(); draft.addAll(allItems.keys); draft.add(CATEGORY_SHOW_ALL_KEY)
                                     hidden.clear(); previewCount = 4
@@ -270,7 +271,7 @@ internal fun CategoryOrderEditorDialog(
                     }
                     val hiddenItems = draft.filter { it in hidden }
                     if (hiddenItems.isNotEmpty()) {
-                        Text("Gizlenenler", color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp,
+                        Text(t("Gizlenenler"), color = Color.White.copy(alpha = 0.45f), fontSize = 12.sp,
                             modifier = Modifier.padding(top = 6.dp, bottom = 6.dp, start = 4.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(hiddenItems, key = { it }) { key ->
