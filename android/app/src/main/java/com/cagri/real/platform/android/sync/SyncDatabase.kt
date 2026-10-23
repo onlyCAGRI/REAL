@@ -1,7 +1,7 @@
 package com.cagri.real.platform.android.sync
 
+import com.cagri.real.i18n.t
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.cagri.real.sync.*
 import org.json.JSONObject
@@ -90,17 +90,17 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
     fun retryRejected(scope: String, id: String) = transaction { removeMeta(scope,rejectKey(id)) }
     /** "Hesaptakini kullan": this device takes the account's copy back (none there: the record is removed here). */
     fun useCloudForRejected(scope: String, id: String) = transaction {
-        val row=checkNotNull(row(scope,id)) { "Durum değişti; yeniden yükle." }
+        val row=checkNotNull(row(scope,id)) { t("Durum değişti; yeniden yükle.") }
         writableDatabase.execSQL("UPDATE records SET payload=?,generation=generation+1,dirty=0 WHERE scope=? AND id=?",arrayOf<Any?>(row.base,scope,id))
         SyncProjection.applyRecord(this,scope,row.record.kind,row.record.key,row.base)
         removeMeta(scope,rejectKey(id))
     }
     fun retryIssue(scope: String, token: String) = transaction {
-        val issue=issues(scope).firstOrNull { it.token==token } ?: error("Durum değişti; yeniden yükle.")
+        val issue=issues(scope).firstOrNull { it.token==token } ?: error(t("Durum değişti; yeniden yükle."))
         if(issue.direction==SyncBinaryDirection.UPLOAD) {
             // Explicitly selected card only. Never clear other cards'/accounts' failure markers.
             val record=checkNotNull(row(scope,issue.recordId)).record
-            check(issue.blobId in record.payload?.let(::JSONObject)?.let(::blobIds).orEmpty()) { "Ek değişti; yeniden yükle." }
+            check(issue.blobId in record.payload?.let(::JSONObject)?.let(::blobIds).orEmpty()) { t("Ek değişti; yeniden yükle.") }
             removeMeta(scope,"blob_failed:${issue.blobId}")
             blob(scope,issue.blobId)?.path?.let { removeMeta(scope,"path_failed:$it") }
             removeMeta(scope,issueKey(issue.direction,issue.recordId))
@@ -220,6 +220,18 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
         writableDatabase.execSQL("INSERT OR REPLACE INTO conflicts VALUES(?,?,?,?,?,?)",arrayOf<Any?>(scope,id,base,local,remote,revision))
     }
     fun hasConflict(scope:String,id:String)=readableDatabase.rawQuery("SELECT 1 FROM conflicts WHERE scope=? AND id=?",arrayOf(scope,id)).use { it.moveToFirst() }
+    /** Conflicts whose two sides became the same (e.g. deleted here too) are settled: nothing is left to choose. */
+    fun settleAgreedConflicts(scope:String) {
+        for(c in conflicts(scope).filter { it.currentLocal==it.remote }) {
+            writableDatabase.execSQL("INSERT INTO conflict_archive VALUES(?,?,?,?)",arrayOf<Any?>(scope,c.id,
+                JSONObject().put("base",c.base?:JSONObject.NULL).put("savedLocal",c.savedLocal?:JSONObject.NULL)
+                    .put("currentLocal",c.currentLocal?:JSONObject.NULL).put("remote",c.remote?:JSONObject.NULL)
+                    .put("choice","AGREED").put("revision",c.revision).toString(),System.currentTimeMillis()))
+            writableDatabase.execSQL("UPDATE records SET base=?,revision=?,dirty=0 WHERE scope=? AND id=?",arrayOf<Any?>(c.remote,c.revision,scope,c.id))
+            writableDatabase.execSQL("DELETE FROM conflicts WHERE scope=? AND id=?",arrayOf<Any?>(scope,c.id))
+            removeMeta(scope,issueKey(SyncBinaryDirection.UPLOAD,c.id))
+        }
+    }
     fun conflicts(scope:String):List<PersistedSyncConflict> {
         return readableDatabase.rawQuery("""SELECT r.id,r.kind,r.logical_key,c.base,c.local,r.payload,c.remote,c.revision,r.generation
             FROM conflicts c JOIN records r ON r.scope=c.scope AND r.id=c.id WHERE c.scope=?""",arrayOf(scope)).use { c->
@@ -256,7 +268,7 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
         val conflict=conflicts(scope).first { it.id==id }
         val chosen=conflictResolutionPayload(conflict,revision,generation,choice)
         if(choice==SyncConflictChoice.LOCAL_AS_NEW_CARD) {
-            check(conflict.kind=="CARD" && conflict.currentLocal!=null) { "Yalnız yerel kart kopyalanabilir." }
+            check(conflict.kind=="CARD" && conflict.currentLocal!=null) { t("Yalnız yerel kart kopyalanabilir.") }
             val copy=JSONObject(conflict.currentLocal)
             var localId=System.currentTimeMillis()
             while(rowByLogicalKey(scope,"CARD",localId.toString())!=null) localId++
@@ -265,7 +277,7 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
             copy.put("id",localId).put("createdAt",localId).put("updatedAt",localId).remove("notifiedAlertAt")
             var payload=copy.toString()
             for(id in blobIds(copy)) {
-                val old=checkNotNull(blob(scope,id)) { "Yerel ek bulunamadı; sürümler korundu." }
+                val old=checkNotNull(blob(scope,id)) { t("Yerel ek bulunamadı; sürümler korundu.") }
                 val next=blobForPath(scope,key,old.path,old.kind,old.mime)
                 payload=payload.replace(JSONObject.quote(id),JSONObject.quote(next))
             }
@@ -318,6 +330,7 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
         override fun checkpoint(cursor:Long,initialPullComplete:Boolean)=transaction {
             meta(scope,"cursor",maxOf(cursor,this.cursor()).toString())
             if(initialPullComplete)meta(scope,"restored","1")
+            settleAgreedConflicts(scope)
         }
         override fun pending():List<PendingRecord> = synchronized(SyncLocal.lock) {
             // Cards copied by "Yereli yeni kart olarak sakla" in the first version carried notifiedAlertAt (refused by the
@@ -358,6 +371,11 @@ internal class SyncDatabase(context: Context) : SQLiteOpenHelper(context,"real_s
         }
         override fun remoteDeleted(pending:PendingRecord)=transaction {
             val row=row(scope,pending.record.id) ?: return@transaction
+            // Deleted here too: both sides agree, the deletion is done (not a choice for the person).
+            if(pending.record.payload==null && row.record.payload==null) {
+                writableDatabase.execSQL("UPDATE records SET base=NULL,dirty=0 WHERE scope=? AND id=? AND generation=?",arrayOf<Any?>(scope,pending.record.id,pending.generation))
+                return@transaction
+            }
             // The account no longer has this card: the person chooses (apply the deletion / keep it as a new card).
             if(!hasConflict(scope,pending.record.id)) conflict(scope,pending.record.id,row.base,row.record.payload,null,row.record.revision)
         }

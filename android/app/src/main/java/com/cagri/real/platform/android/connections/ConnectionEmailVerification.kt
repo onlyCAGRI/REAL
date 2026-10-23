@@ -1,5 +1,6 @@
 package com.cagri.real.platform.android.connections
 
+import com.cagri.real.i18n.t
 import com.cagri.real.platform.android.auth.AndroidBackend
 import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.FirebaseAuth
@@ -11,8 +12,8 @@ import kotlin.coroutines.resumeWithException
 /** Limited sign-in handoff helper for email-bound invites; no changes to global auth behavior. */
 object ConnectionEmailVerification {
     private fun user(uid: String): FirebaseUser {
-        check(AndroidBackend.auth.currentUser()?.id == uid) { "Hesap değişti." }
-        return checkNotNull(FirebaseAuth.getInstance().currentUser?.takeIf { it.uid == uid }) { "REAL'e giriş yapın." }
+        check(AndroidBackend.auth.currentUser()?.id == uid) { t("Hesap değişti.") }
+        return checkNotNull(FirebaseAuth.getInstance().currentUser?.takeIf { it.uid == uid }) { t("REAL'e giriş yapın.") }
     }
     suspend fun send(uid: String) {
         val current = user(uid)
@@ -29,7 +30,7 @@ object ConnectionEmailVerification {
         addOnCompleteListener { task ->
             if (continuation.isActive) {
                 if (task.isSuccessful) continuation.resume(Unit)
-                else continuation.resumeWithException(IllegalStateException("Email doğrulaması tamamlanamadı. Daha sonra tekrar deneyin."))
+                else continuation.resumeWithException(IllegalStateException(t("Email doğrulaması tamamlanamadı. Daha sonra tekrar deneyin.")))
             }
         }
     }

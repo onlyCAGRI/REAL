@@ -1,5 +1,6 @@
 package com.cagri.real.platform.android.auth
 
+import com.cagri.real.i18n.t
 import com.cagri.real.auth.AuthProfileFailure
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -43,7 +44,7 @@ class FirebaseAuthRepository(
     override suspend fun signInWithEmail(email: String, password: String): Result<AuthUser> {
         val normalizedEmail = email.trim()
         if (normalizedEmail.isBlank() || password.isBlank()) {
-            return Result.failure(AuthFailure("E-posta ve şifre gerekli."))
+            return Result.failure(AuthFailure(t("E-posta ve şifre gerekli.")))
         }
         return firebase.signInWithEmailAndPassword(normalizedEmail, password)
             .awaitAuthResult()
@@ -52,7 +53,7 @@ class FirebaseAuthRepository(
     override suspend fun createAccount(email: String, password: String): Result<AuthUser> {
         val normalizedEmail = email.trim()
         if (normalizedEmail.isBlank() || password.isBlank()) {
-            return Result.failure(AuthFailure("E-posta ve şifre gerekli."))
+            return Result.failure(AuthFailure(t("E-posta ve şifre gerekli.")))
         }
         return firebase.createUserWithEmailAndPassword(normalizedEmail, password)
             .awaitAuthResult()
@@ -60,45 +61,45 @@ class FirebaseAuthRepository(
 
     override suspend fun createAccountWithName(email: String, password: String, firstName: String, lastName: String): Result<AuthUser> {
         try { profileDisplayName(firstName, lastName) }
-        catch (failure: IllegalArgumentException) { return Result.failure(AuthFailure(failure.message ?: "Adınızı yazın.")) }
+        catch (failure: IllegalArgumentException) { return Result.failure(AuthFailure(failure.message ?: t("Adınızı yazın."))) }
         return profileCreationScope.async {
             val created = createAccount(email, password)
             if (created.isFailure) return@async created
             val uid = created.getOrThrow().id
             updateProfileName(uid, firstName, lastName).fold(
                 onSuccess = { Result.success(it) },
-                onFailure = { Result.failure(AuthProfileFailure(uid, it.message ?: "İsim kaydedilemedi. Tekrar deneyin.")) }
+                onFailure = { Result.failure(AuthProfileFailure(uid, it.message ?: t("İsim kaydedilemedi. Tekrar deneyin."))) }
             )
         }.await()
     }
 
     override suspend fun updateProfileName(expectedUid: String, firstName: String, lastName: String): Result<AuthUser> {
         val name = try { profileDisplayName(firstName, lastName) }
-        catch (failure: IllegalArgumentException) { return Result.failure(AuthFailure(failure.message ?: "Adınızı yazın.")) }
+        catch (failure: IllegalArgumentException) { return Result.failure(AuthFailure(failure.message ?: t("Adınızı yazın."))) }
         val user = firebase.currentUser
         if (user == null || user.uid != expectedUid || user.isAnonymous) {
-            return Result.failure(AuthFailure("Hesap değişti. Tekrar giriş yapın."))
+            return Result.failure(AuthFailure(t("Hesap değişti. Tekrar giriş yapın.")))
         }
         val saved = user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name).build()).awaitUnit()
         if (saved.isFailure) return Result.failure(saved.exceptionOrNull()!!)
-        if (firebase.currentUser?.uid != expectedUid) return Result.failure(AuthFailure("Hesap değişti."))
+        if (firebase.currentUser?.uid != expectedUid) return Result.failure(AuthFailure(t("Hesap değişti.")))
         // The Worker reads the verified JWT name; do not send a stale token after saving.
         val refreshed = requestIdToken(expectedUid, true)
         if (refreshed.isFailure) return Result.failure(refreshed.exceptionOrNull()!!)
-        if (firebase.currentUser?.uid != expectedUid) return Result.failure(AuthFailure("Hesap değişti."))
+        if (firebase.currentUser?.uid != expectedUid) return Result.failure(AuthFailure(t("Hesap değişti.")))
         return Result.success(user.toAuthUser())
     }
 
     override suspend fun sendPasswordReset(email: String): Result<Unit> {
         val normalizedEmail = email.trim()
         if (normalizedEmail.isBlank()) {
-            return Result.failure(AuthFailure("E-posta adresini yazın."))
+            return Result.failure(AuthFailure(t("E-posta adresini yazın.")))
         }
         return firebase.sendPasswordResetEmail(normalizedEmail).awaitUnit()
     }
 
     override suspend fun signInWithGoogleIdToken(idToken: String): Result<AuthUser> {
-        if (idToken.isBlank()) return Result.failure(AuthFailure("Google kimlik bilgisi boş."))
+        if (idToken.isBlank()) return Result.failure(AuthFailure(t("Google kimlik bilgisi boş.")))
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         return firebase.signInWithCredential(credential).awaitAuthResult()
     }
@@ -129,7 +130,7 @@ class FirebaseAuthRepository(
     override suspend fun reauthenticateWithEmail(expectedUid: String, password: String): Result<Unit> {
         val user = firebase.currentUser
         if (user == null || user.uid != expectedUid || user.email == null || password.isBlank())
-            return Result.failure(AuthFailure("Hesap değişti veya şifre boş."))
+            return Result.failure(AuthFailure(t("Hesap değişti veya şifre boş.")))
         return reauthenticate(expectedUid, com.google.firebase.auth.EmailAuthProvider.getCredential(user.email!!, password))
     }
     override suspend fun reauthenticateWithGoogleIdToken(expectedUid: String, idToken: String): Result<Unit> =
@@ -137,15 +138,15 @@ class FirebaseAuthRepository(
 
     private suspend fun reauthenticate(expectedUid: String, credential: com.google.firebase.auth.AuthCredential): Result<Unit> {
         val user = firebase.currentUser
-        if (user == null || user.uid != expectedUid) return Result.failure(AuthFailure("Hesap değişti."))
+        if (user == null || user.uid != expectedUid) return Result.failure(AuthFailure(t("Hesap değişti.")))
         val result = user.reauthenticate(credential).awaitUnit()
         if (result.isFailure) return result
-        if (firebase.currentUser?.uid != expectedUid) return Result.failure(AuthFailure("Hesap değişti."))
+        if (firebase.currentUser?.uid != expectedUid) return Result.failure(AuthFailure(t("Hesap değişti.")))
         return requestIdToken(expectedUid, true).map { Unit }
     }
     override suspend fun deleteAccount(expectedUid: String): Result<Unit> {
         val user = firebase.currentUser
-        if (user == null || user.uid != expectedUid) return Result.failure(AuthFailure("Hesap değişti."))
+        if (user == null || user.uid != expectedUid) return Result.failure(AuthFailure(t("Hesap değişti.")))
         return user.delete().awaitUnit()
     }
 
@@ -158,7 +159,7 @@ class FirebaseAuthRepository(
                 if (task.isSuccessful) {
                     val user = task.result?.user
                     if (user != null) continuation.resume(Result.success(user.toAuthUser()))
-                    else continuation.resume(Result.failure(AuthFailure("Hesap bilgisi alınamadı.")))
+                    else continuation.resume(Result.failure(AuthFailure(t("Hesap bilgisi alınamadı."))))
                 } else {
                     continuation.resume(Result.failure(mapFailure(task.exception)))
                 }
@@ -176,12 +177,12 @@ class FirebaseAuthRepository(
 
     private fun mapFailure(error: Throwable?): AuthFailure {
         val message = when (error) {
-            is FirebaseAuthWeakPasswordException -> "Şifre çok zayıf. En az 6 karakter kullanın."
-            is FirebaseAuthUserCollisionException -> "Bu e-posta adresi zaten başka bir hesapta kullanılıyor."
-            is FirebaseAuthInvalidCredentialsException -> "E-posta veya şifre geçersiz."
-            is FirebaseTooManyRequestsException -> "Çok fazla deneme yapıldı. Biraz sonra tekrar deneyin."
-            is FirebaseNetworkException -> "İnternet bağlantısını kontrol edin."
-            else -> error?.localizedMessage?.takeIf { it.isNotBlank() } ?: "Kimlik doğrulama başarısız."
+            is FirebaseAuthWeakPasswordException -> t("Şifre çok zayıf. En az 6 karakter kullanın.")
+            is FirebaseAuthUserCollisionException -> t("Bu e-posta adresi zaten başka bir hesapta kullanılıyor.")
+            is FirebaseAuthInvalidCredentialsException -> t("E-posta veya şifre geçersiz.")
+            is FirebaseTooManyRequestsException -> t("Çok fazla deneme yapıldı. Biraz sonra tekrar deneyin.")
+            is FirebaseNetworkException -> t("İnternet bağlantısını kontrol edin.")
+            else -> error?.localizedMessage?.takeIf { it.isNotBlank() } ?: t("Kimlik doğrulama başarısız.")
         }
         return AuthFailure(message)
     }

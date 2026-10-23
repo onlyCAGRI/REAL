@@ -67,7 +67,7 @@ internal fun SyncManagementPanel(uid: String, enabled: Boolean) {
             val canAct = enabled && !busy && !health.paused
             if (expanded) {
                 health.issues.take(limit).forEach { issue -> key(issue.token) {
-                    Text(issue.title.ifBlank { t("İçerik kartı") }, color = Color.White, fontSize = 15.sp)
+                    Text(t(issue.title).ifBlank { t("İçerik kartı") }, color = Color.White, fontSize = 15.sp)
                     ConnectionNote(if (issue.direction == SyncBinaryDirection.UPLOAD) t("Bu kartın bir eki buluta gönderilemedi. Yerel içerik kaldırılmadı.")
                         else t("Bu kartın bulut sürümü ve ekleri bekliyor. Diğer kartlar eşitlenebilir."))
                     ConnectionNote(issue.code.explanation())

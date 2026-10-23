@@ -1,7 +1,7 @@
 package com.cagri.real.platform.android.location
 
+import com.cagri.real.i18n.t
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import com.cagri.real.boards.BoardTransform
@@ -18,7 +18,7 @@ object RealLocationShareFlow {
         val request = com.cagri.real.content.ContentRequest(destination,
             AndroidBackend.auth.currentUser()?.id ?: "guest", "LOCATION", System.currentTimeMillis())
         if (!com.cagri.real.platform.android.content.PendingContentDestination.begin(context, request)) {
-            com.cagri.real.ui.components.RealToast.show(context, "Konum seçimi başlatılamadı")
+            com.cagri.real.ui.components.RealToast.show(context, t("Konum seçimi başlatılamadı"))
             return
         }
         try {
@@ -26,7 +26,7 @@ object RealLocationShareFlow {
                 .setPackage("com.google.android.apps.maps"))
         } catch (_: Exception) {
             com.cagri.real.platform.android.content.PendingContentDestination.cancel(context, request.token)
-            com.cagri.real.ui.components.RealToast.show(context, "Google Haritalar açılamadı")
+            com.cagri.real.ui.components.RealToast.show(context, t("Google Haritalar açılamadı"))
         }
     }
 }

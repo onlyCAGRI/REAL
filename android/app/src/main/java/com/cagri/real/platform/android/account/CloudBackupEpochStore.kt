@@ -1,7 +1,7 @@
 package com.cagri.real.platform.android.account
 
+import com.cagri.real.i18n.t
 import android.content.Context
-import android.util.AtomicFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,7 +15,7 @@ object CloudBackupEpochStore {
     private val mutex = Mutex()
     fun initialize(context: Context) { app = context.applicationContext }
     private fun file(uid: String): AtomicFile {
-        val root = File(checkNotNull(app) { "Uygulama hazırlanıyor." }.noBackupFilesDir, "cloud_backup_approvals").apply { mkdirs() }
+        val root = File(checkNotNull(app) { t("Uygulama hazırlanıyor.") }.noBackupFilesDir, "cloud_backup_approvals").apply { mkdirs() }
         val hash = MessageDigest.getInstance("SHA-256").digest(uid.toByteArray()).joinToString("") { "%02x".format(it) }
         return AtomicFile(File(root, hash))
     }
@@ -24,7 +24,7 @@ object CloudBackupEpochStore {
             val stored = file(uid)
             if (!stored.baseFile.exists()) emptyMap() else {
                 val epoch = String(stored.readFully(), Charsets.UTF_8)
-                check(epoch.matches(Regex("[a-f0-9-]{36}"))) { "Yedekleme onayı okunamadı." }
+                check(epoch.matches(Regex("[a-f0-9-]{36}"))) { t("Yedekleme onayı okunamadı.") }
                 mapOf("X-REAL-Cloud-Epoch" to epoch)
             }
         }

@@ -1,5 +1,6 @@
 package com.cagri.real.platform.android.ai
 
+import com.cagri.real.i18n.t
 import com.cagri.real.ai.aiFeatureForPath
 import com.cagri.real.network.*
 import com.cagri.real.platform.android.auth.AndroidBackend
@@ -10,12 +11,12 @@ internal class AiConsentTransport(private val delegate: HttpTransport,
     override suspend fun execute(request: HttpRequest): HttpResponse {
         val feature=if (request.url.startsWith("${AndroidBackend.ORIGIN}/")) aiFeatureForPath(URI(request.url).path) else null
         if(feature==null) return delegate.execute(request)
-        val uid=checkNotNull(AndroidBackend.auth.currentUser()?.id) { "REAL hesabına giriş yap." }
+        val uid=checkNotNull(AndroidBackend.auth.currentUser()?.id) { t("REAL hesabına giriş yap.") }
         com.cagri.real.platform.android.access.ProAccess.requirePath(URI(request.url).path)
         AndroidAiConsent.require(feature)
-        check(AndroidBackend.auth.currentUser()?.id==uid) { "Hesap değişti." }
+        check(AndroidBackend.auth.currentUser()?.id==uid) { t("Hesap değişti.") }
         val response=forAccount(uid).execute(request)
-        check(AndroidAiConsent.coordinator.allowed(uid,feature)) { "AI onayı kapatıldı; yanıt uygulanmadı." }
+        check(AndroidAiConsent.coordinator.allowed(uid,feature)) { t("AI onayı kapatıldı; yanıt uygulanmadı.") }
         return response
     }
 }

@@ -1,5 +1,6 @@
 package com.cagri.real.platform.android.access
 
+import com.cagri.real.i18n.t
 import com.cagri.real.access.RealFeature
 import com.cagri.real.platform.android.auth.AndroidBackend
 import kotlinx.coroutines.CancellationException
@@ -8,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-class ProRequired : IllegalStateException("Bu özellik REAL Pro ile kullanılabilir.")
+class ProRequired : IllegalStateException(t("Bu özellik REAL Pro ile kullanılabilir."))
 /** No transcript, card data or pending mutation is retained by the paywall. */
 object ProAccess {
     data class Prompt(val uid: String?, val feature: RealFeature)

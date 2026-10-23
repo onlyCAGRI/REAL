@@ -1,7 +1,7 @@
 package com.cagri.real.platform.android.sync
 
+import com.cagri.real.i18n.t
 import android.app.Activity
-import android.app.Application
 import android.app.job.JobInfo
 import android.app.job.JobScheduler
 import android.content.ComponentName
@@ -25,14 +25,23 @@ object SyncLocal {
     val lock=Any()
     private val mutableHealth = kotlinx.coroutines.flow.MutableStateFlow<com.cagri.real.sync.SyncHealthSnapshot?>(null)
     val health: kotlinx.coroutines.flow.StateFlow<com.cagri.real.sync.SyncHealthSnapshot?> = mutableHealth
+    private val mutableWaitingForSpace = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet())
+    /** Local paths of attachments that stay on this phone because the cloud space is full (cloud-off badge). */
+    val waitingForSpace: kotlinx.coroutines.flow.StateFlow<Set<String>> = mutableWaitingForSpace
     /** Called from storage/sync IO boundaries, never composition or a timer of its own. */
     private fun publishHealth() {
-        synchronized(lock) { mutableHealth.value = if (::database.isInitialized && active.startsWith("u:")) database.health(active) else null }
+        synchronized(lock) {
+            val health = if (::database.isInitialized && active.startsWith("u:")) database.health(active) else null
+            mutableHealth.value = health
+            mutableWaitingForSpace.value = health?.issues.orEmpty()
+                .filter { it.code == com.cagri.real.sync.SyncBinaryCode.STORAGE_FULL }
+                .mapNotNullTo(mutableSetOf()) { database.blobPath(active, it.blobId) }
+        }
     }
     suspend fun readSyncHealth(uid: String): com.cagri.real.sync.SyncHealthSnapshot = withContext(Dispatchers.IO) {
         awaitInitialized()
         synchronized(lock) {
-            check(active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid) { "Hesap değişti." }
+            check(active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid) { t("Hesap değişti.") }
             database.health(active)
         }
     }
@@ -40,7 +49,7 @@ object SyncLocal {
         awaitInitialized()
         runLock.withLock {
             synchronized(lock) {
-                check(active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid && !cloudPaused) { "Eşitleme bu hesap için kapalı." }
+                check(active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid && !cloudPaused) { t("Eşitleme bu hesap için kapalı.") }
                 database.retryIssue(active,token)
             }
             publishHealth()
@@ -52,7 +61,7 @@ object SyncLocal {
         awaitInitialized()
         runLock.withLock {
             synchronized(lock) {
-                check(active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid && !cloudPaused) { "Eşitleme bu hesap için kapalı." }
+                check(active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid && !cloudPaused) { t("Eşitleme bu hesap için kapalı.") }
                 if (useCloud) database.useCloudForRejected(active, recordId) else database.retryRejected(active, recordId)
             }
             publishHealth()
@@ -65,7 +74,7 @@ object SyncLocal {
         awaitInitialized()
         runLock.withLock {
             synchronized(lock) {
-                check(active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid && !cloudPaused) { "Eşitleme bu hesap için kapalı." }
+                check(active=="u:$uid" && AndroidBackend.auth.currentUser()?.id==uid && !cloudPaused) { t("Eşitleme bu hesap için kapalı.") }
                 database.resolve(active,conflict.id,conflict.revision,conflict.generation,choice)
             }
             publishHealth()
@@ -244,6 +253,8 @@ object SyncLocal {
     fun workspaceToken():String = active
     fun preferenceRevision(): Long = if (::database.isInitialized) database.preferenceRevision else 0L
     fun protects(path:String):Boolean=if(!::database.isInitialized)false else synchronized(lock) { database.protects(path) }
+    /** This card id was ever used here (a live card or a deletion, ours or the account's): a new card must not take it. */
+    fun cardKeyUsed(id:Long):Boolean=if(!::database.isInitialized)false else synchronized(lock) { database.rowByLogicalKey(active,"CARD",id.toString())!=null }
     fun retryStartup() {
         startup.retry()
         requestSync()
@@ -275,7 +286,7 @@ object SyncLocal {
     }
 
     suspend fun syncForSharing(targetCardId: Long? = null) {
-        check(!cloudPaused) { "Bulut verileri silindi veya siliniyor; eşitleme kapalı." }
+        check(!cloudPaused) { t("Bulut verileri silindi veya siliniyor; eşitleme kapalı.") }
         if (targetCardId != null) {
             syncTargetCard(targetCardId)
         } else {
@@ -283,7 +294,7 @@ object SyncLocal {
         }
     }
     internal suspend fun syncTargetCard(cardId: Long) = runLock.withLock {
-        check(!cloudPaused) { "Bulut eşitlemesi kapalı." }
+        check(!cloudPaused) { t("Bulut eşitlemesi kapalı.") }
         awaitInitialized()
         val uid = AndroidBackend.auth.currentUser()?.id ?: return@withLock
         val account = "u:$uid"
@@ -296,8 +307,8 @@ object SyncLocal {
             database.rowByLogicalKey(account, "CARD", cardId.toString())
         } ?: return@withLock
         synchronized(lock) {
-            check(!database.hasConflict(account,targetRow.record.id)) { "Bu kartın sürümleri çakışıyor. Hesapları yönet → Eşitleme bölümünden bir sürüm seç." }
-            check(database.meta(account,"sync_download:${targetRow.record.id}")==null) { "Bu kartın bulut eki bekliyor. Önce eşitleme sorununu çöz." }
+            check(!database.hasConflict(account,targetRow.record.id)) { t("Bu kartın sürümleri çakışıyor. Hesapları yönet → Eşitleme bölümünden bir sürüm seç.") }
+            check(database.meta(account,"sync_download:${targetRow.record.id}")==null) { t("Bu kartın bulut eki bekliyor. Önce eşitleme sorununu çöz.") }
         }
         if (!targetRow.dirty) return@withLock
         val client = AndroidBackend.cloudClient()
@@ -327,7 +338,7 @@ object SyncLocal {
             }
             publishHealth()
             main.post { if (active==account && AndroidBackend.auth.currentUser()?.id==uid) ReminderRepository.notifyChanged() }
-            error("Kartın bulut sürümü değişti. Hesapları yönet → Eşitleme bölümünü kontrol edip paylaşmayı tekrar dene.")
+            error(t("Kartın bulut sürümü değişti. Hesapları yönet → Eşitleme bölümünü kontrol edip paylaşmayı tekrar dene."))
         }
         ensureAccount()
         synchronized(lock) {
@@ -339,7 +350,7 @@ object SyncLocal {
         }
         publishHealth()
         check(synchronized(lock) { database.row(account,targetRow.record.id)?.record?.payload == targetRow.record.payload }) {
-            "Kart paylaşım sırasında düzenlendi. Son sürümü göndermek için tekrar dene."
+            t("Kart paylaşım sırasında düzenlendi. Son sürümü göndermek için tekrar dene.")
         }
     }
     internal suspend fun sync(requestGeneration: Long? = null, requestSession: String? = null)=runLock.withLock {
@@ -421,7 +432,7 @@ object SyncLocal {
         awaitInitialized()
         runLock.withLock {
             synchronized(lock) {
-                check(active == "u:$uid" && AndroidBackend.auth.currentUser()?.id == uid) { "Hesap değişti." }
+                check(active == "u:$uid" && AndroidBackend.auth.currentUser()?.id == uid) { t("Hesap değişti.") }
                 database.meta(active,"cloud_paused","1")
                 cloudPaused = true
             }
@@ -438,7 +449,7 @@ object SyncLocal {
         awaitInitialized()
         runLock.withLock {
             synchronized(lock) {
-                check(active == "u:$uid" && AndroidBackend.auth.currentUser()?.id == uid) { "Hesap değişti." }
+                check(active == "u:$uid" && AndroidBackend.auth.currentUser()?.id == uid) { t("Hesap değişti.") }
                 database.meta(active, "cloud_paused", "0"); cloudPaused = false
             }
             publishHealth()
@@ -459,8 +470,8 @@ object SyncLocal {
         awaitInitialized()
         runLock.withLock {
             synchronized(lock) {
-                check(active == "u:$uid" && AndroidBackend.auth.currentUser()?.id == uid) { "Hesap değişti." }
-                check(cloudPaused) { "Önce bulut eşitlemesini durdur." }
+                check(active == "u:$uid" && AndroidBackend.auth.currentUser()?.id == uid) { t("Hesap değişti.") }
+                check(cloudPaused) { t("Önce bulut eşitlemesini durdur.") }
                 database.prepareFreshBackup(active, epoch)
             }
             publishHealth()
@@ -470,7 +481,7 @@ object SyncLocal {
     suspend fun accountFilePaths(uid: String): List<String> = withContext(Dispatchers.IO) {
         awaitInitialized()
         synchronized(lock) {
-            check(AndroidBackend.auth.currentUser()?.id == uid) { "Hesap değişti." }
+            check(AndroidBackend.auth.currentUser()?.id == uid) { t("Hesap değişti.") }
             database.accountFilePaths("u:$uid")
         }
     }
@@ -480,7 +491,7 @@ object SyncLocal {
         awaitInitialized()
         runLock.withLock {
             synchronized(lock) {
-                check(AndroidBackend.auth.currentUser()?.id != uid) { "Önce Firebase hesabı silinmeli." }
+                check(AndroidBackend.auth.currentUser()?.id != uid) { t("Önce Firebase hesabı silinmeli.") }
                 database.eraseScope("u:$uid")
             }
             publishHealth()

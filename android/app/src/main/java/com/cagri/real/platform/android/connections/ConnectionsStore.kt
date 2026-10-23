@@ -1,7 +1,7 @@
 package com.cagri.real.platform.android.connections
 
+import com.cagri.real.i18n.t
 import android.content.Context
-import com.cagri.real.connections.ConnectionsSnapshot
 import com.cagri.real.connections.ConnectionsCache
 import java.security.MessageDigest
 
@@ -14,6 +14,6 @@ class ConnectionsStore(context: Context, uid: String) : ConnectionsCache {
         ConnectionsCodec.decode(it)
     } ?: ConnectionsSnapshot()
     override fun save(snapshot: ConnectionsSnapshot) {
-        check(preferences.edit().putString("snapshot", ConnectionsCodec.encode(snapshot)).commit()) { "Bağlantılar cihaza kaydedilemedi." }
+        check(preferences.edit().putString("snapshot", ConnectionsCodec.encode(snapshot)).commit()) { t("Bağlantılar cihaza kaydedilemedi.") }
     }
 }

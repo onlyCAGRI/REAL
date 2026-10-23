@@ -1,7 +1,7 @@
 package com.cagri.real.platform.android.account
 
+import com.cagri.real.i18n.t
 import android.content.Context
-import com.cagri.real.account.*
 import com.cagri.real.network.HttpRequest
 import com.cagri.real.platform.android.auth.AndroidBackend
 import com.cagri.real.platform.android.sync.SyncLocal
@@ -15,12 +15,12 @@ class AndroidAccountRepository(context: Context, private val uid: String) : Acco
     private val appContext = context.applicationContext
     private val prefs = context.applicationContext.getSharedPreferences(cacheName(uid), Context.MODE_PRIVATE)
     private val transport = AndroidBackend.syncTransport()
-    private fun ensureAccount() = check(AndroidBackend.auth.currentUser()?.id == uid) { "Hesap değişti." }
+    private fun ensureAccount() = check(AndroidBackend.auth.currentUser()?.id == uid) { t("Hesap değişti.") }
     override fun cachedUsage(): CloudUsage? = runCatching { prefs.getString("usage", null)?.let { decodeUsage(JSONObject(it)) } }.getOrNull()
     override suspend fun refresh(): AccountSnapshot = withContext(Dispatchers.IO) {
         val result = call("usage", "GET")
         val usage = result.getJSONObject("usage")
-        check(prefs.edit().putString("usage", usage.toString()).commit()) { "Kullanım bilgisi kaydedilemedi." }
+        check(prefs.edit().putString("usage", usage.toString()).commit()) { t("Kullanım bilgisi kaydedilemedi.") }
         val erasure = decodeErasure(result)
         val approved = result.optBoolean("backupDeviceApproved", true)
         if (erasure != null || !approved) SyncLocal.pauseCloud(uid)
@@ -32,16 +32,16 @@ class AndroidAccountRepository(context: Context, private val uid: String) : Acco
         SyncLocal.pauseCloud(uid)
         decodeErasure(call("erasure", "POST", JSONObject().put("mode", mode.name)
             .put("operationId", operationId).put("confirmation", "DELETE_${mode.name}").put("deleteOwnedBoards", true)))
-            ?: error("Silme durumu alınamadı.")
+            ?: error(t("Silme durumu alınamadı."))
     }
     override suspend fun advance(operationId: String): ErasureStatus = withContext(Dispatchers.IO) {
         decodeErasure(call("erasure/continue", "POST", JSONObject().put("operationId", operationId)))
-            ?: error("Silme durumu alınamadı.")
+            ?: error(t("Silme durumu alınamadı."))
     }
     suspend fun resumeCloudIfNoErasure() = withContext(Dispatchers.IO) {
         val result = call("erasure", "GET")
-        check(decodeErasure(result) == null) { "Silme başladı; eşitleme yeniden açılamaz." }
-        check(result.optBoolean("backupDeviceApproved", true)) { "Bu cihaz eski yedeğe bağlı. Otomatik yükleme güvenlik için kapalı." }
+        check(decodeErasure(result) == null) { t("Silme başladı; eşitleme yeniden açılamaz.") }
+        check(result.optBoolean("backupDeviceApproved", true)) { t("Bu cihaz eski yedeğe bağlı. Otomatik yükleme güvenlik için kapalı.") }
         SyncLocal.resumeCloudAfterRejectedErasure(uid)
     }
     /** Manually removes already-deleted cloud files; active files are never touched. */
@@ -67,7 +67,7 @@ class AndroidAccountRepository(context: Context, private val uid: String) : Acco
         // old success cache skip registration when notifications are enabled again.
         val pushPrefs = appContext.getSharedPreferences("pano_push", Context.MODE_PRIVATE)
         if (pushPrefs.getString("sent", null)?.startsWith("$uid:") == true) {
-            check(pushPrefs.edit().remove("sent").commit()) { "Bildirim kaydı yenilenemedi." }
+            check(pushPrefs.edit().remove("sent").commit()) { t("Bildirim kaydı yenilenemedi.") }
         }
         SyncLocal.prepareRestartedBackup(uid, epoch)
         SyncLocal.resumeCloudAfterRejectedErasure(uid)
@@ -81,11 +81,11 @@ class AndroidAccountRepository(context: Context, private val uid: String) : Acco
         if (response.statusCode !in 200..299) {
             val code = runCatching { JSONObject(response.body).optString("error") }.getOrDefault("")
             error(when {
-                code == "RECENT_LOGIN_REQUIRED" -> "Güvenlik için hesabını yeniden doğrula."
-                response.statusCode == 401 -> "Hesabını yeniden doğrula."
-                response.statusCode == 429 -> "Çok fazla istek gönderildi. Biraz sonra yeniden dene."
-                response.statusCode == 503 || response.statusCode == 404 -> "Hesap yönetimi şu an kullanılamıyor. Staging güncellemesini kontrol et."
-                else -> "İşlem tamamlanamadı. Yeniden deneyebilirsin."
+                code == "RECENT_LOGIN_REQUIRED" -> t("Güvenlik için hesabını yeniden doğrula.")
+                response.statusCode == 401 -> t("Hesabını yeniden doğrula.")
+                response.statusCode == 429 -> t("Çok fazla istek gönderildi. Biraz sonra yeniden dene.")
+                response.statusCode == 503 || response.statusCode == 404 -> t("Hesap yönetimi şu an kullanılamıyor. Staging güncellemesini kontrol et.")
+                else -> t("İşlem tamamlanamadı. Yeniden deneyebilirsin.")
             })
         }
         return JSONObject(response.body)

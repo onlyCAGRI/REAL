@@ -1,7 +1,7 @@
 package com.cagri.real.platform.android.connections
 
+import com.cagri.real.i18n.t
 import android.content.Context
-import com.cagri.real.connections.*
 import com.cagri.real.platform.android.auth.AndroidBackend
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +20,7 @@ class ConnectionsRepository(
     private val mutable = MutableStateFlow(ConnectionsSnapshot())
     val state = mutable.asStateFlow()
     private var loaded = false
-    private fun checkAccount() { check(isCurrentAccount()) { "Hesap değişti." } }
+    private fun checkAccount() { check(isCurrentAccount()) { t("Hesap değişti.") } }
     suspend fun load() = mutex.withLock { withContext(Dispatchers.IO) {
         checkAccount()
         if (!loaded) { mutable.value = store.load(); loaded = true }

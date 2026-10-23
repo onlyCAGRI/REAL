@@ -1,7 +1,7 @@
 package com.cagri.real.platform.android.auth
 
+import com.cagri.real.i18n.t
 import android.app.Activity
-import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -44,7 +44,7 @@ class AndroidAuthUiController(
         return try {
             val serverClientId = activity.getString(R.string.default_web_client_id).trim()
             if (serverClientId.isBlank()) {
-                return Result.failure(AuthFailure("Google oturum açma yapılandırması bulunamadı."))
+                return Result.failure(AuthFailure(t("Google oturum açma yapılandırması bulunamadı.")))
             }
 
             val googleOption = GetSignInWithGoogleOption.Builder(serverClientId).build()
@@ -59,7 +59,7 @@ class AndroidAuthUiController(
             if (credential !is CustomCredential ||
                 credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
             ) {
-                return Result.failure(AuthFailure("Google hesabı doğrulanamadı."))
+                return Result.failure(AuthFailure(t("Google hesabı doğrulanamadı.")))
             }
 
             val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
@@ -71,7 +71,7 @@ class AndroidAuthUiController(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
-            Result.failure(AuthFailure(error.localizedMessage ?: "Google ile giriş yapılamadı."))
+            Result.failure(AuthFailure(error.localizedMessage ?: t("Google ile giriş yapılamadı.")))
         } finally {
             googleSignIn.unlock()
         }
@@ -102,20 +102,20 @@ class AndroidAuthUiController(
     override suspend fun deleteAccount(expectedUid: String): Result<Unit> = repository.deleteAccount(expectedUid)
 
     override suspend fun reauthenticateWithGoogle(expectedUid: String): Result<Unit> {
-        if (repository.currentUser()?.id != expectedUid) return Result.failure(AuthFailure("Hesap değişti."))
+        if (repository.currentUser()?.id != expectedUid) return Result.failure(AuthFailure(t("Hesap değişti.")))
         if (!googleSignIn.tryLock()) return Result.failure(AuthCancelled())
         return try {
             val option = GetSignInWithGoogleOption.Builder(activity.getString(R.string.default_web_client_id)).build()
             val credential = credentialManager.getCredential(activity,
                 GetCredentialRequest.Builder().addCredentialOption(option).build()).credential
             if (credential !is CustomCredential || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL)
-                return Result.failure(AuthFailure("Google hesabı doğrulanamadı."))
+                return Result.failure(AuthFailure(t("Google hesabı doğrulanamadı.")))
             val token = GoogleIdTokenCredential.createFrom(credential.data).idToken
             // Reauthenticate the existing FirebaseUser. Never sign in as another selected account.
             repository.reauthenticateWithGoogleIdToken(expectedUid, token)
         } catch (_: GetCredentialCancellationException) { Result.failure(AuthCancelled()) }
         catch (cancelled: CancellationException) { throw cancelled }
-        catch (_: Exception) { Result.failure(AuthFailure("Google doğrulaması tamamlanamadı.")) }
+        catch (_: Exception) { Result.failure(AuthFailure(t("Google doğrulaması tamamlanamadı."))) }
         finally { googleSignIn.unlock() }
     }
 

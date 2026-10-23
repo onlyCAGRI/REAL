@@ -1,7 +1,7 @@
 package com.cagri.real.platform.android.ai
 
+import com.cagri.real.i18n.t
 import android.content.Context
-import android.util.AtomicFile
 import com.cagri.real.ai.*
 import com.cagri.real.platform.android.auth.AndroidBackend
 import kotlinx.coroutines.Dispatchers
@@ -71,7 +71,7 @@ object AndroidAiConsent {
 
         override suspend fun save(uid: String, feature: AiFeature, allowed: Boolean) = withContext(Dispatchers.IO) {
             synchronized(fileLock) {
-                check(directory.isDirectory || directory.mkdirs()) { "AI seçimi kaydedilemedi." }
+                check(directory.isDirectory || directory.mkdirs()) { t("AI seçimi kaydedilemedi.") }
                 // Unreadable history is not overwritten; failure prevents transmission.
                 val obj = read(uid)
                 val decisions = obj.optJSONObject("decisions") ?: JSONObject().also { migrated ->
@@ -109,9 +109,9 @@ object AndroidAiConsent {
         synchronized(fileLock) { decision(read(uid), feature) }
     }
     suspend fun require(feature: AiFeature) {
-        val uid = checkNotNull(AndroidBackend.auth.currentUser()?.id) { "REAL hesabına giriş yap." }
+        val uid = checkNotNull(AndroidBackend.auth.currentUser()?.id) { t("REAL hesabına giriş yap.") }
         coordinator.requireConsent(uid, feature) {
-            check(AndroidBackend.auth.currentUser()?.id == uid) { "Hesap değişti." }
+            check(AndroidBackend.auth.currentUser()?.id == uid) { t("Hesap değişti.") }
         }
     }
     suspend fun remove(uid: String) = withContext(Dispatchers.IO) { synchronized(fileLock) { file(uid).delete() } }
