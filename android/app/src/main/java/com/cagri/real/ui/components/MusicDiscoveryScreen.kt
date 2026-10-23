@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaPlayer
@@ -88,7 +89,11 @@ fun MusicDiscoveryScreen(
     }
     BackHandler(onBack = ::back)
     LaunchedEffect(repo) {
-        runCatching { repo.load() }.onSuccess { snapshot = it; if (selection.isEmpty()) selection = ArrayList(it.selection.filter { k -> MusicMood.fromKey(k) == null }
+        runCatching { repo.load() }.onSuccess { snapshot = it
+            // Apple Music connected: "Müzik listem" is copied to the "REAL" playlist once (in the background).
+            val ids = it.list.mapNotNull { c -> c.music.providerTrackId }
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.cagri.real.discovery.AppleMusicAccount.copyListOnce(context, ids) } }
+            if (selection.isEmpty()) selection = ArrayList(it.selection.filter { k -> MusicMood.fromKey(k) == null }
             .let { keys -> keys.filter { k -> MusicGenre.fromKey(k) == null } + keys.filter { k -> MusicGenre.fromKey(k) != null }.take(2) }) }
     }
     fun discover() {
@@ -99,12 +104,14 @@ fun MusicDiscoveryScreen(
                 snapshot = repo.fetch(selection.toSet())
                 if (page == MusicPage.FILTERS || page == MusicPage.DISCOVER) page = MusicPage.DISCOVER
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { error = e.message ?: "Şarkılar alınamadı." }
+            catch (e: Exception) { error = e.message ?: t("Şarkılar alınamadı.") }
             finally { loading = false }
         }
     }
     val listMode = page == MusicPage.LIST
     val cards = if (listMode) snapshot?.list.orEmpty() else snapshot?.cards.orEmpty()
+    // Shaking the phone brings the last swiped song back on top.
+    ShakeToUndo(page == MusicPage.DISCOVER) { scope.launch { runCatching { repo.undo() }.getOrNull()?.let { snapshot = it; error = null } } }
     LaunchedEffect(page, cards.size, loading) {
         if (page == MusicPage.DISCOVER && !loading && error == null && cards.size <= 3 && snapshot != null) discover()
     }
@@ -122,36 +129,41 @@ fun MusicDiscoveryScreen(
                 MusicPage.FILTERS -> {
                     if (filterHeader == null) DiscoveryHeadline("Ne dinlesek", Modifier.padding(horizontal = 20.dp), TextAlign.Start)
                     else filterHeader()
-                    // One question at a time: 2 genres at most, then (optional) one era.
+                    // One question at a time: 2 genres at most, then (optional) one era, then (Apple Music connected,
+                    // optional) "Sana özel".
+                    val appleMusicLinked = remember { com.cagri.real.discovery.AppleMusicAccount.isConnected(context) }
                     DiscoveryStepper(
-                        steps = listOf(
-                            DiscoveryStep("Hangi türde müzik?", "En fazla 2 tür", 2, false,
+                        steps = listOfNotNull(
+                            DiscoveryStep(t("Hangi türde müzik?"), t("En fazla 2 tür"), 2, false,
                                 listOf(null to MusicGenre.entries.map { StepOption(it.key, it.label) })),
-                            DiscoveryStep("Hangi dönemden?", "İstersen bir dönem · Apple Music ${MusicCatalog.storefrontName()} listeleri", 1, true,
-                                listOf(null to (listOf(StepOption(AllErasKey, "Hepsi")) + MusicEra.entries.map { StepOption(it.key, it.label) }))),
+                            DiscoveryStep(t("Hangi dönemden?"), t("İstersen bir dönem · Apple Music {0} listeleri", MusicCatalog.storefrontName()), 1, true,
+                                listOf(null to (listOf(StepOption(AllErasKey, t("Hepsi"))) + MusicEra.entries.map { StepOption(it.key, it.label) }))),
+                            if (!appleMusicLinked) null else DiscoveryStep(t("Sana özel de olsun mu?"), t("Apple Music'te dinlediklerine göre seçilenler karışır"), 1, true,
+                                listOf(null to listOf(StepOption(NoPersonalKey, t("Hayır")), StepOption(com.cagri.real.discovery.MusicPersonalKey, t("Evet, sana özel"))))),
                         ),
-                        // "Hepsi" is shown chosen when no era is; picking it clears the era.
-                        selection = selection.toSet().let { s -> if (MusicEra.of(s) == null) s + AllErasKey else s },
-                        onSelection = { selection = ArrayList(it - AllErasKey) },
+                        // "Hepsi" / "Hayır" are shown chosen when nothing else is; picking them clears the choice.
+                        selection = selection.toSet().let { s -> if (MusicEra.of(s) == null) s + AllErasKey else s }
+                            .let { s -> if (appleMusicLinked && com.cagri.real.discovery.MusicPersonalKey !in s) s + NoPersonalKey else s },
+                        onSelection = { selection = ArrayList(it - AllErasKey - NoPersonalKey) },
                         accent = MusicTone, loading = loading, enabled = true, reduceAnimations = reduceAnimations,
-                        doneLabel = "şarkıları getir", modifier = Modifier.weight(1f).then(filterBodyModifier),
+                        doneLabel = t("şarkıları getir"), modifier = Modifier.weight(1f).then(filterBodyModifier),
                         rare = { chosen, key -> DiscoveryRarePairs.rare(DiscoveryRarePairs.music, chosen, key) }
                     ) { discover() }
                 }
                 MusicPage.DISCOVER, MusicPage.LIST -> {
-                    DiscoveryHeadline(if (listMode) "MÜZİK LİSTEM" else "SANA GÖRE", Modifier.padding(top = 2.dp, bottom = 6.dp), small = listMode)
+                    DiscoveryHeadline(if (listMode) t("MÜZİK LİSTEM") else t("SANA GÖRE"), Modifier.padding(top = 2.dp, bottom = 6.dp), small = listMode)
                     if (cards.isNotEmpty()) {
                         MusicDeck(cards, reduceAnimations, listMode, Modifier.weight(1f).padding(horizontal = 14.dp), onAddMusic) { card, action ->
                             error = null
                             try { snapshot = repo.act(card, action); true }
                             catch (e: CancellationException) { throw e }
-                            catch (_: Exception) { error = "İşlem tamamlanamadı. Tekrar deneyebilirsin."; false }
+                            catch (_: Exception) { error = t("İşlem tamamlanamadı. Tekrar deneyebilirsin."); false }
                         }
                     } else Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                         Column(Modifier.padding(top = 36.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Text(if (listMode) "Müzik listen henüz boş. Sağa kaydırdığın şarkılar buraya gelir." else
-                                if (loading) "Şarkılar hazırlanıyor…" else "Bu destenin sonuna geldin.", color = Color.White, textAlign = TextAlign.Center)
-                            if (!listMode && !loading) DiscoveryButton("Daha fazla getir", onClick = { discover() })
+                            Text(if (listMode) t("Müzik listen henüz boş. Sağa kaydırdığın şarkılar buraya gelir.") else
+                                if (loading) t("Şarkılar hazırlanıyor…") else t("Bu destenin sonuna geldin."), color = Color.White, textAlign = TextAlign.Center)
+                            if (!listMode && !loading) DiscoveryButton(t("Daha fazla getir"), onClick = { discover() })
                         }
                     }
                 }
@@ -293,10 +305,10 @@ private fun MusicDeck(
                             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .82f)))))
                         Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
                             Text(item.music.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(item.music.artist, color = Color.White.copy(alpha = .75f), fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            MusicArtistLine(item.music, Color.White.copy(alpha = .75f), androidx.compose.ui.text.TextStyle(fontSize = 15.sp))
                         }
                         MusicSourceLogo(musicOpensIn(LocalContext.current, item.music), 20.dp, Modifier.align(Alignment.TopEnd).padding(14.dp))
-                        if (previewUrl == null) Text("Önizleme yok", color = Color.White.copy(alpha = .7f), fontSize = 11.sp,
+                        if (previewUrl == null) Text(t("Önizleme yok"), color = Color.White.copy(alpha = .7f), fontSize = 11.sp,
                             modifier = Modifier.align(Alignment.TopStart).padding(14.dp).clip(RoundedCornerShape(20.dp))
                                 .background(Color.Black.copy(alpha = .7f)).padding(horizontal = 9.dp, vertical = 4.dp))
                         else if (paused) ActionIcon(ActionGlyph.Play, Modifier.align(Alignment.Center).size(44.dp), Color.White.copy(alpha = .9f))
@@ -305,20 +317,20 @@ private fun MusicDeck(
                 }
             }
         }
-        DiscoveryActionBar(null, busy, onDone = {}, accent = MusicTone,
+        DiscoveryActionBar(null, busy, onDone = {}, accent = MusicTone, artworkUrl = card.music.artworkUrl,
             onSave = {
                 if (!busy) scope.launch {
                     busy = true
                     try {
                         if (onAddMusic(card.music) != null) RealToast.show(context, "REAL'e eklendi")
-                        else RealToast.show(context, "Kart eklenemedi. Tekrar deneyebilirsin.")
+                        else RealToast.show(context, t("Kart eklenemedi. Tekrar deneyebilirsin."))
                     } finally { busy = false }
                 }
             },
             // Same place as on the film / game screens.
             modifier = Modifier.align(Alignment.TopCenter).offset(y = (maxHeight - 64.dp).coerceAtLeast(top + side + 12.dp)))
-        if (listMode) SwipeTutorial("music_list", "Kaldır", "Sona at", upLabel = "Uygulamada aç")
-        else SwipeTutorial("music", "Kaydet", "Geç", upLabel = "Uygulamada aç")
+        if (listMode) SwipeTutorial("music_list", t("Kaldır"), t("Sona at"), upLabel = t("Uygulamada aç"))
+        else SwipeTutorial("music", t("Kaydet"), t("Geç"), upLabel = t("Uygulamada aç"))
     }
 }
 
@@ -359,3 +371,6 @@ private class PreviewPreloader {
 
 /** Stepper key for "Hepsi" in the era question; never saved. */
 private const val AllErasKey = "era_all"
+
+/** Stepper key for "Hayır" in the "Sana özel" question; never saved. */
+private const val NoPersonalKey = "personal_none"

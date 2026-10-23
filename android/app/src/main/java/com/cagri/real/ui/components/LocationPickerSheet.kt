@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -10,6 +11,7 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -41,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -58,6 +62,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.cagri.real.data.LocationTrigger
 import com.cagri.real.data.ReminderLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -74,12 +79,13 @@ import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
-private val PickerBlue = Color(0xFF91B9FF)
 private val PickerInk = Color(0xFF0B0B0D)
+private val PickerMuted = Color(0xFF9A9AA4)
 
 /**
  * Konum ekle: move the map under the pin (or tap a spot), jump to where you are now with one GPS fix, or hand off
  * to Google Maps → Paylaş → REAL as before. "Bu konumu kaydet" stores the pin with its reverse-geocoded name.
+ * With [onRemind] the panel also offers "Varınca / Ayrılınca hatırlat" (Hassas or Normal distance), saved in one tap.
  */
 @Composable
 fun LocationPickerSheet(
@@ -87,11 +93,13 @@ fun LocationPickerSheet(
     initial: ReminderLocation?,
     onSave: (ReminderLocation) -> Unit,
     onShareFromGoogleMaps: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    initialTrigger: LocationTrigger? = null,
+    onRemind: ((ReminderLocation, LocationTrigger) -> Unit)? = null
 ) {
     if (!visible) return
     Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        LocationPickerContent(initial, onSave, onShareFromGoogleMaps, onCancel)
+        LocationPickerContent(initial, onSave, onShareFromGoogleMaps, onCancel, initialTrigger, onRemind)
     }
 }
 
@@ -100,7 +108,9 @@ private fun LocationPickerContent(
     initial: ReminderLocation?,
     onSave: (ReminderLocation) -> Unit,
     onShareFromGoogleMaps: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    initialTrigger: LocationTrigger?,
+    onRemind: ((ReminderLocation, LocationTrigger) -> Unit)?
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -117,6 +127,32 @@ private fun LocationPickerContent(
     var locating by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var geocodeJob by remember { mutableStateOf<Job?>(null) }
+    var leaving by remember { mutableStateOf(initialTrigger?.onExit ?: false) }
+    // Konum ara: the top pill turns into a search field; Apple Maps results through the REAL Worker.
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<PlaceResult>>(emptyList()) }
+    var searchBusy by remember { mutableStateOf(false) }
+    var skipLookUp by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(query, searching) {
+        if (!searching || query.trim().length < 2) { results = emptyList(); searchBusy = false; return@LaunchedEffect }
+        delay(300)
+        searchBusy = true
+        results = searchPlaces(query.trim(), center)
+        searchBusy = false
+    }
+    fun pickedPlace() = ReminderLocation(
+        placeName = name.ifBlank { address.ifBlank { t("Seçilen yer") } },
+        address = address,
+        latitude = center.latitude,
+        longitude = center.longitude,
+        mapsUrl = "https://www.google.com/maps/search/?api=1&query=${center.latitude},${center.longitude}"
+    )
+    fun remind(onExit: Boolean) {
+        val place = pickedPlace()
+        onRemind?.invoke(place, LocationTrigger(place.placeName, center.latitude, center.longitude,
+            LocationTrigger.PRECISE_RADIUS, onExit))
+    }
 
     fun lookUp(target: LatLng) {
         geocodeJob?.cancel()
@@ -134,12 +170,12 @@ private fun LocationPickerContent(
         scope.launch {
             val fix = currentLocation(context)
             locating = false
-            if (fix == null) message = "Konum alınamadı. Konum servisinin açık olduğundan emin ol."
+            if (fix == null) message = t("Konum alınamadı. Konum servisinin açık olduğundan emin ol.")
             else { picked = true; moveTo(fix) }
         }
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        if (grants.values.any { it }) locateNow() else message = "Konum izni verilmedi. Haritadan da seçebilirsin."
+        if (grants.values.any { it }) locateNow() else message = t("Konum izni verilmedi. Haritadan da seçebilirsin.")
     }
     fun requestLocate() {
         if (hasLocationPermission(context)) locateNow()
@@ -154,75 +190,185 @@ private fun LocationPickerContent(
             onMoved = { target, byUser ->
                 center = target
                 if (byUser) picked = true
-                if (picked) lookUp(target)
+                // A search result already named the place; only a move by hand asks the geocoder again.
+                if (skipLookUp && !byUser) skipLookUp = false
+                else if (picked) lookUp(target)
             },
             onTap = { target -> picked = true; moveTo(target, map?.cameraPosition?.zoom?.coerceAtLeast(15.0) ?: 16.0) }
         )
         // The pin marks the map centre; the map moves under it.
         PinMark(Modifier.align(Alignment.Center).offset(y = (-18).dp), active = picked)
 
+        // Liquid glass chrome over the map: back, hint, "where I am".
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            RealBackButton(onBack = onCancel, description = "Vazgeç", surface = {
-                Box(Modifier.fillMaxSize().background(Color(0xCC16171A), CircleShape))
+            RealBackButton(onBack = onCancel, description = t("Vazgeç"), surface = {
+                Box(Modifier.fillMaxSize().liquidChrome(22.dp))
             })
-            Spacer(Modifier.weight(1f))
-            Text(
-                "Haritayı kaydır veya bir yere dokun",
-                color = Color.White, fontSize = 12.sp,
-                modifier = Modifier.background(Color(0xCC16171A), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 7.dp)
-            )
-            Spacer(Modifier.weight(1f))
+            // The picked place lives up here between back and locate, so the bottom panel only holds the buttons.
+            // Tapping it searches ("Konum ara").
+            Row(
+                // Grows with a long name / address (neighbourhood, district…) instead of cutting it off.
+                Modifier.weight(1f).heightIn(min = 44.dp).liquidChrome(22.dp)
+                    .clickable(enabled = !searching, role = Role.Button) { searching = true; query = "" }
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (searching) {
+                    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+                    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = query, onValueChange = { query = it.take(120) }, singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFFF3F1F4), fontSize = 14.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                        modifier = Modifier.weight(1f).focusRequester(focus),
+                        decorationBox = { field ->
+                            if (query.isEmpty()) Text(t("Yer ya da adres ara"), color = PickerMuted, fontSize = 14.sp, maxLines = 1)
+                            field()
+                        }
+                    )
+                    if (searchBusy) CircularProgressIndicator(Modifier.size(14.dp), color = Color.White, strokeWidth = 1.5.dp)
+                    else Text("✕", color = PickerMuted, fontSize = 14.sp,
+                        modifier = Modifier.clip(CircleShape).clickable { searching = false; query = "" }.padding(4.dp))
+                } else Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                    if (picked) {
+                        Text(name.ifBlank { t("Seçilen yer") }, color = Color(0xFFF3F1F4), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                            lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(address.ifBlank { String.format(Locale.ROOT, "%.5f, %.5f", center.latitude, center.longitude) },
+                            color = PickerMuted, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    } else {
+                        Text(t("Ara, haritayı kaydır ya da bir yere dokun"), color = Color.White.copy(alpha = 0.86f), fontSize = 12.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
             Box(
-                Modifier.size(44.dp).clip(CircleShape).background(PickerBlue)
+                Modifier.size(44.dp).liquidChrome(22.dp)
                     .clickable(enabled = !locating, role = Role.Button, onClick = ::requestLocate),
                 contentAlignment = Alignment.Center
             ) {
-                if (locating) CircularProgressIndicator(Modifier.size(18.dp), color = PickerInk, strokeWidth = 2.dp)
-                else LocateGlyph()
+                if (locating) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                else LocateGlyph(Color.White)
             }
         }
 
+        if (searching && results.isNotEmpty()) {
+            Column(
+                Modifier.statusBarsPadding().padding(top = 60.dp, start = 12.dp, end = 12.dp).fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp)).background(Color(0xE6101014))
+                    .border(0.75.dp, liquidContentEdge(), RoundedCornerShape(22.dp)).padding(vertical = 6.dp)
+            ) {
+                results.forEach { place ->
+                    Column(
+                        Modifier.fillMaxWidth().clickable(role = Role.Button) {
+                            searching = false; query = ""; results = emptyList()
+                            name = place.name; address = place.address; picked = true; skipLookUp = true
+                            moveTo(LatLng(place.latitude, place.longitude), 16.5)
+                        }.padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Text(place.name, color = Color(0xFFF3F1F4), fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                            lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (place.address.isNotBlank()) Text(place.address, color = PickerMuted, fontSize = 12.sp,
+                            lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+
+        val panelShape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp)
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .background(Color(0xF2121316), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .border(0.7.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .clip(panelShape)
+                // Dark but see-through: the map stays visible behind the panel.
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0x8C08080A), Color(0xD908080A))))
+                .drawBehind {
+                    drawRect(androidx.compose.ui.graphics.Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.07f), Color.Transparent),
+                        center = Offset(size.width / 2f, 0f), radius = size.width * 0.85f
+                    ))
+                }
+                .border(0.75.dp, liquidContentEdge(), panelShape)
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 20.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             message?.let { Text(it, color = Color(0xFFE6BCB1), fontSize = 13.sp) }
-            if (picked) {
-                Text(name.ifBlank { "Seçilen yer" }, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(address.ifBlank { String.format(Locale.ROOT, "%.5f, %.5f", center.latitude, center.longitude) },
-                    color = Color(0xFF9A9AA4), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (onRemind != null) {
+                // Adding the place comes first; reminding on arrival / departure is the second choice.
+                PickerPill(t("Konum ekle"), primary = true, enabled = picked, modifier = Modifier.fillMaxWidth()) { onSave(pickedPlace()) }
+                RemindPill(leaving = leaving, enabled = picked, onToggle = { leaving = !leaving }) { remind(onExit = leaving) }
             } else {
-                Text("Bir yer seç ya da konum düğmesiyle bulunduğun yeri al.", color = Color(0xFFB8B9C2), fontSize = 14.sp)
+                PickerPill(t("Bu konumu kaydet"), primary = true, enabled = picked, modifier = Modifier.fillMaxWidth()) { onSave(pickedPlace()) }
             }
-            Box(
-                Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(50))
-                    .background(if (picked) PickerBlue else PickerBlue.copy(alpha = 0.3f))
-                    .clickable(enabled = picked, role = Role.Button) {
-                        onSave(ReminderLocation(
-                            placeName = name.ifBlank { address.ifBlank { "Seçilen yer" } },
-                            address = address,
-                            latitude = center.latitude,
-                            longitude = center.longitude,
-                            mapsUrl = "https://www.google.com/maps/search/?api=1&query=${center.latitude},${center.longitude}"
-                        ))
-                    },
-                contentAlignment = Alignment.Center
-            ) { Text("Bu konumu kaydet", color = PickerInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
             Text(
-                "Google Haritalar'dan paylaş",
-                color = Color(0xFF9DC3FF), fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                t("Google Haritalar'dan paylaş"),
+                color = PickerMuted, fontSize = 13.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier.align(Alignment.CenterHorizontally).clip(RoundedCornerShape(12.dp))
                     .clickable(role = Role.Button, onClick = onShareFromGoogleMaps).padding(horizontal = 10.dp, vertical = 6.dp)
             )
         }
+    }
+}
+
+/**
+ * "Varınca hatırlat" with a small "Ayrılınca" at its right end. Tapping the small one swaps them: "Ayrılınca
+ * hatırlat" slides into the middle and "Varınca" moves to the left end. The middle saves.
+ */
+@Composable
+private fun RemindPill(leaving: Boolean, enabled: Boolean, onToggle: () -> Unit, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Box(
+        Modifier.fillMaxWidth().height(54.dp).clip(shape)
+            .background(Color.White.copy(alpha = if (enabled) 1f else 0.4f))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+    ) {
+        androidx.compose.animation.AnimatedContent(
+            targetState = leaving,
+            transitionSpec = {
+                val dir = if (targetState) 1 else -1
+                (androidx.compose.animation.slideInHorizontally { it / 2 * dir } + androidx.compose.animation.fadeIn()) togetherWith
+                    (androidx.compose.animation.slideOutHorizontally { -it / 2 * dir } + androidx.compose.animation.fadeOut())
+            },
+            modifier = Modifier.align(Alignment.Center),
+            label = "remindMain"
+        ) { exit ->
+            Text(if (exit) t("Ayrılınca hatırlat") else t("Varınca hatırlat"), color = PickerInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+        androidx.compose.animation.AnimatedContent(
+            targetState = leaving,
+            transitionSpec = { androidx.compose.animation.fadeIn() togetherWith androidx.compose.animation.fadeOut() },
+            modifier = Modifier.fillMaxSize(),
+            label = "remindAlt"
+        ) { exit ->
+            Box(Modifier.fillMaxSize().padding(horizontal = 6.dp), contentAlignment = if (exit) Alignment.CenterStart else Alignment.CenterEnd) {
+                Text(
+                    if (exit) t("Varınca") else t("Ayrılınca"),
+                    color = PickerInk.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(PickerInk.copy(alpha = 0.06f))
+                        .clickable(enabled = enabled, role = Role.Button, onClick = onToggle)
+                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                )
+            }
+        }
+    }
+}
+
+/** White pill for the main action, liquid glass for the others (PermissionSheet buttons). */
+@Composable
+private fun PickerPill(label: String, primary: Boolean, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier.height(50.dp)
+            .then(if (primary) Modifier.clip(shape).background(Color.White.copy(alpha = if (enabled) 1f else 0.4f)) else Modifier.liquidChrome(25.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = if (primary) PickerInk else Color.White.copy(alpha = if (enabled) 0.92f else 0.4f),
+            fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 
@@ -284,7 +430,7 @@ private fun PinMark(modifier: Modifier, active: Boolean) {
         val w = size.width; val h = size.height
         val r = w * 0.36f
         val c = Offset(w / 2f, r + 2f)
-        val fill = if (active) PickerBlue else Color.White.copy(alpha = 0.7f)
+        val fill = if (active) Color.White else Color.White.copy(alpha = 0.6f)
         val path = Path().apply {
             moveTo(w / 2f, h)
             lineTo(c.x - r * 0.72f, c.y + r * 0.62f)
@@ -298,18 +444,18 @@ private fun PinMark(modifier: Modifier, active: Boolean) {
 }
 
 @Composable
-private fun LocateGlyph() {
+private fun LocateGlyph(color: Color) {
     Box(Modifier.size(20.dp).drawBehind {
         val c = Offset(size.width / 2f, size.height / 2f)
         val stroke = 2.dp.toPx()
-        drawCircle(PickerInk, size.minDimension * 0.30f, c, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
-        drawCircle(PickerInk, size.minDimension * 0.12f, c)
+        drawCircle(color, size.minDimension * 0.30f, c, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawCircle(color, size.minDimension * 0.12f, c)
         val l = size.minDimension * 0.5f
         val g = size.minDimension * 0.34f
-        drawLine(PickerInk, Offset(c.x, c.y - l), Offset(c.x, c.y - g), stroke)
-        drawLine(PickerInk, Offset(c.x, c.y + g), Offset(c.x, c.y + l), stroke)
-        drawLine(PickerInk, Offset(c.x - l, c.y), Offset(c.x - g, c.y), stroke)
-        drawLine(PickerInk, Offset(c.x + g, c.y), Offset(c.x + l, c.y), stroke)
+        drawLine(color, Offset(c.x, c.y - l), Offset(c.x, c.y - g), stroke)
+        drawLine(color, Offset(c.x, c.y + g), Offset(c.x, c.y + l), stroke)
+        drawLine(color, Offset(c.x - l, c.y), Offset(c.x - g, c.y), stroke)
+        drawLine(color, Offset(c.x + g, c.y), Offset(c.x + l, c.y), stroke)
     })
 }
 
@@ -338,6 +484,26 @@ private suspend fun currentLocation(context: Context): LatLng? {
     }
     return providers.firstNotNullOfOrNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }?.let { LatLng(it.latitude, it.longitude) }
 }
+
+private data class PlaceResult(val name: String, val address: String, val latitude: Double, val longitude: Double)
+
+/** Konum ara: Apple Maps results near [near] (REAL Worker /api/place-search); empty when offline or signed out. */
+private suspend fun searchPlaces(q: String, near: LatLng): List<PlaceResult> = withContext(Dispatchers.IO) {
+    runCatching {
+        val body = org.json.JSONObject().put("q", q).put("lat", near.latitude).put("lng", near.longitude)
+        val response = com.cagri.real.network.WorkerClient(com.cagri.real.platform.android.auth.AndroidBackend.workerTransport)
+            .postJson(PLACE_SEARCH, body.toString(), 10_000, 15_000, readErrorBody = false)
+        if (response.statusCode !in 200..299) return@runCatching emptyList()
+        val places = org.json.JSONObject(response.body).optJSONArray("places") ?: return@runCatching emptyList()
+        (0 until places.length()).mapNotNull { i ->
+            val p = places.optJSONObject(i) ?: return@mapNotNull null
+            PlaceResult(p.optString("name"), p.optString("address"), p.optDouble("latitude"), p.optDouble("longitude"))
+                .takeIf { it.name.isNotBlank() && !it.latitude.isNaN() && !it.longitude.isNaN() }
+        }
+    }.getOrDefault(emptyList())
+}
+
+private const val PLACE_SEARCH = "https://real-backend-staging.cagrigul1907.workers.dev/api/place-search"
 
 /** Place name and a short address for the pin, from the platform geocoder; blank when it has nothing. */
 private suspend fun reverseGeocode(context: Context, target: LatLng): Pair<String, String> = withContext(Dispatchers.IO) {

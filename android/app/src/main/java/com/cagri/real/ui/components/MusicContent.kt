@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.core.graphics.drawable.toBitmap
 import coil.request.ImageRequest
 import android.content.Intent
@@ -75,7 +76,7 @@ fun MusicSearchSheet(designStyle: DesignStyle, onDismiss: () -> Unit, onSelect: 
         val panel = if (designStyle == DesignStyle.LiquidGlass) Modifier.liquidChrome(corners = 24.dp) else Modifier
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).then(panel).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Müzik", style = RealType.detailDialogTitle)
+            Text(t("Müzik"), style = RealType.detailDialogTitle)
             // Which app the block opens (remembered): logos only.
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color.White.copy(alpha = 0.06f)).padding(4.dp)) {
                 MusicSource.entries.forEach { s ->
@@ -93,7 +94,7 @@ fun MusicSearchSheet(designStyle: DesignStyle, onDismiss: () -> Unit, onSelect: 
             // in Spotify (searched by title and artist, see openMusicBlock). A pasted Spotify song link works too.
             OutlinedTextField(value = query, onValueChange = { query = it.take(500) },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
-                placeholder = { Text(if (source == MusicSource.Spotify) "Şarkı ara veya Spotify bağlantısı yapıştır" else "Şarkı veya sanatçı ara") },
+                placeholder = { Text(if (source == MusicSource.Spotify) t("Şarkı ara veya Spotify bağlantısı yapıştır") else t("Şarkı veya sanatçı ara")) },
                 shape = RoundedCornerShape(24.dp),
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF85858D),
@@ -107,7 +108,7 @@ fun MusicSearchSheet(designStyle: DesignStyle, onDismiss: () -> Unit, onSelect: 
                     val found = com.cagri.real.data.SharedLinkResolver.resolve(link).music
                     searching = false
                     if (found?.provider == "Spotify") spotifyTrack = found
-                    else message = "Bu bağlantıdan şarkı okunamadı. Spotify'da bir şarkının bağlantısını kopyala."
+                    else message = t("Bu bağlantıdan şarkı okunamadı. Spotify'da bir şarkının bağlantısını kopyala.")
                     return@LaunchedEffect
                 }
                 spotifyTrack = null
@@ -117,22 +118,22 @@ fun MusicSearchSheet(designStyle: DesignStyle, onDismiss: () -> Unit, onSelect: 
                 message = null
                 try {
                     results = MusicCatalog.search(q)
-                    if (results.isEmpty()) message = "Sonuç bulunamadı. Başka bir şarkı veya sanatçı dene."
+                    if (results.isEmpty()) message = t("Sonuç bulunamadı. Başka bir şarkı veya sanatçı dene.")
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
-                    message = "Müzik araması yapılamadı. Bağlantını kontrol edip yeniden dene."
+                    message = t("Müzik araması yapılamadı. Bağlantını kontrol edip yeniden dene.")
                 } finally {
                     searching = false
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(if (searching) "Aranıyor…" else "", style = RealType.detailBlockMeta, color = Color(0xFFA5A5B0))
-                TextButton(onClick = onDismiss) { Text("Kapat", color = Color(0xFFBCBCC5)) }
+                Text(if (searching) t("Aranıyor…") else "", style = RealType.detailBlockMeta, color = Color(0xFFA5A5B0))
+                TextButton(onClick = onDismiss) { Text(t("Kapat"), color = Color(0xFFBCBCC5)) }
             }
             message?.let { Text(it, style = RealType.detailBlockMeta, color = Color(0xFFBCBCC5)) }
             spotifyTrack?.let { track ->
-                Text("Yapıştırdığın şarkı", style = RealType.detailBlockMeta, color = Color(0xFFA5A5B0))
+                Text(t("Yapıştırdığın şarkı"), style = RealType.detailBlockMeta, color = Color(0xFFA5A5B0))
                 MusicResultRow(track) { onSelect(track.copy(createdAt = System.currentTimeMillis())) }
             }
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 340.dp),
@@ -141,7 +142,7 @@ fun MusicSearchSheet(designStyle: DesignStyle, onDismiss: () -> Unit, onSelect: 
                     MusicResultRow(track) { onSelect(track.copy(createdAt = System.currentTimeMillis())) }
                 }
             }
-            Text("Apple Music • ${MusicCatalog.storefrontName()} kataloğu", style = RealType.detailAttribution, color = Color(0xFF95959F))
+            Text(t("Apple Music • {0} kataloğu", MusicCatalog.storefrontName()), style = RealType.detailAttribution, color = Color(0xFF95959F))
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -152,6 +153,24 @@ private fun spotifyLinkIn(text: String?): String? = text?.let {
     Regex("https://(?:open\\.spotify\\.com/(?:intl-[a-z-]+/)?track/[A-Za-z0-9]{22}|spotify\\.link/[A-Za-z0-9]+)").find(it)?.value
 }
 
+/** Apple Music's "E": the song has explicit lyrics. */
+@Composable
+internal fun ExplicitBadge(modifier: Modifier = Modifier, tint: Color = Color(0xFFB1B1BC)) {
+    Box(modifier.size(15.dp).clip(RoundedCornerShape(3.dp)).background(tint.copy(alpha = .28f))
+        .semantics { contentDescription = t("Müstehcen sözler") }, contentAlignment = Alignment.Center) {
+        Text("E", color = tint, fontSize = 10.sp, fontWeight = FontWeight.Bold, lineHeight = 10.sp)
+    }
+}
+
+/** Artist line with the "E" badge in front when the song is explicit. */
+@Composable
+internal fun MusicArtistLine(block: MusicBlock, color: Color, style: androidx.compose.ui.text.TextStyle) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (block.explicit) ExplicitBadge(tint = color)
+        Text(block.artist, color = color, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 @Composable
 private fun MusicResultRow(track: MusicBlock, onAdd: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onAdd).padding(8.dp),
@@ -159,7 +178,7 @@ private fun MusicResultRow(track: MusicBlock, onAdd: () -> Unit) {
         MusicArtwork(track, Modifier.size(48.dp))
         Column(Modifier.weight(1f)) {
             Text(track.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artist, color = Color(0xFFA5A5B0), style = RealType.detailBlockMeta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            MusicArtistLine(track, Color(0xFFA5A5B0), RealType.detailBlockMeta)
         }
         ActionIcon(ActionGlyph.Add, Modifier.size(18.dp), Color.White)
     }
@@ -188,7 +207,7 @@ fun MusicContentSection(blocks: List<MusicBlock>, designStyle: DesignStyle, edit
                     // No "Müzik" label: the cover and the source logo say it. Only the remove button while editing.
                     if (editing) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         IconButton(onClick = { onRemove(block.id) }, modifier = Modifier.size(40.dp)) {
-                            ActionIcon(ActionGlyph.Close, Modifier.size(15.dp).semantics { contentDescription = "Müziği kaldır" }, Color(0xFFB8B8C2))
+                            ActionIcon(ActionGlyph.Close, Modifier.size(15.dp).semantics { contentDescription = t("Müziği kaldır") }, Color(0xFFB8B8C2))
                         }
                     }
                     MusicTrackCard(
@@ -289,11 +308,11 @@ fun MusicTrackCard(
         focusRequest = request
         if (audioManager?.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             release()
-            error = "Önizleme şu anda oynatılamıyor."
+            error = t("Önizleme şu anda oynatılamıyor.")
             return
         }
         runCatching { current.start() }.onSuccess { playing = true }.onFailure {
-            release(); error = "Önizleme oynatılamadı."
+            release(); error = t("Önizleme oynatılamadı.")
         }
     }
     fun toggle() {
@@ -325,11 +344,11 @@ fun MusicTrackCard(
             }
             created.setOnCompletionListener { release() }
             created.setOnErrorListener { _, _, _ ->
-                release(); error = "Önizleme yüklenemedi. Yeniden deneyebilirsin."; true
+                release(); error = t("Önizleme yüklenemedi. Yeniden deneyebilirsin."); true
             }
             created.setDataSource(url)
             created.prepareAsync()
-        }.onFailure { release(); error = "Önizleme yüklenemedi." }
+        }.onFailure { release(); error = t("Önizleme yüklenemedi.") }
     }
 
     LaunchedEffect(selected, showActions) { if (!selected || !showActions) release() }
@@ -400,24 +419,24 @@ fun MusicTrackCard(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             IconButton(onClick = { toggle() }, enabled = !loading, modifier = Modifier.size(48.dp)
                                 .clip(CircleShape).background(Color.White.copy(alpha = 0.12f)).semantics {
-                                    contentDescription = if (playing) "Önizlemeyi duraklat" else "Kısa önizlemeyi oynat"
+                                    contentDescription = if (playing) t("Önizlemeyi duraklat") else t("Kısa önizlemeyi oynat")
                                 }) {
                                 if (loading) com.cagri.real.ui.components.RealSpinner(Modifier.size(20.dp), color = Color.White, strokeWidth = 1.5.dp)
                                 else ActionIcon(if (playing) ActionGlyph.Pause else ActionGlyph.Play, Modifier.size(20.dp), Color.White)
                             }
                             Text(if (playing || position > 0) formatVoiceDuration(position)
-                                else if (duration > 0) formatVoiceDuration(duration) else "Önizleme",
+                                else if (duration > 0) formatVoiceDuration(duration) else t("Önizleme"),
                                 color = Color(0xFFB8B8C2), style = RealType.detailBlockMetaSecondary)
                         }
                     }
                     error?.let { Text(it, color = Color(0xFFE0B5A8), style = RealType.detailBlockMetaSecondary) }
-                    HeroOpenRow("${musicProviderLabel(opensIn)}'da aç ↗".replace("Music'da", "Music'te"),
+                    HeroOpenRow(openInLabel(musicProviderLabel(opensIn)),
                         onOpen = { release(); openMusicBlock(context, block) }) {
                         // The source at the bottom right; on Spotify it turns the cover over to its Spotify Code.
                         MusicSourceLogo(opensIn, 22.dp, Modifier
                             .then(if (spotifyCodeId != null) Modifier.clip(CircleShape).clickable(enabled = !showingBack) { flipped = true } else Modifier)
                             .padding(6.dp)
-                            .semantics { contentDescription = if (spotifyCodeId != null) "Spotify kodunu göster" else musicProviderLabel(opensIn) })
+                            .semantics { contentDescription = if (spotifyCodeId != null) t("Spotify kodunu göster") else musicProviderLabel(opensIn) })
                     }
                     if (block.provider == "iTunes" && block.previewUrl != null) {
                         Text("Preview provided courtesy of iTunes", color = Color(0xFF868690), fontSize = 10.sp)
@@ -431,12 +450,12 @@ fun MusicTrackCard(
         val opensIn = remember(block.provider) { musicOpensIn(context, block) }
         MusicSourceLogo(opensIn, 18.dp, Modifier.align(Alignment.TopEnd)
             .then(if (spotifyCodeId != null) Modifier.clip(CircleShape).clickable(enabled = !showingBack) { flipped = true } else Modifier)
-            .semantics { contentDescription = if (spotifyCodeId != null) "Spotify kodunu göster" else musicProviderLabel(opensIn) })
+            .semantics { contentDescription = if (spotifyCodeId != null) t("Spotify kodunu göster") else musicProviderLabel(opensIn) })
         Row(Modifier.padding(end = 26.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             MusicArtwork(block, Modifier.size(92.dp), onAmbience)
             Column(Modifier.weight(1f)) {
                 Text(block.title, color = Color(0xFFF1F1F4), style = RealType.detailMusicTitle, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                Text(block.artist, color = Color(0xFFB1B1BC), style = RealType.detailBlockMeta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                MusicArtistLine(block, Color(0xFFB1B1BC), RealType.detailBlockMeta)
             }
         }
         }
@@ -444,24 +463,24 @@ fun MusicTrackCard(
             if (block.previewUrl?.startsWith("https://") == true) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButton(onClick = { toggle() }, enabled = !loading, modifier = Modifier.size(48.dp).semantics {
-                        contentDescription = if (playing) "Önizlemeyi duraklat" else "Kısa önizlemeyi oynat"
+                        contentDescription = if (playing) t("Önizlemeyi duraklat") else t("Kısa önizlemeyi oynat")
                     }) {
                         if (loading) com.cagri.real.ui.components.RealSpinner(Modifier.size(20.dp), color = Color.White, strokeWidth = 1.5.dp)
                         else ActionIcon(if (playing) ActionGlyph.Pause else ActionGlyph.Play, Modifier.size(20.dp), Color.White)
                     }
                     Spacer(Modifier.weight(1f))
                     Text(if (playing || position > 0) formatVoiceDuration(position)
-                        else if (duration > 0) formatVoiceDuration(duration) else "Önizleme",
+                        else if (duration > 0) formatVoiceDuration(duration) else t("Önizleme"),
                         color = Color(0xFFB8B8C2), style = RealType.detailBlockMetaSecondary)
                 }
-            } else Text("Önizleme yok", color = Color(0xFF95959F), style = RealType.detailBlockMetaSecondary)
+            } else Text(t("Önizleme yok"), color = Color(0xFF95959F), style = RealType.detailBlockMetaSecondary)
             error?.let { Text(it, color = Color(0xFFE0B5A8), style = RealType.detailBlockMetaSecondary) }
             TextButton(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
                 .clip(RoundedCornerShape(24.dp)).background(Color.White.copy(alpha = 0.07f)), onClick = {
                 release()
                 openMusicBlock(context, block)
             }) {
-                Text("${musicProviderLabel(musicOpensIn(context, block))}'da aç ↗".replace("Music'da", "Music'te"),
+                Text(openInLabel(musicProviderLabel(musicOpensIn(context, block))),
                     color = Color(0xFFD0D0D8), style = RealType.detailBlockMetaSecondary)
             }
             if (block.provider == "iTunes" && block.previewUrl != null) {
@@ -475,7 +494,7 @@ fun MusicTrackCard(
         Column(Modifier.matchParentSize().graphicsLayer { rotationY = 180f }
             .clip(RoundedCornerShape(18.dp)).background(Color.Black)
             .clickable { flipped = false }.padding(16.dp)
-            .semantics { contentDescription = "Spotify kodu. Geri dönmek için dokun." },
+            .semantics { contentDescription = t("Spotify kodu. Geri dönmek için dokun.") },
             verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
             AsyncImage(model = "https://scannables.scdn.co/uri/plain/png/000000/white/640/spotify:track:$spotifyCodeId",
                 contentDescription = null, modifier = Modifier.fillMaxWidth().aspectRatio(4f), contentScale = ContentScale.Fit)
@@ -497,7 +516,49 @@ internal fun musicOpensIn(context: android.content.Context, block: MusicBlock): 
 
 fun openMusicBlock(context: android.content.Context, block: MusicBlock) {
     if (block.provider != "Spotify" && musicOpensIn(context, block) == "Spotify") { searchSpotify(context, block); return }
-    val web = runCatching { Uri.parse(block.providerUrl) }.getOrNull()?.takeIf { it.scheme in listOf("http", "https") }
+    if (block.provider == "iTunes" || block.provider == "Apple Music") {
+        // A song from another country's chart may carry an id this country's Apple Music does not have ("not available
+        // in your country") although the same song is there: open this country's copy, or a search for it.
+        val app = context.applicationContext
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+            val here = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { appleMusicLinkHere(block) }.getOrNull() }
+            openMusicAt(app, block, here ?: block.providerUrl)
+        }
+        return
+    }
+    openMusicAt(context, block, block.providerUrl)
+}
+
+/** This storefront's link for an Apple Music song: its own id when the store has it, else the same title and artist,
+ *  else Apple Music's search for them. */
+private fun appleMusicLinkHere(block: MusicBlock): String {
+    val store = com.cagri.real.data.MusicCatalog.storefront().lowercase().ifBlank { "tr" }
+    fun results(url: String): org.json.JSONArray? {
+        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        return try {
+            connection.connectTimeout = 6_000; connection.readTimeout = 6_000
+            if (connection.responseCode !in 200..299) null
+            else org.json.JSONObject(connection.inputStream.bufferedReader().use { it.readText() }).optJSONArray("results")
+        } finally { connection.disconnect() }
+    }
+    fun link(o: org.json.JSONObject?) = o?.optString("trackViewUrl")?.takeIf { it.startsWith("https://") }
+    block.providerTrackId?.takeIf { it.all(Char::isDigit) }?.let { id ->
+        link(results("https://itunes.apple.com/lookup?id=$id&country=$store")?.optJSONObject(0))?.let { return it }
+    }
+    val term = listOf(block.title, block.artist).filter { it.isNotBlank() }.joinToString(" ")
+    fun norm(v: String) = v.lowercase(java.util.Locale.ROOT).filter { it.isLetterOrDigit() }
+    val found = results("https://itunes.apple.com/search?term=${java.net.URLEncoder.encode(term, "UTF-8")}&entity=song&country=$store&limit=10")
+    if (found != null) for (i in 0 until found.length()) {
+        val o = found.optJSONObject(i) ?: continue
+        val title = norm(o.optString("trackName")); val artist = norm(o.optString("artistName"))
+        if (title.isNotEmpty() && (title.startsWith(norm(block.title)) || norm(block.title).startsWith(title)) &&
+            (block.artist.isBlank() || artist.contains(norm(block.artist)) || norm(block.artist).contains(artist))) link(o)?.let { return it }
+    }
+    return "https://music.apple.com/$store/search?term=" + Uri.encode(term)
+}
+
+private fun openMusicAt(context: android.content.Context, block: MusicBlock, url: String?) {
+    val web = runCatching { Uri.parse(url) }.getOrNull()?.takeIf { it.scheme in listOf("http", "https") }
     val attempts = buildList {
         when (block.provider) {
             "Spotify" -> {
@@ -511,13 +572,13 @@ fun openMusicBlock(context: android.content.Context, block: MusicBlock) {
         }
         web?.let { add(Intent(Intent.ACTION_VIEW, it)) }
     }
-    if (attempts.isEmpty()) { RealToast.show(context, "Şarkı bağlantısı kullanılamıyor"); return }
+    if (attempts.isEmpty()) { RealToast.show(context, t("Şarkı bağlantısı kullanılamıyor")); return }
     for (intent in attempts) {
         try { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return }
         catch (_: android.content.ActivityNotFoundException) {}
         catch (_: SecurityException) {}
     }
-    RealToast.show(context, "Şarkı bağlantısı açılamadı")
+    RealToast.show(context, t("Şarkı bağlantısı açılamadı"))
 }
 
 /** Spotify has no open catalog for apps: the song is opened as a Spotify search for "title artist". */
@@ -531,5 +592,8 @@ private fun searchSpotify(context: android.content.Context, music: MusicBlock) {
         try { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return }
         catch (_: android.content.ActivityNotFoundException) {}
     }
-    RealToast.show(context, "Spotify açılamadı")
+    RealToast.show(context, t("Spotify açılamadı"))
 }
+
+private fun openInLabel(provider: String): String =
+    if (provider.contains("Music")) t("{0}'te aç ↗", provider) else t("{0}'da aç ↗", provider)

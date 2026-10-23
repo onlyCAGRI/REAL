@@ -1890,5 +1890,13 @@
   "Öneriler alınamadı.": "Couldn't get suggestions.",
   "İşlem tamamlanamadı. Tekrar deneyebilirsin.": "Couldn't complete the action. You can try again.",
   "Genişletilmiş": "Expanded",
-  "Görseller şu anda alınamadı.": "Images aren't available right now."
+  "Görseller şu anda alınamadı.": "Images aren't available right now.",
+  "Konum alınamadı. Konum servisinin açık olduğundan emin ol.": "Couldn't get your location. Make sure location services are on.",
+  "Puan henüz mevcut değil": "Rating not available yet",
+  "Süre bilgisi mevcut değil": "Duration not available",
+  "Şarkı ara veya Spotify bağlantısı yapıştır": "Search for a song or paste a Spotify link",
+  "Şarkı veya sanatçı ara": "Search for a song or artist",
+  "{0}'te aç ↗": "Open in {0} ↗",
+  "{0}'da aç ↗": "Open in {0} ↗",
+  "Şarkılar alınamadı.": "Couldn't get songs."
 }

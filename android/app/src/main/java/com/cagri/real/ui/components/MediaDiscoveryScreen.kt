@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -15,6 +16,10 @@ import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import com.cagri.real.books.CoverPalette
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -66,7 +71,7 @@ import kotlin.math.abs
 import kotlin.math.min
 
 private val DiscoveryAccent = Color(0xFFDDD4C6)
-private val DiscoveryBlue = Color(0xFF2F6BFF)   // seçili çipler, ana buton ve "REAL'e ekle"; oyun ekranındaki turuncunun mavi karşılığı
+private val DiscoveryBlue = Color(0xFF2F6BFF)   // seçili çipler, ana buton ve t("REAL'e ekle"); oyun ekranındaki turuncunun mavi karşılığı
 private const val PosterAspect = .667f
 private enum class DiscoveryPage { ENTRY, FILTERS, DISCOVER, WATCHLIST }
 
@@ -110,11 +115,15 @@ fun MediaDiscoveryScreen(
     BackHandler(onBack = ::back)
     LaunchedEffect(page) { onAtEntry(page == DiscoveryPage.ENTRY) }
     LaunchedEffect(repo) {
-        if (repo == null) { error = "Öneriler için REAL'e giriş yap."; ready = true; return@LaunchedEffect }
+        if (repo == null) {
+            error = t("Öneriler için REAL'e giriş yap."); ready = true
+            com.cagri.real.ui.auth.SignInRequired.needed(com.cagri.real.ui.auth.SignInRequired.Reason.Suggestions)
+            return@LaunchedEffect
+        }
         try {
             val cached = repo.load(); snapshot = cached
             if (!startInFilters) { type = cached.type; filters = ArrayList(cached.filters) }
-        } catch (e: CancellationException) { throw e } catch (_: Exception) { error = "Kaydedilmiş öneriler okunamadı." }
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { error = t("Kaydedilmiş öneriler okunamadı.") }
         ready = true
     }
     fun openFilters() {
@@ -134,13 +143,15 @@ fun MediaDiscoveryScreen(
                 // Back may have returned to the landing page while the request was running.
                 if (page == DiscoveryPage.FILTERS || page == DiscoveryPage.DISCOVER) page = DiscoveryPage.DISCOVER
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { error = e.message ?: "Öneriler alınamadı." }
+            catch (e: Exception) { error = e.message ?: t("Öneriler alınamadı.") }
             finally { loading = false }
         }
     }
     val watchlist = page == DiscoveryPage.WATCHLIST
     val deckPage = page == DiscoveryPage.DISCOVER || watchlist
     val cards = if (watchlist) snapshot?.later.orEmpty() else snapshot?.cards.orEmpty()
+    // Shaking the phone brings the last swiped title back on top.
+    ShakeToUndo(page == DiscoveryPage.DISCOVER) { scope.launch { runCatching { repo?.undo() }.getOrNull()?.let { snapshot = it; error = null } } }
     // Keep the deck stocked: when only a couple of posters are left, the next ones are fetched in the background.
     LaunchedEffect(page, cards.size, loading, error) {
         if (page == DiscoveryPage.DISCOVER && !loading && error == null && ready && repo != null && cards.size <= 2 &&
@@ -182,24 +193,24 @@ fun MediaDiscoveryScreen(
                     val feelingOptions = DiscoveryFilter.entries.filter { !it.genre && it.themeGroup == null }.map { StepOption(it.key, it.label) }
                     DiscoveryStepper(
                         steps = listOf(
-                            DiscoveryStep("Hangi türde bir şey olsun?", "En fazla 2 tür", 2, false, listOf(null to genreOptions)) {
+                            DiscoveryStep(t("Hangi türde bir şey olsun?"), t("En fazla 2 tür"), 2, false, listOf(null to genreOptions)) {
                                 FlowRow(Modifier.padding(bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    listOf("BOTH" to "Film + Dizi", "MOVIE" to "Film", "TV" to "Dizi").forEach { (key, label) ->
+                                    listOf("BOTH" to t("Film + Dizi"), "MOVIE" to t("Film"), "TV" to t("Dizi")).forEach { (key, label) ->
                                         DiscoveryButton(label, selected = type == key, enabled = !loading, onClick = { type = key })
                                     }
                                 }
                             },
-                            DiscoveryStep("Konusu ne olsun?", "İstersen bir tane", 1, true, themeGroups),
-                            DiscoveryStep("Nasıl hissettirsin?", "İstersen bir tane", 1, true, listOf(null to feelingOptions)),
+                            DiscoveryStep(t("Konusu ne olsun?"), t("İstersen bir tane"), 1, true, themeGroups),
+                            DiscoveryStep(t("Nasıl hissettirsin?"), t("İstersen bir tane"), 1, true, listOf(null to feelingOptions)),
                         ),
                         selection = filters.toSet(), onSelection = { filters = ArrayList(it) },
                         accent = DiscoveryBlue, loading = loading, enabled = ready && repo != null, reduceAnimations = reduceAnimations,
-                        doneLabel = "afişleri getir", modifier = Modifier.weight(1f).then(filterBodyModifier),
+                        doneLabel = t("afişleri getir"), modifier = Modifier.weight(1f).then(filterBodyModifier),
                         rare = { chosen, key -> DiscoveryRarePairs.rare(DiscoveryRarePairs.film, chosen, key) }
                     ) { discover() }
                 }
                 DiscoveryPage.DISCOVER, DiscoveryPage.WATCHLIST -> {
-                    DiscoveryHeadline(if (watchlist) "İZLENECEK LİSTEM" else "SANA GÖRE",
+                    DiscoveryHeadline(if (watchlist) t("İZLENECEK LİSTEM") else t("SANA GÖRE"),
                         Modifier.padding(top = 2.dp, bottom = 6.dp), small = watchlist)
                     if (cards.isNotEmpty()) {
                         com.cagri.real.ui.ai.AiReportButton(com.cagri.real.platform.android.ai.AiReportFeature.MEDIA,
@@ -210,20 +221,20 @@ fun MediaDiscoveryScreen(
                             error = null
                             try {
                                 if ((action == DiscoveryAction.SAVE_DISCOVERY || action == DiscoveryAction.SAVE_WATCHLIST) && onAddMedia(card.media) == null) {
-                                    error = "Kart eklenemedi. Tekrar deneyebilirsin."; false
+                                    error = t("Kart eklenemedi. Tekrar deneyebilirsin."); false
                                 } else {
                                     snapshot = repo?.act(card, action)
                                     if (action == DiscoveryAction.WATCHED && card.media.type == com.cagri.real.data.MediaType.MOVIE) rateWatched = card.media
                                     true
                                 }
                             } catch (e: CancellationException) { throw e }
-                            catch (e: Exception) { error = if (e is IllegalArgumentException) e.message else "İşlem tamamlanamadı. Tekrar deneyebilirsin."; false }
+                            catch (e: Exception) { error = if (e is IllegalArgumentException) e.message else t("İşlem tamamlanamadı. Tekrar deneyebilirsin."); false }
                         }
                     } else Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                         Column(Modifier.padding(top = 36.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             // Kayıtlı liste okunana kadar "boş" yazısı gösterilmez (listeye doğrudan açılışta kısa yanıp sönmesin).
-                            if (ready) Text(if (watchlist) "İzlenecek listen henüz boş." else "Bu destenin sonuna geldin.", color = Color.White)
-                            if (ready && !watchlist) DiscoveryButton(if (loading) "Hazırlanıyor…" else "Daha fazla öner", enabled = ready && !loading, onClick = { discover(useSavedPreferences = true) })
+                            if (ready) Text(if (watchlist) t("İzlenecek listen henüz boş.") else t("Bu destenin sonuna geldin."), color = Color.White)
+                            if (ready && !watchlist) DiscoveryButton(if (loading) t("Hazırlanıyor…") else t("Daha fazla öner"), enabled = ready && !loading, onClick = { discover(useSavedPreferences = true) })
                         }
                     }
                 }
@@ -238,7 +249,7 @@ fun MediaDiscoveryScreen(
     }
     rateWatched?.let { media ->
         val film = rememberFilmReminder(ratings, media)
-        RatingSheet(media.title, listOfNotNull(media.year?.toString(), "İzledim").joinToString(" · "), film.text, null,
+        RatingSheet(media.title, listOfNotNull(media.year?.toString(), t("İzledim")).joinToString(" · "), film.text, null,
             onDismiss = { rateWatched = null }, onRemove = null, reminderLoading = film.loading, onSkipLoading = film.skip) { v ->
             rateWatched = null
             scope.launch { runCatching { ratings?.rate(media, v, past = true) } }
@@ -262,7 +273,7 @@ private suspend fun fetchWidening(repo: MediaDiscoveryRepository, type: String, 
         if ((snapshot?.cards?.size ?: 0) >= 6) break
         snapshot = try { repo.fetch(type, relaxed, deckFilters = filters) } catch (e: CancellationException) { throw e } catch (_: Exception) { snapshot }
     }
-    return snapshot ?: throw (first ?: java.io.IOException("Öneriler alınamadı."))
+    return snapshot ?: throw (first ?: java.io.IOException(t("Öneriler alınamadı.")))
 }
 
 @Composable
@@ -314,7 +325,7 @@ private fun durationLabel(millis: Number?, series: Boolean): String? {
     val value = (millis ?: return null).toLong().takeIf { it in 60_000L..86_400_000L } ?: return null
     val minutes = (value / 60_000L).toInt()
     val text = if (minutes >= 60) "${minutes / 60} sa${if (minutes % 60 > 0) " ${minutes % 60} dk" else ""}" else "$minutes dk"
-    return if (series) "$text / bölüm" else text
+    return if (series) t("{0} / bölüm", text) else text
 }
 
 @Composable
@@ -417,11 +428,11 @@ private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceA
                         val series = item.media.type.name == "TV"
                         val match = DiscoveryRanking.match(item, filters)
                         Column(Modifier.align(Alignment.TopStart).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            PosterLabel(durationLabel(item.media.durationMillis, series) ?: item.media.year?.toString() ?: if (series) "Dizi" else "Film")
+                            PosterLabel(durationLabel(item.media.durationMillis, series) ?: item.media.year?.toString() ?: if (series) t("Dizi") else t("Film"))
                             DiscoveryRanking.displayGenre(item.media.genre)?.let { PosterLabel(it) }
                         }
                         Column(Modifier.align(Alignment.TopEnd).padding(14.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            PosterLabel(if (series) "Dizi" else "Film")
+                            PosterLabel(if (series) t("Dizi") else t("Film"))
                             if (filters.isNotEmpty()) PosterLabel("${match.keys.size}/${filters.size}${if (match.inferred.isNotEmpty()) " · AI" else ""}")
                         }
                         if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(32.dp).align(Alignment.Center), color = Color.White, strokeWidth = 2.dp)
@@ -431,26 +442,34 @@ private fun PosterDeck(cards: List<DiscoveryCard>, filters: Set<String>, reduceA
         }
 
         // The dock stays below the poster and does not move with the swiped artwork.
-        DiscoveryActionBar("İzledim", busy,
+        DiscoveryActionBar(t("İzledim"), busy, artworkUrl = card.media.artworkUrl,
             onDone = { decide(DiscoveryAction.WATCHED, Offset(0f, -threshold * 9)) },
             onSave = { decide(if (later) DiscoveryAction.SAVE_WATCHLIST else DiscoveryAction.SAVE_DISCOVERY) },
             modifier = Modifier.align(Alignment.TopCenter).offset(y = posterHeight + 12.dp))
-        if (later) SwipeTutorial("film_list", "Kaldır", "Sona at") else SwipeTutorial("film", "Kaydet", "Geç")
+        if (later) SwipeTutorial("film_list", t("Kaldır"), t("Sona at")) else SwipeTutorial("film", t("Kaydet"), t("Geç"))
     }
 }
 
 /** Under the poster: "REAL'e ekle" (a card) and "İzledim" / "Oynadım" (done; never suggested again). */
 @Composable
 internal fun DiscoveryActionBar(doneLabel: String?, busy: Boolean, onDone: () -> Unit, onSave: (() -> Unit)?, modifier: Modifier = Modifier,
-                                accent: Color = DiscoveryBlue) {
+                                accent: Color = DiscoveryBlue, artworkUrl: String? = null) {
+    // "REAL'e ekle" takes the poster's dominant colour; very dark posters are lifted so the button still reads on black.
+    val context = LocalContext.current
+    val poster by produceState<Color?>(artworkUrl?.let { CoverPalette.cached(it) }?.let { Color(it) }, artworkUrl) {
+        artworkUrl?.let { url -> CoverPalette.dominant(context, url)?.let { value = Color(it) } }
+    }
+    val tone = poster?.let { if (it.luminance() < .03f) lerp(it, Color.White, .22f) else it } ?: accent
+    val fill by animateColorAsState(tone, tween(220), label = "discoveryAddTone")
+    val ink = if (busy) Color(0xFF66666C) else if (fill.luminance() > .5f) Color(0xFF111111) else Color.White
     Row(modifier.background(Color.Black.copy(alpha = .55f), RoundedCornerShape(32.dp)).liquidChrome(corners = 32.dp, selected = false)
         .padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (onSave != null) Row(Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(accent.copy(alpha = .9f))
+        if (onSave != null) Row(Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(fill.copy(alpha = .92f))
             .clickable(enabled = !busy, role = Role.Button, onClick = onSave).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            ActionIcon(ActionGlyph.Add, Modifier.size(20.dp), if (busy) Color(0xFF66666C) else Color.White)
+            ActionIcon(ActionGlyph.Add, Modifier.size(20.dp), ink)
             Spacer(Modifier.width(7.dp))
-            Text("REAL'e ekle", color = if (busy) Color(0xFF66666C) else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(t("REAL'e ekle"), color = ink, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
         if (doneLabel != null) Row(Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Color.White.copy(alpha = .10f))
             .clickable(enabled = !busy, role = Role.Button, onClick = onDone).padding(horizontal = 16.dp),

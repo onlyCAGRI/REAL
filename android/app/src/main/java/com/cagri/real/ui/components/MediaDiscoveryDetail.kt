@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -111,6 +112,17 @@ fun MediaDiscoveryDetail(card: DiscoveryCard, repository: MediaDetailRepository,
                         onError = { imageFailed = true })
                     if (imageFailed || card.media.artworkUrl.isNullOrBlank()) ActionIcon(ActionGlyph.Video,
                         Modifier.size(44.dp).align(Alignment.Center), Color.White.copy(alpha = .6f))
+                    // Fragman: a glass play button over the poster when TheTVDB knows a trailer.
+                    detail?.trailerUrl?.let { trailer ->
+                        Row(Modifier.align(Alignment.BottomStart).padding(14.dp).clip(RoundedCornerShape(22.dp))
+                            .liquidChrome(corners = 22.dp)
+                            .clickable(role = Role.Button) { runCatching { uri.openUri(trailer) } }
+                            .padding(start = 12.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ActionIcon(ActionGlyph.Play, Modifier.size(16.dp), Color.White)
+                            Text(t("Fragman"), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
                 Column(Modifier.graphicsLayer { alpha = contentAlpha }) {
                 Text(card.media.title, style = RealType.editorialSubtitle, color = Color.White,
@@ -137,7 +149,7 @@ fun MediaDiscoveryDetail(card: DiscoveryCard, repository: MediaDetailRepository,
                         if (fade > 0f) drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 1f - fade)),
                             startY = size.height - 26.dp.toPx(), endY = size.height), blendMode = BlendMode.DstIn)
                     }) {
-                    Text(description?.takeIf { it.isNotBlank() } ?: "Bu yapımın konusu henüz bulunamadı.",
+                    Text(description?.takeIf { it.isNotBlank() } ?: t("Bu yapımın konusu henüz bulunamadı."),
                         color = Color.White.copy(alpha = .72f), fontSize = 14.sp, lineHeight = 21.sp,
                         modifier = Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true),
                         onTextLayout = { r ->
@@ -145,23 +157,23 @@ fun MediaDiscoveryDetail(card: DiscoveryCard, repository: MediaDetailRepository,
                             collapsedPx = r.getLineBottom(minOf(3, r.lineCount - 1)).toInt()
                         })
                 }
-                if (!description.isNullOrBlank()) Text(if (readMore) "Daha az" else "Devamını oku", color = Color.White,
+                if (!description.isNullOrBlank()) Text(if (readMore) t("Daha az") else t("Devamını oku"), color = Color.White,
                     fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp)
                         .clickable(role = Role.Button) { readMore = !readMore }.padding(8.dp))
-                Text("Cast", style = RealType.editorialSubtitle, color = Color.White,
+                Text(t("Cast"), style = RealType.editorialSubtitle, color = Color.White,
                     modifier = Modifier.padding(start = 20.dp, top = 22.dp, bottom = 12.dp))
                 when {
                     loading -> Row(Modifier.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         com.cagri.real.ui.components.RealSpinner(Modifier.size(18.dp), color = Color.White.copy(alpha = .65f), strokeWidth = 2.dp)
-                        Text("Oyuncular yükleniyor…", color = Color.White.copy(alpha = .55f), fontSize = 12.sp)
+                        Text(t("Oyuncular yükleniyor…"), color = Color.White.copy(alpha = .55f), fontSize = 12.sp)
                     }
                     failed -> Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Oyuncular şu anda alınamadı.", color = Color.White.copy(alpha = .55f), fontSize = 12.sp, modifier = Modifier.weight(1f))
-                        Text("Tekrar dene", color = Color.White, fontSize = 12.sp,
+                        Text(t("Oyuncular şu anda alınamadı."), color = Color.White.copy(alpha = .55f), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        Text(t("Tekrar dene"), color = Color.White, fontSize = 12.sp,
                             modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable(role = Role.Button) { retry++ }.padding(12.dp))
                     }
-                    detail?.cast.isNullOrEmpty() -> Text("Oyuncu bilgisi bulunamadı.", color = Color.White.copy(alpha = .55f), fontSize = 12.sp,
+                    detail?.cast.isNullOrEmpty() -> Text(t("Oyuncu bilgisi bulunamadı."), color = Color.White.copy(alpha = .55f), fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 20.dp))
                     else -> LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(detail!!.cast, key = { it.id }) { person -> CastPortrait(person) }
@@ -169,31 +181,19 @@ fun MediaDiscoveryDetail(card: DiscoveryCard, repository: MediaDetailRepository,
                 }
                 val sourceUrl = if (card.media.provider.equals("TVmaze", true)) "https://www.tvmaze.com/shows/${card.media.providerId}"
                     else "https://thetvdb.com"
-                Text("${card.media.provider} · Kaynak", color = Color.White.copy(alpha = .4f), fontSize = 11.sp,
+                Text(t("{0} · Kaynak", card.media.provider), color = Color.White.copy(alpha = .4f), fontSize = 11.sp,
                     modifier = Modifier.padding(start = 12.dp, top = 18.dp).clickable(role = Role.Button) { runCatching { uri.openUri(sourceUrl) } }.padding(8.dp))
                 Spacer(Modifier.height(24.dp))
                 }
             }
         }
-        // Floating liquid-glass header: the poster scrolls under it and shows through blurred.
+        // Floating header: no blurred poster behind it; content only fades out softly from the very top while scrolling.
         Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().graphicsLayer { alpha = contentAlpha }.onSizeChanged { headerPx = it.height }) {
-            Box(Modifier.matchParentSize().clipToBounds()) {
-                AsyncImage(heroImage, null,
-                    Modifier.padding(horizontal = 20.dp).fillMaxWidth().requiredHeight(heroHeight)
-                        .graphicsLayer {
-                            translationY = headerPx - scroll.value.toFloat()
-                            alpha = (scroll.value / 60f).coerceIn(0f, 1f)
-                        }.blur(28.dp),
-                    contentScale = ContentScale.Crop)
-                Box(Modifier.matchParentSize().graphicsLayer { alpha = (scroll.value / 60f).coerceIn(0f, 1f) }
-                    .background(Color.Black.copy(alpha = .38f)))
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(0.5.dp)
-                    .graphicsLayer { alpha = (scroll.value / 60f).coerceIn(0f, 1f) * .7f }
-                    .background(Color.White.copy(alpha = .18f)))
-            }
+            Box(Modifier.matchParentSize().graphicsLayer { alpha = (scroll.value / 60f).coerceIn(0f, 1f) }
+                .background(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = .85f), Color.Transparent))))
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                RealBackButton({ leaving = true }, description = "Afişlere dön")
+                RealBackButton({ leaving = true }, description = t("Afişlere dön"))
                 Spacer(Modifier.weight(1f))
                 DetailCapsule(if (card.media.type == MediaType.TV) "Dizi" else "Film")
                 val duration = detail?.durationMillis ?: card.media.durationMillis
@@ -208,7 +208,7 @@ fun MediaDiscoveryDetail(card: DiscoveryCard, repository: MediaDetailRepository,
 private fun DetailCapsule(label: String?, rating: Boolean = false) {
     Box(Modifier.heightIn(min = 30.dp).widthIn(min = if (rating) 54.dp else 48.dp)
         .liquidChrome(corners = 20.dp).padding(horizontal = 10.dp, vertical = 6.dp)
-        .semantics { if (label == null) contentDescription = if (rating) "Puan henüz mevcut değil" else "Süre bilgisi mevcut değil" },
+        .semantics { if (label == null) contentDescription = if (rating) t("Puan henüz mevcut değil") else t("Süre bilgisi mevcut değil") },
         contentAlignment = Alignment.Center) {
         if (label != null) Text(label, color = Color.White, fontSize = 11.sp, maxLines = 1)
     }
@@ -216,8 +216,8 @@ private fun DetailCapsule(label: String?, rating: Boolean = false) {
 private fun detailDuration(duration: Long, series: Boolean): String? {
     if (duration !in 60_000L..86_400_000L) return null
     val minutes = duration / 60_000L
-    val value = if (minutes >= 60) "${minutes / 60} sa ${minutes % 60} dk" else "$minutes dk"
-    return if (series) "$value / bölüm" else value
+    val value = if (minutes >= 60) t("{0} sa {1} dk", minutes / 60, minutes % 60) else t("{0} dk", minutes)
+    return if (series) t("{0} / bölüm", value) else value
 }
 @Composable
 private fun CastPortrait(person: MediaCastMember) {
