@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -251,8 +252,8 @@ fun ActiveTasksWidget(
     val clock by rememberRefClock()
     val tasks = remember(reminders, clock.zone) { refActiveTasks(reminders, clock.zone) }
     RefTaskGlowCard(
-        label = "Aktif görevler", tasks = tasks, completedStyle = false,
-        accent = RefPurple, accentLight = RefPurpleLight, emptyText = "Açık görev yok",
+        label = t("Aktif görevler"), tasks = tasks, completedStyle = false,
+        accent = RefPurple, accentLight = RefPurpleLight, emptyText = t("Açık görev yok"),
         reduce = reduceAnimations, delayMs = enterDelayMillis, modifier = modifier, onToggle = onToggleReminder
     )
 }
@@ -267,8 +268,8 @@ fun DoneTasksWidget(
 ) {
     val tasks = remember(reminders) { refDoneTasks(reminders) }
     RefTaskGlowCard(
-        label = "Tamamlanan görevler", tasks = tasks, completedStyle = true,
-        accent = RefMint, accentLight = RefMintLight, emptyText = "Henüz tamamlanan yok",
+        label = t("Tamamlanan görevler"), tasks = tasks, completedStyle = true,
+        accent = RefMint, accentLight = RefMintLight, emptyText = t("Henüz tamamlanan yok"),
         reduce = reduceAnimations, delayMs = enterDelayMillis, modifier = modifier, onToggle = onToggleReminder
     )
 }
@@ -377,12 +378,12 @@ private fun RefTaskGlowCard(
                 }
             }
             if (expanded && tasks.size > 8) {
-                Text("İlk 8 görev gösteriliyor · ${tasks.size - 8} diğer", color = RefSoft,
+                Text(t("İlk 8 görev gösteriliyor · {0} diğer", tasks.size - 8), color = RefSoft,
                     fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
             }
             if (tasks.size > 3) {
                 Text(
-                    if (expanded) "Daha az göster" else "${minOf(tasks.size - 3, 5)} görev daha göster",
+                    if (expanded) t("Daha az göster") else t("{0} görev daha göster", minOf(tasks.size - 3, 5)),
                     color = RefSoft, fontSize = 13.sp,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                         .padding(top = 10.dp)
@@ -473,9 +474,9 @@ fun TodayStackWidget(
     )
     val done = rememberRefCount(stats.done.toFloat(), reduceAnimations, enterDelayMillis + 200).roundToInt()
     val chipText = when {
-        stats.total == 0 -> "Boş"
-        stats.pending > 0 -> "Aktif"
-        else -> "Tamam"
+        stats.total == 0 -> t("Boş")
+        stats.pending > 0 -> t("Aktif")
+        else -> t("Tamam")
     }
     val green = Color(0xFF4ADE80)
 
@@ -493,7 +494,7 @@ fun TodayStackWidget(
             Modifier.fillMaxWidth().padding(start = 26.dp, end = 22.dp, top = 24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Bugün", color = Color.White, fontSize = 22.sp, modifier = Modifier.weight(1f))
+            Text(t("Bugün"), color = Color.White, fontSize = 22.sp, modifier = Modifier.weight(1f))
             Text(
                 chipText, color = green, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
@@ -508,12 +509,12 @@ fun TodayStackWidget(
                 Text("$done", color = Color.White, fontSize = 62.sp, fontWeight = FontWeight.Normal)
                 Text("/${stats.total}", color = Color(0xFF7C7C82), fontSize = 62.sp, fontWeight = FontWeight.Normal)
             }
-            Text("bugün tamamlanan", color = RefSoft, fontSize = 14.sp)
+            Text(t("bugün tamamlanan"), color = RefSoft, fontSize = 14.sp)
         }
 
         // Blue card sits behind; the violet one in front. Tap the widget to fan them apart.
         RefStackCard(
-            label = "Bekleyen", value = stats.pending,
+            label = t("Bekleyen"), value = stats.pending,
             gradient = listOf(Color(0xFF4F46E5), Color(0xFF6366F1)), textColor = Color.White,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -525,7 +526,7 @@ fun TodayStackWidget(
                 }
         )
         RefStackCard(
-            label = "Gecikmiş", value = stats.overdue,
+            label = t("Gecikmiş"), value = stats.overdue,
             gradient = listOf(Color(0xFFA78BFA), Color(0xFFC4B5FD)), textColor = Color(0xFF4C1D95),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -634,7 +635,7 @@ fun ProgressSparkWidget(
             ) {
                 Text("$percentShown%", color = Color(0xFF2A3416), fontSize = 46.sp, modifier = Modifier.weight(1f))
                 Text(
-                    "Hafta", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                    t("Hafta"), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
                         .background(Color(0xFF4F7A1F).copy(alpha = 0.55f))
@@ -658,7 +659,7 @@ fun ProgressSparkWidget(
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 26.dp, top = 22.dp)
             )
             Text(
-                "${days} gün", color = RefSoft, fontSize = 13.sp,
+                t("{0} gün", days), color = RefSoft, fontSize = 13.sp,
                 modifier = Modifier
                     .align(Alignment.TopEnd).padding(top = 28.dp, end = 24.dp)
                     .clip(RoundedCornerShape(50))
@@ -703,7 +704,7 @@ fun ProgressSparkWidget(
                 }
             }
             Text(
-                "Son $days günde tamamlanan", color = RefSoft, fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                t("Son {0} günde tamamlanan", days), color = RefSoft, fontSize = 16.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier.align(Alignment.BottomStart).padding(start = 26.dp, bottom = 24.dp)
             )
         }
@@ -817,18 +818,18 @@ fun WidgetReferenceSection(
         TodayStackWidget(reminders, reduceAnimations, Modifier, 150)
         ProgressSparkWidget(reminders, reduceAnimations, Modifier, 210)
         RingStatPill(
-            label = if (stats.total == 0) "Bugün plan yok" else "Bugün tamamlanan",
+            label = if (stats.total == 0) t("Bugün plan yok") else t("Bugün tamamlanan"),
             value = stats.fraction * 100f, format = { "${it.roundToInt()}%" },
             fraction = stats.fraction, color = Color(0xFF22F08E),
             reduceAnimations = reduceAnimations, enterDelayMillis = 270
         )
         RingStatPill(
             label = when {
-                water.error != null -> "Su verisi şu an okunamadı"
-                !water.ready -> "Su verisi yükleniyor"
-                else -> "Bugün su · hedef $goal ml"
+                water.error != null -> t("Su verisi şu an okunamadı")
+                !water.ready -> t("Su verisi yükleniyor")
+                else -> t("Bugün su · hedef {0} ml", goal)
             },
-            value = water.todayMl.toFloat(), format = { "${refNumber(it.roundToInt())} ml" },
+            value = water.todayMl.toFloat(), format = { t("{0} ml", refNumber(it.roundToInt())) },
             fraction = water.todayMl.toFloat() / goal, color = Color(0xFFEA6BE3),
             reduceAnimations = reduceAnimations, enterDelayMillis = 330
         )

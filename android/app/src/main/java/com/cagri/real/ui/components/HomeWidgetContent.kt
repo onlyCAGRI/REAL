@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import com.cagri.real.ui.motion.RealEntranceMotion
 import com.cagri.real.ui.motion.RealEntrancePop
@@ -252,7 +253,7 @@ fun HomeWidgetScreen(
                     while (true) awaitPointerEvent(PointerEventPass.Final)
                 }
             }
-            .semantics { paneTitle = if (section == YasamSection.Journals) "Journal" else "Yaşam" }
+            .semantics { paneTitle = if (section == YasamSection.Journals) t("Günlük") else t("Yaşam") }
     ) {
         if (homeOnscreen) homeState.SaveableStateProvider("yasam-home") {
         Box(Modifier.fillMaxSize().onSizeChanged { homeWidth = it.width }
@@ -344,7 +345,7 @@ fun HomeWidgetScreen(
                 ) else Modifier
                 val filterHeader: @Composable () -> Unit = {
                     YasamDiscoveryHero(
-                        title = if (music) "Ne dinlesek" else if (film) "Ne izlesek" else "Ne oynasak",
+                        title = if (music) t("Ne dinlesek") else if (film) t("Ne izlesek") else t("Ne oynasak"),
                         tone = if (music) MusicTone else if (film) Color(0xFF2F6BFF) else Color(0xFFF26A1B),
                         reduceAnimations = reduceAnimations,
                         onBack = closeDiscovery
@@ -385,10 +386,10 @@ private fun YasamDiscoveryHero(title: String, tone: Color, reduceAnimations: Boo
                 reduceAnimations = reduceAnimations, entrance = entrance, wordsStartMs = 80, topInset = 0.dp, compact = true
             )
             YasamBackButton(onBack, Modifier.align(Alignment.TopStart).padding(start = 22.dp, top = 8.dp),
-                description = "Yaşam'a dön")
+                description = t("Yaşam'a dön"))
         }
         androidx.compose.material3.Text(
-            "Birlikte uyanlar önce gelir.", color = YasamMuted,
+            t("Birlikte uyanlar önce gelir."), color = YasamMuted,
             style = com.cagri.real.ui.theme.RealType.editorialSubtitle,
             modifier = Modifier.padding(start = 22.dp, top = 12.dp, bottom = 8.dp)
         )
@@ -440,7 +441,7 @@ private fun YasamScrollContent(
     val hour = remember { LocalTime.now().hour }
     val water = holder.water
     val book = holder.book
-    val mediaPrompt = if (hour < 17) "Bugün ne izleyelim?" else "Bu akşam ne izleyelim?"
+    val mediaPrompt = if (hour < 17) t("Bugün ne izleyelim?") else t("Bu akşam ne izleyelim?")
     // En son günlük girişi (yalnız okunur): journalReminders içindeki journal.text / journal.createdAt.
     // Bağımsız günlükler de dahildir (ReminderScreen genel listeden çıkardığı için ayrı verilir).
     val journalPreview = remember(journalReminders) {
@@ -482,7 +483,7 @@ private fun YasamScrollContent(
     val rowDeparture = externalLeave ?: leave
     val journalsMode = shown == YasamSection.Journals
     val sentence = if (journalsMode) "Journal" else homeSentence
-    val label = if (journalsMode) "${journalReminders.size} GİRİŞ" else YasamSentence.greeting(hour)
+    val label = if (journalsMode) t("{0} GİRİŞ", journalReminders.size) else YasamSentence.greeting(hour)
 
     Column(modifier.fillMaxWidth().verticalScroll(scroll)) {
         Box(Modifier.fillMaxWidth().padding(top = 4.dp).realEntrance(entrance, startMs = baseMs + 40, durationMs = 560, fromScale = 0.96f, easing = RealEntrancePop)) {
@@ -494,7 +495,7 @@ private fun YasamScrollContent(
             // Geri tuşu artık kutunun üstünde (kartla birlikte açılır ve kayar).
             YasamBackButton(
                 onBack, Modifier.align(Alignment.TopStart).padding(start = 22.dp, top = 8.dp),
-                description = if (journalsMode) "Yaşam'a dön" else "Geri"
+                description = if (journalsMode) t("Yaşam'a dön") else t("Geri")
             )
         }
         if (journalsMode) {

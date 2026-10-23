@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -205,7 +206,10 @@ private fun rememberDrawIn(key: Any, reduceAnimations: Boolean, delayMillis: Int
 // 1) Mood: line chart per Gün / Hafta / Ay (Kötü .. Çok iyi)
 // ---------------------------------------------------------------------------------------------
 
-internal enum class MoodRange(val chip: String) { Day("Gün"), Week("Hafta"), Month("Ay") }
+internal enum class MoodRange(private val trChip: String) {
+    Day(t("Gün")), Week(t("Hafta")), Month(t("Ay"));
+    val chip: String get() = t(trChip)
+}
 
 internal data class MoodDayPoint(val day: Int, val level: Float, val tint: Color)
 
@@ -230,7 +234,7 @@ internal fun moodMonthPoints(entries: List<MoodTrackerEntry>, month: YearMonth, 
         }
         .sortedBy { it.day }
 
-private val WeekDayShort = listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
+private val WeekDayShort get() = listOf(t("Pzt"), t("Sal"), t("Çar"), t("Per"), t("Cum"), t("Cmt"), t("Paz"))
 
 /**
  * Ay / Hafta: one point per day (average of that day's records).
@@ -315,9 +319,9 @@ fun MoodMonthChartCard(
     val average = if (points.isEmpty()) null else points.map { it.level }.average().toFloat()
     val progress = rememberDrawIn(listOf(range, points.size), reduceAnimations)
     val title = when (range) {
-        MoodRange.Month -> "Mood · $monthName"
-        MoodRange.Week -> "Mood · Bu hafta"
-        MoodRange.Day -> "Mood · Bugün"
+        MoodRange.Month -> t("Mood · {0}", monthName)
+        MoodRange.Week -> t("Mood · Bu hafta")
+        MoodRange.Day -> t("Mood · Bugün")
     }
 
     WidgetGlowCard(Color(0xFF3B82F6), reduceAnimations, enterDelayMillis, modifier) {
@@ -400,7 +404,7 @@ fun MoodMonthChartCard(
                 Modifier.fillMaxSize().padding(top = 12.dp, bottom = 6.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                listOf("Çok iyi", "Normal", "Kötü").forEach {
+                listOf(t("Çok iyi"), t("Normal"), t("Kötü")).forEach {
                     Text(it, color = Color.White.copy(alpha = 0.42f), fontSize = 11.sp, modifier = Modifier.width(labelGutter))
                 }
             }
@@ -448,7 +452,7 @@ fun MoodMonthChartCard(
 
         Spacer(Modifier.height(6.dp))
         Text(
-            when (range) { MoodRange.Day -> "Gün ortalaması"; MoodRange.Week -> "Hafta ortalaması"; MoodRange.Month -> "Ay ortalaması" },
+            when (range) { MoodRange.Day -> t("Gün ortalaması"); MoodRange.Week -> t("Hafta ortalaması"); MoodRange.Month -> t("Ay ortalaması") },
             color = SoftText, fontSize = 14.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
         )
         Text(
@@ -462,12 +466,12 @@ fun MoodMonthChartCard(
         Text(
             text = when {
                 points.isEmpty() -> when (range) {
-                    MoodRange.Day -> "Bugün henüz mood kaydı yok"
-                    MoodRange.Week -> "Bu hafta henüz mood kaydı yok"
-                    MoodRange.Month -> "Bu ay henüz mood kaydı yok"
+                    MoodRange.Day -> t("Bugün henüz mood kaydı yok")
+                    MoodRange.Week -> t("Bu hafta henüz mood kaydı yok")
+                    MoodRange.Month -> t("Bu ay henüz mood kaydı yok")
                 }
-                range == MoodRange.Day -> "${points.size} kayıt"
-                else -> "${points.size} gün kayıtlı"
+                range == MoodRange.Day -> t("{0} kayıt", points.size)
+                else -> t("{0} gün kayıtlı", points.size)
             },
             color = Color.White.copy(alpha = 0.45f),
             fontSize = 12.sp,
@@ -552,9 +556,9 @@ fun WeekProgressCard(
 
     WidgetGlowCard(aqua.copy(alpha = 0.55f), reduceAnimations, enterDelayMillis, modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Haftalık ilerleme", color = Color.White, fontSize = 20.sp, modifier = Modifier.weight(1f))
+            Text(t("Haftalık ilerleme"), color = Color.White, fontSize = 20.sp, modifier = Modifier.weight(1f))
             Text(
-                "Bu hafta",
+                t("Bu hafta"),
                 color = SoftText,
                 fontSize = 13.sp,
                 modifier = Modifier
@@ -668,7 +672,7 @@ internal fun weekWaterRatios(
     return (6 downTo 0).map { back -> (byDay[today.minusDays(back.toLong())] ?: 0f) / goal }
 }
 
-private val ShortDays = listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
+private val ShortDays get() = listOf(t("Pzt"), t("Sal"), t("Çar"), t("Per"), t("Cum"), t("Cmt"), t("Paz"))
 
 @Composable
 fun DrinksWeekCard(
@@ -688,7 +692,7 @@ fun DrinksWeekCard(
     val percent = (average * 100f * progress).roundToInt()
 
     WidgetGlowCard(blue, reduceAnimations, enterDelayMillis, modifier) {
-        CardHeader("Su hedefi", "7 gün")
+        CardHeader(t("Su hedefi"), t("7 gün"))
         Spacer(Modifier.height(6.dp))
 
         Canvas(Modifier.fillMaxWidth().height(150.dp)) {
@@ -742,10 +746,10 @@ fun DrinksWeekCard(
             }
         }
         Spacer(Modifier.height(10.dp))
-        Text("Ortalama tamamlanma", color = SoftText, fontSize = 14.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        Text(t("Ortalama tamamlanma"), color = SoftText, fontSize = 14.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
         Text("$percent%", color = Color.White, fontSize = 48.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
         Text(
-            "Son 7 gün · günlük ${water.snapshot.goalMl} ml hedefe göre",
+            t("Son 7 gün · günlük {0} ml hedefe göre", water.snapshot.goalMl),
             color = Color.White.copy(alpha = 0.45f),
             fontSize = 12.sp,
             modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),

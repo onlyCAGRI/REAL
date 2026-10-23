@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.water
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -89,7 +90,7 @@ internal fun WaterSurface(
         }
     }
     Canvas(modifier
-        .semantics { contentDescription = if (amountLabel == null) "Su seviyesi yüzde ${(progress * 100).roundToInt()}" else "${beverage.label}: $amountLabel" }
+        .semantics { contentDescription = if (amountLabel == null) t("Su seviyesi yüzde {0}", (progress * 100).roundToInt()) else t("{0}: {1}", beverage.label, amountLabel) }
         .pointerInput(engine, reduceAnimations, visualOverflowFrozen) {
             detectTapGestures {
                 if (!reduceAnimations && !visualOverflowFrozen) {

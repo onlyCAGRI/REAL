@@ -1915,5 +1915,11 @@
   "Hesap menüsünü aç": "Open account menu",
   "Henüz günlük eklenmemiş": "No journal entries yet",
   "Bu renkte hatırlatıcı yok": "No reminders in this color",
-  "Bu kategoride henüz hatırlatıcı yok": "No reminders in this category yet"
+  "Bu kategoride henüz hatırlatıcı yok": "No reminders in this category yet",
+  "Su seviyesi yüzde {0}": "Water level {0} percent",
+  "{0}: {1}": "{0}: {1}",
+  "Kayıtları görüntüle": "View records",
+  "Bugün plan yok": "Nothing planned today",
+  "Bugün tamamlanan": "Completed today",
+  "Su verisi şu an okunamadı": "Water data can't be read right now"
 }

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.water
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -219,14 +220,14 @@ fun WaterTrackerCategoryCard(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Drinks", color = Color.White, fontSize = 28.sp, lineHeight = 34.sp,
                     modifier = Modifier.weight(1f).offset(x = 10.dp))
-                Text("${state.todayEntries.size} kayıt", color = Color(0xFFB8BEC0), fontSize = 14.sp)
+                Text(t("{0} kayıt", state.todayEntries.size), color = Color(0xFFB8BEC0), fontSize = 14.sp)
             }
             Spacer(Modifier.height(13.dp))
             val waterBand = waterLevelBand(state.progressFor(BeverageType.WATER))
             val waterStatus = remember(waterBand) { randomWaterStatus(waterBand) }
             Text(when {
-                state.error != null -> "Kayıtları görüntüle"
-                !state.ready -> "Yükleniyor…"
+                state.error != null -> t("Kayıtları görüntüle")
+                !state.ready -> t("Yükleniyor…")
                 else -> waterStatus
             }, color = Color(0xFFD2DFDF), fontSize = 13.sp,
                 modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xFF0D2F3B).copy(alpha = 0.64f))
@@ -262,52 +263,52 @@ private fun waterLevelBand(progress: Float): Int {
 private fun randomWaterStatus(band: Int): String {
     val options = when (band) {
         0 -> listOf(
-            "Su seni bekliyor",
-            "Daha yeni başlıyoruz",
-            "İlk bardak için yer var",
-            "Bugün su tarafı sessiz"
+            t("Su seni bekliyor"),
+            t("Daha yeni başlıyoruz"),
+            t("İlk bardak için yer var"),
+            t("Bugün su tarafı sessiz")
         )
         1 -> listOf(
-            "Ritim başladı",
-            "Yarıya doğru gidiyor",
-            "Su tarafı hareketlendi",
-            "Biraz daha devam"
+            t("Ritim başladı"),
+            t("Yarıya doğru gidiyor"),
+            t("Su tarafı hareketlendi"),
+            t("Biraz daha devam")
         )
         2 -> listOf(
-            "İyi gidiyor",
-            "Yarıyı geçtin",
-            "Su ritmi yerinde",
-            "Hedefe doğru akıyor"
+            t("İyi gidiyor"),
+            t("Yarıyı geçtin"),
+            t("Su ritmi yerinde"),
+            t("Hedefe doğru akıyor")
         )
         3 -> listOf(
-            "Hedefe çok az kaldı",
-            "Neredeyse tamam",
-            "Son düzlüktesin",
-            "Bugünün hedefi yakın"
+            t("Hedefe çok az kaldı"),
+            t("Neredeyse tamam"),
+            t("Son düzlüktesin"),
+            t("Bugünün hedefi yakın")
         )
         4 -> listOf(
-            "Hedef tamam",
-            "Bugünün hedefi geçildi",
-            "Su tarafı tamam",
-            "Hedef çizgisinin üstünde"
+            t("Hedef tamam"),
+            t("Bugünün hedefi geçildi"),
+            t("Su tarafı tamam"),
+            t("Hedef çizgisinin üstünde")
         )
         5 -> listOf(
-            "Hedefin üstündesin",
-            "Bugün su bol",
-            "Hedef biraz aşıldı",
-            "Su seviyesi güçlü"
+            t("Hedefin üstündesin"),
+            t("Bugün su bol"),
+            t("Hedef biraz aşıldı"),
+            t("Su seviyesi güçlü")
         )
         6 -> listOf(
-            "Bugün bayağı su var",
-            "Hedef epey geçildi",
-            "Su tarafı yüksek",
-            "Bugün su önde"
+            t("Bugün bayağı su var"),
+            t("Hedef epey geçildi"),
+            t("Su tarafı yüksek"),
+            t("Bugün su önde")
         )
         else -> listOf(
-            "Su tarafı tavan",
-            "Bugün su çok yüksek",
-            "Hedefin çok üzerindesin",
-            "Su sayacı uçmuş"
+            t("Su tarafı tavan"),
+            t("Bugün su çok yüksek"),
+            t("Hedefin çok üzerindesin"),
+            t("Su sayacı uçmuş")
         )
     }
     return options[kotlin.random.Random.nextInt(options.size)]
