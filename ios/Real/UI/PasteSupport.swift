@@ -53,7 +53,7 @@ enum CardPaste {
         for provider in providers {
             if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier),
                let data = await loadData(provider, .image), let photo = AttachmentStorage.save(data) {
-                return Result(attachments: [photo], label: "Fotoğraf")
+                return Result(attachments: [photo], label: t("Fotoğraf"))
             }
             if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier), let url = await loadURL(provider) {
                 return await fromText(url.absoluteString)
@@ -70,9 +70,9 @@ enum CardPaste {
         if let link = parsed.url {
             let found = await LinkResolver.resolve(link)
             if let music = found.music {
-                return Result(music: [music], label: music.provider == "iTunes" ? "Apple Music şarkısı" : "\(music.provider) şarkısı")
+                return Result(music: [music], label: music.provider == "iTunes" ? t("Apple Music şarkısı") : t("{0} şarkısı", music.provider))
             }
-            return Result(url: link, label: "Bağlantı")
+            return Result(url: link, label: t("Bağlantı"))
         }
         let source = SnippetSourceDetector.detect(text: raw)
         let snippet = ReminderAttachment(id: UUID().uuidString.lowercased(), type: .textSnippet, mimeType: "text/plain",

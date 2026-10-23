@@ -44,9 +44,9 @@ func categoryHeaderDetail(_ items: [ReminderItem], calendar: Calendar = .real) -
         r.id >= 0 && ((r.alertAt.map { $0 < now && !r.hasRepeat } ?? false) ||
             (r.alertAt == nil && (r.plannedDateEpochDay.map { $0 < today } ?? false) && r.quick24HourUntilAt == nil))
     }.count
-    if overdue > 0 { return ("\(overdue) gecikmiş", true) }
+    if overdue > 0 { return (t("{0} gecikmiş", overdue), true) }
     let todayCount = open.filter { r in
         (r.alertAt.map { calendar.epochDay(ofMillis: $0) } ?? r.plannedDateEpochDay) == today
     }.count
-    return todayCount > 0 ? ("\(todayCount) tanesi bugün", false) : nil
+    return todayCount > 0 ? (t("{0} tanesi bugün", todayCount), false) : nil
 }

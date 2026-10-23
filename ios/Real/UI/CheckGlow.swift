@@ -75,25 +75,25 @@ struct CheckRequestSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Kontrol ettir").font(RealFont.inter(17, .semibold)).foregroundStyle(Color(argb: 0xFFF5F5F8))
-            label("KİME")
+            Text(t("Kontrol ettir")).font(RealFont.inter(17, .semibold)).foregroundStyle(Color(argb: 0xFFF5F5F8))
+            label(t("KİME"))
             chips { ForEach(targets) { t in chip(t.label, target == t.key) { target = t.key } } }
-            label("NE ZAMAN YANSIN")
+            label(t("NE ZAMAN YANSIN"))
             chips {
-                chip("Şimdi", !useDate) { useDate = false }
-                chip("Tarih", useDate) { useDate = true }
+                chip(t("Şimdi"), !useDate) { useDate = false }
+                chip(t("Tarih"), useDate) { useDate = true }
             }
             if useDate {
                 DatePicker("", selection: $day, in: Date()..., displayedComponents: .date).labelsHidden().datePickerStyle(.compact)
-                    .environment(\.locale, Locale(identifier: "tr_TR"))
+                    .environment(\.locale, I18n.locale)
             }
             HStack(spacing: 10) {
                 Button { if canClear { onClear() }; dismiss() } label: {
-                    Text(canClear ? "Kontrolü kaldır" : "Vazgeç").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFE9E9EF))
+                    Text(canClear ? t("Kontrolü kaldır") : t("Vazgeç")).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFE9E9EF))
                         .frame(maxWidth: .infinity, minHeight: 46).background(Capsule().fill(.white.opacity(0.08)))
                 }
                 Button { onSave(target, useDate ? Calendar.real.epochDay(of: day) : nil, nil); dismiss() } label: {
-                    Text("Işığı yak").font(RealFont.inter(14, .semibold)).foregroundStyle(.black)
+                    Text(t("Işığı yak")).font(RealFont.inter(14, .semibold)).foregroundStyle(.black)
                         .frame(maxWidth: .infinity, minHeight: 46).background(Capsule().fill(.white))
                 }
             }
@@ -136,11 +136,11 @@ extension ReminderStore {
         let me = RealAuth.shared.account?.uid
         let categoryIds = Set(ids.compactMap { reminder($0) }.map(\.customCategoryId))
         guard categoryIds.count == 1, let only = categoryIds.first, let category = category(only), category.isShared, let me else {
-            return [CheckTarget(key: CheckRequest.me, label: "Kendime")]
+            return [CheckTarget(key: CheckRequest.me, label: t("Kendime"))]
         }
         let others = ((try? await SharedCategorySync.shared.members(category)) ?? []).filter { $0.uid != me }
             .map { CheckTarget(key: $0.uid, label: $0.name) }
-        return [CheckTarget(key: me, label: "Kendime")] + others + (others.count > 1 ? [CheckTarget(key: CheckRequest.everyone, label: "Herkes")] : [])
+        return [CheckTarget(key: me, label: t("Kendime"))] + others + (others.count > 1 ? [CheckTarget(key: CheckRequest.everyone, label: t("Herkes"))] : [])
     }
 
     /// Puts (or with nil takes off) a Kontrol ettir request on the cards.

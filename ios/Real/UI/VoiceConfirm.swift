@@ -89,26 +89,26 @@ struct VoiceConfirmSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Doğru mu anladım?").font(RealFont.inter(13, .medium)).foregroundStyle(Color(red: 0.57, green: 0.73, blue: 1))
+            Text(t("Doğru mu anladım?")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(red: 0.57, green: 0.73, blue: 1))
             Text(sentence).font(RealFont.inter(17)).foregroundStyle(.white)
             if editingPlace {
-                TextField("Yer (örn. When Kitchen, Ordu)", text: $place)
+                TextField(t("Yer (örn. When Kitchen, Ordu)"), text: $place)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 12).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.08)))
                     .submitLabel(.done)
                     .onSubmit(savePlace)
-                Text("Adresini ben bulurum.").font(RealFont.inter(12)).foregroundStyle(Color(white: 0.56))
+                Text(t("Adresini ben bulurum.")).font(RealFont.inter(12)).foregroundStyle(Color(white: 0.56))
             }
             HStack(spacing: 8) {
                 if editingPlace {
-                    chip("Kaydet", filled: true, action: savePlace)
+                    chip(t("Kaydet"), filled: true, action: savePlace)
                 } else {
-                    chip("Doğru", filled: true) { dismiss(); onConfirm(nil) }
+                    chip(t("Doğru"), filled: true) { dismiss(); onConfirm(nil) }
                     if let p = pending.place {
-                        chip("Yeri yaz", filled: false) { place = p; editingPlace = true }
+                        chip(t("Yeri yaz"), filled: false) { place = p; editingPlace = true }
                     }
-                    chip("Düzelt", filled: false) { dismiss(); onCorrect() }
+                    chip(t("Düzelt"), filled: false) { dismiss(); onCorrect() }
                 }
             }
         }

@@ -22,7 +22,7 @@ struct ScheduleDraft: Equatable {
     var untilEpochDay: EpochDay? { until.map { Calendar.real.epochDay(of: $0) } }
 
     var summary: String {
-        guard let date else { return "Tarih" }
+        guard let date else { return t("Tarih") }
         var s = hasTime ? RealDates.reminder(date.epochMillis) : RealDates.dayLabel(date)
         if hasTime && repeatRule != .none { s += " • " + repeatRule.displayName }
         return s
@@ -65,7 +65,7 @@ struct ScheduleDraft: Equatable {
 /// "bugün / yarın" in the draft offers a one-tap date chip (ComposerDateSuggestions.kt).
 enum DateSuggestion {
     case today, tomorrow
-    var label: String { self == .today ? "Bugün'e ekle" : "Yarına ekle" }
+    var label: String { self == .today ? t("Bugün'e ekle") : t("Yarına ekle") }
 
     static func detect(_ text: String) -> DateSuggestion? {
         let t = " " + text.lowercased(with: Locale(identifier: "tr_TR")) + " "
@@ -145,7 +145,7 @@ struct ComposerBar: View {
                                 .frame(width: 48, height: 48)
                                 .contentShape(Circle())
                         }
-                        .accessibilityLabel("Takvim")
+                        .accessibilityLabel(t("Takvim"))
                         Spacer()
                         micCircle
                     }
@@ -195,10 +195,10 @@ struct ComposerBar: View {
         }
         .realOverlay(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId) }
         .realOverlay(isPresented: $showLocationChoice) {
-            PermissionSheet(title: "Konum",
-                            description: "Yeri karta ekleyebilir ya da o yere varınca (veya oradan ayrılınca) bir kere hatırlatılabilirsin. Hatırlatma için konum yalnızca bekleyen bir konum hatırlatman varken izlenir ve hatırlatma gelince takip biter.",
+            PermissionSheet(title: t("Konum"),
+                            description: t("Yeri karta ekleyebilir ya da o yere varınca (veya oradan ayrılınca) bir kere hatırlatılabilirsin. Hatırlatma için konum yalnızca bekleyen bir konum hatırlatman varken izlenir ve hatırlatma gelince takip biter."),
                             // First choice: just add the place; reminding on arrival / departure is the second one.
-                            primaryLabel: "Konum ekle", secondaryLabel: "Varınca / ayrılınca hatırlat", glyph: .pin,
+                            primaryLabel: t("Konum ekle"), secondaryLabel: t("Varınca / ayrılınca hatırlat"), glyph: .pin,
                             onPrimary: {
                                 showLocationChoice = false
                                 pickForTrigger = false
@@ -245,15 +245,15 @@ struct ComposerBar: View {
     }
 
     private var micCircle: some View {
-        dockCircle(symbol: "mic", label: "Sesle REAL oluştur") { startVoice() }
+        dockCircle(symbol: "mic", label: t("Sesle REAL oluştur")) { startVoice() }
     }
 
     /// HomeDockExpandedNavigation: Yaşam · Pano · Takvim, Takvim selected.
     private var navigationBar: some View {
         HStack(spacing: 0) {
-            navItem("Yaşam", "rectangle.stack", selected: false) { navExpanded = false; onOpenYasam?() }
-            navItem("Pano", "square.grid.2x2", selected: false) { navExpanded = false; onOpenPano?() }
-            navItem("Takvim", "calendar", selected: true) { navExpanded = false; onOpenPlanner?() }
+            navItem(t("Yaşam"), "rectangle.stack", selected: false) { navExpanded = false; onOpenYasam?() }
+            navItem(t("Pano"), "square.grid.2x2", selected: false) { navExpanded = false; onOpenPano?() }
+            navItem(t("Takvim"), "calendar", selected: true) { navExpanded = false; onOpenPlanner?() }
         }
         .padding(.horizontal, 5)
         .frame(height: 60)
@@ -271,7 +271,7 @@ struct ComposerBar: View {
             .background { if selected { Capsule().fill(LiquidGlassTokens.dockSelectedPill) } }
             .padding(.vertical, 5)
         }
-        .accessibilityValue(selected ? "Seçili" : "")
+        .accessibilityValue(selected ? t("Seçili") : "")
     }
 
     // MARK: Composer panel
@@ -308,12 +308,12 @@ struct ComposerBar: View {
             ZStack(alignment: .leading) {
                 if text.isEmpty {
                     if voice.phase != .idle {
-                        Text(voice.phase == .finishing ? "REAL düşünüyor…" : "Dinleniyor…")
+                        Text(voice.phase == .finishing ? t("REAL düşünüyor…") : t("Dinleniyor…"))
                             .font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFFA2C7FF))
                     } else if checklistMode {
-                        Text("Başlık").font(RealFont.inter(16, .semibold)).foregroundStyle(Color(argb: 0xFFB8B8BF))
+                        Text(t("Başlık")).font(RealFont.inter(16, .semibold)).foregroundStyle(Color(argb: 0xFFB8B8BF))
                     } else if expanded {
-                        Text("Aklında ne var?").font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFF8E8E96))
+                        Text(t("Aklında ne var?")).font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFF8E8E96))
                     } else {
                         ShimmerText(text: "Add to REAL")
                     }
@@ -332,7 +332,7 @@ struct ComposerBar: View {
                             if checklistMode { focus = .item(0) } else { submit() }
                         }
                     }
-                    .accessibilityLabel(checklistMode ? "Başlık" : "Hatırlatıcı metni")
+                    .accessibilityLabel(checklistMode ? t("Başlık") : t("Hatırlatıcı metni"))
             }
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -346,7 +346,7 @@ struct ComposerBar: View {
                         .frame(width: 36, height: 36)
                 }
                 .disabled(!can)
-                .accessibilityLabel("Listeyi kaydet")
+                .accessibilityLabel(t("Listeyi kaydet"))
             }
             if !isHome {
                 Button(action: startVoice) {
@@ -357,7 +357,7 @@ struct ComposerBar: View {
                         .scaleEffect(voice.phase == .listening ? 1 + CGFloat(voice.level) * 0.05 : 1)
                         .frame(width: 48, height: 48)
                 }
-                .accessibilityLabel(voice.phase == .listening ? "Dinlemeyi bitir" : "Sesle REAL oluştur")
+                .accessibilityLabel(voice.phase == .listening ? t("Dinlemeyi bitir") : t("Sesle REAL oluştur"))
             } else if isHome && voice.phase != .idle {
                 Button(action: startVoice) {
                     RealSymbol("mic.fill", size: 23).foregroundStyle(Color(argb: 0xFF69ACFF))
@@ -365,7 +365,7 @@ struct ComposerBar: View {
                         .background(Circle().fill(Color(argb: 0xFF2D6099).opacity(0.32 + Double(voice.level) * 0.12)))
                         .frame(width: 48, height: 48)
                 }
-                .accessibilityLabel("Dinlemeyi bitir")
+                .accessibilityLabel(t("Dinlemeyi bitir"))
             }
         }
         .padding(.leading, 22)
@@ -395,7 +395,7 @@ struct ComposerBar: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(on ? "Bildirim açık" : "Bildirim kapalı")
+        .accessibilityLabel(on ? t("Bildirim açık") : t("Bildirim kapalı"))
     }
 
     static let alarmTone = Color(argb: 0xFFFF8A5B)
@@ -414,27 +414,27 @@ struct ComposerBar: View {
                 Button { schedule = ScheduleDraft(); alarm = false } label: {
                     RealSymbol("xmark", size: 12.6).foregroundStyle(Color(argb: 0xFFAAAAB4)).frame(width: 36, height: 40)
                 }
-                .accessibilityLabel("Tarihi kaldır")
+                .accessibilityLabel(t("Tarihi kaldır"))
             } else {
-                toolButton("calendar", "Tarih seç", active: false) { withoutAnimation { showDateSheet = true } }
+                toolButton("calendar", t("Tarih seç"), active: false) { withoutAnimation { showDateSheet = true } }
             }
             let cat = store.category(categoryId)
-            toolButton(cat?.icon.symbol ?? "square.grid.2x2", "Kategori seç", active: cat != nil,
+            toolButton(cat?.icon.symbol ?? "square.grid.2x2", t("Kategori seç"), active: cat != nil,
                        tint: cat.map { paletteColor($0.accentStart) ?? RealColors.accentBlue }) { withoutAnimation { showCategoryPicker = true } }
             ZStack(alignment: .topTrailing) {
-                toolButton("plus", "Fotoğraf ekle", active: !attachments.isEmpty) { showPhotoPicker = true }
+                toolButton("plus", t("Fotoğraf ekle"), active: !attachments.isEmpty) { showPhotoPicker = true }
                 if !attachments.isEmpty {
                     Text("\(attachments.count)").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 14, height: 14).background(Circle().fill(Color(argb: 0xFF3B82F6))).offset(x: -4, y: 4)
                 }
             }
-            toolButton("checklist", "Checklist", active: checklistMode) {
+            toolButton("checklist", t("Checklist"), active: checklistMode) {
                 checklistMode.toggle()
                 if checklistMode { checklistItems = [""]; focus = text.isEmpty ? .title : .item(0) }
             }
             // Konum: the card detail's map editor, or a reminder at the place; both are saved with the new card.
             // The green dot: some card is waiting for its place (iOS watches it).
-            toolButton("mappin", placeTrigger.map(\.label) ?? location.map { "Konum: \($0.placeName)" } ?? "Konum ekle",
+            toolButton("mappin", placeTrigger.map(\.label) ?? location.map { t("Konum: {0}", $0.placeName) } ?? t("Konum ekle"),
                        active: location != nil || placeTrigger != nil) {
                 focus = nil
                 // The panel explains location once; with permission the pin goes straight to the map.
@@ -508,7 +508,7 @@ struct ComposerBar: View {
                     Circle().strokeBorder(Color(argb: 0xFF5A5A66), lineWidth: 1.2).frame(width: 16, height: 16)
                     TextField("", text: Binding(get: { checklistItems.indices.contains(index) ? checklistItems[index] : "" },
                                                 set: { if checklistItems.indices.contains(index) { checklistItems[index] = $0 } }),
-                              prompt: Text("Madde \(index + 1)").foregroundStyle(Color(argb: 0xFF6C6C76)))
+                              prompt: Text(t("Madde {0}", index + 1)).foregroundStyle(Color(argb: 0xFF6C6C76)))
                         .font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFEEEEF2))
                         .focused($focus, equals: .item(index))
                         .submitLabel(.next)
@@ -525,7 +525,7 @@ struct ComposerBar: View {
                 if checklistItems.last?.trimmingCharacters(in: .whitespaces).isEmpty == false || checklistItems.isEmpty { checklistItems.append("") }
                 focus = .item(checklistItems.count - 1)
             } label: {
-                Label("Madde ekle", systemImage: "plus").font(RealFont.inter(13, .medium)).foregroundStyle(RealColors.accentBlue)
+                Label(t("Madde ekle"), systemImage: "plus").font(RealFont.inter(13, .medium)).foregroundStyle(RealColors.accentBlue)
             }
             .padding(.horizontal, 20).padding(.vertical, 6)
         }
@@ -662,12 +662,12 @@ struct CategoryPickerSheet: View {
         OverlayPanel { close in
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text("Kategori Seç").font(RealFont.inter(20, .semibold)).foregroundStyle(.white)
+                    Text(t("Kategori Seç")).font(RealFont.inter(20, .semibold)).foregroundStyle(.white)
                     Spacer()
                     Button(action: close) {
                         RealSymbol("xmark", size: 17.2).foregroundStyle(Color(argb: 0xFFB8B8BE)).frame(width: 40, height: 40)
                     }
-                    .accessibilityLabel("Kapat")
+                    .accessibilityLabel(t("Kapat"))
                 }
                 .padding(.bottom, 10)
                 ScrollView {
@@ -675,12 +675,12 @@ struct CategoryPickerSheet: View {
                         row(isSelected: selected == nil, highlight: selected == nil) {
                             RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFFC8C8D0))
                                 .frame(width: 34, height: 34).background(Circle().fill(Color(argb: 0xFF2A2A30)))
-                        } title: { Text("Kategori yok").font(RealFont.inter(17, .semibold)) } action: { selected = nil; close() }
+                        } title: { Text(t("Kategori yok")).font(RealFont.inter(17, .semibold)) } action: { selected = nil; close() }
                         row(isSelected: false, highlight: false) {
                             RealSymbol("plus", size: 14.9).foregroundStyle(RealColors.accentBlue)
                                 .frame(width: 34, height: 34).background(Circle().fill(RealColors.accentBlue.opacity(0.14)))
                                 .overlay(Circle().strokeBorder(RealColors.accentBlue.opacity(0.35), lineWidth: 0.8))
-                        } title: { Text("Yeni kategori ekle...").font(RealFont.inter(17)) } action: { showNew = true }
+                        } title: { Text(t("Yeni kategori ekle...")).font(RealFont.inter(17)) } action: { showNew = true }
                         Rectangle().fill(.white.opacity(0.10)).frame(height: 1).padding(.vertical, 6).padding(.horizontal, 4)
                         ForEach(store.categories) { category in
                             row(isSelected: selected == category.id, highlight: selected == category.id) {

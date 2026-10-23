@@ -123,8 +123,8 @@ struct CardWeatherBlock: View {
 
     private func whenText(_ at: Int64, _ allDay: Bool) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "tr_TR")
-        f.dateFormat = allDay ? "EEE '· Tüm gün'" : "EEE HH:mm"
+        f.locale = I18n.locale
+        f.dateFormat = allDay ? "EEE '· \(t("Tüm gün"))'" : "EEE HH:mm"
         let s = f.string(from: Date(timeIntervalSince1970: TimeInterval(at) / 1000))
         return s.prefix(1).uppercased() + s.dropFirst()
     }
@@ -144,7 +144,7 @@ struct CardWeatherBlock: View {
                     HStack(spacing: 10) {
                         WeatherGlyph(kind: w.kind, top: top, bottom: bottom, still: reduceMotion).frame(width: 52, height: 46)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(w.label).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                            Text(t(w.label)).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                             Text(when).font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
                         }
                         Spacer(minLength: 0)
@@ -168,13 +168,13 @@ struct CardWeatherBlock: View {
                     HStack(spacing: 14) {
                         VStack(spacing: 4) {
                             WeatherGlyph(kind: w.kind, top: top, bottom: bottom, still: reduceMotion).frame(width: 96, height: 84)
-                            Text(w.label).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.55)).lineLimit(2)
+                            Text(t(w.label)).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.55)).lineLimit(2)
                                 .multilineTextAlignment(.center)
                         }
                         .frame(width: 96)
                         VStack(alignment: .leading, spacing: 7) {
-                            if let v = w.windKmh { WeatherStat(icon: .wind, text: "\(v) km/s") }
-                            if let v = w.precipitationChance { WeatherStat(icon: .drop, text: "%\(v)") }
+                            if let v = w.windKmh { WeatherStat(icon: .wind, text: t("{0} km/s", v)) }
+                            if let v = w.precipitationChance { WeatherStat(icon: .drop, text: t("%{0}", v)) }
                             if let h = w.high, let l = w.low { WeatherStat(icon: .thermo, text: "\(h)° / \(l)°") }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -186,7 +186,7 @@ struct CardWeatherBlock: View {
                     HStack {
                         Text("Apple Weather")
                         Spacer()
-                        Text("Kaynaklar").onTapGesture { openSources(w) }
+                        Text(t("Kaynaklar")).onTapGesture { openSources(w) }
                     }
                     .font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.4))
                 }
@@ -208,7 +208,7 @@ struct CardWeatherBlock: View {
             .contentShape(shape)
             .contextMenu(interactive ? ContextMenu {
                 Button(role: .destructive) { CardWeatherRepository.hide(reminder.id); onHide() } label: {
-                    Label("Hava durumunu gizle", systemImage: "eye.slash")
+                    Label(t("Hava durumunu gizle"), systemImage: "eye.slash")
                 }
             } : nil)
     }

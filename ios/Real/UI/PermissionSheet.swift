@@ -5,8 +5,8 @@ import SwiftUI
 struct PermissionSheet: View {
     let title: String
     let description: String
-    var primaryLabel = "İzin ver"
-    var secondaryLabel = "Daha sonra"
+    var primaryLabel = t("İzin ver")
+    var secondaryLabel = t("Daha sonra")
     var glyph: ActionGlyph = .pin
     let onPrimary: () -> Void
     let onSecondary: () -> Void
@@ -25,21 +25,21 @@ struct PermissionSheet: View {
                 Color.clear.frame(height: 18)
                 PermissionHero(glyph: glyph).stagger(entered, 0)
                 Color.clear.frame(height: 6)
-                Text(title).font(RealFont.inter(28, .medium)).kerning(-0.9).foregroundStyle(Color(argb: 0xFFF3F1F4))
+                Text(t(title)).font(RealFont.inter(28, .medium)).kerning(-0.9).foregroundStyle(Color(argb: 0xFFF3F1F4))
                     .multilineTextAlignment(.center).frame(maxWidth: .infinity).stagger(entered, 0.08)
                 Color.clear.frame(height: 12)
-                Text(description).font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFF9B9BA4)).lineSpacing(4)
+                Text(t(description)).font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFF9B9BA4)).lineSpacing(4)
                     .multilineTextAlignment(.center).padding(.horizontal, 6).frame(maxWidth: .infinity).stagger(entered, 0.15)
                 Color.clear.frame(height: 30)
                 Button { close(onPrimary) } label: {
-                    Text(primaryLabel).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                    Text(t(primaryLabel)).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                         .frame(maxWidth: .infinity).frame(height: 54)
                         .background(Capsule().fill(.white))
                 }
                 .buttonStyle(PressScaleStyle(scale: 0.97)).stagger(entered, 0.22)
                 Color.clear.frame(height: 6)
                 Button { close(onSecondary) } label: {
-                    Text(secondaryLabel).font(RealFont.inter(14, .semibold)).foregroundStyle(Color(argb: 0xFF9B9BA4))
+                    Text(t(secondaryLabel)).font(RealFont.inter(14, .semibold)).foregroundStyle(Color(argb: 0xFF9B9BA4))
                         .frame(maxWidth: .infinity).frame(height: 46).contentShape(Capsule())
                 }
                 .buttonStyle(PressScaleStyle(scale: 0.97)).stagger(entered, 0.28)

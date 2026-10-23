@@ -79,7 +79,7 @@ struct ScheduleSheet: View {
     @State private var error: String?
 
     private let calendar = Calendar.real
-    private static let months = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"]
+    private static var months: [String] { [t("OCA"), t("ŞUB"), t("MAR"), t("NİS"), t("MAY"), t("HAZ"), t("TEM"), t("AĞU"), t("EYL"), t("EKİ"), t("KAS"), t("ARA")] }
 
     private var currentYear: Int { calendar.component(.year, from: Date()) }
 
@@ -176,13 +176,13 @@ struct ScheduleSheet: View {
     private var startText: String {
         let date = makeDate(year: effectiveYear) ?? Date()
         let time = String(format: "%02d:%02d", hour, minute)
-        if hasEnd { return "\(day) \(Self.months[month - 1].capitalized(with: Locale(identifier: "tr_TR"))) · " + time }
+        if hasEnd { return "\(day) \(Self.months[month - 1].capitalized(with: I18n.locale)) · " + time }
         let dateText = includeYear ? String(format: "%02d/%02d/%d", day, month, effectiveYear) : String(format: "%02d/%02d", day, month)
-        return "\(calendar.isoWeekday(of: date).full) · \(dateText) · " + time
+        return "\(t(calendar.isoWeekday(of: date).full)) · \(dateText) · " + time
     }
     private var endText: String {
-        guard hasEnd else { return "Bitiş" }
-        return "\(endDay) \(Self.months[endMonth - 1].capitalized(with: Locale(identifier: "tr_TR"))) · " + String(format: "%02d:%02d", endHour, endMinute)
+        guard hasEnd else { return t("Bitiş") }
+        return "\(endDay) \(Self.months[endMonth - 1].capitalized(with: I18n.locale)) · " + String(format: "%02d:%02d", endHour, endMinute)
     }
 
     // Wheels follow the side being edited.
@@ -215,8 +215,8 @@ struct ScheduleSheet: View {
                             // Long press removes the end.
                             if hasEnd { hasEnd = false; editingEnd = false; UISelectionFeedbackGenerator().selectionChanged() }
                         }
-                        .accessibilityLabel(hasEnd ? "Bitiş \(endText)" : "Bitiş ekle")
-                        .accessibilityAction(named: "Bitişi kaldır") { hasEnd = false; editingEnd = false }
+                        .accessibilityLabel(hasEnd ? t("Bitiş {0}", endText) : t("Bitiş ekle"))
+                        .accessibilityAction(named: t("Bitişi kaldır")) { hasEnd = false; editingEnd = false }
                 }
             }
             .padding(.vertical, 18)
@@ -225,10 +225,10 @@ struct ScheduleSheet: View {
                     withAnimation(.easeOut(duration: 0.3)) { alarmOn = on; if on { alarmHint = false } }
                 }), nudge: alarmHint)
             } else {
-                LiquidSegmentedControl(labels: ["Tarih", "Saat"], selected: Binding(get: { timeTab ? 1 : 0 }, set: { timeTab = $0 == 1 }))
+                LiquidSegmentedControl(labels: [t("Tarih"), t("Saat")], selected: Binding(get: { timeTab ? 1 : 0 }, set: { timeTab = $0 == 1 }))
             }
             // The hint sits in the gap under the control, so nothing below moves.
-            Text("Alarm için Saat'i sağa it").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF9A9AA3))
+            Text(t("Alarm için Saat'i sağa it")).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF9A9AA3))
                 .lineLimit(1).opacity(alarmHint ? 1 : 0)
                 .frame(height: 18)
             ZStack {
@@ -259,12 +259,12 @@ struct ScheduleSheet: View {
             .onChange(of: month) { _, _ in day = min(day, daysInMonth) }
             .onChange(of: endMonth) { _, _ in endDay = min(endDay, daysInMonth) }
             HStack(spacing: 0) {
-                optionButton("Yıl gir", selected: includeYear, symbol: includeYear ? "checkmark" : nil, filled: true) {
+                optionButton(t("Yıl gir"), selected: includeYear, symbol: includeYear ? "checkmark" : nil, filled: true) {
                     includeYear.toggle()
                     if includeYear { year = effectiveYear }
                 }
-                optionButton("Tekrarlama", selected: repeatRule != .none, symbol: "repeat", filled: false) { showRepeat = true }
-                optionButton(earlyMinutes.map { EarlyAlertScreen.label($0) + " önce" } ?? "Erken uyarı",
+                optionButton(t("Tekrarlama"), selected: repeatRule != .none, symbol: "repeat", filled: false) { showRepeat = true }
+                optionButton(earlyMinutes.map { t("{0} önce", EarlyAlertScreen.label($0)) } ?? t("Erken uyarı"),
                              selected: earlyMinutes != nil, symbol: "bell", filled: false, enabled: showTiming) { showEarly = true }
             }
             .padding(.top, 12)
@@ -273,17 +273,17 @@ struct ScheduleSheet: View {
             }
             HStack(spacing: 0) {
                 Button(action: close) {
-                    Text("İptal").font(RealFont.inter(18)).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 48)
+                    Text(t("İptal")).font(RealFont.inter(18)).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 48)
                 }
                 Rectangle().fill(Color(argb: 0xFF555559)).frame(width: 1, height: 22)
                 Button { confirm(close) } label: {
-                    Text("Bitti").font(RealFont.inter(18)).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 48)
+                    Text(t("Bitti")).font(RealFont.inter(18)).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 48)
                 }
             }
             .liquidGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .chrome)
             .padding(.top, 12)
             if draft.date != nil {
-                Button("Tarih ve saati kaldır") { draft = ScheduleDraft(); alarm?.wrappedValue = false; close() }
+                Button(t("Tarih ve saati kaldır")) { draft = ScheduleDraft(); alarm?.wrappedValue = false; close() }
                     .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFA4AA))
                     .padding(.top, 12)
             }
@@ -317,14 +317,14 @@ struct ScheduleSheet: View {
     private var repeatScreen: some View {
         let alert = makeDate(year: effectiveYear)?.epochMillis
         let options: [(RecurrenceRule, String)] = [
-            (.none, "Yok"), (.daily, "Her gün"),
+            (.none, t("Yok")), (.daily, t("Her gün")),
             (.weekly, Recurrence.description(.weekly, alert: alert)),
             (.monthly, Recurrence.description(.monthly, alert: alert)),
             (.yearly, Recurrence.description(.yearly, alert: alert)),
         ]
         return VStack(spacing: 0) {
             Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3)
-            SheetBackHeader(title: "Tekrarlama") { showRepeat = false }
+            SheetBackHeader(title: t("Tekrarlama")) { showRepeat = false }
             VStack(spacing: 0) {
                 ForEach(Array(options.enumerated()), id: \.offset) { index, option in
                     Button {
@@ -343,17 +343,17 @@ struct ScheduleSheet: View {
                 }
             }
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(LiquidGlassTokens.contentColor))
-            Button("Kapat") { showRepeat = false }
+            Button(t("Kapat")) { showRepeat = false }
                 .font(RealFont.inter(16)).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 44).padding(.top, 24)
         }
     }
 
     private func confirm(_ close: () -> Void) {
-        guard let at = makeDate(year: effectiveYear) else { error = "Bu saat, saat değişimi nedeniyle kullanılamıyor."; return }
-        guard at > Date() else { error = "Gelecekte bir tarih ve saat seç."; return }
+        guard let at = makeDate(year: effectiveYear) else { error = t("Bu saat, saat değişimi nedeniyle kullanılamıyor."); return }
+        guard at > Date() else { error = t("Gelecekte bir tarih ve saat seç."); return }
         if hasEnd {
-            guard let end = endDate else { error = "Bitiş saati, saat değişimi nedeniyle kullanılamıyor."; return }
-            guard end > at else { error = "Bitiş, başlangıçtan sonra olmalı."; return }
+            guard let end = endDate else { error = t("Bitiş saati, saat değişimi nedeniyle kullanılamıyor."); return }
+            guard end > at else { error = t("Bitiş, başlangıçtan sonra olmalı."); return }
         }
         var result = draft
         result.date = at
@@ -381,7 +381,7 @@ struct SheetBackHeader: View {
                 RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                     .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
             }
-            .accessibilityLabel("Geri dön")
+            .accessibilityLabel(t("Geri dön"))
             Text(title).font(RealFont.inter(18, .semibold)).foregroundStyle(.white)
             Spacer()
         }
@@ -398,7 +398,7 @@ struct EarlyAlertScreen: View {
 
     enum Unit: CaseIterable { case minutes, hours, days
         var factor: Int { switch self { case .minutes: 1; case .hours: 60; case .days: 1440 } }
-        var word: String { switch self { case .minutes: "dakika"; case .hours: "saat"; case .days: "gün" } }
+        var word: String { switch self { case .minutes: t("dakika"); case .hours: t("saat"); case .days: t("gün") } }
         var range: ClosedRange<Int> { switch self { case .minutes: 5...180; case .hours: 1...72; case .days: 1...30 } }
         var step: Int { self == .minutes ? 5 : 1 }
         var initial: Int { self == .minutes ? 15 : 1 }
@@ -410,10 +410,10 @@ struct EarlyAlertScreen: View {
     }
     /// "15 dk", "1 saat", "2 gün", "1 sa 30 dk".
     static func label(_ minutes: Int) -> String {
-        if minutes >= 1440 && minutes % 1440 == 0 { return "\(minutes / 1440) gün" }
-        if minutes >= 60 && minutes % 60 == 0 { return "\(minutes / 60) saat" }
-        if minutes > 60 { return "\(minutes / 60) sa \(minutes % 60) dk" }
-        return "\(minutes) dk"
+        if minutes >= 1440 && minutes % 1440 == 0 { return t("{0} gün", minutes / 1440) }
+        if minutes >= 60 && minutes % 60 == 0 { return t("{0} saat", minutes / 60) }
+        if minutes > 60 { return t("{0} sa {1} dk", minutes / 60, minutes % 60) }
+        return t("{0} dk", minutes)
     }
 
     @State private var active: Unit?
@@ -425,11 +425,11 @@ struct EarlyAlertScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3)
-            SheetBackHeader(title: "Erken uyarı", onBack: onBack)
+            SheetBackHeader(title: t("Erken uyarı"), onBack: onBack)
             VStack(spacing: 0) {
                 Button { active = nil; selected = nil; onBack() } label: {
                     HStack {
-                        Text("Yok").font(RealFont.inter(16, active == nil ? .semibold : .regular))
+                        Text(t("Yok")).font(RealFont.inter(16, active == nil ? .semibold : .regular))
                             .foregroundStyle(active == nil ? Color.white : Color.white.opacity(0.72))
                         Spacer()
                     }
@@ -441,7 +441,7 @@ struct EarlyAlertScreen: View {
                 }
             }
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(LiquidGlassTokens.contentColor))
-            Button("Tamam", action: onBack)
+            Button(t("Tamam"), action: onBack)
                 .font(RealFont.inter(16)).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 44).padding(.top, 24)
         }
         .onAppear {
@@ -478,7 +478,7 @@ struct EarlyAlertScreen: View {
                     .onTapGesture { if on { step(u, up: false) } }
             }
             .frame(minWidth: 34)
-            Text(" \(u.word) önce").font(RealFont.inter(16, on ? .semibold : .regular))
+            Text(" " + t("{0} önce", u.word)).font(RealFont.inter(16, on ? .semibold : .regular))
                 .foregroundStyle(on ? Color.white : Color.white.opacity(0.72))
             Spacer()
         }
@@ -492,7 +492,7 @@ struct EarlyAlertScreen: View {
             if abs(delta) >= 18 { step(u, up: delta > 0); dragCarry += delta > 0 ? 18 : -18 }
         }.onEnded { _ in dragCarry = 0 })
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(amount(u)) \(u.word) önce")
+        .accessibilityLabel(t("{0} {1} önce", amount(u), u.word))
         .accessibilityAdjustableAction { dir in active = u; step(u, up: dir == .increment) }
     }
 }

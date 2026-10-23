@@ -25,11 +25,11 @@ struct SnippetBlockView: View {
                 Text(SnippetSourceDetector.label(attachment.source)).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFD1D1D8))
                 Spacer()
                 if inline {
-                    Button("Bitti") { save() }.font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFE6E6EC))
+                    Button(t("Bitti")) { save() }.font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFE6E6EC))
                 }
                 if editing {
                     Button(action: onRemove) { RealSymbol("xmark", size: 14).foregroundStyle(Color(argb: 0xFFAEAFB8)).frame(width: 36, height: 36) }
-                        .accessibilityLabel("Metin alıntısını kaldır")
+                        .accessibilityLabel(t("Metin alıntısını kaldır"))
                 }
             }
             if let title = attachment.sourceTitle, !title.isEmpty, title != "REAL_TEXT_BLOCK" {
@@ -47,7 +47,7 @@ struct SnippetBlockView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { draft = text; inline = true; DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { focused = true } }
                 if long {
-                    Button(expanded ? "Daralt" : "Metni aç") { withAnimation(.easeOut(duration: 0.24)) { expanded.toggle() } }
+                    Button(expanded ? t("Daralt") : t("Metni aç")) { withAnimation(.easeOut(duration: 0.24)) { expanded.toggle() } }
                         .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFCAD3D9))
                 }
             }

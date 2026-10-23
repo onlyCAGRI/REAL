@@ -33,7 +33,7 @@ struct CardRouteMap: View {
         .allowsHitTesting(false)
         .overlay(alignment: .topLeading) {
             if let route {
-                Text("Trafikle \(max(1, Int((route.expectedTravelTime / 60).rounded()))) dk")
+                Text(t("Trafikle {0} dk", max(1, Int((route.expectedTravelTime / 60).rounded()))))
                     .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(Capsule().fill(Color.black.opacity(0.85)))

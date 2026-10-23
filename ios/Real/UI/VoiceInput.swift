@@ -35,10 +35,10 @@ final class VoiceInput {
         self.onFinished = onFinished
         SFSpeechRecognizer.requestAuthorization { status in
             DispatchQueue.main.async {
-                guard status == .authorized else { self.errorText = "Konuşma tanıma izni verilmedi"; return }
+                guard status == .authorized else { self.errorText = t("Konuşma tanıma izni verilmedi"); return }
                 AVAudioApplication.requestRecordPermission { granted in
                     DispatchQueue.main.async {
-                        guard granted else { self.errorText = "Mikrofon izni verilmedi"; return }
+                        guard granted else { self.errorText = t("Mikrofon izni verilmedi"); return }
                         self.begin()
                     }
                 }
@@ -47,7 +47,7 @@ final class VoiceInput {
     }
 
     private func begin() {
-        guard let recognizer, recognizer.isAvailable else { errorText = "Konuşma tanıma şu an kullanılamıyor"; return }
+        guard let recognizer, recognizer.isAvailable else { errorText = t("Konuşma tanıma şu an kullanılamıyor"); return }
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -91,7 +91,7 @@ final class VoiceInput {
                 }
             }
         } catch {
-            errorText = "Mikrofon başlatılamadı"
+            errorText = t("Mikrofon başlatılamadı")
             stopEngine()
         }
     }

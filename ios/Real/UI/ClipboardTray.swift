@@ -50,7 +50,7 @@ final class ClipboardTrayStore {
         case .text(_, let text): return await CardPaste.fromText(text)
         case .image(_, let data):
             guard let photo = AttachmentStorage.save(data) else { return nil }
-            return CardPaste.Result(attachments: [photo], label: "Fotoğraf")
+            return CardPaste.Result(attachments: [photo], label: t("Fotoğraf"))
         }
     }
 
@@ -85,17 +85,17 @@ struct ClipboardTraySheet: View {
                 .buttonBorderShape(.capsule)
                 .tint(Color(red: 0.57, green: 0.73, blue: 1))
                 Spacer()
-                Button("Bitti") { dismiss() }.foregroundStyle(Color(white: 0.8))
+                Button(t("Bitti")) { dismiss() }.foregroundStyle(Color(white: 0.8))
             }
-            Text("Kopyaladığın her şeyi Yapıştır ile buraya topla; + ile karta ekle. Liste uygulama kapanana kadar durur.")
+            Text(t("Kopyaladığın her şeyi Yapıştır ile buraya topla; + ile karta ekle. Liste uygulama kapanana kadar durur."))
                 .font(.system(size: 12)).foregroundStyle(Color(white: 0.56))
-            TextField("ya da buraya yaz…", text: $typed)
+            TextField(t("ya da buraya yaz…"), text: $typed)
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 12).padding(.vertical, 9)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.07)))
                 .onSubmit { store.addTyped(typed); typed = "" }
             if store.items.isEmpty {
-                Text("Henüz bir şey yok").font(.system(size: 13)).foregroundStyle(Color(white: 0.43)).padding(.vertical, 10)
+                Text(t("Henüz bir şey yok")).font(.system(size: 13)).foregroundStyle(Color(white: 0.43)).padding(.vertical, 10)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
@@ -117,13 +117,13 @@ struct ClipboardTraySheet: View {
             case .text(_, let text):
                 VStack(alignment: .leading, spacing: 2) {
                     Text(text.replacingOccurrences(of: "\n", with: " ")).font(.system(size: 13)).lineLimit(2)
-                    Text(text.lowercased().hasPrefix("http") ? "Bağlantı" : "Metin").font(.system(size: 11)).foregroundStyle(Color(white: 0.56))
+                    Text(text.lowercased().hasPrefix("http") ? t("Bağlantı") : t("Metin")).font(.system(size: 11)).foregroundStyle(Color(white: 0.56))
                 }
             case .image(_, let data):
                 if let image = UIImage(data: data) {
                     Image(uiImage: image).resizable().scaledToFill().frame(width: 40, height: 40).clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                Text("Fotoğraf").font(.system(size: 13))
+                Text(t("Fotoğraf")).font(.system(size: 13))
             }
             Spacer()
             Button { onAppend(item) } label: {
@@ -131,7 +131,7 @@ struct ClipboardTraySheet: View {
                     .frame(width: 34, height: 34).background(Circle().fill(Color(red: 0.57, green: 0.73, blue: 1)))
             }
             .disabled(busy)
-            .accessibilityLabel("Sona ekle")
+            .accessibilityLabel(t("Sona ekle"))
         }
         .padding(.leading, 12).padding(.trailing, 6).padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.07)))

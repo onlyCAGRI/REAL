@@ -48,11 +48,11 @@ struct HomeCardsSearchTitle<Trailing: View>: View {
         HStack(spacing: 0) {
             // Pulling left: the title slides out with the finger and "Kartlarda ara" comes up in its place.
             ZStack(alignment: .leading) {
-                Text("Kartlarda ara…").font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFF9A9AA4))
+                Text(t("Kartlarda ara…")).font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFF9A9AA4))
                     .offset(x: (1 - progress) * 24)
                     .opacity(progress)
                 HStack(spacing: 8) {
-                    Text("Kartlarım").font(RealFont.inter(20, .semibold)).foregroundStyle(Color(argb: 0xFFF2F2F4))
+                    Text(t("Kartlarım")).font(RealFont.inter(20, .semibold)).foregroundStyle(Color(argb: 0xFFF2F2F4))
                     // A context card is waiting on top of the list: its colour dot sits right beside the title.
                     if let type = ContextCardPresence.shared.activeType {
                         Circle().fill(type.accent).frame(width: 7, height: 7)
@@ -67,7 +67,7 @@ struct HomeCardsSearchTitle<Trailing: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 44)
-            .accessibilityAction(named: "Kartlarda ara") { open = true }
+            .accessibilityAction(named: t("Kartlarda ara")) { open = true }
             trailing()
         }
         .task {
@@ -85,15 +85,15 @@ struct HomeCardsSearchTitle<Trailing: View>: View {
 
     private var field: some View {
         HStack(spacing: 4) {
-            TextField("", text: $query, prompt: Text("Kartlarda ara…").foregroundStyle(Color(argb: 0xFF77777F)))
+            TextField("", text: $query, prompt: Text(t("Kartlarda ara…")).foregroundStyle(Color(argb: 0xFF77777F)))
                 .font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFFF2F2F4)).tint(.white)
                 .focused($focused).submitLabel(.search).autocorrectionDisabled()
-                .accessibilityLabel("Kartlarda ara")
+                .accessibilityLabel(t("Kartlarda ara"))
             Button(action: close) {
                 Text("×").font(.system(size: 24)).foregroundStyle(Color(argb: 0xFFC8C8D0)).frame(width: 38, height: 38)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Aramayı kapat")
+            .accessibilityLabel(t("Aramayı kapat"))
         }
         .padding(.leading, 16).padding(.trailing, 4).frame(height: 44)
         .background(Capsule().fill(Color(argb: 0xFF1C1C21)))

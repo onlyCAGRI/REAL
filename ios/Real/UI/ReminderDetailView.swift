@@ -117,8 +117,8 @@ struct ReminderDetailView: View {
         .realOverlay(isPresented: $showLocationGuide) {
             // LocationGuideSheet: Android hands off to Google Maps → Share → REAL; iOS searches in-app (a share
             // extension would be needed for the Maps hand-off).
-            PermissionSheet(title: "Konum ekle", description: "Haritada istediğin yeri ara ve seç. Seçtiğin konum karta eklenir.",
-                            primaryLabel: "Haritada ara", secondaryLabel: "Vazgeç", glyph: .pin,
+            PermissionSheet(title: t("Konum ekle"), description: t("Haritada istediğin yeri ara ve seç. Seçtiğin konum karta eklenir."),
+                            primaryLabel: t("Haritada ara"), secondaryLabel: t("Vazgeç"), glyph: .pin,
                             onPrimary: { withoutAnimation { showLocationGuide = false }; DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { showLocationEditor = true } },
                             onSecondary: { withoutAnimation { showLocationGuide = false } })
         }
@@ -195,8 +195,8 @@ struct ReminderDetailView: View {
         let cal = Calendar.real
         let d = r.createdAt.date
         let c = cal.dateComponents([.year, .month, .day], from: d)
-        let months = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
-        return "Oluşturuldu · \(cal.isoWeekday(of: d).full) • \(c.day ?? 1) \(months[(c.month ?? 1) - 1]) \(c.year ?? 2026), \(RealDates.time(d))"
+        let month = d.formatted(.dateTime.month(.abbreviated).locale(I18n.locale))
+        return t("Oluşturuldu · {0} • {1} {2} {3}, {4}", t(cal.isoWeekday(of: d).full), c.day ?? 1, month, c.year ?? 2026, RealDates.time(d))
     }
 
     // MARK: Block order
@@ -292,7 +292,7 @@ struct ReminderDetailView: View {
                     .frame(width: 40, height: 40).liquidGlass(Circle())
                     .frame(width: 48, height: 48)
             }
-            .accessibilityLabel("Geri")
+            .accessibilityLabel(t("Geri"))
             Spacer(minLength: 8)
             if CalendarCardPublisher.shared.hasExternalTarget(r.id) {
                 let done = CalendarCardPublisher.shared.isPublished(r)
@@ -306,7 +306,7 @@ struct ReminderDetailView: View {
                     .liquidGlass(Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Takvime web bağlantısı ekle")
+                .accessibilityLabel(t("Takvime web bağlantısı ekle"))
                 Spacer(minLength: 8)
             }
             // Something copied in the last 30 s: the pill sits in the middle of the header (Android: SpaceBetween row).
@@ -325,7 +325,7 @@ struct ReminderDetailView: View {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         showClipboardTray = true
                     })
-                    .accessibilityAction(named: "Panodan ekle") { showClipboardTray = true }
+                    .accessibilityAction(named: Text(t("Panodan ekle"))) { showClipboardTray = true }
                     .sheet(isPresented: $showClipboardTray) {
                         ClipboardTraySheet(busy: trayBusy) { item in addFromTray(item) }
                     }
@@ -339,7 +339,7 @@ struct ReminderDetailView: View {
                         .background(r.isImportant ? Color(argb: 0xFFEACB75).opacity(0.08) : .clear)
                         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.16), value: r.isImportant)
                 }
-                .accessibilityLabel(r.isImportant ? "Önemli işaretini kaldır" : "Önemli olarak işaretle")
+                .accessibilityLabel(r.isImportant ? t("Önemli işaretini kaldır") : t("Önemli olarak işaretle"))
             }
             // Yapıştır 48 + divider 1 + star 48 (Android: 97 dp).
             .frame(width: 97, height: 40)
@@ -360,7 +360,7 @@ struct ReminderDetailView: View {
         let ink: Color = dark ? (struck ? Color(argb: 0xFF55555A) : Color(argb: 0xFF101010)) : (struck ? Color(argb: 0xFF9999A2) : Color(argb: 0xFFF4F4F6))
         return VStack(alignment: cover ? .center : .leading, spacing: 0) {
             if editing {
-                TextField("Hatırlatıcı metni", text: Binding(get: { draft?.text ?? "" }, set: { draft?.text = $0 }), axis: .vertical)
+                TextField(t("Hatırlatıcı metni"), text: Binding(get: { draft?.text ?? "" }, set: { draft?.text = $0 }), axis: .vertical)
                     .font(RealFont.inter(21))
                     .lineSpacing(10)
                     .foregroundStyle(dark ? Color(argb: 0xFF101010) : .white)
@@ -370,7 +370,7 @@ struct ReminderDetailView: View {
                     .onChange(of: titleFocused) { _, f in if f { secondaryExpanded = false } }
                 if !r.isCompleted, r.alertAt != nil || r.plannedDateEpochDay != nil { scheduleChips(r) }
             } else {
-                Text(r.text.isEmpty ? "Boş not" : r.text)
+                Text(r.text.isEmpty ? t("Boş not") : r.text)
                     .font(RealFont.inter(21))
                     .lineSpacing(10)
                     .foregroundStyle(ink)
@@ -423,9 +423,9 @@ struct ReminderDetailView: View {
                             }
                             if let dur = r.durationMinutes {
                                 HStack(spacing: 6) {
-                                    Text("Süre: \(dur) dk")
+                                    Text(t("Süre: {0} dk", dur))
                                     Text("•").foregroundStyle(Color(argb: 0xFF6B6B75))
-                                    Text("Bitiş: \(RealDates.time((alert + Int64(dur) * 60_000).date))")
+                                    Text(t("Bitiş: {0}", RealDates.time((alert + Int64(dur) * 60_000).date)))
                                 }
                                 .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 2)
                             }
@@ -455,8 +455,8 @@ struct ReminderDetailView: View {
                     if let trigger = r.locationTrigger, !r.isCompleted {
                         HStack(spacing: 6) {
                             PlaceTriggerGlyph(onExit: trigger.onExit).frame(width: 12, height: 12)
-                            Text((trigger.onExit ? "Ayrılınca · " : "Varınca · ") + trigger.placeName
-                                 + (trigger.onExit ? " · \(trigger.radiusMeters) m dışına çıkınca" : " · \(trigger.radiusMeters) m içinde"))
+                            Text((trigger.onExit ? t("Ayrılınca · ") : t("Varınca · ")) + trigger.placeName
+                                 + (trigger.onExit ? t(" · {0} m dışına çıkınca", trigger.radiusMeters) : t(" · {0} m içinde", trigger.radiusMeters)))
                                 .font(RealFont.inter(12)).lineLimit(1)
                                 .foregroundStyle(PlaceTriggerGlyph.tone(trigger.onExit))
                         }
@@ -468,7 +468,7 @@ struct ReminderDetailView: View {
     }
 
     private func statusText(_ r: ReminderItem, hasCategory: Bool) -> String? {
-        if r.isCompleted { return "Tamamlandı" }
+        if r.isCompleted { return t("Tamamlandı") }
         if r.isQuick24HourActive() { return "24 hour" }
         if r.alertAt == nil && r.plannedDateEpochDay == nil { return hasCategory ? nil : "No alert" }
         return "Planned"
@@ -481,8 +481,8 @@ struct ReminderDetailView: View {
         let cal = Calendar.real
         let d = base.date
         switch r.repeatRule {
-        case .daily: return "Her gün tekrarlanacak"
-        case .weekly: return "Her \(cal.isoWeekday(of: d).full) tekrarlanacak"
+        case .daily: return t("Her gün tekrarlanacak")
+        case .weekly: return t("Her {0} tekrarlanacak", t(cal.isoWeekday(of: d).full))
         case .monthly:
             let day = cal.component(.day, from: d)
             let suffix: String
@@ -493,8 +493,8 @@ struct ReminderDetailView: View {
             case 6, 16, 26: suffix = "'sı"
             default: suffix = "'i"
             }
-            return "Her ayın \(day)\(suffix) tekrarlanacak"
-        case .yearly: return "Her yıl \(cal.component(.day, from: d)) \(turkishMonths[cal.component(.month, from: d) - 1]) tekrarlanacak"
+            return t("Her ayın {0}{1} tekrarlanacak", day, suffix)
+        case .yearly: return t("Her yıl {0} {1} tekrarlanacak", cal.component(.day, from: d), t(turkishMonths[cal.component(.month, from: d) - 1]))
         case .none: return nil
         }
     }
@@ -512,16 +512,16 @@ struct ReminderDetailView: View {
     @ViewBuilder
     private func timingLines(_ r: ReminderItem) -> some View {
         if let end = r.endAt {
-            Text("Bitiş: " + Self.shortDateTime(end)).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
+            Text(t("Bitiş: {0}", Self.shortDateTime(end))).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
         }
         if let early = r.earlyAlertMinutes {
-            Text("Erken uyarı: " + EarlyAlertScreen.label(early) + " önce").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
+            Text(t("Erken uyarı: {0} önce", EarlyAlertScreen.label(early))).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
         }
     }
 
     static func shortDateTime(_ millis: EpochMillis) -> String {
         let d = millis.date
-        return "\(Calendar.real.component(.day, from: d)) " + d.formatted(.dateTime.month(.abbreviated).locale(Locale(identifier: "tr_TR"))) + " " + RealDates.time(d)
+        return "\(Calendar.real.component(.day, from: d)) " + d.formatted(.dateTime.month(.abbreviated).locale(I18n.locale)) + " " + RealDates.time(d)
     }
 
     /// Edit-mode schedule chips under the text: date, repeat, early warning, duration, end, clear. A day without a time
@@ -539,22 +539,22 @@ struct ReminderDetailView: View {
                         chip("repeat", Recurrence.description(r.repeatRule, alert: r.anchorAlertAt ?? r.alertAt), selected: false) { openSchedule(r) }
                     }
                     if let early = r.earlyAlertMinutes {
-                        chip("bell", EarlyAlertScreen.label(early) + " önce", selected: false) { openSchedule(r) }
+                        chip("bell", t("{0} önce", EarlyAlertScreen.label(early)), selected: false) { openSchedule(r) }
                     }
                     if r.alertAt != nil {
-                        chip("note.text", r.durationMinutes.map { "Süre: \($0) min" } ?? "Süre ekle", selected: false) {
+                        chip("note.text", r.durationMinutes.map { t("Süre: {0} min", $0) } ?? t("Süre ekle"), selected: false) {
                             let options = [nil, 15, 30, 45, 60, 90, 120]
                             let i = options.firstIndex(of: r.durationMinutes) ?? 0
                             draft?.durationMinutes = options[(i + 1) % options.count]
                         }
                     }
                     HStack(spacing: 4) {
-                        chip("calendar", r.endAt.map { "Bitiş: " + Self.shortDateTime($0) } ?? "+ Bitiş", selected: false) { openSchedule(r) }
+                        chip("calendar", r.endAt.map { t("Bitiş: {0}", Self.shortDateTime($0)) } ?? t("+ Bitiş"), selected: false) { openSchedule(r) }
                         if r.endAt != nil {
                             Button { draft?.endAt = nil } label: {
                                 RealSymbol("xmark", size: 11).foregroundStyle(Color(argb: 0xFFA7A7AF)).frame(width: 24, height: 24)
                             }
-                            .accessibilityLabel("Bitişi kaldır")
+                            .accessibilityLabel(t("Bitişi kaldır"))
                         }
                     }
                 }
@@ -569,7 +569,7 @@ struct ReminderDetailView: View {
                 draft?.endAt = nil
                 draft?.earlyAlertMinutes = nil
             } label: { RealSymbol("xmark", size: 16.1).foregroundStyle(.white).frame(width: 40, height: 40) }
-            .accessibilityLabel("Tarih ve saati kaldır")
+            .accessibilityLabel(t("Tarih ve saati kaldır"))
         }
         .padding(.top, 12)
     }
@@ -595,10 +595,10 @@ struct ReminderDetailView: View {
     private func checklistBlock(_ r: ReminderItem) -> some View {
         let items = r.checklistItems
         let done = items.filter(\.isCompleted).count
-        let summary = items.isEmpty ? "" : (done > 0 ? "\(items.count) madde • \(done) tamamlandı" : "\(items.count) madde")
+        let summary = items.isEmpty ? "" : (done > 0 ? t("{0} madde • {1} tamamlandı", items.count, done) : t("{0} madde", items.count))
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Checklist").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
+                Text(t("Checklist")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
                 if !summary.isEmpty { Text("  •  \(summary)").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B5)).lineLimit(1) }
                 Spacer()
                 if editing {
@@ -607,7 +607,7 @@ struct ReminderDetailView: View {
                         draft?.isChecklist = false
                         checklistOpen = false
                     } label: { RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFF8E8E98)).frame(width: 28, height: 28) }
-                    .accessibilityLabel("Checklist kutusunu kaldır")
+                    .accessibilityLabel(t("Checklist kutusunu kaldır"))
                 }
             }
             .padding(.horizontal, 4).padding(.vertical, 2)
@@ -649,7 +649,7 @@ struct ReminderDetailView: View {
             if editing {
                 HStack(spacing: 12) {
                     RealSymbol("plus", size: 14.9).foregroundStyle(RealColors.accentBlue).frame(width: 32, height: 32)
-                    TextField("", text: $newChecklistText, prompt: Text("Madde ekle").foregroundStyle(Color(argb: 0xFF6C6C76)))
+                    TextField("", text: $newChecklistText, prompt: Text(t("Madde ekle")).foregroundStyle(Color(argb: 0xFF6C6C76)))
                         .font(RealFont.inter(15))
                         .submitLabel(.next)
                         .onSubmit {
@@ -693,7 +693,7 @@ struct ReminderDetailView: View {
             RealSymbol("doc", size: 20.7).foregroundStyle(RealColors.accentBlue)
                 .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.06)))
             VStack(alignment: .leading, spacing: 2) {
-                Text(a.displayName ?? "Dosya").font(RealFont.inter(14, .medium)).foregroundStyle(.white).lineLimit(1)
+                Text(a.displayName ?? t("Dosya")).font(RealFont.inter(14, .medium)).foregroundStyle(.white).lineLimit(1)
                 if let size = a.sizeBytes { Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).font(RealFont.inter(12)).foregroundStyle(RealColors.subtext) }
             }
             Spacer()
@@ -750,7 +750,7 @@ struct ReminderDetailView: View {
                             if item.id == a.id { copy.text = v }
                             return copy
                         }
-                    }), prompt: Text("Metin yaz…").foregroundStyle(ink.opacity(0.4)), axis: .vertical)
+                    }), prompt: Text(t("Metin yaz…")).foregroundStyle(ink.opacity(0.4)), axis: .vertical)
                     .tint(ink)
                     .frame(minHeight: placement.minHeight > 0 ? 0 : 96, alignment: .topLeading)
                 } else {
@@ -770,9 +770,9 @@ struct ReminderDetailView: View {
             if editing {
                 HStack(spacing: 0) {
                     Button { textToolsKey = key } label: { ActionIcon(.settings, color: Color(argb: 0xFFB7B7C0), size: 15).frame(width: 28, height: 28) }
-                        .accessibilityLabel("Metin araçları")
+                        .accessibilityLabel(t("Metin araçları"))
                     Button { removeAttachment(a) } label: { ActionIcon(.close, color: Color(argb: 0xFFB7B7C0), size: 15).frame(width: 28, height: 28) }
-                        .accessibilityLabel("Metin kutusunu kaldır")
+                        .accessibilityLabel(t("Metin kutusunu kaldır"))
                 }
                 .buttonStyle(.plain)
                 .liquidGlass(RoundedRectangle(cornerRadius: 14, style: .continuous), role: .chrome)
@@ -807,7 +807,7 @@ struct ReminderDetailView: View {
                 if editing {
                     removeButton { draft?.location = nil }
                 } else {
-                    Button("Haritada aç") { openInMaps(l) }.font(RealFont.inter(13, .medium)).foregroundStyle(RealColors.accentBlue)
+                    Button(t("Haritada aç")) { openInMaps(l) }.font(RealFont.inter(13, .medium)).foregroundStyle(RealColors.accentBlue)
                 }
             }
             .padding(14)
@@ -821,15 +821,15 @@ struct ReminderDetailView: View {
     private func journalBlock(_ j: ReminderJournal) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Günlük").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
+                Text(t("Günlük")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
                 Spacer()
                 if let mood = j.mood { Text("\(mood.emoji) \(mood.label)").font(RealFont.inter(12)).foregroundStyle(RealColors.subtext) }
             }
             if editing {
-                TextField("Günlük notu", text: Binding(get: { draft?.journal?.text ?? "" }, set: { draft?.journal?.text = $0; draft?.journal?.updatedAt = .now }), axis: .vertical)
+                TextField(t("Günlük notu"), text: Binding(get: { draft?.journal?.text ?? "" }, set: { draft?.journal?.text = $0; draft?.journal?.updatedAt = .now }), axis: .vertical)
                     .font(RealFont.inter(15)).lineLimit(2...12)
             } else {
-                Text(j.text.isEmpty ? "Günlük notu" : j.text).font(RealFont.inter(15)).foregroundStyle(j.text.isEmpty ? RealColors.textMuted : Color(argb: 0xFFE9E9EF))
+                Text(j.text.isEmpty ? t("Günlük notu") : j.text).font(RealFont.inter(15)).foregroundStyle(j.text.isEmpty ? RealColors.textMuted : Color(argb: 0xFFE9E9EF))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             Text(RealDates.reminder(j.createdAt)).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF6F6F78))
@@ -843,7 +843,7 @@ struct ReminderDetailView: View {
         return HStack(spacing: 14) {
             MoodFace(mood: mood, tint: tint).frame(width: 72, height: 72)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Mood").font(RealFont.inter(12)).foregroundStyle(tint)
+                Text(t("Mood")).font(RealFont.inter(12)).foregroundStyle(tint)
                 Text(MoodV2.families[MoodV2.familyIndex(mood)].title).font(RealFont.inter(21, .semibold)).foregroundStyle(Color(argb: 0xFFF7F7F9))
             }
             Spacer()
@@ -872,7 +872,7 @@ struct ReminderDetailView: View {
                 .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 0.5))
         }
         .padding(8)
-        .accessibilityLabel("Kaldır")
+        .accessibilityLabel(t("Kaldır"))
     }
 
     // MARK: Bottom column
@@ -894,12 +894,12 @@ struct ReminderDetailView: View {
                     }
                 }
                 .padding(.bottom, 10)
-            } else if r.isCompleted && r.journal == nil && !(r.cardStack?.cards.contains { $0.title == "Nasıl geçti?" } ?? false) {
+            } else if r.isCompleted && r.journal == nil && !(r.cardStack?.cards.contains { $0.title == "Nasıl geçti?" || $0.title == t("Nasıl geçti?") } ?? false) {
                 Button(action: addCompletionJournal) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Günlük ekle").font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
-                            Text("Nasıl geçti? Aklında kalanı yaz.").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                            Text(t("Günlük ekle")).font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
+                            Text(t("Nasıl geçti? Aklında kalanı yaz.")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
                         }
                         Spacer()
                         RealSymbol("plus", size: 16.1).foregroundStyle(RealColors.accentBlue)
@@ -922,15 +922,15 @@ struct ReminderDetailView: View {
     private func actionBar(_ r: ReminderItem) -> some View {
         HStack(spacing: 0) {
             if editing {
-                DetailAction(label: "Vazgeç", symbol: "xmark") { draft = nil; secondaryExpanded = false; checklistOpen = false }
-                DetailAction(label: "Kaydet", symbol: "checkmark", color: Color(argb: 0xFF91B9FF),
+                DetailAction(label: t("Vazgeç"), symbol: "xmark") { draft = nil; secondaryExpanded = false; checklistOpen = false }
+                DetailAction(label: t("Kaydet"), symbol: "checkmark", color: Color(argb: 0xFF91B9FF),
                              enabled: !(draft?.text.trimmingCharacters(in: .whitespaces).isEmpty ?? true)) { saveDraft() }
             } else {
-                DetailAction(label: r.isCompleted ? "Geri al" : "Tamamla", symbol: r.isCompleted ? "arrow.uturn.backward" : "checkmark", enabled: !deleting) {
+                DetailAction(label: r.isCompleted ? t("Geri al") : t("Tamamla"), symbol: r.isCompleted ? "arrow.uturn.backward" : "checkmark", enabled: !deleting) {
                     if !r.isCompleted { UINotificationFeedbackGenerator().notificationOccurred(.success) }
                     withAnimation { store.toggleCompleted(reminderId) }
                 }
-                DetailAction(label: "Düzenle", symbol: "pencil", enabled: !deleting) {
+                DetailAction(label: t("Düzenle"), symbol: "pencil", enabled: !deleting) {
                     dockCollapsed = false   // every edit starts with the dock raised
                     draft = r
                     categorySelection = r.customCategoryId
@@ -946,7 +946,7 @@ struct ReminderDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(deleting)
-                DetailAction(label: "Sil", symbol: "trash") { deleting.toggle() }
+                DetailAction(label: t("Sil"), symbol: "trash") { deleting.toggle() }
             }
         }
         .padding(.horizontal, 6)
@@ -958,23 +958,23 @@ struct ReminderDetailView: View {
         let occurrence = Recurrence.nextDeletableOccurrence(r, now: .now)
         let scoped = r.hasRepeat && occurrence != nil
         return VStack(alignment: .leading, spacing: 10) {
-            Text(scoped ? "Tekrarlayan etkinlik silinsin mi?" : "Hatırlatıcı silinsin mi?")
+            Text(scoped ? t("Tekrarlayan etkinlik silinsin mi?") : t("Hatırlatıcı silinsin mi?"))
                 .font(RealFont.inter(17, .semibold)).lineSpacing(6).foregroundStyle(Color(argb: 0xFFF5F5F8))
-            Text(scoped ? "Yalnızca sıradaki tekrarı ya da sıradaki tekrardan itibaren tüm tekrarları silebilirsin. Önceki tekrarlar korunur. Bu işlem geri alınamaz."
-                 : "Bu not listenden ve bildirim panelinden kaldırılacak. Bu işlem geri alınamaz.")
+            Text(scoped ? t("Yalnızca sıradaki tekrarı ya da sıradaki tekrardan itibaren tüm tekrarları silebilirsin. Önceki tekrarlar korunur. Bu işlem geri alınamaz.")
+                 : t("Bu not listenden ve bildirim panelinden kaldırılacak. Bu işlem geri alınamaz."))
                 .font(RealFont.inter(13)).lineSpacing(6).foregroundStyle(Color(argb: 0xFFBEBEC8))
             // DeleteReminderPrompt.kt: 46pt pill buttons — red tint for deleting, a light one for Vazgeç.
             if scoped, let occurrence {
                 VStack(spacing: 8) {
-                    deletePill("Sadece sıradaki tekrarı sil", destructive: true) { deleting = false; store.deleteOccurrence(reminderId, occurrence: occurrence) }
-                    deletePill("Bu ve sonraki tüm tekrarları sil", destructive: true) { deleting = false; store.deleteThisAndFuture(reminderId, occurrence: occurrence) }
-                    deletePill("Vazgeç", destructive: false) { deleting = false }
+                    deletePill(t("Sadece sıradaki tekrarı sil"), destructive: true) { deleting = false; store.deleteOccurrence(reminderId, occurrence: occurrence) }
+                    deletePill(t("Bu ve sonraki tüm tekrarları sil"), destructive: true) { deleting = false; store.deleteThisAndFuture(reminderId, occurrence: occurrence) }
+                    deletePill(t("Vazgeç"), destructive: false) { deleting = false }
                 }
                 .padding(.top, 4)
             } else {
                 HStack(spacing: 10) {
-                    deletePill("Vazgeç", destructive: false) { deleting = false }
-                    deletePill("Sil", destructive: true) { deleting = false; store.delete([reminderId]) }
+                    deletePill(t("Vazgeç"), destructive: false) { deleting = false }
+                    deletePill(t("Sil"), destructive: true) { deleting = false; store.delete([reminderId]) }
                 }
                 .padding(.top, 4)
             }
@@ -1005,8 +1005,8 @@ struct ReminderDetailView: View {
                 let next = v.translation.height >= 24 ? true : (v.translation.height <= -24 ? false : dockCollapsed)
                 if next != dockCollapsed { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { dockCollapsed = next } }
             })
-            .accessibilityLabel("Düzenleme dock'u")
-            .accessibilityValue(dockCollapsed ? "Küçültülmüş" : "Açık")
+            .accessibilityLabel(t("Düzenleme dock'u"))
+            .accessibilityValue(dockCollapsed ? t("Küçültülmüş") : t("Açık"))
             .accessibilityAddTraits(.isButton)
     }
 
@@ -1016,7 +1016,7 @@ struct ReminderDetailView: View {
             HStack {
                 Button { titleFocused = false; secondaryExpanded.toggle() } label: {
                     HStack(spacing: 6) {
-                        Text("Renk ve kategori").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
+                        Text(t("Renk ve kategori")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
                         RealSymbol("chevron.right", size: 12.6).foregroundStyle(Color(argb: 0xFF8E8E98))
                             .rotationEffect(.degrees(secondaryExpanded ? 90 : 0))
                     }
@@ -1026,42 +1026,42 @@ struct ReminderDetailView: View {
                 Button { reordering = true } label: {
                     RealSymbol("arrow.up.arrow.down", size: 19.5).foregroundStyle(Color(argb: 0xFFD2D2DA)).frame(width: 40, height: 40)
                 }
-                .accessibilityLabel("Sırala")
+                .accessibilityLabel(t("Sırala"))
             }
             .padding(.horizontal, 2)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     let d = draft
                     // Most used first, least used last (Android order).
-                    QuickAction(symbol: "calendar", label: "Tarih / Saat", active: d?.alertAt != nil || d?.plannedDateEpochDay != nil) {
+                    QuickAction(symbol: "calendar", label: t("Tarih / Saat"), active: d?.alertAt != nil || d?.plannedDateEpochDay != nil) {
                         if let d { openSchedule(d) }
                     }
-                    QuickAction(symbol: "photo", label: "Fotoğraf ekle", active: false,
+                    QuickAction(symbol: "photo", label: t("Fotoğraf ekle"), active: false,
                                 count: d?.attachments.filter { $0.type == .image }.count) { showPhotoPicker = true }
-                    QuickAction(symbol: "camera", label: "Kamera ile fotoğraf ekle", active: false) { showCamera = true }
-                    QuickAction(symbol: "checklist", label: "Checklist", active: checklistOpen || !(d?.checklistItems.isEmpty ?? true),
+                    QuickAction(symbol: "camera", label: t("Kamera ile fotoğraf ekle"), active: false) { showCamera = true }
+                    QuickAction(symbol: "checklist", label: t("Checklist"), active: checklistOpen || !(d?.checklistItems.isEmpty ?? true),
                                 count: d?.checklistItems.count) {
                         checklistOpen = true
                         draft?.isChecklist = true
                     }
-                    QuickAction(symbol: "rectangle.stack", label: "Kart Yığını", active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
+                    QuickAction(symbol: "rectangle.stack", label: t("Kart Yığını"), active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
                         editingStackCard = CardStackCard()
                     }
-                    QuickAction(symbol: "text.alignleft", label: "Metin kutusu ekle", active: d?.attachments.contains { $0.sourceTitle == "REAL_TEXT_BLOCK" } ?? false) {
+                    QuickAction(symbol: "text.alignleft", label: t("Metin kutusu ekle"), active: d?.attachments.contains { $0.sourceTitle == "REAL_TEXT_BLOCK" } ?? false) {
                         addAttachment(ReminderAttachment(id: UUID().uuidString, type: .textSnippet, text: "", sourceTitle: "REAL_TEXT_BLOCK"))
                     }
-                    QuickAction(symbol: "mappin", label: "Konum", active: d?.location != nil) { withoutAnimation { showLocationGuide = true } }
-                    QuickAction(symbol: "waveform", label: "Ses kaydı", active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
+                    QuickAction(symbol: "mappin", label: t("Konum"), active: d?.location != nil) { withoutAnimation { showLocationGuide = true } }
+                    QuickAction(symbol: "waveform", label: t("Ses kaydı"), active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
                                 count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
-                    QuickAction(symbol: "music.note", label: "Müzik", active: !(d?.musicBlocks.isEmpty ?? true),
+                    QuickAction(symbol: "music.note", label: t("Müzik"), active: !(d?.musicBlocks.isEmpty ?? true),
                                 count: d?.musicBlocks.count) { showMusicSearch = true }
-                    QuickAction(symbol: "play.rectangle", label: "Film & Dizi", active: !(d?.mediaBlocks.isEmpty ?? true),
+                    QuickAction(symbol: "play.rectangle", label: t("Film & Dizi"), active: !(d?.mediaBlocks.isEmpty ?? true),
                                 count: d?.mediaBlocks.count) { showMediaSearch = true }
-                    QuickAction(symbol: "gamecontroller", label: "Oyun", active: !(d?.gameBlocks.isEmpty ?? true),
+                    QuickAction(symbol: "gamecontroller", label: t("Oyun"), active: !(d?.gameBlocks.isEmpty ?? true),
                                 count: d?.gameBlocks.count) { showGameSearch = true }
-                    QuickAction(symbol: "doc", label: "Dosya ekle", active: false,
+                    QuickAction(symbol: "doc", label: t("Dosya ekle"), active: false,
                                 count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
-                    QuickAction(symbol: "face.smiling", label: "Mood", active: d?.mood != nil) { showMoodPicker = true }
+                    QuickAction(symbol: "face.smiling", label: t("Mood"), active: d?.mood != nil) { showMoodPicker = true }
                 }
                 .padding(.leading, 2).padding(.trailing, 12)
             }
@@ -1085,13 +1085,13 @@ struct ReminderDetailView: View {
                 .liquidGlass(RoundedRectangle(cornerRadius: 28, style: .continuous), role: .sheet)
             Button { titleFocused = false; withoutAnimation { showCategoryPicker = true } } label: {
                 HStack {
-                    Text("Kategori").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
+                    Text(t("Kategori")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
                     Spacer()
                     if let c = store.category(draft?.customCategoryId) {
                         categoryBadge(c, size: 18)
                         Text(c.name).font(RealType.categoryPill).foregroundStyle(.white)
                     } else {
-                        Text("Kategori yok").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                        Text(t("Kategori yok")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8E8E98))
                     }
                     RealSymbol("chevron.right", size: 13.8).foregroundStyle(Color(argb: 0xFF8E8E98))
                 }
@@ -1121,21 +1121,21 @@ struct ReminderDetailView: View {
         trayBusy = true
         Task { @MainActor in
             defer { trayBusy = false }
-            guard let result = await ClipboardTrayStore.result(for: item) else { RealToast.shared.show("Yapıştırılacak bir şey bulunamadı"); return }
+            guard let result = await ClipboardTrayStore.result(for: item) else { RealToast.shared.show(t("Yapıştırılacak bir şey bulunamadı")); return }
             if editing, var d = draft { CardPaste.apply(result, to: &d); draft = d }
             else { store.mutate(reminderId) { CardPaste.apply(result, to: &$0) } }
-            RealToast.shared.show("Eklendi · \(result.label)")
+            RealToast.shared.show(t("Eklendi · {0}", result.label))
         }
     }
 
     /// Yapıştır: the copied item becomes blocks on this card (the draft while editing, saved right away otherwise).
     private func paste(_ providers: [NSItemProvider]) {
         Task { @MainActor in
-            guard let result = await CardPaste.read(providers) else { RealToast.shared.show("Yapıştırılacak bir şey bulunamadı"); return }
+            guard let result = await CardPaste.read(providers) else { RealToast.shared.show(t("Yapıştırılacak bir şey bulunamadı")); return }
             if editing, var d = draft { CardPaste.apply(result, to: &d); draft = d }
             else { store.mutate(reminderId) { CardPaste.apply(result, to: &$0) } }
             ClipboardWatcher.shared.consume()
-            RealToast.shared.show("Yapıştırıldı · \(result.label)")
+            RealToast.shared.show(t("Yapıştırıldı · {0}", result.label))
         }
     }
 
@@ -1162,7 +1162,7 @@ struct ReminderDetailView: View {
 
     /// Completed card: "Nasıl geçti?" card added to the stack and opened for writing.
     private func addCompletionJournal() {
-        let card = CardStackCard(id: "completed_journal_\(EpochMillis.now)", title: "Nasıl geçti?", body: "")
+        let card = CardStackCard(id: "completed_journal_\(EpochMillis.now)", title: t("Nasıl geçti?"), body: "")
         editingStackCard = card
     }
 
@@ -1273,7 +1273,7 @@ struct CardStackDeck: View {
         .overlay(alignment: .bottom) {
             if editing {
                 Button(action: onAdd) {
-                    Text("+ Kart ekle").font(RealFont.inter(12, .medium)).foregroundStyle(.white.opacity(0.8))
+                    Text(t("+ Kart ekle")).font(RealFont.inter(12, .medium)).foregroundStyle(.white.opacity(0.8))
                         .padding(.horizontal, 14).padding(.vertical, 8).liquidGlass(Capsule(), role: .chrome)
                 }
                 .offset(y: 18)
@@ -1289,7 +1289,7 @@ struct CardStackDeck: View {
         let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("KART 0\(index + 1)")
+                Text(t("KART 0{0}", index + 1))
                     .font(RealFont.inter(10)).kerning(1.2).foregroundStyle(fg.opacity(0.9))
                     .padding(.horizontal, 12).padding(.vertical, 7)
                     .background(Capsule().fill(hasImage ? Color.black.opacity(0.36) : .clear))
@@ -1336,9 +1336,9 @@ struct CardStackEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Başlık", text: $card.title)
-                TextField("Metin", text: $card.body, axis: .vertical).lineLimit(3...12)
-                Section("Renk") {
+                TextField(t("Başlık"), text: $card.title)
+                TextField(t("Metin"), text: $card.body, axis: .vertical).lineLimit(3...12)
+                Section(t("Renk")) {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 10) {
                         ForEach(pickerColorChoices) { choice in
                             let argb = choice.color.argbInt
@@ -1348,20 +1348,20 @@ struct CardStackEditor: View {
                         }
                     }
                 }
-                Section("Görsel") {
-                    PhotosPicker(selection: $photo, matching: .images) { Label(card.imageUri == nil ? "Görsel ekle" : "Görseli değiştir", systemImage: "photo") }
-                    if card.imageUri != nil { Button("Görseli kaldır", role: .destructive) { card.imageUri = nil } }
+                Section(t("Görsel")) {
+                    PhotosPicker(selection: $photo, matching: .images) { Label(card.imageUri == nil ? t("Görsel ekle") : t("Görseli değiştir"), systemImage: "photo") }
+                    if card.imageUri != nil { Button(t("Görseli kaldır"), role: .destructive) { card.imageUri = nil } }
                 }
                 if !isNew {
-                    Button("Kartı sil", role: .destructive) { onSave(nil); dismiss() }
+                    Button(t("Kartı sil"), role: .destructive) { onSave(nil); dismiss() }
                 }
             }
-            .navigationTitle(isNew ? "Yeni kart" : "Kart")
+            .navigationTitle(isNew ? t("Yeni kart") : t("Kart"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(t("Vazgeç")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") { onSave(card); dismiss() }
+                    Button(t("Kaydet")) { onSave(card); dismiss() }
                         .disabled(card.title.trimmingCharacters(in: .whitespaces).isEmpty && card.body.trimmingCharacters(in: .whitespaces).isEmpty && card.imageUri == nil)
                 }
             }
@@ -1468,13 +1468,13 @@ struct LocationEditor: View {
                     .frame(width: 44, height: 44).liquidGlass(Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Vazgeç")
+            .accessibilityLabel(t("Vazgeç"))
             // The picked place lives here; tapping it searches instead.
             Group {
                 if searching || pin == nil {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold)).foregroundStyle(Self.muted)
-                        TextField("", text: $query, prompt: Text("Yer ara ya da haritaya dokun").foregroundStyle(Self.muted))
+                        TextField("", text: $query, prompt: Text(t("Yer ara ya da haritaya dokun")).foregroundStyle(Self.muted))
                             .font(RealFont.inter(13)).foregroundStyle(.white)
                             .submitLabel(.search).onSubmit(search).focused($searchFocused)
                             // Suggestions while typing (cafés, addresses, malls), a moment after the last key.
@@ -1488,7 +1488,7 @@ struct LocationEditor: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else if let pin {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(pinName.isEmpty ? "Seçilen yer" : pinName).font(RealFont.inter(13, .semibold))
+                        Text(pinName.isEmpty ? t("Seçilen yer") : pinName).font(RealFont.inter(13, .semibold))
                             .foregroundStyle(Color(argb: 0xFFF3F1F4)).lineLimit(1)
                         Text(pinAddress.isEmpty ? String(format: "%.5f, %.5f", pin.latitude, pin.longitude) : pinAddress)
                             .font(RealFont.inter(11)).foregroundStyle(Self.muted).lineLimit(1)
@@ -1508,7 +1508,7 @@ struct LocationEditor: View {
                 .frame(width: 44, height: 44).liquidGlass(Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Şu anki konumum")
+            .accessibilityLabel(t("Şu anki konumum"))
         }
         .padding(.horizontal, 12).padding(.top, 8)
     }
@@ -1549,19 +1549,19 @@ struct LocationEditor: View {
             }
             if onRemind != nil {
                 // Adding the place comes first; reminding on arrival / departure is the second choice.
-                whitePill("Konum ekle", enabled: pin != nil) { savePlain() }
+                whitePill(t("Konum ekle"), enabled: pin != nil) { savePlain() }
                 remindPill
             } else {
-                whitePill("Bu konumu kaydet", enabled: pin != nil) { savePlain() }
+                whitePill(t("Bu konumu kaydet"), enabled: pin != nil) { savePlain() }
             }
             HStack {
                 if !query.isEmpty && pin == nil {
-                    Button("“\(query)” olarak kaydet") { onSave(ReminderLocation(placeName: query)); dismiss() }
+                    Button(t("“{0}” olarak kaydet", query)) { onSave(ReminderLocation(placeName: query)); dismiss() }
                         .font(RealFont.inter(13, .medium)).foregroundStyle(Self.muted)
                 }
                 Spacer()
                 if initial != nil {
-                    Button("Konumu kaldır", role: .destructive) { onSave(nil); dismiss() }.font(RealFont.inter(13, .medium))
+                    Button(t("Konumu kaldır"), role: .destructive) { onSave(nil); dismiss() }.font(RealFont.inter(13, .medium))
                 }
             }
         }
@@ -1582,7 +1582,7 @@ struct LocationEditor: View {
         let enabled = pin != nil
         return ZStack {
             Capsule().fill(.white.opacity(enabled ? 1 : 0.4))
-            Text(leaving ? "Ayrılınca hatırlat" : "Varınca hatırlat")
+            Text(leaving ? t("Ayrılınca hatırlat") : t("Varınca hatırlat"))
                 .font(RealFont.inter(15, .semibold)).foregroundStyle(Self.ink)
                 .id(leaving)
                 .transition(.asymmetric(insertion: .move(edge: leaving ? .trailing : .leading).combined(with: .opacity),
@@ -1590,7 +1590,7 @@ struct LocationEditor: View {
             HStack {
                 if !leaving { Spacer() }
                 Button { withAnimation(.spring(response: 0.34, dampingFraction: 0.85)) { leaving.toggle() } } label: {
-                    Text(leaving ? "Varınca" : "Ayrılınca").font(RealFont.inter(12, .medium)).foregroundStyle(Self.ink.opacity(0.5))
+                    Text(leaving ? t("Varınca") : t("Ayrılınca")).font(RealFont.inter(12, .medium)).foregroundStyle(Self.ink.opacity(0.5))
                         .padding(.horizontal, 12).padding(.vertical, 9)
                         .background(Capsule().fill(Self.ink.opacity(0.06)))
                 }
@@ -1623,7 +1623,7 @@ struct LocationEditor: View {
     }
 
     private func pickedPlace(_ pin: CLLocationCoordinate2D) -> ReminderLocation {
-        let name = pinName.isEmpty ? (pinAddress.isEmpty ? "Seçilen yer" : pinAddress) : pinName
+        let name = pinName.isEmpty ? (pinAddress.isEmpty ? t("Seçilen yer") : pinAddress) : pinName
         return ReminderLocation(placeName: name, address: pinAddress, latitude: pin.latitude, longitude: pin.longitude)
     }
 
@@ -1696,7 +1696,7 @@ final class OneShotLocation: NSObject, CLLocationManagerDelegate {
         completion = done
         switch manager.authorizationStatus {
         case .notDetermined: manager.requestWhenInUseAuthorization()
-        case .denied, .restricted: finish(.failure("Konum izni kapalı. Ayarlar > REAL > Konum bölümünden açabilirsin."))
+        case .denied, .restricted: finish(.failure(t("Konum izni kapalı. Ayarlar > REAL > Konum bölümünden açabilirsin.")))
         default: manager.requestLocation()
         }
     }
@@ -1705,7 +1705,7 @@ final class OneShotLocation: NSObject, CLLocationManagerDelegate {
         guard completion != nil else { return }
         switch manager.authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways: manager.requestLocation()
-        case .denied, .restricted: finish(.failure("Konum izni verilmedi."))
+        case .denied, .restricted: finish(.failure(t("Konum izni verilmedi.")))
         default: break
         }
     }
@@ -1715,7 +1715,7 @@ final class OneShotLocation: NSObject, CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        finish(.failure("Konum alınamadı. Biraz sonra tekrar dene."))
+        finish(.failure(t("Konum alınamadı. Biraz sonra tekrar dene.")))
     }
 
     private func finish(_ result: Result) {
@@ -1736,12 +1736,12 @@ private struct LinkEditor: View {
             Form {
                 TextField("https://", text: $text).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
             }
-            .navigationTitle("Bağlantı")
+            .navigationTitle(t("Bağlantı"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(t("Vazgeç")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") {
+                    Button(t("Kaydet")) {
                         let t = text.trimmingCharacters(in: .whitespaces)
                         onSave(t.isEmpty ? nil : t)
                         dismiss()
@@ -1775,14 +1775,14 @@ private struct BlockReorderSheet: View {
                             }
                             .frame(width: 22, height: 22)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("En üstteki içeriği büyüt").font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFE8E8EE))
-                                Text("Listenin başındaki içerik kartın tepesinde tam genişlikte, büyük görünür.")
+                                Text(t("En üstteki içeriği büyüt")).font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFE8E8EE))
+                                Text(t("Listenin başındaki içerik kartın tepesinde tam genişlikte, büyük görünür."))
                                     .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
                             }
                         }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityValue(hero ? "Açık" : "Kapalı")
+                    .accessibilityValue(hero ? t("Açık") : t("Kapalı"))
                 }
                 ForEach(keys, id: \.self) { key in
                     let d = describe(key)
@@ -1797,10 +1797,10 @@ private struct BlockReorderSheet: View {
                 .onMove { keys.move(fromOffsets: $0, toOffset: $1) }
             }
             .environment(\.editMode, .constant(.active))
-            .navigationTitle("İçerik Sıralaması")
+            .navigationTitle(t("İçerik Sıralaması"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Bitti") { onSave(keys, hero); dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(t("Bitti")) { onSave(keys, hero); dismiss() } }
             }
         }
     }
@@ -1808,19 +1808,19 @@ private struct BlockReorderSheet: View {
     private func describe(_ key: String) -> (String, String, String) {
         let kind = key.split(separator: ":").first.map(String.init) ?? key
         switch kind {
-        case "text": return ("Not Metni", item.text.isEmpty ? "Boş not" : item.text, "note.text")
-        case "card_stack": return ("Kart Yığını", "\(item.cardStack?.cards.count ?? 0) kart", "rectangle.stack")
-        case "checklist": return ("Checklist", "\(item.checklistItems.count) madde", "checklist")
-        case "photos": return ("Fotoğraf", "", "photo")
-        case "files": return (key == "files:reference" ? "Bağlantı" : "Dosya", "", "doc")
-        case "location": return ("Konum", item.location?.placeName ?? "Konum", "mappin")
-        case "mood": return ("Mood", item.mood?.label ?? "Mood", "face.smiling")
-        case "journal": return ("Günlük", "Günlük notu", "book.closed")
-        case "voice": return ("Ses", "\(item.voiceRecordings.count) kayıt", "waveform")
-        case "music": return ("Müzik", item.musicBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "music.note")
-        case "media": return ("Film / Dizi", item.mediaBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "film")
-        case "game": return ("Oyun", item.gameBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "gamecontroller")
-        case "weather": return ("Hava durumu", "Apple Weather", "cloud.sun")
+        case "text": return (t("Not Metni"), item.text.isEmpty ? t("Boş not") : item.text, "note.text")
+        case "card_stack": return (t("Kart Yığını"), t("{0} kart", item.cardStack?.cards.count ?? 0), "rectangle.stack")
+        case "checklist": return (t("Checklist"), t("{0} madde", item.checklistItems.count), "checklist")
+        case "photos": return (t("Fotoğraf"), "", "photo")
+        case "files": return (key == "files:reference" ? t("Bağlantı") : t("Dosya"), "", "doc")
+        case "location": return (t("Konum"), item.location?.placeName ?? t("Konum"), "mappin")
+        case "mood": return (t("Mood"), item.mood.map { t($0.label) } ?? t("Mood"), "face.smiling")
+        case "journal": return (t("Günlük"), t("Günlük notu"), "book.closed")
+        case "voice": return (t("Ses"), t("{0} kayıt", item.voiceRecordings.count), "waveform")
+        case "music": return (t("Müzik"), item.musicBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "music.note")
+        case "media": return (t("Film / Dizi"), item.mediaBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "film")
+        case "game": return (t("Oyun"), item.gameBlocks.first { key.hasSuffix($0.id) }?.title ?? "", "gamecontroller")
+        case "weather": return (t("Hava durumu"), "Apple Weather", "cloud.sun")
         default: return (key, "", "square")
         }
     }
@@ -1854,7 +1854,7 @@ private struct PhotoBlockBody: View {
                         .frame(width: 22, height: 22).background(Circle().fill(.black.opacity(0.6)))
                         .frame(width: 44, height: 44)
                 }
-                .accessibilityLabel("Kaldır")
+                .accessibilityLabel(t("Kaldır"))
             }
         }
     }
@@ -1971,18 +1971,18 @@ struct CardTextTools: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text("Metin biçimi").font(RealFont.inter(16)).foregroundStyle(.white)
+                Text(t("Metin biçimi")).font(RealFont.inter(16)).foregroundStyle(.white)
                 Spacer()
-                Button("Bitti") { dismiss() }.foregroundStyle(.white)
+                Button(t("Bitti")) { dismiss() }.foregroundStyle(.white)
             }
             HStack(spacing: 6) {
-                ForEach([("start", "Sola"), ("center", "Ortala"), ("end", "Sağa")], id: \.0) { key, label in
+                ForEach([("start", t("Sola")), ("center", t("Ortala")), ("end", t("Sağa"))], id: \.0) { key, label in
                     tool(label, active: current.textAlignment == key) { current.textAlignment = key }
                 }
             }
             HStack(spacing: 6) {
-                tool("Kalın", active: current.textBold, bold: true) { current.textBold.toggle() }
-                tool("İtalik", active: current.textItalic, italic: true) { current.textItalic.toggle() }
+                tool(t("Kalın"), active: current.textBold, bold: true) { current.textBold.toggle() }
+                tool(t("İtalik"), active: current.textItalic, italic: true) { current.textItalic.toggle() }
             }
         }
         .padding(16)
@@ -2010,7 +2010,7 @@ let detailHeroMinHeight = 360
 func reminderLocationLabel(_ l: ReminderLocation) -> String? {
     let name = l.placeName.trimmingCharacters(in: .whitespaces)
     let street = l.address.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
-    if !name.isEmpty, name != "Seçilen yer", name != l.address.trimmingCharacters(in: .whitespaces), name.contains(where: \.isLetter) { return name }
+    if !name.isEmpty, name != "Seçilen yer", name != t("Seçilen yer"), name != l.address.trimmingCharacters(in: .whitespaces), name.contains(where: \.isLetter) { return name }
     if let street { return street }
     return name.isEmpty ? nil : name
 }

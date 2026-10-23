@@ -52,11 +52,11 @@ struct CategoryScreen: View {
         .contentShape(Rectangle())
         .contextMenu {
             if canEditDividers {
-                Button("Başlığı düzenle", systemImage: "pencil") { dividerEditing = d; dividerTitle = d.text; dividerPrompt = true }
-                Button("Sil", systemImage: "trash", role: .destructive) { withAnimation { store.delete([d.id]) } }
+                Button(t("Başlığı düzenle"), systemImage: "pencil") { dividerEditing = d; dividerTitle = d.text; dividerPrompt = true }
+                Button(t("Sil"), systemImage: "trash", role: .destructive) { withAnimation { store.delete([d.id]) } }
             }
         }
-        .accessibilityLabel(d.text.isEmpty ? "Ayraç" : "Ayraç: \(d.text)")
+        .accessibilityLabel(d.text.isEmpty ? t("Ayraç") : t("Ayraç: {0}", d.text))
         .transition(.opacity)
     }
 
@@ -84,7 +84,7 @@ struct CategoryScreen: View {
                             detail: categoryHeaderDetail(lists.active + calendarItems.map(CalendarCards.card)),
                             showIcon: custom.map { $0.icon != .noIcon } ?? true, topInset: topInset,
                             query: $query, hasFilter: colorFilter != nil,
-                            editLabel: custom != nil ? "Kategoriyi düzenle" : "Kategori rengini düzenle",
+                            editLabel: custom != nil ? t("Kategoriyi düzenle") : t("Kategori rengini düzenle"),
                             stats: stats, showProgress: $showProgress, sort: sort, showSort: builtIn != .journalEntries,
                             onBack: { dismiss() },
                             onEdit: {
@@ -120,7 +120,7 @@ struct CategoryScreen: View {
                     }
                     Color.clear.frame(height: 18)
                     if lists.active.isEmpty && lists.completed.isEmpty {
-                        Text(query.isEmpty ? emptyMessage : "\"\(query)\" bu kategoride yok")
+                        Text(query.isEmpty ? emptyMessage : t("\"{0}\" bu kategoride yok", query))
                             .font(RealFont.inter(14))
                             .foregroundStyle(Color(argb: 0xFF888890))
                             .frame(height: 104)
@@ -144,7 +144,7 @@ struct CategoryScreen: View {
                         }
                     }
                     if !lists.completed.isEmpty {
-                        SectionTitle(text: "Tamamlandı").padding(.top, 18)
+                        SectionTitle(text: t("Tamamlandı")).padding(.top, 18)
                         // Same as Home: 2 + a 3rd under glass until "Daha fazla" opens 10, then 10 more each time.
                         // "Tamamlananlar" itself lists everything.
                         let limit = builtIn != .completed
@@ -161,7 +161,7 @@ struct CategoryScreen: View {
                                                 completedShown = completedShown < 11 ? 11 : completedShown + 10
                                             }
                                         } label: {
-                                            Text("Daha fazla").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+                                            Text(t("Daha fazla")).font(RealFont.inter(14, .medium)).foregroundStyle(.white)
                                                 .padding(.horizontal, 18).padding(.vertical, 9)
                                                 .liquidGlass(Capsule(), role: .chrome)
                                         }
@@ -225,11 +225,11 @@ struct CategoryScreen: View {
                               onSave: { target, day, color in store.setCheckRequest(checkIds, target: target, startEpochDay: day, color: color) },
                               onClear: { store.setCheckRequest(checkIds, target: nil) })
         }
-        .alert(dividerEditing == nil ? "Ayraç ekle" : "Ayracı düzenle", isPresented: $dividerPrompt) {
-            TextField("Ör. 1. hafta bitti", text: $dividerTitle)
-            Button(dividerEditing == nil ? "Ekle" : "Kaydet") { saveDivider() }
-            Button("Vazgeç", role: .cancel) { dividerEditing = nil }
-        } message: { Text("Kartlarının arasına bir çizgi ve kısa bir başlık. Boş bırakırsan sadece çizgi olur.") }
+        .alert(dividerEditing == nil ? t("Ayraç ekle") : t("Ayracı düzenle"), isPresented: $dividerPrompt) {
+            TextField(t("Ör. 1. hafta bitti"), text: $dividerTitle)
+            Button(dividerEditing == nil ? t("Ekle") : t("Kaydet")) { saveDivider() }
+            Button(t("Vazgeç"), role: .cancel) { dividerEditing = nil }
+        } message: { Text(t("Kartlarının arasına bir çizgi ve kısa bir başlık. Boş bırakırsan sadece çizgi olur.")) }
     }
 
     private var nextSort: ReminderSortOrder {
@@ -245,9 +245,9 @@ struct CategoryScreen: View {
         sortRaw = next.rawValue
         let text: String
         switch next {
-        case .oldestFirst: text = "Son eklenen altta"
-        case .nearestDate, .reminderTime: text = "Tarihi en yakın üstte"
-        case .recentlyAdded: text = "Son eklenen üstte"
+        case .oldestFirst: text = t("Son eklenen altta")
+        case .nearestDate, .reminderTime: text = t("Tarihi en yakın üstte")
+        case .recentlyAdded: text = t("Son eklenen üstte")
         }
         withAnimation(.easeOut(duration: 0.2)) { sortHint = ((sortHint?.id ?? 0) + 1, text) }
     }
@@ -258,10 +258,10 @@ struct CategoryScreen: View {
     }
 
     private var emptyMessage: String {
-        if builtIn == .journalEntries { return "Henüz günlük eklenmemiş" }
-        if colorFilter != nil { return "Bu renkte hatırlatıcı yok" }
-        if custom != nil { return "Bu kategoride henüz hatırlatıcı yok" }
-        return builtIn?.emptyMessage ?? "Henüz hatırlatıcı yok"
+        if builtIn == .journalEntries { return t("Henüz günlük eklenmemiş") }
+        if colorFilter != nil { return t("Bu renkte hatırlatıcı yok") }
+        if custom != nil { return t("Bu kategoride henüz hatırlatıcı yok") }
+        return builtIn.map { t($0.emptyMessage) } ?? t("Henüz hatırlatıcı yok")
     }
 
     /// "Bu kategoride ara": title or a checklist line contains the typed text.
@@ -311,18 +311,18 @@ struct CategoryScreen: View {
                     RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFFC8C8D0))
                         .frame(width: 34, height: 34).liquidGlass(Circle())
                 }
-                .accessibilityLabel("Filtreyi temizle / Tümünü göster")
+                .accessibilityLabel(t("Filtreyi temizle / Tümünü göster"))
                 Button { withAnimation { colorFilter = -1; filterMode = false } } label: {
                     Circle().fill(RealColors.cardSurface).frame(width: 34, height: 34)
                         .overlay(Circle().strokeBorder(.white.opacity(colorFilter == -1 ? 0.9 : 0.25), lineWidth: colorFilter == -1 ? 2 : 1))
                 }
-                .accessibilityLabel("Renksiz kartlar")
+                .accessibilityLabel(t("Renksiz kartlar"))
                 ForEach(pickerColorChoices) { choice in
                     Button { withAnimation { colorFilter = choice.index; filterMode = false } } label: {
                         Circle().fill(choice.color).frame(width: 34, height: 34)
                             .overlay(Circle().strokeBorder(.white, lineWidth: colorFilter == choice.index ? 2 : 0))
                     }
-                    .accessibilityLabel("\(choice.label) rengine göre filtrele")
+                    .accessibilityLabel(t("{0} rengine göre filtrele", t(choice.label)))
                 }
             }
             .padding(.horizontal, 16)
@@ -377,7 +377,7 @@ struct CategoryScreen: View {
             onLongPress: { if !viewOnly { selectedIds.insert(reminder.id) } },
             onSwipeTo24Hour: rightAction,
             onSwipeDelete: deleteAction,
-            swipeRightLabel: plainCards ? (reminder.isCompleted ? "Geri al" : "Tamamla") : "Move 24 hour",
+            swipeRightLabel: plainCards ? (reminder.isCompleted ? t("Geri al") : t("Tamamla")) : "Move 24 hour",
             swipeRightKeepsCard: !plainCards || (reminder.hasRepeat && !reminder.isCompleted),
             plainStyle: plainCards
         )
@@ -460,21 +460,21 @@ private struct CategoryHero: View {
         let shape = UnevenRoundedRectangle(bottomLeadingRadius: 34, bottomTrailingRadius: 34, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                HeroRound(fg: fg, label: "Ana sayfaya dön", action: onBack) { RealSymbol("chevron.left", size: 18).foregroundStyle(fg) }
+                HeroRound(fg: fg, label: t("Ana sayfaya dön"), action: onBack) { RealSymbol("chevron.left", size: 18).foregroundStyle(fg) }
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .medium)).foregroundStyle(fg.opacity(0.8))
-                    TextField("", text: $query, prompt: Text("Bu kategoride ara").foregroundStyle(fg.opacity(0.72)))
+                    TextField("", text: $query, prompt: Text(t("Bu kategoride ara")).foregroundStyle(fg.opacity(0.72)))
                         .font(RealFont.inter(14, .medium)).foregroundStyle(fg).tint(fg)
                         .focused($searching).submitLabel(.search).onSubmit { searching = false }
                     if !query.isEmpty {
                         Button { query = "" } label: { RealSymbol("xmark", size: 12).foregroundStyle(fg).frame(width: 26, height: 26) }
-                            .accessibilityLabel("Aramayı temizle")
+                            .accessibilityLabel(t("Aramayı temizle"))
                     }
                 }
                 .padding(.horizontal, 14).frame(height: 40)
                 .background(Capsule().fill(heroGlass(fg)))
                 .overlay(Capsule().strokeBorder(heroRim(fg), lineWidth: 0.8))
-                HeroRound(fg: fg, label: menuOpen ? "Seçenekleri kapat" : "Seçenekler", action: {
+                HeroRound(fg: fg, label: menuOpen ? t("Seçenekleri kapat") : t("Seçenekler"), action: {
                     withAnimation(.spring(duration: 0.3, bounce: 0.25)) { menuOpen.toggle() }
                 }) {
                     ZStack(alignment: .topTrailing) {
@@ -490,26 +490,26 @@ private struct CategoryHero: View {
                                 Image(systemName: "pencil").font(.system(size: 16, weight: .medium)).foregroundStyle(fg)
                             }
                             .transition(.scale(scale: 0.6).combined(with: .opacity))
-                            HeroRound(fg: fg, label: hasFilter ? "Renk filtresi (açık)" : "Renge göre filtrele", action: { menuOpen = false; onFilter() }) {
+                            HeroRound(fg: fg, label: hasFilter ? t("Renk filtresi (açık)") : t("Renge göre filtrele"), action: { menuOpen = false; onFilter() }) {
                                 Image(systemName: hasFilter ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
                                     .font(.system(size: 16, weight: .medium)).foregroundStyle(fg)
                             }
                             .transition(.scale(scale: 0.6).combined(with: .opacity))
                             if let onGoals {
-                                HeroRound(fg: fg, label: "Hedefler", action: { menuOpen = false; onGoals() }) {
+                                HeroRound(fg: fg, label: t("Hedefler"), action: { menuOpen = false; onGoals() }) {
                                     Image(systemName: "target").font(.system(size: 16, weight: .medium)).foregroundStyle(fg)
                                 }
                                 .transition(.scale(scale: 0.6).combined(with: .opacity))
                             }
                             if let onPeople {
-                                HeroRound(fg: fg, label: "Kişiler", action: { menuOpen = false; onPeople() }) {
+                                HeroRound(fg: fg, label: t("Kişiler"), action: { menuOpen = false; onPeople() }) {
                                     CategoryIconGlyph(icon: .friends, color: fg, size: 18)
                                 }
                                 .transition(.scale(scale: 0.6).combined(with: .opacity))
                             }
                             if let onAddDivider {
                                 // Ayraç: a line broken by a short title mark (CategoryFullHero.kt).
-                                HeroRound(fg: fg, label: "Ayraç ekle", action: { menuOpen = false; onAddDivider() }) {
+                                HeroRound(fg: fg, label: t("Ayraç ekle"), action: { menuOpen = false; onAddDivider() }) {
                                     HStack(spacing: 2.5) {
                                         Capsule().fill(fg).frame(width: 5, height: 1.6)
                                         Capsule().fill(fg).frame(width: 4, height: 3.4)
@@ -528,7 +528,7 @@ private struct CategoryHero: View {
             .zIndex(3)
             HStack(spacing: 8) {
                 if showIcon { RealSymbol(visual.symbol, size: 15).foregroundStyle(fg.opacity(0.85)) }
-                Text(description.isEmpty ? "Kategori" : description).font(RealFont.inter(13, .medium)).foregroundStyle(fg.opacity(0.8)).lineLimit(1)
+                Text(description.isEmpty ? t("Kategori") : description).font(RealFont.inter(13, .medium)).foregroundStyle(fg.opacity(0.8)).lineLimit(1)
             }
             .padding(.top, 30)
             Text(visual.title).font(RealFont.inter(40, .bold)).kerning(-1.4).foregroundStyle(fg).lineLimit(2)
@@ -536,7 +536,7 @@ private struct CategoryHero: View {
             HStack(spacing: 4) {
                 // Overdue reads in a soft red that still shows on light and dark category colours.
                 let alertColor = fg == .white ? Color(argb: 0xFFFFB4AB) : Color(argb: 0xFF9C1C1C)
-                (Text("\(count) kart") + (detail.map { d in Text("  •  ") + Text(d.text).foregroundColor(d.alert ? alertColor : fg.opacity(0.9)) } ?? Text("")))
+                (Text(t("{0} kart", count)) + (detail.map { d in Text("  •  ") + Text(d.text).foregroundColor(d.alert ? alertColor : fg.opacity(0.9)) } ?? Text("")))
                     .font(RealFont.inter(13, .semibold)).foregroundStyle(fg.opacity(0.9)).lineLimit(1)
                 Spacer()
                 if shared {
@@ -544,17 +544,17 @@ private struct CategoryHero: View {
                         CategoryIconGlyph(icon: .friends, color: fg, size: 19).frame(width: 34, height: 34).contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Ortak kategori · Kişiler")
+                    .accessibilityLabel(t("Ortak kategori · Kişiler"))
                 }
                 if let stats {
                     Button { withAnimation(.spring(duration: 0.35)) { showProgress.toggle() } } label: {
                         CategoryProgressDisc(fraction: stats.fraction, active: showProgress, tint: fg).frame(width: 44, height: 44)
                     }
-                    .accessibilityLabel(showProgress ? "İlerlemeyi gizle" : "Kategori ilerlemesini göster")
+                    .accessibilityLabel(showProgress ? t("İlerlemeyi gizle") : t("Kategori ilerlemesini göster"))
                 }
                 if showSort {
                     Button(action: onSort) { SortArrow(sort: sort, fg: fg).frame(width: 44, height: 44) }
-                        .accessibilityLabel("Sıralamayı değiştir")
+                        .accessibilityLabel(t("Sıralamayı değiştir"))
                 }
             }
             .padding(.top, 10)
@@ -587,7 +587,7 @@ private struct HeroProgress: View {
                     .contentTransition(.numericText())
                 Text("%").font(RealFont.inter(20, .bold)).foregroundStyle(fg.opacity(0.7))
                 Spacer()
-                Text(stats.total == 0 ? "Kayıt yok" : "\(stats.done) / \(stats.total) tamamlandı")
+                Text(stats.total == 0 ? t("Kayıt yok") : t("{0} / {1} tamamlandı", stats.done, stats.total))
                     .font(RealFont.inter(13, .semibold)).foregroundStyle(fg.opacity(0.85))
             }
             GeometryReader { g in
@@ -598,9 +598,9 @@ private struct HeroProgress: View {
             }
             .frame(height: 12)
             HStack(spacing: 8) {
-                chip("Tamamlanan", stats.done)
-                chip("Kalan", max(stats.total - stats.done, 0))
-                chip("Bugün", stats.doneToday)
+                chip(t("Tamamlanan"), stats.done)
+                chip(t("Kalan"), max(stats.total - stats.done, 0))
+                chip(t("Bugün"), stats.doneToday)
             }
         }
         .onAppear { withAnimation(.easeInOut(duration: 0.85).delay(0.08)) { fill = stats.fraction } }
@@ -631,12 +631,12 @@ private struct CategoryCompactBar: View {
     var body: some View {
         let fg = visual.foreground
         HStack(spacing: 8) {
-            HeroRound(fg: fg, size: 36, label: "Ana sayfaya dön", action: onBack) { RealSymbol("chevron.left", size: 16).foregroundStyle(fg) }
+            HeroRound(fg: fg, size: 36, label: t("Ana sayfaya dön"), action: onBack) { RealSymbol("chevron.left", size: 16).foregroundStyle(fg) }
             Text(visual.title).font(RealFont.inter(18, .bold)).foregroundStyle(fg).lineLimit(1).padding(.leading, 4)
             Spacer()
             if showSort {
                 Button(action: onSort) { SortArrow(sort: sort, fg: fg).frame(width: 40, height: 40) }
-                    .accessibilityLabel("Sıralamayı değiştir")
+                    .accessibilityLabel(t("Sıralamayı değiştir"))
             }
         }
         .padding(.top, topInset + 6).padding(.horizontal, 12).padding(.bottom, 8)
@@ -672,7 +672,7 @@ struct CategoryProgressPanel: View {
         let shape = RoundedRectangle(cornerRadius: 32, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("İlerleme").font(RealFont.inter(18)).foregroundStyle(.white)
+                Text(t("İlerleme")).font(RealFont.inter(18)).foregroundStyle(.white)
                 Spacer()
                 Text(title).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFB4B9C4))
             }
@@ -681,13 +681,13 @@ struct CategoryProgressPanel: View {
                 Text("%").font(.system(size: 44, weight: .light)).foregroundStyle(accent.opacity(0.85))
             }
             .padding(.top, 6)
-            GlowProgressBar(fraction: fill, label: stats.total == 0 ? "Kayıt yok" : "\(stats.done) / \(stats.total)", accent: accent)
+            GlowProgressBar(fraction: fill, label: stats.total == 0 ? t("Kayıt yok") : "\(stats.done) / \(stats.total)", accent: accent)
                 .frame(height: 46)
                 .padding(.top, 8)
             HStack(spacing: 10) {
-                statChip("Tamamlanan", stats.done, accent: accent)
-                statChip("Kalan", max(stats.total - stats.done, 0), accent: nil)
-                statChip("Bugün", stats.doneToday, accent: nil)
+                statChip(t("Tamamlanan"), stats.done, accent: accent)
+                statChip(t("Kalan"), max(stats.total - stats.done, 0), accent: nil)
+                statChip(t("Bugün"), stats.doneToday, accent: nil)
             }
             .padding(.top, 14).padding(.bottom, 14)
         }

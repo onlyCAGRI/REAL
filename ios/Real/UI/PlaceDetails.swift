@@ -25,9 +25,9 @@ struct PlaceDetails: View {
             if phone != nil || site != nil {
                 HStack(spacing: 8) {
                     if let phone, let tel = URL(string: "tel:" + phone.filter { $0.isNumber || $0 == "+" }) {
-                        chip("phone.fill", "Ara") { UIApplication.shared.open(tel) }
+                        chip("phone.fill", t("Ara")) { UIApplication.shared.open(tel) }
                     }
-                    if let site { chip("safari", "Web sitesi") { UIApplication.shared.open(site) } }
+                    if let site { chip("safari", t("Web sitesi")) { UIApplication.shared.open(site) } }
                     Spacer(minLength: 0)
                 }
             }

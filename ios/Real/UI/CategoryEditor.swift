@@ -39,7 +39,7 @@ struct CategoryEditorSheet: View {
     /// Someone else's shared category (full or limited member): the owner's description (read only) and this phone's
     /// "Yalnızca kategori içinde göster". Name, colour, icon and delete stay with the owner.
     private var memberMode: Bool { existing?.isSharedMirror == true }
-    private var title: String { isBuiltIn ? (builtIn?.title ?? "") : (existing == nil ? "Yeni Kategori" : "Kategoriyi Düzenle") }
+    private var title: String { isBuiltIn ? (builtIn?.title ?? "") : (existing == nil ? t("Yeni Kategori") : t("Kategoriyi Düzenle")) }
     private var canSave: Bool { isBuiltIn || !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
@@ -49,25 +49,25 @@ struct CategoryEditorSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     if memberMode {
-                        section("AÇIKLAMA", footer: "Açıklamayı yalnızca kategori sahibi değiştirebilir.") {
-                            Text(description.isEmpty ? "Kategori sahibi henüz açıklama yazmadı." : description)
+                        section(t("AÇIKLAMA"), footer: t("Açıklamayı yalnızca kategori sahibi değiştirebilir.")) {
+                            Text(description.isEmpty ? t("Kategori sahibi henüz açıklama yazmadı.") : description)
                                 .font(RealFont.inter(15))
                                 .foregroundStyle(description.isEmpty ? Color(argb: 0xFF6F6F78) : Color(argb: 0xFFF3F3F5))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 16).padding(.vertical, 14)
                         }
                     } else if !isBuiltIn {
-                        section("AD") {
+                        section(t("AD")) {
                             HStack {
-                                TextField("", text: $name, prompt: Text("Kategori adı").foregroundStyle(Color(argb: 0xFF6F6F78)))
+                                TextField("", text: $name, prompt: Text(t("Kategori adı")).foregroundStyle(Color(argb: 0xFF6F6F78)))
                                     .font(RealFont.inter(16, .medium)).foregroundStyle(.white).tint(RealColors.accentBlue)
                                     .onChange(of: name) { _, v in if v.count > 20 { name = String(v.prefix(20)) } }
                                 Text("\(name.count)/20").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF6F6F78))
                             }
                             .padding(.horizontal, 16).frame(minHeight: 52)
                         }
-                        section("AÇIKLAMA", footer: "Boş bırakırsan açıklama kutusu kaldırılır · \(wordCount)/30 kelime") {
-                            TextField("", text: $description, prompt: Text("Bu kategori ne için?").foregroundStyle(Color(argb: 0xFF6F6F78)), axis: .vertical)
+                        section(t("AÇIKLAMA"), footer: t("Boş bırakırsan açıklama kutusu kaldırılır · {0}/30 kelime", wordCount)) {
+                            TextField("", text: $description, prompt: Text(t("Bu kategori ne için?")).foregroundStyle(Color(argb: 0xFF6F6F78)), axis: .vertical)
                                 .font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFF3F3F5)).tint(RealColors.accentBlue)
                                 .lineLimit(1...3)
                                 .onChange(of: description) { _, v in
@@ -78,12 +78,12 @@ struct CategoryEditorSheet: View {
                                 .frame(minHeight: 76, alignment: .topLeading)
                         }
                     }
-                    if !memberMode { section("RENK") {
+                    if !memberMode { section(t("RENK")) {
                         CardColorsPanel(title: nil, start: $start, end: $end, blend: $blend, darkText: $dark,
                                         allowNoneStart: isBuiltIn, showDarkText: false)
                     } }
                     if !isBuiltIn && !memberMode {
-                        section("İKON") {
+                        section(t("İKON")) {
                             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 6), spacing: 10) {
                                 ForEach(CategoryIcon.allCases) { option in
                                     iconTile(option)
@@ -92,10 +92,10 @@ struct CategoryEditorSheet: View {
                             .padding(14)
                         }
                     }
-                    section("GÖRÜNÜM") {
+                    section(t("GÖRÜNÜM")) {
                         VStack(spacing: 0) {
                             if !isBuiltIn {
-                                switchRow("Yalnızca kategori içinde göster", "Kartlar genel listelerde görünmez.", $hide)
+                                switchRow(t("Yalnızca kategori içinde göster"), t("Kartlar genel listelerde görünmez."), $hide)
                             }
                         }
                     }
@@ -103,12 +103,12 @@ struct CategoryEditorSheet: View {
                         // CreateCategoryDialog.kt: the confirmation opens inside the same group, not as a system sheet.
                         VStack(spacing: 8) {
                             if confirmDelete {
-                                Text("Bu kategoriyi silmek istiyor musun?")
+                                Text(t("Bu kategoriyi silmek istiyor musun?"))
                                     .font(RealFont.inter(16, .semibold)).foregroundStyle(Color(argb: 0xFFF5F5F8))
                                     .multilineTextAlignment(.center).padding(.horizontal, 16)
                                 Button { withAnimation(.easeOut(duration: 0.18)) { deleteCards.toggle() } } label: {
                                     HStack(spacing: 12) {
-                                        Text("Kategori içindeki kutucukları da sil").font(RealFont.inter(16)).foregroundStyle(.white)
+                                        Text(t("Kategori içindeki kutucukları da sil")).font(RealFont.inter(16)).foregroundStyle(.white)
                                         Spacer()
                                         RealSwitch(isOn: deleteCards, tint: Color(argb: 0xFFFF6B73))
                                     }
@@ -118,12 +118,12 @@ struct CategoryEditorSheet: View {
                                 .buttonStyle(.plain)
                                 HStack(spacing: 10) {
                                     Button { withAnimation(.easeOut(duration: 0.18)) { confirmDelete = false } } label: {
-                                        Text("Vazgeç").font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFE9E9EF))
+                                        Text(t("Vazgeç")).font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFE9E9EF))
                                             .frame(maxWidth: .infinity, minHeight: 46)
                                             .background(Capsule().fill(Color.white.opacity(0.08)))
                                     }
                                     Button { confirmDelete = false; delete(cards: deleteCards) } label: {
-                                        Text("Sil").font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFFFF9AA0))
+                                        Text(t("Sil")).font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFFFF9AA0))
                                             .frame(maxWidth: .infinity, minHeight: 46)
                                             .background(Capsule().fill(Color(argb: 0xFFFF6B73).opacity(0.22)))
                                     }
@@ -134,7 +134,7 @@ struct CategoryEditorSheet: View {
                                 Button { withAnimation(.easeOut(duration: 0.18)) { confirmDelete = true } } label: {
                                     HStack(spacing: 8) {
                                         ActionIcon(.delete, color: Color(argb: 0xFFFF9AA0), size: 16)
-                                        Text("Kategoriyi sil").font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFFF9AA0))
+                                        Text(t("Kategoriyi sil")).font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFFF9AA0))
                                     }
                                     .frame(maxWidth: .infinity).padding(.vertical, 15)
                                     .contentShape(Rectangle())
@@ -159,12 +159,12 @@ struct CategoryEditorSheet: View {
 
     private var header: some View {
         HStack {
-            Button("Vazgeç") { dismiss() }.font(RealFont.inter(17)).foregroundStyle(RealColors.accentBlue)
+            Button(t("Vazgeç")) { dismiss() }.font(RealFont.inter(17)).foregroundStyle(RealColors.accentBlue)
             Spacer()
             Text(title).font(RealFont.inter(17, .semibold)).foregroundStyle(.white).lineLimit(1)
             Spacer()
             Button(action: save) {
-                Text(existing == nil && !isBuiltIn ? "Oluştur" : "Kaydet").font(RealFont.inter(16, .semibold))
+                Text(existing == nil && !isBuiltIn ? t("Oluştur") : t("Kaydet")).font(RealFont.inter(16, .semibold))
                     .foregroundStyle(canSave ? Color.white : Color.white.opacity(0.4))
                     .padding(.horizontal, 16).frame(height: 40)
                     .background(Capsule().fill(canSave ? Self.blue : Self.blue.opacity(0.35)))
@@ -179,7 +179,7 @@ struct CategoryEditorSheet: View {
             return builtIn.visual(override: start == nil && end == nil ? nil
                 : CategoryColorOverride(start: start, end: end, useDarkText: dark, gradientBlendFraction: blend))
         }
-        return CustomCategory(id: 0, name: name.isEmpty ? "Kategori" : name, iconKey: icon.rawValue, accentStart: start ?? 2,
+        return CustomCategory(id: 0, name: name.isEmpty ? t("Kategori") : name, iconKey: icon.rawValue, accentStart: start ?? 2,
                               accentEnd: end, useDarkText: dark, gradientBlendFraction: blend).visual
     }
 
@@ -200,7 +200,7 @@ struct CategoryEditorSheet: View {
                 .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(argb: on ? 0xFF2A2A30 : 0xFF1E1E23)))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(on ? Color.white : Color.clear, lineWidth: 2))
         }
-        .accessibilityLabel(on ? "İkon: \(option.label), seçili" : "İkon: \(option.label)")
+        .accessibilityLabel(on ? t("İkon: {0}, seçili", t(option.label)) : t("İkon: {0}", t(option.label)))
     }
 
     private var wordCount: Int { description.split(whereSeparator: { $0.isWhitespace }).count }
@@ -331,21 +331,21 @@ struct CategoryOrderSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Kategoriler").font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
+                Text(t("Kategoriler")).font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
                 Spacer()
                 Button {
                     store.setCategoryOrder(order.filter { $0 != ReminderStore.showAllKey }, hidden: hidden)
                     savedPreview = preview
                     dismiss()
                 } label: {
-                    Text("Tamam").font(RealFont.inter(14, .semibold)).foregroundStyle(.black)
+                    Text(t("Tamam")).font(RealFont.inter(14, .semibold)).foregroundStyle(.black)
                         .padding(.horizontal, 18).padding(.vertical, 9).background(Capsule().fill(.white))
                 }
                 .buttonStyle(.plain)
             }
             // How many show on Home before "Tümünü göster".
             HStack {
-                Text("Ana sayfada").font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.85))
+                Text(t("Ana sayfada")).font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.85))
                 Spacer()
                 stepButton("−", enabled: preview > 1) { withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { preview -= 1 } }
                 Text("\(preview)").font(RealFont.inter(17, .semibold)).foregroundStyle(.white).frame(minWidth: 26)
@@ -372,7 +372,7 @@ struct CategoryOrderSheet: View {
             .scrollContentBackground(.hidden)
             .environment(\.editMode, .constant(.active))
             if !hiddenList.isEmpty {
-                Text("Gizlenenler").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45))
+                Text(t("Gizlenenler")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45))
                     .padding(.top, 10)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -388,7 +388,7 @@ struct CategoryOrderSheet: View {
                     .padding(.vertical, 6)
                 }
             }
-            Button("Varsayılan") {
+            Button(t("Varsayılan")) {
                 withAnimation {
                     order = store.allHomeCategories.map(\.orderKey) + [ReminderStore.showAllKey]
                     hidden = []
@@ -415,7 +415,7 @@ struct CategoryOrderSheet: View {
     private func item(_ key: String) -> OrderedCategory? { store.allHomeCategories.first { $0.orderKey == key } }
 
     private func title(_ key: String) -> String {
-        guard let item = item(key) else { return "Tümünü göster" }
+        guard let item = item(key) else { return t("Tümünü göster") }
         switch item {
         case .builtIn(let c): return c.visual(override: store.builtInColors[c]).title
         case .custom(let c): return c.name
@@ -439,7 +439,7 @@ struct CategoryOrderSheet: View {
                 Image(systemName: "eye.slash").font(.system(size: 15)).foregroundStyle(Color(argb: 0xFFAAAAB4)).frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(title(key)) gizle")
+            .accessibilityLabel(t("{0} gizle", title(key)))
         }
         .padding(.leading, 16).padding(.vertical, 8).padding(.trailing, 4)
         .frame(minHeight: 56)
@@ -458,7 +458,7 @@ struct CategoryOrderSheet: View {
 /// ReminderColorPicker.kt "Kart renkleri": Ana renk / Geçiş rengi horizontal rows (✕ = none), the draggable
 /// gradient "Geçiş" bar when both are set, otherwise a preview strip, and the dark-text radio.
 struct CardColorsPanel: View {
-    var title: String? = "Kart renkleri"
+    var title: String? = t("Kart renkleri")
     @Binding var start: Int?
     @Binding var end: Int?
     @Binding var blend: Double
@@ -469,12 +469,12 @@ struct CardColorsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
-            if let title { Text(title).font(RealFont.inter(13, .semibold)).foregroundStyle(Color(argb: 0xFFF0F0F4)) }
-            ColorChoiceRow(label: "Ana renk", selected: $start, allowNone: allowNoneStart)
-            ColorChoiceRow(label: "Geçiş rengi", selected: $end, allowNone: true)
+            if let title { Text(t(title)).font(RealFont.inter(13, .semibold)).foregroundStyle(Color(argb: 0xFFF0F0F4)) }
+            ColorChoiceRow(label: t("Ana renk"), selected: $start, allowNone: allowNoneStart)
+            ColorChoiceRow(label: t("Geçiş rengi"), selected: $end, allowNone: true)
             if let s = paletteColor(start), let e = paletteColor(end) {
                 HStack(spacing: 0) {
-                    Text("Geçiş").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFFB7B7C0)).frame(width: 96, alignment: .leading)
+                    Text(t("Geçiş")).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFFB7B7C0)).frame(width: 96, alignment: .leading)
                     GradientTransitionBar(fraction: $blend, startColor: s, endColor: e)
                 }
             } else {
@@ -495,7 +495,7 @@ struct CardColorsPanel: View {
                             if darkText { RealSymbol("checkmark", size: 11.5).foregroundStyle(.white) }
                         }
                         .frame(width: 20, height: 20)
-                        Text("Koyu renk metin kullan (Siyah)").font(RealFont.inter(13, .medium))
+                        Text(t("Koyu renk metin kullan (Siyah)")).font(RealFont.inter(13, .medium))
                             .foregroundStyle(darkText ? Color(argb: 0xFFF5F5F8) : Color(argb: 0xFFB7B7C0))
                     }
                     .padding(.vertical, 4).padding(.horizontal, 2)
@@ -524,7 +524,7 @@ private struct ColorChoiceRow: View {
                                 .background(Circle().fill(on ? Color(argb: 0xFF2D2D36) : Color(argb: 0xFF1B1B1F)))
                                 .overlay(Circle().strokeBorder(on ? .white : .white.opacity(0.18), lineWidth: on ? 2.2 : 0.8))
                         }
-                        .accessibilityLabel("\(label): Renk yok (Varsayılan)")
+                        .accessibilityLabel(t("{0}: Renk yok (Varsayılan)", label))
                     }
                     ForEach(pickerColorChoices) { choice in
                         let on = selected == choice.index
@@ -532,7 +532,7 @@ private struct ColorChoiceRow: View {
                             Circle().fill(choice.color).frame(width: 31, height: 31)
                                 .overlay(Circle().strokeBorder(on ? .white : .white.opacity(0.16), lineWidth: on ? 2.2 : 0.8))
                         }
-                        .accessibilityLabel("\(label): \(choice.label)")
+                        .accessibilityLabel("\(label): \(t(choice.label))")
                     }
                 }
                 .padding(.vertical, 2)
@@ -565,6 +565,6 @@ struct GradientTransitionBar: View {
             })
         }
         .frame(height: 36)
-        .accessibilityLabel("Geçiş çubuğu")
+        .accessibilityLabel(t("Geçiş çubuğu"))
     }
 }

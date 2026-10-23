@@ -85,9 +85,9 @@ struct SwipeTutorial: View {
 
     var body: some View {
         if visible {
-            TimelineView(.animation) { t in
+            TimelineView(.animation) { tl in
                 let phases = upLabel == nil ? 2.0 : 3.0
-                let time = t.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: phases * 1.5) / 1.5
+                let time = tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: phases * 1.5) / 1.5
                 let phase = min(Int(time), Int(phases) - 1)
                 let frac = CGFloat(time - Double(phase))
                 let travel: CGFloat = frac < 0.55 ? 1 - pow(1 - frac / 0.55, 2) : (frac < 0.8 ? 1 : 1 - (frac - 0.8) / 0.2)
@@ -103,7 +103,7 @@ struct SwipeTutorial: View {
                             .frame(width: 120, height: 170)
                             .rotationEffect(.degrees(Double(max(-24, min(24, ghost.width / 85 * 7)))))
                             .offset(ghost)
-                        Text(phase == 0 ? "Sağa kaydır" : (phase == 1 ? "Sola kaydır" : "Yukarı kaydır"))
+                        Text(phase == 0 ? t("Sağa kaydır") : (phase == 1 ? t("Sola kaydır") : t("Yukarı kaydır")))
                             .font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.7)).padding(.top, 28)
                         Text(phase == 0 ? rightLabel : (phase == 1 ? leftLabel : (upLabel ?? "")))
                             .font(RealFont.inter(24, .bold)).foregroundStyle(phase == 0 ? swipeSave : (phase == 1 ? swipePass : musicTone))
@@ -114,7 +114,7 @@ struct SwipeTutorial: View {
                             UserDefaults.standard.set(true, forKey: "swipe_tutorial_\(kind)")
                             withAnimation(.easeOut(duration: 0.2)) { visible = false }
                         } label: {
-                            Text("Bir daha gösterme").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+                            Text(t("Bir daha gösterme")).font(RealFont.inter(14, .medium)).foregroundStyle(.white)
                                 .padding(.horizontal, 18).padding(.vertical, 11).background(Capsule().fill(.white.opacity(0.12)))
                         }
                         .buttonStyle(.plain)

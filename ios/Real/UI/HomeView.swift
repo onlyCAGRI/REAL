@@ -155,7 +155,7 @@ struct HomeView: View {
                         SortArrow(sort: ReminderSortOrder(rawValue: homeSort) ?? .recentlyAdded, fg: Color(argb: 0xFFF2F2F4))
                             .frame(width: 44, height: 44)
                     }
-                    .accessibilityLabel("Sıralamayı değiştir")
+                    .accessibilityLabel(t("Sıralamayı değiştir"))
                 }
                 .padding(.leading, 18).padding(.trailing, 6).padding(.top, 12).padding(.bottom, 12)
                 if let sortHint {
@@ -169,9 +169,9 @@ struct HomeView: View {
                         }
                 }
                 if active.isEmpty && completed.isEmpty && calendarItems.isEmpty && searching {
-                    Text("Bununla eşleşen kart yok").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF888890)).padding(.top, 40)
+                    Text(t("Bununla eşleşen kart yok")).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF888890)).padding(.top, 40)
                 } else if active.isEmpty && completed.isEmpty {
-                    Text("Bir REAL yaz, gerisini biz hatırlayalım.")
+                    Text(t("Bir REAL yaz, gerisini biz hatırlayalım."))
                         .font(RealType.cardTitle)
                         .foregroundStyle(RealColors.textMuted)
                         .padding(.top, 40)
@@ -190,7 +190,7 @@ struct HomeView: View {
                         .padding(.horizontal, 16).padding(.bottom, 8)
                 }
                 if !completed.isEmpty {
-                    SectionTitle(text: "Tamamlandı").padding(.top, 18)
+                    SectionTitle(text: t("Tamamlandı")).padding(.top, 18)
                     let shown = Array(completed.prefix(completedShown))
                     let more = completed.count > completedShown
                     ForEach(Array(shown.enumerated()), id: \.element.id) { index, reminder in
@@ -207,7 +207,7 @@ struct HomeView: View {
                                             completedShown = completedShown < 11 ? 11 : completedShown + 10
                                         }
                                     } label: {
-                                        Text("Daha fazla").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+                                        Text(t("Daha fazla")).font(RealFont.inter(14, .medium)).foregroundStyle(.white)
                                             .padding(.horizontal, 18).padding(.vertical, 9)
                                             .liquidGlass(Capsule(), role: .chrome)
                                     }
@@ -327,9 +327,9 @@ struct HomeView: View {
         homeSort = next.rawValue
         let text: String
         switch next {
-        case .oldestFirst: text = "Son eklenen altta"
-        case .reminderTime, .nearestDate: text = "Tarihi en yakın üstte"
-        case .recentlyAdded: text = "Son eklenen üstte"
+        case .oldestFirst: text = t("Son eklenen altta")
+        case .reminderTime, .nearestDate: text = t("Tarihi en yakın üstte")
+        case .recentlyAdded: text = t("Son eklenen üstte")
         }
         withAnimation(.easeOut(duration: 0.2)) { sortHint = ((sortHint?.id ?? 0) + 1, text) }
     }
@@ -346,7 +346,7 @@ struct HomeView: View {
             Button { withoutAnimation { showAccountMenu = true } } label: {
                 ProfileAvatar(name: store.ownerName, size: 44)
             }
-            .accessibilityLabel("Hesap menüsünü aç")
+            .accessibilityLabel(t("Hesap menüsünü aç"))
         }
     }
 
@@ -378,7 +378,7 @@ struct HomeView: View {
                             withAnimation(.spring(duration: 0.2)) { pressedTile = pressing ? item.orderKey : nil }
                         })
                         .accessibilityAddTraits(.isButton)
-                        .accessibilityAction(named: customId != nil ? "Kategorileri seç" : "Kategori rengini düzenle") {
+                        .accessibilityAction(named: customId != nil ? t("Kategorileri seç") : t("Kategori rengini düzenle")) {
                             if let customId { toggleCategory(customId) } else if case .builtIn(let c) = item { editingBuiltIn = c }
                         }
                         .zoomSource("cat-\(item.orderKey)", in: nav)
@@ -388,7 +388,7 @@ struct HomeView: View {
             }
             if expanded && !selecting {
                 Button { showNewCategory = true } label: {
-                    Text("＋  Yeni kategori")
+                    Text(t("＋  Yeni kategori"))
                         .font(RealFont.inter(15))
                         .foregroundStyle(Color(argb: 0xFFCCCCD3))
                         .frame(maxWidth: .infinity)
@@ -399,7 +399,7 @@ struct HomeView: View {
                 .padding(.bottom, 8)
             }
             if !selecting && (order.count > previewCount || !expanded) && !store.hiddenHomeKeys.contains(ReminderStore.showAllKey) {
-                Button(expanded ? "Daha az göster" : "Tümünü göster") {
+                Button(expanded ? t("Daha az göster") : t("Tümünü göster")) {
                     withAnimation(.spring(duration: 0.4)) { expanded.toggle() }
                 }
                 .font(RealFont.inter(14, .medium))
@@ -440,7 +440,7 @@ struct HomeView: View {
             onLongPress: { if !viewOnly { toggleSelection(reminder.id) } },
             onSwipeTo24Hour: rightAction,
             onSwipeDelete: deleteAction,
-            swipeRightLabel: plainCards ? (reminder.isCompleted ? "Geri al" : "Tamamla") : "Move 24 hour",
+            swipeRightLabel: plainCards ? (reminder.isCompleted ? t("Geri al") : t("Tamamla")) : "Move 24 hour",
             swipeRightKeepsCard: !plainCards || (reminder.hasRepeat && !reminder.isCompleted),
             plainStyle: plainCards,
             categoryLabel: label
@@ -520,7 +520,7 @@ struct ConnectionAvatar: View {
     }
 
     var body: some View {
-        let initial = name.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased(with: Locale(identifier: "tr_TR")) } ?? "R"
+        let initial = name.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased(with: I18n.locale) } ?? "R"
         Circle()
             .fill(LinearGradient(colors: [tone.opacity(0.38), tone.opacity(0.14)], startPoint: .topLeading, endPoint: .bottomTrailing))
             .overlay(Circle().strokeBorder(tone.opacity(0.45), lineWidth: 1))
@@ -581,17 +581,17 @@ struct SelectionBar: View {
     var body: some View {
         HStack(spacing: 18) {
             Button(action: onCancel) { ActionIcon(.close, size: 21) }
-            Text("\(count) seçili").font(RealFont.inter(15, .medium))
+            Text(t("{0} seçili", count)).font(RealFont.inter(15, .medium))
             Spacer()
             if let onStar { Button(action: onStar) { ActionIcon(.star, size: 21) } }
             if let onComplete { Button(action: onComplete) { ActionIcon(.check, size: 21) } }
             if let onCheck {
                 Button(action: onCheck) {
-                    Text("Kontrol").font(RealFont.inter(14, .semibold)).foregroundStyle(CheckRequests.otherColor)
+                    Text(t("Kontrol")).font(RealFont.inter(14, .semibold)).foregroundStyle(CheckRequests.otherColor)
                         .padding(.horizontal, 12).frame(height: 34)
                         .background(Capsule().fill(CheckRequests.otherColor.opacity(0.14)))
                 }
-                .accessibilityLabel("Kontrol ettir")
+                .accessibilityLabel(t("Kontrol ettir"))
             }
             Button(action: onDelete) { ActionIcon(.delete, size: 21) }.tint(RealColors.overdue)
         }
@@ -612,7 +612,7 @@ struct ModulePlaceholderScreen: View {
     var body: some View {
         VStack(spacing: 14) {
             Text(name).font(RealType.editorialTitle).kerning(-2.2).foregroundStyle(Color(argb: 0xFFF3F1F4))
-            Text("iOS sürümünde yakında").font(RealType.editorialSubtitle).foregroundStyle(Color(argb: 0xFF8C8C95))
+            Text(t("iOS sürümünde yakında")).font(RealType.editorialSubtitle).foregroundStyle(Color(argb: 0xFF8C8C95))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black.ignoresSafeArea())

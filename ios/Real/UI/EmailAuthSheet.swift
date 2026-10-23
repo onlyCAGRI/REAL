@@ -5,8 +5,8 @@ import SwiftUI
 struct AuthChoiceSheet: View {
     var startWithEmail = false
     /// SignInRequired: what the guest tapped asks for an account.
-    var title = "Hesap ekle"
-    var subtitle = "Notların bu cihazda kalır. Hesap; eşitleme ve yedekleme için kullanılır."
+    var title = t("Hesap ekle")
+    var subtitle = t("Notların bu cihazda kalır. Hesap; eşitleme ve yedekleme için kullanılır.")
     let onAuthenticated: (RealAuth.Account) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var auth = RealAuth.shared
@@ -20,30 +20,30 @@ struct AuthChoiceSheet: View {
                               onAuthenticated: { account in dismiss(); onAuthenticated(account) })
                     .transition(.opacity)
             } else {
-                Text(title).font(RealFont.inter(24, .semibold)).foregroundStyle(.white).padding(.top, 8)
-                Text(subtitle)
+                Text(t(title)).font(RealFont.inter(24, .semibold)).foregroundStyle(.white).padding(.top, 8)
+                Text(t(subtitle))
                     .font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFA9A9B2)).padding(.bottom, 6)
-                methodRow(glyph: "G", tone: Color(argb: 0xFF6FD6FF), title: auth.busy ? "Google açılıyor…" : "Google ile devam et",
-                          subtitle: "Hesabını Google ile bağla") {
+                methodRow(glyph: "G", tone: Color(argb: 0xFF6FD6FF), title: auth.busy ? t("Google açılıyor…") : t("Google ile devam et"),
+                          subtitle: t("Hesabını Google ile bağla")) {
                     error = nil
                     Task { @MainActor in
                         if let account = await auth.signInWithGoogle() { dismiss(); onAuthenticated(account) }
                         else { error = auth.lastError }
                     }
                 }
-                methodRow(glyph: "A", tone: .white, title: "Apple ile devam et", subtitle: "Hesabını Apple ile bağla") {
+                methodRow(glyph: "A", tone: .white, title: t("Apple ile devam et"), subtitle: t("Hesabını Apple ile bağla")) {
                     error = nil
                     Task { @MainActor in
                         if let account = await auth.signInWithApple() { dismiss(); onAuthenticated(account) }
                         else { error = auth.lastError }
                     }
                 }
-                methodRow(glyph: "@", tone: Color(argb: 0xFFB59BFF), title: "E-posta ile devam et", subtitle: "Giriş yap ya da hesap oluştur") {
+                methodRow(glyph: "@", tone: Color(argb: 0xFFB59BFF), title: t("E-posta ile devam et"), subtitle: t("Giriş yap ya da hesap oluştur")) {
                     error = nil
                     withAnimation(.easeOut(duration: 0.18)) { showEmail = true }
                 }
                 if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFF7A70)) }
-                Button("Vazgeç") { dismiss() }
+                Button(t("Vazgeç")) { dismiss() }
                     .font(RealFont.inter(14, .medium)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 40)
                     .background(Capsule().fill(.white.opacity(0.06))).overlay(Capsule().strokeBorder(.white.opacity(0.10)))
@@ -106,28 +106,28 @@ struct EmailAuthForm: View {
                 RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white).frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
             }
             .buttonStyle(.plain).disabled(busy).padding(.top, 8)
-            .accessibilityLabel("Geri")
-            Text(mode == .signIn ? "E-posta ile giriş" : "Hesap oluştur")
+            .accessibilityLabel(t("Geri"))
+            Text(mode == .signIn ? t("E-posta ile giriş") : t("Hesap oluştur"))
                 .font(RealFont.inter(28, .semibold)).foregroundStyle(.white).padding(.top, 4).padding(.bottom, 8)
             if mode == .create {
-                field("Ad (zorunlu)", text: $firstName, tag: 0).textContentType(.givenName)
-                field("Soyad (isteğe bağlı)", text: $lastName, tag: 1).textContentType(.familyName)
+                field(t("Ad (zorunlu)"), text: $firstName, tag: 0).textContentType(.givenName)
+                field(t("Soyad (isteğe bağlı)"), text: $lastName, tag: 1).textContentType(.familyName)
             }
-            field("E-posta", text: $email, tag: 2)
+            field(t("E-posta"), text: $email, tag: 2)
                 .textContentType(.emailAddress).keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
-            field("Şifre", text: $password, tag: 3, secure: true).textContentType(mode == .signIn ? .password : .newPassword)
-            if mode == .create { field("Şifreyi tekrar yaz", text: $confirm, tag: 4, secure: true).textContentType(.newPassword) }
+            field(t("Şifre"), text: $password, tag: 3, secure: true).textContentType(mode == .signIn ? .password : .newPassword)
+            if mode == .create { field(t("Şifreyi tekrar yaz"), text: $confirm, tag: 4, secure: true).textContentType(.newPassword) }
             if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFF7A70)) }
             if let info { Text(info).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF7BE0A4)) }
             Button(action: submit) {
-                Text(busy ? "Bekleyin…" : (mode == .signIn ? "Giriş yap" : "Hesap oluştur"))
+                Text(busy ? t("Bekleyin…") : (mode == .signIn ? t("Giriş yap") : t("Hesap oluştur")))
                     .font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                     .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white))
             }
             .buttonStyle(PressScaleStyle(scale: 0.98)).disabled(busy).padding(.top, 4)
             HStack(spacing: 8) {
-                if mode == .signIn { pill("Şifremi unuttum", action: resetPassword) }
-                pill(mode == .signIn ? "Yeni hesap oluştur" : "Zaten hesabım var") {
+                if mode == .signIn { pill(t("Şifremi unuttum"), action: resetPassword) }
+                pill(mode == .signIn ? t("Yeni hesap oluştur") : t("Zaten hesabım var")) {
                     mode = mode == .signIn ? .create : .signIn
                     password = ""; confirm = ""; error = nil; info = nil
                 }
@@ -162,11 +162,11 @@ struct EmailAuthForm: View {
     private func submit() {
         guard !busy else { return }
         let mail = email.trimmingCharacters(in: .whitespaces)
-        guard !mail.isEmpty, !password.isEmpty else { error = "E-posta ve şifreyi doldurun."; return }
+        guard !mail.isEmpty, !password.isEmpty else { error = t("E-posta ve şifreyi doldurun."); return }
         if mode == .create {
-            guard !firstName.trimmingCharacters(in: .whitespaces).isEmpty else { error = "Adını yaz."; return }
-            guard password.count >= 6 else { error = "Şifre en az 6 karakter olmalı."; return }
-            guard password == confirm else { error = "Şifreler eşleşmiyor."; return }
+            guard !firstName.trimmingCharacters(in: .whitespaces).isEmpty else { error = t("Adını yaz."); return }
+            guard password.count >= 6 else { error = t("Şifre en az 6 karakter olmalı."); return }
+            guard password == confirm else { error = t("Şifreler eşleşmiyor."); return }
         }
         busy = true; error = nil; info = nil; focus = nil
         Task { @MainActor in
@@ -182,11 +182,11 @@ struct EmailAuthForm: View {
 
     private func resetPassword() {
         let mail = email.trimmingCharacters(in: .whitespaces)
-        guard !mail.isEmpty else { error = "Önce e-posta adresini yazın."; return }
+        guard !mail.isEmpty else { error = t("Önce e-posta adresini yazın."); return }
         busy = true; error = nil; info = nil
         Task { @MainActor in
             defer { busy = false }
-            do { try await RealAuth.shared.sendPasswordReset(mail); info = "Şifre sıfırlama bağlantısı e-posta adresine gönderildi." }
+            do { try await RealAuth.shared.sendPasswordReset(mail); info = t("Şifre sıfırlama bağlantısı e-posta adresine gönderildi.") }
             catch { self.error = error.localizedDescription }
         }
     }

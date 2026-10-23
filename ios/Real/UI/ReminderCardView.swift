@@ -78,7 +78,7 @@ struct ReminderCardView: View {
                 let p = min(max(-dragX / 82, 0), 1)
                 HStack(spacing: 6) {
                     Image(systemName: "trash").font(.system(size: 13, weight: .semibold))
-                    Text("Sil").font(RealFont.inter(12, .semibold))
+                    Text(t("Sil")).font(RealFont.inter(12, .semibold))
                 }
                 .foregroundStyle(Color(argb: 0xFFFF8A80))
                 .scaleEffect(0.85 + 0.15 * p, anchor: .trailing)
@@ -118,7 +118,7 @@ struct ReminderCardView: View {
                 Color.clear.frame(width: 12, height: 48)
             }
             VStack(alignment: .leading, spacing: 0) {
-                Text(reminder.text.isEmpty ? "Boş not" : reminder.text)
+                Text(reminder.text.isEmpty ? t("Boş not") : reminder.text)
                     .font(RealType.cardTitle)
                     .lineSpacing(4)
                     .foregroundStyle(textColor)
@@ -207,7 +207,7 @@ struct ReminderCardView: View {
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(reminder.isCompleted ? "Tamamlamayı geri al" : "Tamamla")
+        .accessibilityLabel(reminder.isCompleted ? t("Tamamlamayı geri al") : t("Tamamla"))
     }
 
     private var selectionDot: some View {
@@ -240,7 +240,7 @@ struct ReminderCardView: View {
     @ViewBuilder private var standardMeta: some View {
         if let journal = reminder.journal {
             HStack(spacing: 4) {
-                Text("Günlük")
+                Text(t("Günlük"))
                 if let mood = journal.mood { Text(mood.emoji).font(.system(size: 10)) }
             }
             .font(RealType.cardMetaPrimary)
@@ -285,7 +285,7 @@ struct ReminderCardView: View {
             .padding(.top, 5)
         }
         if let done = reminder.completedAt {
-            Text("Tamamlandı: \(RealDates.reminder(done))")
+            Text(t("Tamamlandı: {0}", RealDates.reminder(done)))
                 .font(RealType.cardMeta)
                 .foregroundStyle(useDark ? Color(argb: 0xFF55555E) : Color(argb: 0xFF92929A))
                 .padding(.top, 5)
@@ -456,7 +456,7 @@ struct CategoryTileView: View {
             if hero, let heroActions {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 8) {
-                        if showCount { CategoryPill(text: "\(count) kart", foreground: visual.foreground) }
+                        if showCount { CategoryPill(text: t("{0} kart", count), foreground: visual.foreground) }
                         if !description.isEmpty { CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading) }
                     }
                     Spacer()
@@ -464,13 +464,13 @@ struct CategoryTileView: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    if showCount { CategoryPill(text: "\(count) kart", foreground: visual.foreground) }
+                    if showCount { CategoryPill(text: t("{0} kart", count), foreground: visual.foreground) }
                     if !description.isEmpty {
                         CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading)
                     }
                     Spacer()
                     if selectionMode {
-                        Text(isSelected ? "✓ Seçili" : "○ Seç").font(RealFont.inter(13, .medium)).foregroundStyle(visual.foreground)
+                        Text(isSelected ? "✓ " + t("Seçili") : "○ " + t("Seç")).font(RealFont.inter(13, .medium)).foregroundStyle(visual.foreground)
                     }
                     RealSymbol(visual.symbol, size: 21.8).foregroundStyle(visual.foreground)
                 }
@@ -519,6 +519,6 @@ struct PlaceTriggerGlyph: View {
             ctx.fill(arrow, with: .color(Self.tone(onExit)))
         }
         .rotationEffect(.degrees(onExit ? 180 : 0))
-        .accessibilityLabel(onExit ? "Ayrılınca hatırlatır" : "Varınca hatırlatır")
+        .accessibilityLabel(onExit ? t("Ayrılınca hatırlatır") : t("Varınca hatırlatır"))
     }
 }

@@ -7,12 +7,12 @@ enum SignInReason {
 
     var title: String {
         switch self {
-        case .share: return "Paylaşmak için hesap gerekiyor"
-        case .people: return "Kişiler için hesap gerekiyor"
-        case .backup: return "Yedekleme için hesap gerekiyor"
+        case .share: return t("Paylaşmak için hesap gerekiyor")
+        case .people: return t("Kişiler için hesap gerekiyor")
+        case .backup: return t("Yedekleme için hesap gerekiyor")
         }
     }
-    static let keepNote = "Misafirken yaptıkların kaybolmaz; hesabına hemen taşınır ve buluta yedeklenir."
+    static var keepNote: String { t("Misafirken yaptıkların kaybolmaz; hesabına hemen taşınır ve buluta yedeklenir.") }
 }
 
 @MainActor
@@ -22,9 +22,9 @@ enum GuestAdoption {
         do {
             RealCloudSync.shared.reset()
             _ = try await RealCloudRestore.run(store: store, life: life, keepGuest: true)
-            RealToast.shared.show("Kartların hesabına taşındı")
+            RealToast.shared.show(t("Kartların hesabına taşındı"))
         } catch {
-            RealToast.shared.show("Giriş yapıldı; kartlar birazdan eşitlenecek")
+            RealToast.shared.show(t("Giriş yapıldı; kartlar birazdan eşitlenecek"))
         }
     }
 }
@@ -38,10 +38,10 @@ struct SignInRequiredPrompt: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(reason.title).font(RealFont.inter(16, .medium)).foregroundStyle(.white)
-            Text(SignInReason.keepNote).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6))
+            Text(t(reason.title)).font(RealFont.inter(16, .medium)).foregroundStyle(.white)
+            Text(t(SignInReason.keepNote)).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6))
             Button { showAuth = true } label: {
-                Text("Hesap ekle").font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                Text(t("Hesap ekle")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                     .frame(maxWidth: .infinity, minHeight: 46).background(Capsule().fill(.white))
             }
             .buttonStyle(.plain)
@@ -73,16 +73,16 @@ struct GuestBackupNudge: View {
         if visible {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Kartların yalnız bu telefonda").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
-                    Text("Telefon kaybolursa ya da uygulama silinirse gider. Hesap ekle, hepsi yedeklensin.")
+                    Text(t("Kartların yalnız bu telefonda")).font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+                    Text(t("Telefon kaybolursa ya da uygulama silinirse gider. Hesap ekle, hepsi yedeklensin."))
                         .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9A9AA3)).padding(.bottom, 7)
                     HStack(spacing: 8) {
                         Button { showAuth = true } label: {
-                            Text("Hesap ekle").font(RealFont.inter(13, .medium)).foregroundStyle(.black)
+                            Text(t("Hesap ekle")).font(RealFont.inter(13, .medium)).foregroundStyle(.black)
                                 .padding(.horizontal, 14).padding(.vertical, 8).background(Capsule().fill(.white))
                         }
                         Button { later() } label: {
-                            Text("Sonra").font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+                            Text(t("Sonra")).font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                                 .padding(.horizontal, 14).padding(.vertical, 8)
                                 .overlay(Capsule().strokeBorder(.white.opacity(0.16)))
                         }
@@ -94,7 +94,7 @@ struct GuestBackupNudge: View {
                     Text("✕").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF6A6A72)).padding(4)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Hatırlatmayı kapat")
+                .accessibilityLabel(t("Hatırlatmayı kapat"))
             }
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color(argb: 0xFF121A14)))

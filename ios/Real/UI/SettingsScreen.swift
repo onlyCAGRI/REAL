@@ -32,23 +32,23 @@ struct AccountMenuOverlay: View {
             do {
                 RealCloudSync.shared.reset()
                 let summary = try await RealCloudRestore.run(store: store, life: life, keepGuest: keepGuest)
-                var text = "Hesabından \(summary.cards) kart, \(summary.categories) kategori ve \(summary.moods) mood yüklendi"
-                if summary.categoryOrder { text += ", kategori sıralaman uygulandı" }
+                var text = t("Hesabından {0} kart, {1} kategori ve {2} mood yüklendi", summary.cards, summary.categories, summary.moods)
+                if summary.categoryOrder { text += t(", kategori sıralaman uygulandı") }
                 // Boards come from their own service; a failure there does not undo the cards.
                 if let boards = try? await RealBoardsRestore.run(pano: pano) {
-                    text += ". \(boards.boards) pano geldi"
-                    if boards.skipped > 0 { text += " (\(boards.skipped) blok türü iOS'ta henüz gösterilemiyor)" }
+                    text += t(". {0} pano geldi", boards.boards)
+                    if boards.skipped > 0 { text += t(" ({0} blok türü iOS'ta henüz gösterilemiyor)", boards.skipped) }
                     await pano.sync()
                 } else {
-                    text += ". Panolar şu anda alınamadı"
+                    text += t(". Panolar şu anda alınamadı")
                 }
-                notice = text + (summary.files > 0 ? ". \(summary.files) fotoğraf, dosya ve ses kaydı arka planda iniyor." : ".")
+                notice = text + (summary.files > 0 ? t(". {0} fotoğraf, dosya ve ses kaydı arka planda iniyor.", summary.files) : ".")
             } catch let failure as AppCheckUnavailable {
-                notice = "Kartlar alınamadı: uygulama doğrulaması yapılamadı (\(failure.reason))."
+                notice = t("Kartlar alınamadı: uygulama doğrulaması yapılamadı ({0}).", failure.reason)
             } catch let failure as RealBackend.Failure {
-                notice = "Kartlar alınamadı (sunucu: \(failure.status))."
+                notice = t("Kartlar alınamadı (sunucu: {0}).", failure.status)
             } catch {
-                notice = "Kartlar alınamadı. İnternet bağlantını kontrol et."
+                notice = t("Kartlar alınamadı. İnternet bağlantını kontrol et.")
             }
         }
     }
@@ -57,28 +57,28 @@ struct AccountMenuOverlay: View {
         ZStack(alignment: .top) {
             Color.black.opacity(0.40 * progress).ignoresSafeArea()
                 .onTapGesture { close() }
-                .accessibilityLabel("Hesap menüsünü kapat")
+                .accessibilityLabel(t("Hesap menüsünü kapat"))
             VStack(alignment: .leading, spacing: 0) {
-                Text("Hesap").font(RealFont.inter(21, .bold)).foregroundStyle(Color(argb: 0xFFF7F7F8))
-                Text(auth.account?.email ?? "Bu cihazdaki notlar").font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFA4A4AD)).padding(.top, 12)
+                Text(t("Hesap")).font(RealFont.inter(21, .bold)).foregroundStyle(Color(argb: 0xFFF7F7F8))
+                Text(auth.account?.email ?? t("Bu cihazdaki notlar")).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFA4A4AD)).padding(.top, 12)
                 HStack(spacing: 12) {
                     ProfileAvatar(name: store.ownerName, size: 44)
-                    Text(store.ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? "Kullanıcı" : store.ownerName)
+                    Text(store.ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? t("Kullanıcı") : store.ownerName)
                         .font(RealFont.inter(16, .medium)).foregroundStyle(Color(argb: 0xFFF7F7F8))
                 }
                 .padding(.top, 13)
                 VStack(spacing: 3) {
-                    item(.person, "Fotoğrafın veya avatarın") { showPhotoChoice = true }
-                    item(.star, "REAL Pro") { notice = "REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak." }
+                    item(.person, t("Fotoğrafın veya avatarın")) { showPhotoChoice = true }
+                    item(.star, "REAL Pro") { notice = t("REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak.") }
                     if auth.account == nil {
-                        item(.add, auth.busy ? "Google açılıyor…" : "Hesap ekle") { signInAndRestore() }
+                        item(.add, auth.busy ? t("Google açılıyor…") : t("Hesap ekle")) { signInAndRestore() }
                             .sheet(isPresented: $showAuthChoice) { AuthChoiceSheet { _ in restore(keepGuest: true) } }
                     } else {
-                        item(.manage, "Hesapları yönet") { showManage = true }
-                        item(.person, "Kişilerim") { showPeople = true }
+                        item(.manage, t("Hesapları yönet")) { showManage = true }
+                        item(.person, t("Kişilerim")) { showPeople = true }
                     }
-                    item(.category, "Kategori sıralaması") { close(then: onCategoryOrder) }
-                    item(.settings, "Ayarlar") { close(then: onSettings) }
+                    item(.category, t("Kategori sıralaması")) { close(then: onCategoryOrder) }
+                    item(.settings, t("Ayarlar")) { close(then: onSettings) }
                 }
                 .padding(.top, 12)
             }
@@ -93,11 +93,11 @@ struct AccountMenuOverlay: View {
         }
         .onAppear { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.26)) { progress = 1 } }
         // ProfilePhotoChooser.kt: your own photo, or a Humation avatar drawn in REAL.
-        .confirmationDialog("Profil görünümün", isPresented: $showPhotoChoice, titleVisibility: .visible) {
-            Button("Fotoğraf seç") { showPhotoPicker = true }
-            Button("Avatar oluştur") { showAvatarEditor = true }
-            Button("Vazgeç", role: .cancel) {}
-        } message: { Text("Avatar kişilerinde her zaman görünür; fotoğraf yalnız Ayarlar'da paylaşmayı açarsan.") }
+        .confirmationDialog(t("Profil görünümün"), isPresented: $showPhotoChoice, titleVisibility: .visible) {
+            Button(t("Fotoğraf seç")) { showPhotoPicker = true }
+            Button(t("Avatar oluştur")) { showAvatarEditor = true }
+            Button(t("Vazgeç"), role: .cancel) {}
+        } message: { Text(t("Avatar kişilerinde her zaman görünür; fotoğraf yalnız Ayarlar'da paylaşmayı açarsan.")) }
         .fullScreenCover(isPresented: $showAvatarEditor) { AvatarEditorView() }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .onChange(of: photoItem) { _, item in
@@ -110,7 +110,7 @@ struct AccountMenuOverlay: View {
             }
         }
         .alert("REAL", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
-            Button("Tamam", role: .cancel) {}
+            Button(t("Tamam"), role: .cancel) {}
         } message: { Text(notice ?? "") }
         .sheet(isPresented: $showPeople) { PeopleScreen() }
         .sheet(isPresented: $showManage) {
@@ -122,7 +122,7 @@ struct AccountMenuOverlay: View {
                     Task {
                         await RealPush.shared.release()
                         auth.signOut()
-                        notice = "Hesaptan çıkıldı. Kartlar bu cihazda kalmaya devam ediyor."
+                        notice = t("Hesaptan çıkıldı. Kartlar bu cihazda kalmaya devam ediyor.")
                     }
                 })
         }
@@ -216,30 +216,30 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
         .sheet(isPresented: $showAiPrivacy) { AiPrivacySheet() }
         .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false }.liftedTopSafeArea() }
-        .alert("Önerileri sıfırlamak istediğine emin misin?", isPresented: $showSuggestionReset) {
-            Button("Sıfırla", role: .destructive) {
+        .alert(t("Önerileri sıfırlamak istediğine emin misin?"), isPresented: $showSuggestionReset) {
+            Button(t("Sıfırla"), role: .destructive) {
                 MusicDiscoveryStore.shared.resetSeen()
                 discovery.resetSeen()
-                RealToast.shared.show("Öneriler sıfırlandı")
+                RealToast.shared.show(t("Öneriler sıfırlandı"))
             }
-            Button("Vazgeç", role: .cancel) {}
-        } message: { Text("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır.") }
-        .alert("Puanları sıfırlamak istediğine emin misin?", isPresented: $showRatingReset) {
-            Button("Sıfırla", role: .destructive) {
+            Button(t("Vazgeç"), role: .cancel) {}
+        } message: { Text(t("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır.")) }
+        .alert(t("Puanları sıfırlamak istediğine emin misin?"), isPresented: $showRatingReset) {
+            Button(t("Sıfırla"), role: .destructive) {
                 MediaRatingStore.shared.reset(watched: discovery.film.watched)
-                RealToast.shared.show("Puanlar sıfırlandı")
+                RealToast.shared.show(t("Puanlar sıfırlandı"))
             }
-            Button("Vazgeç", role: .cancel) {}
-        } message: { Text("Puanlarım listesi boşalır. Bu geri alınamaz.") }
-        .alert("Tüm mood kayıtlarını sil?", isPresented: $showClearMoods) {
-            Button("Sil", role: .destructive) {
+            Button(t("Vazgeç"), role: .cancel) {}
+        } message: { Text(t("Puanlarım listesi boşalır. Bu geri alınamaz.")) }
+        .alert(t("Tüm mood kayıtlarını sil?"), isPresented: $showClearMoods) {
+            Button(t("Sil"), role: .destructive) {
                 life.clearAllMoods()
                 for r in store.reminders where r.mood != nil { store.mutate(r.id) { $0.mood = nil } }
             }
-            Button("Vazgeç", role: .cancel) {}
-        } message: { Text("Moods kayıtları ve REAL kartlarındaki Mood blokları silinecek. Günlükler korunacak.") }
+            Button(t("Vazgeç"), role: .cancel) {}
+        } message: { Text(t("Moods kayıtları ve REAL kartlarındaki Mood blokları silinecek. Günlükler korunacak.")) }
         .alert("REAL", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
-            Button("Tamam", role: .cancel) {}
+            Button(t("Tamam"), role: .cancel) {}
         } message: { Text(notice ?? "") }
         .confirmationDialog(t("Uygulama dilini seç"), isPresented: $showLanguage, titleVisibility: .visible) {
             Button(t("Sistem")) { language.set(.system) }
@@ -255,85 +255,85 @@ struct SettingsScreen: View {
 
     @ViewBuilder
     private var mainPage: some View {
-        SettingsSectionHeader(title: "GÖRÜNÜM")
+        SettingsSectionHeader(title: t("GÖRÜNÜM"))
         SettingsGlassGroup {
             SettingsActionRow(icon: .theme, title: t("Dil"), subtitle: language.currentLabel) {
                 showLanguage = true
             }
             SettingsDivider()
-            SettingsToggleRow(icon: .motionOff, title: "Animasyonu azalt", subtitle: "Arayüz hareketlerini ve geçiş efektlerini sakinleştirir", isOn: $reduceAnimations)
+            SettingsToggleRow(icon: .motionOff, title: t("Animasyonu azalt"), subtitle: t("Arayüz hareketlerini ve geçiş efektlerini sakinleştirir"), isOn: $reduceAnimations)
             SettingsDivider()
-            SettingsToggleRow(icon: .blurOff, title: "Dinamik bulanıklığı azalt", subtitle: "Bulanıklık efektleri yerine sabit koyu yüzeyler kullanır", isOn: $reduceDynamicBlur)
+            SettingsToggleRow(icon: .blurOff, title: t("Dinamik bulanıklığı azalt"), subtitle: t("Bulanıklık efektleri yerine sabit koyu yüzeyler kullanır"), isOn: $reduceDynamicBlur)
             SettingsDivider()
-            SettingsToggleRow(icon: .cat, title: "REAL Pet", subtitle: "Geçici olarak devre dışı bırakıldı", isOn: .constant(false), enabled: false)
+            SettingsToggleRow(icon: .cat, title: "REAL Pet", subtitle: t("Geçici olarak devre dışı bırakıldı"), isOn: .constant(false), enabled: false)
             SettingsDivider()
-            SettingsToggleRow(icon: .bell, title: "Bağlam kartları", subtitle: "Ana ekranın altında arada su, mood, kitap ve film önerisi gösterir", isOn: $contextCards)
+            SettingsToggleRow(icon: .bell, title: t("Bağlam kartları"), subtitle: t("Ana ekranın altında arada su, mood, kitap ve film önerisi gösterir"), isOn: $contextCards)
             SettingsDivider()
-            SettingsActionRow(icon: .calendar, title: "Takvim bağlantısı", subtitle: "Google / iCloud takvimlerini göster ve planlarını gönder") {
+            SettingsActionRow(icon: .calendar, title: t("Takvim bağlantısı"), subtitle: t("Google / iCloud takvimlerini göster ve planlarını gönder")) {
                 showCalendar = true
             }
             SettingsDivider()
-            SettingsToggleRow(icon: .check, title: "Sade kartlar (Deneysel)",
-                              subtitle: "Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır.", isOn: $plainCards)
+            SettingsToggleRow(icon: .check, title: t("Sade kartlar (Deneysel)"),
+                              subtitle: t("Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır."), isOn: $plainCards)
             SettingsDivider()
             // Kapalı → 7 gün → 14 gün, one tap each.
-            SettingsActionRow(icon: .calendar, title: "Ana ekranda takvim",
-                              subtitle: calendarHomeDays > 0 ? "Önümüzdeki \(calendarHomeDays) gün" : "Kapalı") {
+            SettingsActionRow(icon: .calendar, title: t("Ana ekranda takvim"),
+                              subtitle: calendarHomeDays > 0 ? t("Önümüzdeki {0} gün", calendarHomeDays) : t("Kapalı")) {
                 calendarHomeDays = calendarHomeDays == 0 ? 7 : (calendarHomeDays == 7 ? 14 : 0)
             }
             SettingsDivider()
             // Where songs open (music discovery's up-swipe, the music search's default).
-            SettingsActionRow(icon: .music, title: "Müzik uygulaması", subtitle: musicSource.label + " · şarkılar burada açılır") {
+            SettingsActionRow(icon: .music, title: t("Müzik uygulaması"), subtitle: musicSource.label + t(" · şarkılar burada açılır")) {
                 musicSource = musicSource == .apple ? .spotify : .apple
                 MusicSource.saved = musicSource
             }
             SettingsDivider()
             // Apple Music hesabı: "Sana özel" in Müzik keşfi, a right swipe also adds to the library.
             let appleMusic = AppleMusicAccount.shared
-            SettingsActionRow(icon: .music, title: "Apple Music hesabı",
-                              subtitle: appleMusic.isConnected ? "Bağlı · dokun, bağlantıyı kes" : "Bağla · sana özel öneriler, REAL çalma listesi") {
+            SettingsActionRow(icon: .music, title: t("Apple Music hesabı"),
+                              subtitle: appleMusic.isConnected ? t("Bağlı · dokun, bağlantıyı kes") : t("Bağla · sana özel öneriler, REAL çalma listesi")) {
                 if appleMusic.isConnected { appleMusic.disconnect() } else { appleMusic.connect() }
             }
             SettingsDivider()
             // Puanlarım: film / dizi / bölüm puanlarını siler (şimdilik test için).
             // Öneriler (müzik, film / dizi, oyun): geçilenler yeniden gelebilir; kayıtlı listeler ve İzledim / Oynadım kalır.
-            SettingsActionRow(icon: .music, title: "Önerileri sıfırla", subtitle: "Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez") {
+            SettingsActionRow(icon: .music, title: t("Önerileri sıfırla"), subtitle: t("Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez")) {
                 showSuggestionReset = true
             }
             SettingsDivider()
-            SettingsActionRow(icon: .delete, title: "Puanlarımı sıfırla", subtitle: "Film, dizi ve bölüm puanlarının hepsini siler") {
+            SettingsActionRow(icon: .delete, title: t("Puanlarımı sıfırla"), subtitle: t("Film, dizi ve bölüm puanlarının hepsini siler")) {
                 showRatingReset = true
             }
         }
-        SettingsSectionHeader(title: "BİLDİRİMLER VE DAVRANIŞ")
+        SettingsSectionHeader(title: t("BİLDİRİMLER VE DAVRANIŞ"))
         SettingsGlassGroup {
-            SettingsStatusRow(icon: .bell, title: "Bildirim izni", status: notificationsAllowed ? "Açık" : "Kapalı",
+            SettingsStatusRow(icon: .bell, title: t("Bildirim izni"), status: notificationsAllowed ? t("Açık") : t("Kapalı"),
                               statusColor: notificationsAllowed ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFA5A5AF),
-                              subtitle: notificationsAllowed ? "Hatırlatıcı bildirimleri bu cihazda etkin." : "Bildirimleri alabilmek için bildirim iznini açabilirsin.",
-                              actionLabel: notificationsAllowed ? nil : "İzni aç") {
+                              subtitle: notificationsAllowed ? t("Hatırlatıcı bildirimleri bu cihazda etkin.") : t("Bildirimleri alabilmek için bildirim iznini açabilirsin."),
+                              actionLabel: notificationsAllowed ? nil : t("İzni aç")) {
                 NotificationScheduler.requestAuthorization()
                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
             }
             SettingsDivider()
             // Android's "Hatırlatıcı kanalı" is a per-channel setting; iOS keeps sound/banners in the app's notification settings.
-            SettingsStatusRow(icon: .settings, title: "Hatırlatıcı kanalı", status: notificationsAllowed ? "Açık" : "Kapalı",
+            SettingsStatusRow(icon: .settings, title: t("Hatırlatıcı kanalı"), status: notificationsAllowed ? t("Açık") : t("Kapalı"),
                               statusColor: notificationsAllowed ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFA5A5AF),
-                              subtitle: "Ses, titreşim ve kilit ekranı uyarıları iOS bildirim ayarlarından yönetilir.",
-                              actionLabel: "Kanal ayarları") {
+                              subtitle: t("Ses, titreşim ve kilit ekranı uyarıları iOS bildirim ayarlarından yönetilir."),
+                              actionLabel: t("Kanal ayarları")) {
                 if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
             }
             SettingsDivider()
-            SettingsStatusRow(icon: .calendar, title: "Tam saatinde hatırlatma", status: "Açık", statusColor: Color(argb: 0xFF91B9FF),
-                              subtitle: "Alarmlar tam zamanında çalacak şekilde ayarlandı.", actionLabel: nil, action: {})
+            SettingsStatusRow(icon: .calendar, title: t("Tam saatinde hatırlatma"), status: t("Açık"), statusColor: Color(argb: 0xFF91B9FF),
+                              subtitle: t("Alarmlar tam zamanında çalacak şekilde ayarlandı."), actionLabel: nil, action: {})
             SettingsDivider()
             // Alarm cards: iOS plays its own alarm sound (apps cannot use the phone's ringtones); REAL's page has its chime.
             if #available(iOS 26.0, *) {
                 let allowed = alarmAllowed ?? RealAlarmKit.authorized
-                SettingsStatusRow(icon: .bell, title: "Alarm izni", status: allowed ? "Açık" : "Kapalı",
+                SettingsStatusRow(icon: .bell, title: t("Alarm izni"), status: allowed ? t("Açık") : t("Kapalı"),
                                   statusColor: allowed ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFA5A5AF),
-                                  subtitle: allowed ? "Alarm kartları sessiz moddayken de tam ekran çalar."
-                                                    : "Alarm kartlarının sessiz modu delip çalması için izni aç.",
-                                  actionLabel: allowed ? nil : "İzni aç") {
+                                  subtitle: allowed ? t("Alarm kartları sessiz moddayken de tam ekran çalar.")
+                                                    : t("Alarm kartlarının sessiz modu delip çalması için izni aç."),
+                                  actionLabel: allowed ? nil : t("İzni aç")) {
                     Task {
                         let ok = await RealAlarmKit.requestAuthorization()
                         alarmAllowed = ok
@@ -343,7 +343,7 @@ struct SettingsScreen: View {
                 }
                 SettingsDivider()
             }
-            SettingsActionRow(icon: .repeat_, title: "Alarm erteleme", subtitle: "\(alarmSnooze) dakika · değiştirmek için dokun") {
+            SettingsActionRow(icon: .repeat_, title: t("Alarm erteleme"), subtitle: t("{0} dakika · değiştirmek için dokun", alarmSnooze)) {
                 let choices = RealAlarmSettings.snoozeChoices
                 alarmSnooze = choices[((choices.firstIndex(of: alarmSnooze) ?? 0) + 1) % choices.count]
                 RealAlarmSettings.snoozeMinutes = alarmSnooze
@@ -351,34 +351,34 @@ struct SettingsScreen: View {
         }
         SettingsSectionHeader(title: "REAL PRO")
         SettingsGlassGroup {
-            SettingsActionRow(icon: .star, title: "REAL Pro", subtitle: "Pro’yu keşfet, mağaza aboneliklerini yönet") {
-                notice = "REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak."
+            SettingsActionRow(icon: .star, title: "REAL Pro", subtitle: t("Pro’yu keşfet, mağaza aboneliklerini yönet")) {
+                notice = t("REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak.")
             }
         }
-        SettingsSectionHeader(title: "GİZLİLİK")
+        SettingsSectionHeader(title: t("GİZLİLİK"))
         SettingsGlassGroup {
-            SettingsActionRow(icon: .note, title: "Veri kullanımı", subtitle: "Hesap, bulut, paylaşım ve cihaz izinleri") {
-                notice = "Kartların, kategorilerin, su, mood ve kitap kayıtların bu iPhone'da saklanıyor. REAL hesabınla giriş yaptığında kartlar, kategoriler, mood ve su kayıtları hesabınla iki yönlü eşitlenir; durumu Hesapları yönet → Eşitleme'de görürsün."
+            SettingsActionRow(icon: .note, title: t("Veri kullanımı"), subtitle: t("Hesap, bulut, paylaşım ve cihaz izinleri")) {
+                notice = t("Kartların, kategorilerin, su, mood ve kitap kayıtların bu iPhone'da saklanıyor. REAL hesabınla giriş yaptığında kartlar, kategoriler, mood ve su kayıtları hesabınla iki yönlü eşitlenir; durumu Hesapları yönet → Eşitleme'de görürsün.")
             }
             SettingsDivider()
-            SettingsActionRow(icon: .note, title: "AI ve gizlilik", subtitle: "Açıklamalar ve veri aktarımı onayları") {
+            SettingsActionRow(icon: .note, title: t("AI ve gizlilik"), subtitle: t("Açıklamalar ve veri aktarımı onayları")) {
                 showAiPrivacy = true
             }
             SettingsDivider()
-            SettingsActionRow(icon: .note, title: "Veri hakları ve talepler", subtitle: "Kopya, düzeltme, silme veya itiraz talebi") {
-                notice = "Hesap verilerin için kopya, düzeltme veya silme talebini şimdilik Android uygulamasından ya da gizlilik sayfasındaki adresten yapabilirsin. Bu iPhone'daki verileri uygulamayı silerek tamamen kaldırabilirsin."
+            SettingsActionRow(icon: .note, title: t("Veri hakları ve talepler"), subtitle: t("Kopya, düzeltme, silme veya itiraz talebi")) {
+                notice = t("Hesap verilerin için kopya, düzeltme veya silme talebini şimdilik Android uygulamasından ya da gizlilik sayfasındaki adresten yapabilirsin. Bu iPhone'daki verileri uygulamayı silerek tamamen kaldırabilirsin.")
             }
             SettingsDivider()
             // Off by default: the profile photo goes to Kişilerim and shared-category people only when this is on.
-            SettingsToggleRow(icon: .person, title: "Fotoğrafımı kişilerimle paylaş",
-                              subtitle: "Profil fotoğrafın Kişilerim'de ve ortak kategorilerde görünür",
+            SettingsToggleRow(icon: .person, title: t("Fotoğrafımı kişilerimle paylaş"),
+                              subtitle: t("Profil fotoğrafın Kişilerim'de ve ortak kategorilerde görünür"),
                               isOn: Binding(get: { sharePhoto }, set: { on in
                                   sharePhoto = on
                                   ProfilePictures.sharePhoto = on
                                   Task { await ProfilePictures.push() }
                               }))
         }
-        SettingsSectionHeader(title: "HAKKINDA")
+        SettingsSectionHeader(title: t("HAKKINDA"))
         SettingsGlassGroup {
             HStack(spacing: 14) {
                 ActionIcon(.checklist, color: .white, size: 20)
@@ -391,15 +391,15 @@ struct SettingsScreen: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
             SettingsDivider()
-            SettingsActionRow(icon: .note, title: "Açık kaynak lisansları", subtitle: "Humation, Tabler Icons ve üçüncü taraf bildirimleri") { showLicenses = true }
+            SettingsActionRow(icon: .note, title: t("Açık kaynak lisansları"), subtitle: t("Humation, Tabler Icons ve üçüncü taraf bildirimleri")) { showLicenses = true }
             SettingsDivider()
-            SettingsActionRow(icon: .note, title: "Veri kaynakları ve lisanslar", subtitle: "TheTVDB, TVmaze ve IGDB") {
+            SettingsActionRow(icon: .note, title: t("Veri kaynakları ve lisanslar"), subtitle: t("TheTVDB, TVmaze ve IGDB")) {
                 withAnimation(.easeOut(duration: 0.2)) { page = .sources }
             }
         }
-        SettingsSectionHeader(title: "GELİŞTİRİCİ")
+        SettingsSectionHeader(title: t("GELİŞTİRİCİ"))
         SettingsGlassGroup {
-            SettingsActionRow(icon: .settings, title: "Geliştirici araçları", subtitle: "Tanılama, testler ve tasarım demoları") {
+            SettingsActionRow(icon: .settings, title: t("Geliştirici araçları"), subtitle: t("Tanılama, testler ve tasarım demoları")) {
                 withAnimation(.easeOut(duration: 0.2)) { page = .developer }
             }
         }
@@ -408,38 +408,38 @@ struct SettingsScreen: View {
 
     @ViewBuilder
     private var developerPage: some View {
-        SettingsSectionHeader(title: "GELİŞTİRİCİ ARAÇLARI")
-        SettingsSectionHeader(title: "BAĞLAM KARTLARI TESTİ")
+        SettingsSectionHeader(title: t("GELİŞTİRİCİ ARAÇLARI"))
+        SettingsSectionHeader(title: t("BAĞLAM KARTLARI TESTİ"))
         SettingsGlassGroup {
-            let tests: [(ContextCardType, ActionGlyph, String)] = [(.water, .bell, "Su kartını göster"), (.mood, .moodNeutral, "Mood kartını göster"),
-                                                                  (.book, .note, "Kitap kartını göster"), (.media, .video, "Film & dizi kartını göster"),
-                                                                  (.watch, .play, "Sıradaki bölüm kartını göster"), (.listen, .music, "Müzik kartını göster"),
-                                                                  (.play, .cards, "Oyun kartını göster"), (.journal, .edit, "Günlük kartını göster")]
-            SettingsActionRow(icon: .cards, title: "Tüm kartları göster", subtitle: "Sadece test: bütün türler sırayla gelir (normalde günde en fazla 2 kart)") {
+            let tests: [(ContextCardType, ActionGlyph, String)] = [(.water, .bell, t("Su kartını göster")), (.mood, .moodNeutral, t("Mood kartını göster")),
+                                                                  (.book, .note, t("Kitap kartını göster")), (.media, .video, t("Film & dizi kartını göster")),
+                                                                  (.watch, .play, t("Sıradaki bölüm kartını göster")), (.listen, .music, t("Müzik kartını göster")),
+                                                                  (.play, .cards, t("Oyun kartını göster")), (.journal, .edit, t("Günlük kartını göster"))]
+            SettingsActionRow(icon: .cards, title: t("Tüm kartları göster"), subtitle: t("Sadece test: bütün türler sırayla gelir (normalde günde en fazla 2 kart)")) {
                 ContextCardStore.forceAll()
-                notice = "Kartlar ana ekranda Kartlarım'ın en üstünde, sırayla görünecek."
+                notice = t("Kartlar ana ekranda Kartlarım'ın en üstünde, sırayla görünecek.")
             }
             SettingsDivider()
-            ForEach(Array(tests.enumerated()), id: \.offset) { i, t in
+            ForEach(Array(tests.enumerated()), id: \.offset) { i, test in
                 if i > 0 { SettingsDivider() }
-                SettingsActionRow(icon: t.1, title: t.2, subtitle: "Saat ve limit kurallarını yok sayar; Kartlarım'ın en üstünde görünür") {
-                    ContextCardStore.force(t.0)
-                    notice = "Kart ana ekranda Kartlarım'ın en üstünde görünecek."
+                SettingsActionRow(icon: test.1, title: test.2, subtitle: t("Saat ve limit kurallarını yok sayar; Kartlarım'ın en üstünde görünür")) {
+                    ContextCardStore.force(test.0)
+                    notice = t("Kart ana ekranda Kartlarım'ın en üstünde görünecek.")
                 }
             }
             SettingsDivider()
-            SettingsActionRow(icon: .undo, title: "Kart geçmişini sıfırla", subtitle: "Günlük limit, bekleme ve sessize alma sayaçlarını temizler") {
+            SettingsActionRow(icon: .undo, title: t("Kart geçmişini sıfırla"), subtitle: t("Günlük limit, bekleme ve sessize alma sayaçlarını temizler")) {
                 ContextCardStore.update { ContextCardHistory(enabled: $0.enabled) }
-                notice = "Bağlam kartı geçmişi sıfırlandı."
+                notice = t("Bağlam kartı geçmişi sıfırlandı.")
             }
         }
-        SettingsSectionHeader(title: "MOOD TEST VE VERİ")
+        SettingsSectionHeader(title: t("MOOD TEST VE VERİ"))
         SettingsGlassGroup {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Mood Test ve Veri").font(RealFont.inter(15)).foregroundStyle(.white)
-                Text("Mood kayıtlarını geliştirme sırasında sıfırla").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5AF))
+                Text(t("Mood Test ve Veri")).font(RealFont.inter(15)).foregroundStyle(.white)
+                Text(t("Mood kayıtlarını geliştirme sırasında sıfırla")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5AF))
                 Button { showClearMoods = true } label: {
-                    Text("Tüm moodları sil").font(RealFont.inter(13, .semibold)).foregroundStyle(Color(argb: 0xFFFF6B72))
+                    Text(t("Tüm moodları sil")).font(RealFont.inter(13, .semibold)).foregroundStyle(Color(argb: 0xFFFF6B72))
                 }
                 .buttonStyle(.plain)
             }
@@ -451,14 +451,14 @@ struct SettingsScreen: View {
 
     @ViewBuilder
     private var sourcesPage: some View {
-        SettingsSectionHeader(title: "VERİ KAYNAKLARI VE LİSANSLAR")
+        SettingsSectionHeader(title: t("VERİ KAYNAKLARI VE LİSANSLAR"))
         ForEach(CatalogSourceNotice.all, id: \.name) { source in
             SettingsGlassGroup {
-                SettingsActionRow(icon: .note, title: source.name, subtitle: "Resmî kaynağı aç") { if let u = URL(string: source.website) { openURL(u) } }
-                Text(source.summary).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA3A3AB)).lineSpacing(6)
+                SettingsActionRow(icon: .note, title: source.name, subtitle: t("Resmî kaynağı aç")) { if let u = URL(string: source.website) { openURL(u) } }
+                Text(t(source.summary)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA3A3AB)).lineSpacing(6)
                     .padding(.horizontal, 16).padding(.vertical, 12)
                 SettingsDivider()
-                SettingsActionRow(icon: .note, title: "Lisans ve kullanım koşulları", subtitle: source.name) { if let u = URL(string: source.terms) { openURL(u) } }
+                SettingsActionRow(icon: .note, title: t("Lisans ve kullanım koşulları"), subtitle: source.name) { if let u = URL(string: source.terms) { openURL(u) } }
             }
             .padding(.bottom, 10)
         }
@@ -477,13 +477,15 @@ struct CatalogSourceNotice {
     let website: String
     let terms: String
 
-    static let all: [CatalogSourceNotice] = [
-        CatalogSourceNotice(name: "TheTVDB", summary: "Film bilgileri TheTVDB tarafından sağlanır. API kullanımı TheTVDB'nin proje lisansı ve kullanım koşullarına tabidir. Afişler ve oyuncu görselleri ilgili hak sahiplerine aittir; API erişimi görsel kullanım haklarını otomatik olarak vermez.", website: "https://thetvdb.com/", terms: "https://www.thetvdb.com/api-information"),
-        CatalogSourceNotice(name: "TVmaze", summary: "Dizi bilgileri TVmaze tarafından sağlanır. API verileri CC BY-SA lisansıyla sunulur; kaynak gösterme ve uyarlanmış materyal için aynı lisans koşullarını koruma yükümlülüğü vardır. Kapaklar ve oyuncu görselleri ilgili hak sahiplerine aittir.", website: "https://www.tvmaze.com/", terms: "https://www.tvmaze.com/api#licensing"),
-        CatalogSourceNotice(name: "IGDB", summary: "Oyun bilgileri ve kapaklar IGDB'den alınır. IGDB, ticari kullanım için partner başvurusu ve görünür kaynak gösterimi ister. API'nin ücretsiz sunulması bu başvuru koşulunu kaldırmaz. Oyun kapakları ve marka hakları ilgili hak sahiplerine aittir.", website: "https://www.igdb.com/", terms: "https://api-docs.igdb.com/#business-related-faq"),
-        CatalogSourceNotice(name: "Apple iTunes", summary: "Müzik araması, kapaklar ve önizleme bağlantıları Apple iTunes Search API'den alınır. Önizlemeler tanıtım amaçlıdır; indirilip kitaplığa kaydedilmez. Apple'ın önizleme, kaynak gösterimi ve mağazaya bağlantı koşulları geçerlidir.", website: "https://www.apple.com/itunes/", terms: "https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/index.html"),
-        CatalogSourceNotice(name: "OpenFreeMap / OpenStreetMap", summary: "Harita karoları OpenFreeMap üzerinden gelir. OpenMapTiles ve OpenStreetMap katkıda bulunanları harita verisinin kaynaklarıdır. Haritada görünen kaynak gösterimi korunmalıdır; bu sayfa harita üzerindeki kaynak gösteriminin yerine geçmez.", website: "https://openfreemap.org/", terms: "https://osmfoundation.org/wiki/Licence/Attribution_Guidelines"),
-    ]
+    static var all: [CatalogSourceNotice] {
+        [
+            CatalogSourceNotice(name: "TheTVDB", summary: t("Film bilgileri TheTVDB tarafından sağlanır. API kullanımı TheTVDB'nin proje lisansı ve kullanım koşullarına tabidir. Afişler ve oyuncu görselleri ilgili hak sahiplerine aittir; API erişimi görsel kullanım haklarını otomatik olarak vermez."), website: "https://thetvdb.com/", terms: "https://www.thetvdb.com/api-information"),
+            CatalogSourceNotice(name: "TVmaze", summary: t("Dizi bilgileri TVmaze tarafından sağlanır. API verileri CC BY-SA lisansıyla sunulur; kaynak gösterme ve uyarlanmış materyal için aynı lisans koşullarını koruma yükümlülüğü vardır. Kapaklar ve oyuncu görselleri ilgili hak sahiplerine aittir."), website: "https://www.tvmaze.com/", terms: "https://www.tvmaze.com/api#licensing"),
+            CatalogSourceNotice(name: "IGDB", summary: t("Oyun bilgileri ve kapaklar IGDB'den alınır. IGDB, ticari kullanım için partner başvurusu ve görünür kaynak gösterimi ister. API'nin ücretsiz sunulması bu başvuru koşulunu kaldırmaz. Oyun kapakları ve marka hakları ilgili hak sahiplerine aittir."), website: "https://www.igdb.com/", terms: "https://api-docs.igdb.com/#business-related-faq"),
+            CatalogSourceNotice(name: "Apple iTunes", summary: t("Müzik araması, kapaklar ve önizleme bağlantıları Apple iTunes Search API'den alınır. Önizlemeler tanıtım amaçlıdır; indirilip kitaplığa kaydedilmez. Apple'ın önizleme, kaynak gösterimi ve mağazaya bağlantı koşulları geçerlidir."), website: "https://www.apple.com/itunes/", terms: "https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/index.html"),
+            CatalogSourceNotice(name: "OpenFreeMap / OpenStreetMap", summary: t("Harita karoları OpenFreeMap üzerinden gelir. OpenMapTiles ve OpenStreetMap katkıda bulunanları harita verisinin kaynaklarıdır. Haritada görünen kaynak gösterimi korunmalıdır; bu sayfa harita üzerindeki kaynak gösteriminin yerine geçmez."), website: "https://openfreemap.org/", terms: "https://osmfoundation.org/wiki/Licence/Attribution_Guidelines"),
+        ]
+    }
 }
 
 // MARK: - Layout pieces (LiquidSettingsLayout.kt + SettingsScreen.kt private composables)
@@ -491,7 +493,7 @@ struct CatalogSourceNotice {
 /// SettingsLayout: black backdrop with soft glows, a top glass bar (back · "Ayarlar") and a large glass sheet body.
 struct SettingsLayout<Content: View>: View {
     let onBack: () -> Void
-    var title = "Ayarlar"
+    var title = t("Ayarlar")
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -519,7 +521,7 @@ struct SettingsLayout<Content: View>: View {
                         ActionIcon(.back, color: .white, size: 20).frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Geri")
+                    .accessibilityLabel(t("Geri"))
                     Spacer()
                 }
                 Text(title).font(RealFont.inter(18, .semibold)).kerning(-0.3).foregroundStyle(.white)
@@ -669,15 +671,17 @@ struct SettingsStatusRow: View {
 struct LicensesSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var index = 0
-    private let entries = [("Humation", "Humation 1 avatar varlıkları (MIT)", "Humation-MIT"),
-                           ("Tabler Icons", "Tabler Icons vektör simge seti (MIT)", "Tabler-Icons-MIT"),
-                           ("Inter Font", "Inter değişken yazı tipi (SIL OFL 1.1)", "Inter-OFL")]
+    private var entries: [(String, String, String)] {
+        [("Humation", t("Humation 1 avatar varlıkları (MIT)"), "Humation-MIT"),
+         ("Tabler Icons", t("Tabler Icons vektör simge seti (MIT)"), "Tabler-Icons-MIT"),
+         ("Inter Font", t("Inter değişken yazı tipi (SIL OFL 1.1)"), "Inter-OFL")]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Açık kaynak lisansları").font(RealFont.inter(18, .semibold)).foregroundStyle(.white)
-                Text(entries[index].1).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9D9DA7))
+                Text(t("Açık kaynak lisansları")).font(RealFont.inter(18, .semibold)).foregroundStyle(.white)
+                Text(t(entries[index].1)).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9D9DA7))
             }
             HStack(spacing: 0) {
                 ForEach(entries.indices, id: \.self) { i in
@@ -702,7 +706,7 @@ struct LicensesSheet: View {
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(argb: 0xFF28282C), lineWidth: 0.75))
             HStack {
                 Spacer()
-                Button("Kapat") { dismiss() }.font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFF91B9FF))
+                Button(t("Kapat")) { dismiss() }.font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFF91B9FF))
             }
         }
         .padding(22)
@@ -712,7 +716,7 @@ struct LicensesSheet: View {
 
     private var text: String {
         guard let url = Bundle.main.url(forResource: entries[index].2, withExtension: "txt"),
-              let s = try? String(contentsOf: url, encoding: .utf8) else { return "Lisans metni okunamadı." }
+              let s = try? String(contentsOf: url, encoding: .utf8) else { return t("Lisans metni okunamadı.") }
         return s
     }
 }
@@ -738,9 +742,9 @@ struct AccountManageSheet: View {
     @Environment(LifeStore.self) private var life
 
     private var syncLine: String {
-        if let e = cloud.lastError { return "Son deneme olmadı: \(e)" }
-        guard let t = cloud.lastSuccess else { return "Bu oturumda henüz eşitlenmedi." }
-        return "Son eşitleme: " + t.formatted(.relative(presentation: .named, unitsStyle: .wide))
+        if let e = cloud.lastError { return t("Son deneme olmadı: {0}", e) }
+        guard let date = cloud.lastSuccess else { return t("Bu oturumda henüz eşitlenmedi.") }
+        return t("Son eşitleme: {0}", date.formatted(.relative(presentation: .named, unitsStyle: .wide).locale(I18n.locale)))
     }
 
     private func syncNow() {
@@ -755,11 +759,11 @@ struct AccountManageSheet: View {
 
     private func choiceLabel(_ c: RealCloudSync.ConflictInfo, _ choice: RealCloudSync.Choice) -> String {
         switch choice {
-        case .keepLocal: return "Bu iPhone'daki sürüm hesaba gönderilecek; hesaptaki sürüm değişecek."
-        case .useAccount: return c.remote == nil ? "Kart bu iPhone'dan da kaldırılacak." : "Bu iPhone'da hesaptaki sürüm kullanılacak."
+        case .keepLocal: return t("Bu iPhone'daki sürüm hesaba gönderilecek; hesaptaki sürüm değişecek.")
+        case .useAccount: return c.remote == nil ? t("Kart bu iPhone'dan da kaldırılacak.") : t("Bu iPhone'da hesaptaki sürüm kullanılacak.")
         case .keepAsNewCard: return c.remote == nil
-            ? "Kart hesaba yeni bir kart olarak gönderilecek; bu iPhone'da içeriği aynen kalır."
-            : "Bu iPhone'daki içerik ayrı bir kartta korunacak; eski karta hesaptaki sürüm uygulanacak."
+            ? t("Kart hesaba yeni bir kart olarak gönderilecek; bu iPhone'da içeriği aynen kalır.")
+            : t("Bu iPhone'daki içerik ayrı bir kartta korunacak; eski karta hesaptaki sürüm uygulanacak.")
         }
     }
 
@@ -772,7 +776,7 @@ struct AccountManageSheet: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.title).font(RealFont.inter(13, .medium)).foregroundStyle(.white).lineLimit(1)
-                        Text(c.remote == nil ? "Hesapta silinmiş" : (c.isCard ? "İki tarafta da değişti" : "Kayıt sürümleri çakışıyor"))
+                        Text(c.remote == nil ? t("Hesapta silinmiş") : (c.isCard ? t("İki tarafta da değişti") : t("Kayıt sürümleri çakışıyor")))
                             .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFFFD27A))
                     }
                     Spacer()
@@ -783,30 +787,30 @@ struct AccountManageSheet: View {
             }
             .buttonStyle(.plain)
             if openConflicts.contains(c.id) {
-            Text(c.remote == nil ? "Başka bir cihazda silindi ama bu iPhone'da değişmişti. Ne olacağını sen seç."
-                                 : "İki tarafta da değişti; hiçbiri ezilmedi. Karşılaştırıp seç.")
+            Text(c.remote == nil ? t("Başka bir cihazda silindi ama bu iPhone'da değişmişti. Ne olacağını sen seç.")
+                                 : t("İki tarafta da değişti; hiçbiri ezilmedi. Karşılaştırıp seç."))
                 .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
-            Text("Bu iPhone'daki").font(RealFont.inter(11, .medium)).foregroundStyle(Color(argb: 0xFF6FD6FF))
+            Text(t("Bu iPhone'daki")).font(RealFont.inter(11, .medium)).foregroundStyle(Color(argb: 0xFF6FD6FF))
             Text(c.local).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
-            Text("Hesaptaki").font(RealFont.inter(11, .medium)).foregroundStyle(Color(argb: 0xFF6FD6FF))
-            Text(c.remote ?? "Silinmiş kayıt").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+            Text(t("Hesaptaki")).font(RealFont.inter(11, .medium)).foregroundStyle(Color(argb: 0xFF6FD6FF))
+            Text(c.remote ?? t("Silinmiş kayıt")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
             if let chosen = pendingChoice, chosen.0 == c.id {
                 Text(choiceLabel(c, chosen.1)).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFFFD27A)).fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 14) {
-                    Button("Onayla") {
+                    Button(t("Onayla")) {
                         let (id, choice) = chosen
                         pendingChoice = nil
                         act { await cloud.resolve(id, choice, store, life) }
                     }
-                    Button("Vazgeç") { pendingChoice = nil }
+                    Button(t("Vazgeç")) { pendingChoice = nil }
                 }
                 .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    if c.isCard && c.remote == nil { Button("Hesaba geri yükle") { pendingChoice = (c.id, .keepAsNewCard) } }
-                    if c.remote != nil { Button("Bu iPhone'dakini koru") { pendingChoice = (c.id, .keepLocal) } }
-                    Button(c.remote == nil ? "Silmeyi uygula (bu iPhone'dan da kaldır)" : "Hesaptakini kullan") { pendingChoice = (c.id, .useAccount) }
-                    if c.isCard && c.remote != nil { Button("Yeni kart olarak sakla") { pendingChoice = (c.id, .keepAsNewCard) } }
+                    if c.isCard && c.remote == nil { Button(t("Hesaba geri yükle")) { pendingChoice = (c.id, .keepAsNewCard) } }
+                    if c.remote != nil { Button(t("Bu iPhone'dakini koru")) { pendingChoice = (c.id, .keepLocal) } }
+                    Button(c.remote == nil ? t("Silmeyi uygula (bu iPhone'dan da kaldır)") : t("Hesaptakini kullan")) { pendingChoice = (c.id, .useAccount) }
+                    if c.isCard && c.remote != nil { Button(t("Yeni kart olarak sakla")) { pendingChoice = (c.id, .keepAsNewCard) } }
                 }
                 .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
             }
@@ -820,12 +824,12 @@ struct AccountManageSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(issue.title).font(RealFont.inter(13, .medium)).foregroundStyle(.white).lineLimit(1)
             Text(issue.reason).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA4A4AD)).fixedSize(horizontal: false, vertical: true)
-            Text(issue.hasAccountCopy ? "Bu iPhone'daki sürüm korunuyor. Kartı düzenlersen kendiliğinden tekrar gönderilir."
-                                      : "Bu kayıt hesabına hiç ulaşmadı; bu iPhone'daki sürüm korunuyor.")
+            Text(issue.hasAccountCopy ? t("Bu iPhone'daki sürüm korunuyor. Kartı düzenlersen kendiliğinden tekrar gönderilir.")
+                                      : t("Bu kayıt hesabına hiç ulaşmadı; bu iPhone'daki sürüm korunuyor."))
                 .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 14) {
-                Button("Tekrar dene") { syncNow() }
-                if issue.hasAccountCopy { Button("Hesaptakini kullan") { act { await cloud.useAccount(forRefused: issue.id, store, life) } } }
+                Button(t("Tekrar dene")) { syncNow() }
+                if issue.hasAccountCopy { Button(t("Hesaptakini kullan")) { act { await cloud.useAccount(forRefused: issue.id, store, life) } } }
             }
             .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
         }
@@ -852,13 +856,13 @@ struct AccountManageSheet: View {
         // An e-mail account confirms with its password instead of Google.
         if RealAuth.shared.usesPassword && password == nil { deletePassword = ""; askDeletePassword = true; return }
         deleteError = nil
-        deleting = password != nil ? "Şifre doğrulanıyor…" : (RealAuth.shared.usesApple ? "Apple ile doğrulanıyor…" : "Google ile doğrulanıyor…")
+        deleting = password != nil ? t("Şifre doğrulanıyor…") : (RealAuth.shared.usesApple ? t("Apple ile doğrulanıyor…") : t("Google ile doğrulanıyor…"))
         Task {
             do {
                 if let password { try await RealAuth.shared.reauthenticateWithPassword(password) }
                 else if RealAuth.shared.usesApple { try await RealAuth.shared.reauthenticateWithApple() }
                 else { try await RealAuth.shared.reauthenticateWithGoogle() }
-                deleting = "Bulut verileri siliniyor…"
+                deleting = t("Bulut verileri siliniyor…")
                 let op = UUID().uuidString.lowercased()
                 var r = try await RealBackend.post("/api/account/v1/erasure",
                     ["operationId": op, "mode": "ACCOUNT", "confirmation": "DELETE_ACCOUNT", "deleteOwnedBoards": true], timeout: 60)
@@ -869,9 +873,9 @@ struct AccountManageSheet: View {
                     r = try await RealBackend.post("/api/account/v1/erasure/continue", ["operationId": operation], timeout: 60)
                 }
                 guard ((r["erasure"] as? [String: Any])?["phase"] as? String) == "COMPLETE" else {
-                    throw CalendarCardPublisher.Failure(errorDescription: "Silme sürüyor. Birazdan yeniden dene; işlem kaldığı yerden devam eder.")
+                    throw CalendarCardPublisher.Failure(errorDescription: t("Silme sürüyor. Birazdan yeniden dene; işlem kaldığı yerden devam eder."))
                 }
-                deleting = "Hesap siliniyor…"
+                deleting = t("Hesap siliniyor…")
                 RealCloudSync.shared.reset()
                 try await RealAuth.shared.deleteFirebaseUser()
                 deleting = nil
@@ -887,19 +891,19 @@ struct AccountManageSheet: View {
         ScrollView {
         VStack(alignment: .leading, spacing: 14) {
             Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3).frame(maxWidth: .infinity)
-            Text("Hesapları yönet").font(RealFont.inter(26, .semibold)).foregroundStyle(.white)
+            Text(t("Hesapları yönet")).font(RealFont.inter(26, .semibold)).foregroundStyle(.white)
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 14) {
                     ProfileAvatar(name: auth.account?.displayName ?? "REAL", size: 48)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(auth.account?.displayName ?? "REAL hesabı").font(RealFont.inter(17, .medium)).foregroundStyle(.white).lineLimit(1)
+                        Text(auth.account?.displayName ?? t("REAL hesabı")).font(RealFont.inter(17, .medium)).foregroundStyle(.white).lineLimit(1)
                         if let email = auth.account?.email { Text(email).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA4A4AD)).lineLimit(1) }
                     }
                 }
                 HStack(spacing: 10) {
-                    Text("Ortak kategorilerde ve paylaşımlarda bu ad görünür.").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA4A4AD))
+                    Text(t("Ortak kategorilerde ve paylaşımlarda bu ad görünür.")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA4A4AD))
                     Spacer(minLength: 8)
-                    Button("Adını değiştir", action: onEditName)
+                    Button(t("Adını değiştir"), action: onEditName)
                         .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                         .padding(.horizontal, 12).padding(.vertical, 7).background(Capsule().fill(.white.opacity(0.10)))
                 }
@@ -909,40 +913,40 @@ struct AccountManageSheet: View {
             // Eşitleme ve bu cihazdaki alan (SyncManagementPanel / LocalStoragePanel, short).
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Eşitleme").font(RealFont.inter(15, .medium)).foregroundStyle(.white)
+                    Text(t("Eşitleme")).font(RealFont.inter(15, .medium)).foregroundStyle(.white)
                     Spacer()
-                    Button(syncing ? "Eşitleniyor…" : "Şimdi eşitle") { syncNow() }
+                    Button(syncing ? t("Eşitleniyor…") : t("Şimdi eşitle")) { syncNow() }
                         .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
                 }
                 Text(syncLine).font(RealFont.inter(13)).foregroundStyle(cloud.lastError == nil ? Color(argb: 0xFFA4A4AD) : Color(argb: 0xFFFFB4AB))
-                Text("Kartlar, kategoriler, mood ve su kayıtları bu iPhone ile hesabın arasında iki yönlü eşitlenir. Bir kart iki tarafta da değişirse ya da hesapta silinirse hiçbiri ezilmez; ne olacağını sen seçersin.")
+                Text(t("Kartlar, kategoriler, mood ve su kayıtları bu iPhone ile hesabın arasında iki yönlü eşitlenir. Bir kart iki tarafta da değişirse ya da hesapta silinirse hiçbiri ezilmez; ne olacağını sen seçersin."))
                     .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
                 let waiting = cloud.issues.count + cloud.conflicts.count
                 if cloud.lastError == nil && cloud.lastSuccess != nil {
-                    Text(waiting == 0 ? "Bekleyen kayıt yok." : "\(waiting) kayıt senin seçimini bekliyor · diğerleri eşitlendi")
+                    Text(waiting == 0 ? t("Bekleyen kayıt yok.") : t("{0} kayıt senin seçimini bekliyor · diğerleri eşitlendi", waiting))
                         .font(RealFont.inter(13)).foregroundStyle(waiting == 0 ? Color(argb: 0xFFA4A4AD) : Color(argb: 0xFFFFD27A))
                 }
                 if waiting > 0 {
-                    Button(showIssues ? "Ayrıntıları gizle" : "Sorunları ve sürümleri göster") { withAnimation(.snappy) { showIssues.toggle() } }
+                    Button(showIssues ? t("Ayrıntıları gizle") : t("Sorunları ve sürümleri göster")) { withAnimation(.snappy) { showIssues.toggle() } }
                         .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                     if showIssues {
                         // Cards the account deleted while they changed here: one button for all of them.
                         let deletedCards = cloud.conflicts.filter { $0.isCard && $0.remote == nil }
                         if deletedCards.count > 1 {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("Hesapta silinmiş \(deletedCards.count) kart").font(RealFont.inter(13, .medium)).foregroundStyle(.white)
-                                Text("Bu kartlar bu iPhone'da duruyor ama hesabında silinmiş görünüyor. Geri yüklersen her biri hesaba yeni bir kart olarak gönderilir; bu iPhone'da hiçbir şey kaybolmaz.")
+                                Text(t("Hesapta silinmiş {0} kart", deletedCards.count)).font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+                                Text(t("Bu kartlar bu iPhone'da duruyor ama hesabında silinmiş görünüyor. Geri yüklersen her biri hesaba yeni bir kart olarak gönderilir; bu iPhone'da hiçbir şey kaybolmaz."))
                                     .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A93)).fixedSize(horizontal: false, vertical: true)
                                 HStack(spacing: 14) {
                                     if bulkConfirm {
-                                        Button("Onayla: \(deletedCards.count) kartı geri yükle") {
+                                        Button(t("Onayla: {0} kartı geri yükle", deletedCards.count)) {
                                             bulkConfirm = false
                                             let ids = deletedCards.map(\.id)
                                             act { for id in ids { await cloud.resolve(id, .keepAsNewCard, store, life) } }
                                         }
-                                        Button("Vazgeç") { bulkConfirm = false }
+                                        Button(t("Vazgeç")) { bulkConfirm = false }
                                     } else {
-                                        Button("Hepsini hesaba geri yükle") { bulkConfirm = true }
+                                        Button(t("Hepsini hesaba geri yükle")) { bulkConfirm = true }
                                     }
                                 }
                                 .font(RealFont.inter(13, .medium)).foregroundStyle(.white).disabled(syncing)
@@ -953,29 +957,29 @@ struct AccountManageSheet: View {
                         ForEach(Array((deletedCards + cloud.conflicts.filter { !($0.isCard && $0.remote == nil) }).prefix(issueLimit))) { conflict in conflictRow(conflict) }
                         ForEach(cloud.issues.prefix(issueLimit)) { issue in issueRow(issue) }
                         HStack {
-                            if max(cloud.issues.count, cloud.conflicts.count) > issueLimit { Button("Daha fazla göster") { issueLimit += 10 } }
+                            if max(cloud.issues.count, cloud.conflicts.count) > issueLimit { Button(t("Daha fazla göster")) { issueLimit += 10 } }
                             Spacer()
-                            if !cloud.issues.isEmpty { Button(syncing ? "Deneniyor…" : "Hepsini tekrar dene") { syncNow() }.disabled(syncing) }
+                            if !cloud.issues.isEmpty { Button(syncing ? t("Deneniyor…") : t("Hepsini tekrar dene")) { syncNow() }.disabled(syncing) }
                         }
                         .font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                     }
                 }
-                Text("Bu cihazdaki dosyalar: \(localSize)").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA4A4AD))
+                Text(t("Bu cihazdaki dosyalar: {0}", localSize)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA4A4AD))
             }
             .padding(16)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.05)))
             Button(action: onRestore) {
-                Text("Kartları hesaptan yeniden yükle").font(RealFont.inter(15)).foregroundStyle(.white)
+                Text(t("Kartları hesaptan yeniden yükle")).font(RealFont.inter(15)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white.opacity(0.08)))
             }
             .buttonStyle(.plain)
             Button(action: onSignOut) {
-                Text("Hesaptan çık").font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFFFB4AB))
+                Text(t("Hesaptan çık")).font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFFFB4AB))
                     .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white.opacity(0.05)))
             }
             .buttonStyle(.plain)
             Button { confirmDelete = true } label: {
-                Text(deleting ?? "Hesabı sil").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFF8A80))
+                Text(deleting ?? t("Hesabı sil")).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFF8A80))
                     .frame(maxWidth: .infinity, minHeight: 40)
             }
             .buttonStyle(.plain).disabled(deleting != nil)
@@ -986,17 +990,17 @@ struct AccountManageSheet: View {
         .scrollBounceBehavior(.basedOnSize)
         .presentationDetents([.height(600), .large])
         .task { await measureLocal() }
-        .confirmationDialog("Hesabın ve buluttaki tüm verilerin kalıcı olarak silinsin mi?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Hesabı kalıcı olarak sil", role: .destructive) { deleteAccount() }
-            Button("Vazgeç", role: .cancel) {}
+        .confirmationDialog(t("Hesabın ve buluttaki tüm verilerin kalıcı olarak silinsin mi?"), isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button(t("Hesabı kalıcı olarak sil"), role: .destructive) { deleteAccount() }
+            Button(t("Vazgeç"), role: .cancel) {}
         } message: {
-            Text("Buluttaki kartların, dosyaların, paylaşım linklerin ve sahibi olduğun panolar silinir. Bu iPhone'daki kartlar kalır. Geri alınamaz.")
+            Text(t("Buluttaki kartların, dosyaların, paylaşım linklerin ve sahibi olduğun panolar silinir. Bu iPhone'daki kartlar kalır. Geri alınamaz."))
         }
-        .alert("Şifreni yaz", isPresented: $askDeletePassword) {
-            SecureField("Şifre", text: $deletePassword)
-            Button("Sil", role: .destructive) { deleteAccount(password: deletePassword) }
-            Button("Vazgeç", role: .cancel) { deletePassword = "" }
-        } message: { Text("Hesabı silmek için e-posta hesabının şifresiyle doğrula.") }
+        .alert(t("Şifreni yaz"), isPresented: $askDeletePassword) {
+            SecureField(t("Şifre"), text: $deletePassword)
+            Button(t("Sil"), role: .destructive) { deleteAccount(password: deletePassword) }
+            Button(t("Vazgeç"), role: .cancel) { deletePassword = "" }
+        } message: { Text(t("Hesabı silmek için e-posta hesabının şifresiyle doğrula.")) }
         .presentationBackground(Color(argb: 0xFF111113))
     }
 }

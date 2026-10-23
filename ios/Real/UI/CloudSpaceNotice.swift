@@ -53,14 +53,14 @@ private struct CloudSpaceNoticeModifier: ViewModifier {
         content
             .task { await space.check() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await space.check() } } }
-            .alert(space.notice == 2 ? "Bulut alanın doldu" : "Bulut alanın dolmak üzere",
+            .alert(space.notice == 2 ? t("Bulut alanın doldu") : t("Bulut alanın dolmak üzere"),
                    isPresented: Binding(get: { space.notice != 0 }, set: { if !$0 { space.notice = 0 } })) {
-                Button("Yer aç") { space.notice = 0; showFiles = true }
-                Button("Tamam", role: .cancel) { space.notice = 0 }
+                Button(t("Yer aç")) { space.notice = 0; showFiles = true }
+                Button(t("Tamam"), role: .cancel) { space.notice = 0 }
             } message: {
                 Text(space.notice == 2
-                     ? "REAL'i kullanmaya devam edebilirsin. Yeni fotoğraf ve ekler bu telefonda kalır, yer açınca kendiliğinden yüklenir."
-                     : "Alanının %90'ını kullandın. Dolunca yeni ekler yalnız bu telefonda kalır.")
+                     ? t("REAL'i kullanmaya devam edebilirsin. Yeni fotoğraf ve ekler bu telefonda kalır, yer açınca kendiliğinden yüklenir.")
+                     : t("Alanının %90'ını kullandın. Dolunca yeni ekler yalnız bu telefonda kalır."))
             }
             .sheet(isPresented: $showFiles) { CloudSpaceFilesSheet() }
     }
@@ -82,14 +82,14 @@ struct CloudSpaceFilesSheet: View {
             return ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? NSNumber)?.int64Value ?? 0
         }
         return store.reminders.flatMap { card -> [SpaceFile] in
-            let title = card.text.split(separator: "\n").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? "Başlıksız kart"
+            let title = card.text.split(separator: "\n").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? t("Başlıksız kart")
             let attachments = card.attachments.filter { $0.type != .textSnippet && !$0.localPath.isEmpty }.map {
-                SpaceFile(id: $0.id, cardId: card.id, title: title.isEmpty ? "Başlıksız kart" : title,
-                          kind: $0.type == .image ? "Fotoğraf" : ($0.displayName ?? "Dosya"),
+                SpaceFile(id: $0.id, cardId: card.id, title: title.isEmpty ? t("Başlıksız kart") : title,
+                          kind: $0.type == .image ? t("Fotoğraf") : ($0.displayName ?? t("Dosya")),
                           bytes: max(size($0.localPath), $0.sizeBytes ?? 0))
             }
             let voices = card.voiceRecordings.map {
-                SpaceFile(id: $0.id, cardId: card.id, title: title.isEmpty ? "Başlıksız kart" : title, kind: "Ses kaydı", bytes: size($0.localPath))
+                SpaceFile(id: $0.id, cardId: card.id, title: title.isEmpty ? t("Başlıksız kart") : title, kind: t("Ses kaydı"), bytes: size($0.localPath))
             }
             return attachments + voices
         }.filter { $0.bytes > 0 }.sorted { $0.bytes > $1.bytes }.prefix(10).map { $0 }
@@ -98,14 +98,14 @@ struct CloudSpaceFilesSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Yer aç").font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
+                Text(t("Yer aç")).font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
                 Spacer()
-                Button("Bitti") { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(.white)
+                Button(t("Bitti")) { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(.white)
             }
-            Text("En büyük ekler").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+            Text(t("En büyük ekler")).font(RealFont.inter(14, .medium)).foregroundStyle(.white)
             let list = files
             if list.isEmpty {
-                Text("Bu telefonda ek yok.").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF9A9AA3))
+                Text(t("Bu telefonda ek yok.")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF9A9AA3))
             }
             ForEach(list) { file in
                 HStack(spacing: 10) {
@@ -114,7 +114,7 @@ struct CloudSpaceFilesSheet: View {
                         Text("\(file.kind) · \(Self.size(file.bytes))").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9A9AA3)).lineLimit(1)
                     }
                     Spacer()
-                    Button(confirm == file.id ? "Sil" : "Kaldır") {
+                    Button(confirm == file.id ? t("Sil") : t("Kaldır")) {
                         if confirm == file.id { remove(file); confirm = nil } else { confirm = file.id }
                     }
                     .font(RealFont.inter(13, .medium))
@@ -123,17 +123,17 @@ struct CloudSpaceFilesSheet: View {
                     .overlay(Capsule().strokeBorder(.white.opacity(0.16)))
                 }
             }
-            Text("Kaldırılan ekler buluttan 30 gün içinde silinir; hemen yer açmak için bekleyenleri temizle.")
+            Text(t("Kaldırılan ekler buluttan 30 gün içinde silinir; hemen yer açmak için bekleyenleri temizle."))
                 .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9A9AA3))
             Button {
                 purging = true
                 Task {
-                    note = await CloudSpace.shared.purgeRetained() ? "Bekleyenler temizlendi." : "Şu anda temizlenemedi. Biraz sonra tekrar dene."
+                    note = await CloudSpace.shared.purgeRetained() ? t("Bekleyenler temizlendi.") : t("Şu anda temizlenemedi. Biraz sonra tekrar dene.")
                     purging = false
                     await CloudSpace.shared.check(force: true)
                 }
             } label: {
-                Text(purging ? "Temizleniyor…" : "Bekleyenleri şimdi temizle").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+                Text(purging ? t("Temizleniyor…") : t("Bekleyenleri şimdi temizle")).font(RealFont.inter(14, .medium)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 44).overlay(Capsule().strokeBorder(.white.opacity(0.16)))
             }
             .buttonStyle(.plain).disabled(purging)

@@ -9,7 +9,6 @@ struct AlarmScreen: View {
     @State private var ramp: Task<Void, Never>?
 
     private static let ink = Color(argb: 0xFF08080A)
-    private static let tr = Locale(identifier: "tr_TR")
 
     var body: some View {
         let accent = alarm.color
@@ -32,7 +31,7 @@ struct AlarmScreen: View {
                 .background(Capsule().fill(.white.opacity(0.08)))
                 .padding(.top, 28)
                 Spacer(minLength: 0).frame(maxHeight: 120)
-                DotMatrixTime(text: time).accessibilityLabel("Alarm \(time)")
+                DotMatrixTime(text: time).accessibilityLabel(t("Alarm {0}", time))
                 Text(day).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.7)).padding(.top, 14)
                 Spacer(minLength: 0)
                 panel(accent)
@@ -43,13 +42,13 @@ struct AlarmScreen: View {
     }
 
     private var time: String {
-        let f = DateFormatter(); f.locale = Self.tr; f.dateFormat = "HH:mm"
+        let f = DateFormatter(); f.locale = I18n.locale; f.dateFormat = "HH:mm"
         return f.string(from: alarm.at.date)
     }
 
     private var day: String {
-        let f = DateFormatter(); f.locale = Self.tr; f.dateFormat = "EEEE, d MMMM"
-        return f.string(from: alarm.at.date).capitalized(with: Self.tr)
+        let f = DateFormatter(); f.locale = I18n.locale; f.dateFormat = "EEEE, d MMMM"
+        return f.string(from: alarm.at.date).capitalized(with: I18n.locale)
     }
 
     // MARK: Panel
@@ -61,18 +60,18 @@ struct AlarmScreen: View {
             HStack(spacing: 10) {
                 Button {
                     let at = AlarmCenter.shared.snooze()
-                    let f = DateFormatter(); f.locale = Self.tr; f.dateFormat = "HH:mm"
-                    RealToast.shared.show("\(f.string(from: at))'da tekrar çalacak")
+                    let f = DateFormatter(); f.locale = I18n.locale; f.dateFormat = "HH:mm"
+                    RealToast.shared.show(t("{0}'da tekrar çalacak", f.string(from: at)))
                 } label: {
                     VStack(spacing: 1) {
-                        Text("Ertele").font(RealFont.inter(10)).foregroundStyle(.white.opacity(0.7))
-                        Text("\(RealAlarmSettings.snoozeMinutes) dk").font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+                        Text(t("Ertele")).font(RealFont.inter(10)).foregroundStyle(.white.opacity(0.7))
+                        Text(t("{0} dk", RealAlarmSettings.snoozeMinutes)).font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                     }
                     .frame(width: 62, height: 62)
                     .background(Circle().fill(.black.opacity(0.28)))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(RealAlarmSettings.snoozeMinutes) dakika ertele")
+                .accessibilityLabel(t("{0} dakika ertele", RealAlarmSettings.snoozeMinutes))
                 slideTrack
             }
             .padding(.top, 26)
@@ -92,7 +91,7 @@ struct AlarmScreen: View {
             let travel = max(1, geo.size.width - knob - 10)
             ZStack(alignment: .leading) {
                 Capsule().fill(.black.opacity(0.28))
-                Text("Kaydır, kapat").font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.75 * (1 - slide)))
+                Text(t("Kaydır, kapat")).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.75 * (1 - slide)))
                     .frame(maxWidth: .infinity).padding(.leading, 44)
                 Circle().fill(.white).frame(width: knob, height: knob)
                     .overlay(RealSymbol("chevron.right", size: 18).foregroundStyle(Self.ink))
@@ -117,7 +116,7 @@ struct AlarmScreen: View {
         }
         .frame(height: 62)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Kaydırarak alarmı kapat")
+        .accessibilityLabel(t("Kaydırarak alarmı kapat"))
         .accessibilityAction { AlarmCenter.shared.stop() }
     }
 

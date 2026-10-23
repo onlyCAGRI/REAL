@@ -37,6 +37,7 @@ struct ReminderColorChoice: Identifiable {
     let label: String
     let color: Color
     var id: Int { index }
+    var localizedLabel: String { t(label) }
 }
 
 /// REAL 2026 palette. Saved choices are list indices, so this list is append-only (ReminderColorPicker.kt).
@@ -226,10 +227,9 @@ enum RealColors {
     static let field = Color(argb: 0xFF1A1A1E)
 }
 
-/// Turkish date strings used across cards ("12 Eki, 14:30").
+/// Localized date strings used across cards ("12 Eki, 14:30").
 enum RealDates {
     static let calendar = Calendar.real
-    private static let shortMonths = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
 
     static func time(_ date: Date) -> String {
         let c = calendar.dateComponents([.hour, .minute], from: date)
@@ -241,15 +241,14 @@ enum RealDates {
         let dayStart = calendar.startOfDay(for: date)
         let diff = calendar.dateComponents([.day], from: todayStart, to: dayStart).day ?? 0
         switch diff {
-        case 0: return "Bugün"
-        case 1: return "Yarın"
-        case -1: return "Dün"
+        case 0: return t("Bugün")
+        case 1: return t("Yarın")
+        case -1: return t("Dün")
         default:
-            let c = calendar.dateComponents([.year, .month, .day], from: date)
-            let thisYear = calendar.component(.year, from: Date())
-            var s = "\(c.day ?? 1) \(shortMonths[(c.month ?? 1) - 1])"
-            if c.year != thisYear { s += " \(c.year ?? thisYear)" }
-            return s
+            let f = DateFormatter()
+            f.locale = I18n.locale
+            f.dateFormat = "d MMM"
+            return f.string(from: date)
         }
     }
 
@@ -260,7 +259,9 @@ enum RealDates {
     static func planned(_ epochDay: EpochDay) -> String { dayLabel(calendar.startOfDay(epochDay: epochDay)) }
 
     static func longDay(_ date: Date) -> String {
-        let c = calendar.dateComponents([.month, .day], from: date)
-        return "\(c.day ?? 1) \(turkishMonths[(c.month ?? 1) - 1]) \(calendar.isoWeekday(of: date).full)"
+        let f = DateFormatter()
+        f.locale = I18n.locale
+        f.dateFormat = "d MMMM EEEE"
+        return f.string(from: date)
     }
 }

@@ -95,17 +95,17 @@ struct DateTimeAlarmSegment: View {
 
     private func labels(cell: CGFloat, stretch: CGFloat, inner: CGFloat) -> some View {
         HStack(spacing: 0) {
-            Text("Tarih").font(RealFont.inter(14, timeTab ? .regular : .semibold))
+            Text(t("Tarih")).font(RealFont.inter(14, timeTab ? .regular : .semibold))
                 .foregroundStyle(timeTab ? Color(argb: 0xFFB8B8BE) : .white)
                 .frame(width: cell)
             // Saat ↔ Alarm rides the thumb, centred on its stretched width.
             ZStack {
-                Text("Saat").font(RealFont.inter(14, timeTab ? .semibold : .regular))
+                Text(t("Saat")).font(RealFont.inter(14, timeTab ? .semibold : .regular))
                     .foregroundStyle(timeTab ? .white : Color(argb: 0xFFB8B8BE))
                     .opacity(Double(min(max(1 - stretch * 2, 0), 1)))
                 HStack(spacing: 6) {
                     Image(systemName: "alarm").font(.system(size: 14, weight: .semibold))
-                    Text("Alarm").font(RealFont.inter(14, .semibold))
+                    Text(t("Alarm")).font(RealFont.inter(14, .semibold))
                 }
                 .foregroundStyle(.white)
                 .opacity(Double(min(max(stretch * 2 - 1, 0), 1)))
@@ -127,17 +127,17 @@ struct DateTimeAlarmSegment: View {
         HStack(spacing: 0) {
             Color.clear.frame(width: cell).contentShape(Rectangle())
                 .onTapGesture { timeTab = false }
-                .accessibilityAddTraits(timeTab ? [] : .isSelected).accessibilityLabel("Tarih")
+                .accessibilityAddTraits(timeTab ? [] : .isSelected).accessibilityLabel(t("Tarih"))
             Color.clear.frame(width: cell).contentShape(Rectangle())
                 .onTapGesture { if timeTab { alarm = false }; timeTab = true }
-                .accessibilityAddTraits(timeTab && !alarm ? .isSelected : []).accessibilityLabel("Saat")
+                .accessibilityAddTraits(timeTab && !alarm ? .isSelected : []).accessibilityLabel(t("Saat"))
             Color.clear.frame(width: slot).contentShape(Rectangle())
                 .onTapGesture {
                     let on = !(timeTab && alarm)
                     timeTab = true; alarm = on
                     if on { UISelectionFeedbackGenerator().selectionChanged() }
                 }
-                .accessibilityAddTraits(timeTab && alarm ? .isSelected : []).accessibilityLabel(alarm ? "Alarm açık" : "Alarm")
+                .accessibilityAddTraits(timeTab && alarm ? .isSelected : []).accessibilityLabel(alarm ? t("Alarm açık") : t("Alarm"))
         }
         .accessibilityElement(children: .contain)
     }

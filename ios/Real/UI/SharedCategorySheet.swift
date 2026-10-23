@@ -48,9 +48,9 @@ struct SharedCategorySheet: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 14) {
             Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3).frame(maxWidth: .infinity)
-            Text("Kişiler").font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
+            Text(t("Kişiler")).font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
             if calendarLinked && current.sharedId == nil {
-                Text("Takvime bağlı kategoriler paylaşılamaz.").font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.6))
+                Text(t("Takvime bağlı kategoriler paylaşılamaz.")).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.6))
             } else {
                 if !members.isEmpty {
                     VStack(spacing: 0) {
@@ -61,7 +61,7 @@ struct SharedCategorySheet: View {
                 if isOwner {
                     if members.filter({ !$0.isOwner }).count < 10 {
                         HStack {
-                            Text("Yeni kişi").font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6))
+                            Text(t("Yeni kişi")).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6))
                             Spacer()
                             AccessToggle(access: newAccess) { newAccess = $0 }
                         }
@@ -69,10 +69,10 @@ struct SharedCategorySheet: View {
                             VStack(spacing: 0) {
                                 let candidates = people.filter { p in !members.contains { $0.uid == p.uid } }
                                 if candidates.isEmpty {
-                                    Text(people.isEmpty ? "Kişilerim boş." : "Herkes bu kategoride.")
+                                    Text(people.isEmpty ? t("Kişilerim boş.") : t("Herkes bu kategoride."))
                                         .font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.5)).padding(14)
                                     if people.isEmpty {
-                                        Button("Kişilerim'i aç") { showPeople = true }
+                                        Button(t("Kişilerim'i aç")) { showPeople = true }
                                             .font(RealFont.inter(13, .semibold)).foregroundStyle(.white).padding(.bottom, 12)
                                     }
                                 }
@@ -81,7 +81,7 @@ struct SharedCategorySheet: View {
                                         ConnectionAvatar(name: p.name, key: p.uid, size: 36, pictureVersion: p.pictureVersion)
                                         Text(p.name).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
                                         Spacer()
-                                        Button("Ekle") { add(p.uid) }
+                                        Button(t("Ekle")) { add(p.uid) }
                                             .font(RealFont.inter(13, .semibold)).foregroundStyle(.black)
                                             .padding(.horizontal, 14).padding(.vertical, 7).background(Capsule().fill(.white))
                                             .disabled(busy)
@@ -93,16 +93,16 @@ struct SharedCategorySheet: View {
                         .frame(maxHeight: 260)
                         .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.05)))
                     } else {
-                        Text("Bir kategoride en fazla 10 kişi olabilir.").font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.5))
+                        Text(t("Bir kategoride en fazla 10 kişi olabilir.")).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.5))
                     }
                 } else if !leaving {
-                    Button("Kategoriden ayrıl") { leaving = true }
+                    Button(t("Kategoriden ayrıl")) { leaving = true }
                         .font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFFFB4AB))
                 } else {
-                    Text("Kartlar kategoride kalır.").font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6))
+                    Text(t("Kartlar kategoride kalır.")).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6))
                     HStack(spacing: 10) {
-                        sheetButton("Kopyasını sakla", filled: true) { act { try await sync.leave(store, category: current, keepCopy: true) } }
-                        sheetButton("Benden kaldır", filled: false) { act { try await sync.leave(store, category: current, keepCopy: false) } }
+                        sheetButton(t("Kopyasını sakla"), filled: true) { act { try await sync.leave(store, category: current, keepCopy: true) } }
+                        sheetButton(t("Benden kaldır"), filled: false) { act { try await sync.leave(store, category: current, keepCopy: false) } }
                     }
                 }
             }
@@ -116,20 +116,20 @@ struct SharedCategorySheet: View {
             Text(m.name).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
             Spacer()
             if m.isOwner {
-                Text("Sahibi").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45))
+                Text(t("Sahibi")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45))
             } else if isOwner {
                 AccessToggle(access: m.access) { access in act { try await sync.setAccess(current, uid: m.uid, access: access) } }
-                Button("Çıkar") {
+                Button(t("Çıkar")) {
                     act {
                         if try await sync.removeMember(current, uid: m.uid) {
-                            working = "Kategori sana dönüyor"
+                            working = t("Kategori sana dönüyor")
                             try await sync.release(store, category: current)
                         }
                     }
                 }
                 .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)).padding(.leading, 6)
             } else {
-                Text(m.access == "view" ? "Sınırlı" : "Tam").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45))
+                Text(m.access == "view" ? t("Sınırlı") : t("Tam")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45))
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
@@ -145,7 +145,7 @@ struct SharedCategorySheet: View {
     private func add(_ uid: String) {
         act {
             if current.sharedId == nil {
-                working = "Kategori paylaşılıyor"; moved = 0
+                working = t("Kategori paylaşılıyor"); moved = 0
                 // The server only shares categories it already has.
                 await RealCloudSync.shared.runFully(store, life)
                 try await sync.share(store, category: current, personUid: uid, access: newAccess) { moved = $0 }
@@ -186,7 +186,7 @@ private struct AccessToggle: View {
                 let key = pair.0, label = pair.1
                 let on = access == key
                 Button { if !on { onChange(key) } } label: {
-                    Text(label).font(RealFont.inter(12, on ? .semibold : .regular)).foregroundStyle(on ? .black : .white.opacity(0.7))
+                    Text(t(label)).font(RealFont.inter(12, on ? .semibold : .regular)).foregroundStyle(on ? .black : .white.opacity(0.7))
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(Capsule().fill(on ? Color.white : .clear))
                 }

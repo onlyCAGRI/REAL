@@ -132,13 +132,13 @@ struct InviteAcceptSheet: View {
             if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)) }
             HStack(spacing: 10) {
                 Button { done ? dismiss() : accept() } label: {
-                    Text(done ? "Tamam" : (busy ? "Bekle…" : "Kabul et")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                    Text(done ? t("Tamam") : (busy ? t("Bekle…") : t("Kabul et"))).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                         .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white))
                 }
                 .disabled(busy || (RealAuth.shared.account == nil))
                 if !done {
                     Button { dismiss() } label: {
-                        Text("Vazgeç").font(RealFont.inter(15)).foregroundStyle(.white)
+                        Text(t("Vazgeç")).font(RealFont.inter(15)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white.opacity(0.08)))
                     }
                 }
@@ -149,7 +149,7 @@ struct InviteAcceptSheet: View {
         .presentationDetents([.height(260)])
         .presentationBackground(Color(argb: 0xFF111113))
         .task {
-            guard RealAuth.shared.account != nil else { error = "Kabul etmek için REAL hesabınla giriş yap."; return }
+            guard RealAuth.shared.account != nil else { error = t("Kabul etmek için REAL hesabınla giriş yap."); return }
             if case .connection(let t) = link { from = try? await RealConnections.shared.preview(t) }
             if case .category(let t) = link {
                 let data = try? await RealBackend.request("/api/categories/v1/invites/\(t)")
@@ -160,17 +160,17 @@ struct InviteAcceptSheet: View {
     }
 
     private var title: String {
-        if done { return "Eklendi" }
-        if case .category = link { return "Kategori daveti" }
-        if case .sharedCard = link { return "Paylaşılan kart" }
-        return "Kişi daveti"
+        if done { return t("Eklendi") }
+        if case .category = link { return t("Kategori daveti") }
+        if case .sharedCard = link { return t("Paylaşılan kart") }
+        return t("Kişi daveti")
     }
     private var message: String {
-        if done, case .sharedCard = link { return "Kart REAL'ine eklendi." }
-        if done { return "Artık birbirinizin Kişilerim listesindesiniz." }
-        if case .sharedCard = link { return "Bu kartın bir kopyası REAL'ine eklensin mi?" }
-        if case .category = link { return "\(from ?? "Bir arkadaşın") seni ortak bir REAL kategorisine davet ediyor." }
-        return "\(from ?? "Bir arkadaşın") seni REAL'de Kişilerim'e eklemek istiyor."
+        if done, case .sharedCard = link { return t("Kart REAL'ine eklendi.") }
+        if done { return t("Artık birbirinizin Kişilerim listesindesiniz.") }
+        if case .sharedCard = link { return t("Bu kartın bir kopyası REAL'ine eklensin mi?") }
+        if case .category = link { return t("{0} seni ortak bir REAL kategorisine davet ediyor.", from ?? t("Bir arkadaşın")) }
+        return t("{0} seni REAL'de Kişilerim'e eklemek istiyor.", from ?? t("Bir arkadaşın"))
     }
 
     private func accept() {
@@ -202,9 +202,9 @@ struct PeopleScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Kişilerim").font(RealFont.inter(26, .semibold)).foregroundStyle(.white)
+                Text(t("Kişilerim")).font(RealFont.inter(26, .semibold)).foregroundStyle(.white)
                 Spacer()
-                Button("Bitti") { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(.white)
+                Button(t("Bitti")) { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(.white)
             }
             if RealAuth.shared.account == nil {
                 SignInRequiredPrompt(reason: .people)
@@ -212,20 +212,20 @@ struct PeopleScreen: View {
                 Button {
                     Task { inviteURL = try? await connections.createInvite() }
                 } label: {
-                    Text("Davet linki oluştur").font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                    Text(t("Davet linki oluştur")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                         .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white))
                 }
                 .buttonStyle(.plain)
                 if let inviteURL {
-                    ShareLink(item: inviteURL, message: Text("REAL'de beni Kişilerim'e ekle")) {
-                        Text("Linki paylaş").font(RealFont.inter(15)).foregroundStyle(.white)
+                    ShareLink(item: inviteURL, message: Text(t("REAL'de beni Kişilerim'e ekle"))) {
+                        Text(t("Linki paylaş")).font(RealFont.inter(15)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity, minHeight: 44).background(Capsule().fill(.white.opacity(0.08)))
                     }
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         if connections.people.isEmpty && !connections.loading {
-                            Text("Henüz kimse yok. Bir davet linki gönder.").font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.5))
+                            Text(t("Henüz kimse yok. Bir davet linki gönder.")).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.5))
                         }
                         ForEach(connections.people) { p in
                             HStack(spacing: 12) {
@@ -240,24 +240,24 @@ struct PeopleScreen: View {
                             .background(RoundedRectangle(cornerRadius: 18).fill(.white.opacity(0.05)))
                         }
                         if !connections.invites.isEmpty {
-                            Text("Bekleyen davetler").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45)).padding(.top, 10)
+                            Text(t("Bekleyen davetler")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45)).padding(.top, 10)
                             ForEach(connections.invites) { i in
                                 HStack {
-                                    Text("Link · " + RealDates.dayLabel(i.expiresAt.date) + "'e kadar").font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.8))
+                                    Text(t("Link · {0}'e kadar", RealDates.dayLabel(i.expiresAt.date))).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.8))
                                     Spacer()
-                                    Button("İptal") { Task { await connections.revokeInvite(i.id) } }
+                                    Button(t("İptal")) { Task { await connections.revokeInvite(i.id) } }
                                         .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB))
                                 }
                                 .padding(.horizontal, 14).padding(.vertical, 10)
                             }
                         }
                         if !connections.blocked.isEmpty {
-                            Text("Engellenenler").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45)).padding(.top, 10)
+                            Text(t("Engellenenler")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.45)).padding(.top, 10)
                             ForEach(connections.blocked) { p in
                                 HStack {
                                     Text(p.name).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.8))
                                     Spacer()
-                                    Button("Engeli kaldır") { Task { await connections.unblock(p.uid) } }
+                                    Button(t("Engeli kaldır")) { Task { await connections.unblock(p.uid) } }
                                         .font(RealFont.inter(13)).foregroundStyle(.white)
                                 }
                                 .padding(.horizontal, 14).padding(.vertical, 10)
@@ -273,9 +273,9 @@ struct PeopleScreen: View {
         .task { await connections.refresh() }
         .confirmationDialog(confirm?.name ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible) {
             if let p = confirm {
-                Button("Kişilerden çıkar", role: .destructive) { Task { await connections.remove(p.uid, block: false) } }
-                Button("Engelle", role: .destructive) { Task { await connections.remove(p.uid, block: true) } }
-                Button("Vazgeç", role: .cancel) {}
+                Button(t("Kişilerden çıkar"), role: .destructive) { Task { await connections.remove(p.uid, block: false) } }
+                Button(t("Engelle"), role: .destructive) { Task { await connections.remove(p.uid, block: true) } }
+                Button(t("Vazgeç"), role: .cancel) {}
             }
         }
     }
@@ -292,9 +292,9 @@ struct ProfileNameSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3).frame(maxWidth: .infinity)
-            Text("REAL'de adın ne olsun?").font(RealFont.inter(22, .semibold)).foregroundStyle(.white)
-            Text("Ortak kategorilerde ve paylaştığın kartlarda bu ad görünür.").font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.65))
-            TextField("Adın", text: $name)
+            Text(t("REAL'de adın ne olsun?")).font(RealFont.inter(22, .semibold)).foregroundStyle(.white)
+            Text(t("Ortak kategorilerde ve paylaştığın kartlarda bu ad görünür.")).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.65))
+            TextField(t("Adın"), text: $name)
                 .font(RealFont.inter(16)).foregroundStyle(.white).tint(.white)
                 .textContentType(.givenName).submitLabel(.done).focused($focused)
                 .onSubmit { save() }
@@ -302,12 +302,12 @@ struct ProfileNameSheet: View {
                 .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.06)))
             if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)) }
             Button { save() } label: {
-                Text(busy ? "Kaydediliyor…" : "Kaydet").font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                Text(busy ? t("Kaydediliyor…") : t("Kaydet")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                     .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white))
             }
             .buttonStyle(.plain).disabled(busy || name.trimmingCharacters(in: .whitespaces).isEmpty)
             Button { RealAuth.shared.confirmName() } label: {
-                Text(editing ? "Vazgeç" : "Google adım kalsın").font(RealFont.inter(15)).foregroundStyle(.white)
+                Text(editing ? t("Vazgeç") : t("Google adım kalsın")).font(RealFont.inter(15)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white.opacity(0.08)))
             }
             .buttonStyle(.plain).disabled(busy)
@@ -323,7 +323,7 @@ struct ProfileNameSheet: View {
         busy = true; error = nil
         Task {
             do { try await RealAuth.shared.updateDisplayName(name) }
-            catch { self.error = (error as? LocalizedError)?.errorDescription ?? "Ad kaydedilemedi." }
+            catch { self.error = (error as? LocalizedError)?.errorDescription ?? t("Ad kaydedilemedi.") }
             busy = false
         }
     }

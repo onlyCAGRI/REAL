@@ -20,7 +20,7 @@ struct VoiceListeningWindow: View {
         HStack(alignment: .bottom, spacing: 6) {
             VStack(alignment: .leading, spacing: 4) {
                 if !processing {
-                    Text("Dinleniyor…").font(RealFont.inter(12, .medium)).foregroundStyle(blueSoft.opacity(0.9))
+                    Text(t("Dinleniyor…")).font(RealFont.inter(12, .medium)).foregroundStyle(blueSoft.opacity(0.9))
                 }
                 // Grows with the words, up to a few lines; never the whole screen (the composer area is unbounded).
                 transcript
@@ -37,7 +37,7 @@ struct VoiceListeningWindow: View {
             }
             .buttonStyle(.plain)
             .disabled(!listening)
-            .accessibilityLabel(listening ? "Dinlemeyi bitir" : "REAL düşünüyor")
+            .accessibilityLabel(listening ? t("Dinlemeyi bitir") : t("REAL düşünüyor"))
         }
         .padding(.leading, 22).padding(.trailing, 9).padding(.top, 16).padding(.bottom, 8)
         .frame(maxWidth: .infinity, minHeight: 118, maxHeight: 230, alignment: .bottom)
@@ -76,7 +76,7 @@ struct VoiceListeningWindow: View {
         let committed = voice.committed
         let partial = voice.partial
         if committed.isEmpty && partial.isEmpty {
-            Text("Aklında ne var? Konuş…").font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFFA2C7FF)).lineSpacing(6)
+            Text(t("Aklında ne var? Konuş…")).font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFFA2C7FF)).lineSpacing(6)
         } else {
             (Text(committed).foregroundColor(ink) + Text(committed.isEmpty || partial.isEmpty ? "" : " ") + Text(partial).foregroundColor(blueSoft))
                 .font(RealFont.inter(16)).lineSpacing(6).lineLimit(5)

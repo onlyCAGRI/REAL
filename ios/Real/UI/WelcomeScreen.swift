@@ -88,7 +88,7 @@ struct WelcomeScreen: View {
 
                 Group {
                     if phase == .greeting {
-                        Text("Tanıştığımıza memnun oldum,\n\(name.trimmingCharacters(in: .whitespaces)).")
+                        Text(t("Tanıştığımıza memnun oldum,\n{0}.", name.trimmingCharacters(in: .whitespaces)))
                             .font(RealFont.inter(22, .semibold)).kerning(-0.3).lineSpacing(8).multilineTextAlignment(.center)
                             .foregroundStyle(.white)
                             .opacity(greetingAlpha).offset(y: (1 - greetingAlpha) * 12)
@@ -108,19 +108,19 @@ struct WelcomeScreen: View {
         .onAppear(perform: startStory)
         .onDisappear { introTask?.cancel(); sound.fadeOut(0.6) }   // soften out, don't cut
         .onChange(of: scenePhase) { _, newPhase in if newPhase == .background { sound.stop() } }
-        .alert("Veri kullanımı", isPresented: $showDataUse) { Button("Tamam", role: .cancel) {} } message: {
-            Text("iOS sürümünde notların ve kayıtların yalnızca bu cihazda saklanıyor. AI özellikleri isteğe bağlıdır; kullanmadan önce ayrıca izin istenir.")
+        .alert(t("Veri kullanımı"), isPresented: $showDataUse) { Button(t("Tamam"), role: .cancel) {} } message: {
+            Text(t("iOS sürümünde notların ve kayıtların yalnızca bu cihazda saklanıyor. AI özellikleri isteğe bağlıdır; kullanmadan önce ayrıca izin istenir."))
         }
     }
 
     private var prompt: some View {
         VStack(spacing: 0) {
-            Text("Size nasıl hitap edelim?").font(RealFont.inter(21, .semibold)).kerning(-0.3).foregroundStyle(Color(argb: 0xFFF7F7F8))
+            Text(t("Size nasıl hitap edelim?")).font(RealFont.inter(21, .semibold)).kerning(-0.3).foregroundStyle(Color(argb: 0xFFF7F7F8))
                 .opacity(questionAlpha).offset(y: questionOffset)
             Color.clear.frame(height: 20)
             HStack {
                 ZStack(alignment: .leading) {
-                    if name.isEmpty { Text("Adınız").font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFF5A5A62)) }
+                    if name.isEmpty { Text(t("Adınız")).font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFF5A5A62)) }
                     TextField("", text: $name).font(RealFont.inter(17, .medium)).foregroundStyle(.white).tint(.white)
                         .textInputAutocapitalization(.words).submitLabel(.done).focused($focused)
                         .onSubmit(confirm)
@@ -132,7 +132,7 @@ struct WelcomeScreen: View {
                         .background(Circle().fill(enabled ? .white : .white.opacity(0.06)))
                 }
                 .buttonStyle(.plain).disabled(!enabled)
-                .accessibilityLabel("Devam et")
+                .accessibilityLabel(t("Devam et"))
             }
             .padding(.leading, 22).padding(.trailing, 8)
             .frame(width: 300, height: 56)
@@ -151,7 +151,7 @@ struct WelcomeScreen: View {
                 Color.clear.frame(height: 9)
                 if auth.isAvailable {
                     Button { focused = false; authError = nil; showEmailAuth = true } label: {
-                        Text("E-posta ile devam et").font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                        Text(t("E-posta ile devam et")).font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
                             .frame(width: 300, height: 50)
                             .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white.opacity(0.08)))
                             .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.14)))
@@ -168,11 +168,11 @@ struct WelcomeScreen: View {
                 // Kept quiet on purpose: the three documents in one small row. The longer explanations live behind
                 // "Veri kullanımı" and AI asks for its own consent before it is first used.
                 HStack(spacing: 0) {
-                    link("Gizlilik politikası") { if let u = URL(string: privacyOrigin + "/privacy?lang=tr") { openURL(u) } }
+                    link(t("Gizlilik politikası")) { if let u = URL(string: privacyOrigin + "/privacy?lang=tr") { openURL(u) } }
                     linkDot
-                    link("KVKK aydınlatma") { if let u = URL(string: privacyOrigin + "/kvkk?lang=tr") { openURL(u) } }
+                    link(t("KVKK aydınlatma")) { if let u = URL(string: privacyOrigin + "/kvkk?lang=tr") { openURL(u) } }
                     linkDot
-                    link("Veri kullanımı") { focused = false; showDataUse = true }
+                    link(t("Veri kullanımı")) { focused = false; showDataUse = true }
                 }
             }
             .opacity(inputAlpha)
@@ -197,7 +197,7 @@ struct WelcomeScreen: View {
             } label: {
                 HStack(spacing: 10) {
                     Image("GoogleG").resizable().frame(width: 18, height: 18)
-                    Text(auth.busy ? "Google açılıyor…" : "Google ile devam et")
+                    Text(auth.busy ? t("Google açılıyor…") : t("Google ile devam et"))
                 }
                     .font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                     .frame(width: 300, height: 50)
@@ -227,7 +227,7 @@ struct WelcomeScreen: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "apple.logo").font(.system(size: 17))
-                    Text("Apple ile devam et")
+                    Text(t("Apple ile devam et"))
                 }
                     .font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                     .frame(width: 300, height: 50)
@@ -247,7 +247,7 @@ struct WelcomeScreen: View {
             RealCloudSync.shared.reset()
             _ = try await RealCloudRestore.run(store: store, life: life)
         } catch {
-            authError = "Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin."
+            authError = t("Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin.")
         }
         let typed = name.trimmingCharacters(in: .whitespaces)
         name = typed.isEmpty ? (account.firstName ?? "") : typed
@@ -263,13 +263,13 @@ struct WelcomeScreen: View {
             // The Google / Apple mark before the label, dimmed with it.
             if label.hasPrefix("Google") { Image("GoogleG").resizable().frame(width: 18, height: 18).opacity(0.5) }
             if label.hasPrefix("Apple") { Image(systemName: "apple.logo").font(.system(size: 17)) }
-            Text(label)
+            Text(t(label))
         }
         .font(RealFont.inter(15, .semibold)).foregroundStyle(Color(argb: 0xFF66666E))
             .frame(width: 300, height: 50)
             .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white.opacity(0.05)))
             .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.06), lineWidth: 1))
-            .accessibilityLabel(label + ", şu an kullanılamıyor")
+            .accessibilityLabel(t("{0}, şu an kullanılamıyor", t(label)))
     }
 
     private var linkDot: some View {

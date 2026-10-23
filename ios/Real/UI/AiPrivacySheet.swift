@@ -8,22 +8,24 @@ struct AiPrivacySheet: View {
     @State private var auth = RealAuth.shared
     @State private var revision = 0
 
-    private let features: [(AiConsent.Feature, String)] = [
-        (.voice, "Sesli komutlar"),
-        (.mood, "Mood önerileri"),
-        (.discovery, "Film, dizi ve oyun önerileri"),
-    ]
+    private var features: [(AiConsent.Feature, String)] {
+        [
+            (.voice, t("Sesli komutlar")),
+            (.mood, t("Mood önerileri")),
+            (.discovery, t("Film, dizi ve oyun önerileri")),
+        ]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("AI ve gizlilik").font(RealFont.inter(20, .semibold)).foregroundStyle(.white)
+                Text(t("AI ve gizlilik")).font(RealFont.inter(20, .semibold)).foregroundStyle(.white)
                 Spacer()
-                Button("Bitti") { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFBCBCC5))
+                Button(t("Bitti")) { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFBCBCC5))
             }
             Text(auth.account == nil
-                 ? "AI özellikleri REAL hesabıyla çalışır. Giriş yaptığında her biri ilk kullanımda ayrıca izin ister."
-                 : "Her AI özelliği yalnızca izin verdiğinde veri gönderir. İstediğin zaman kapatabilirsin.")
+                 ? t("AI özellikleri REAL hesabıyla çalışır. Giriş yaptığında her biri ilk kullanımda ayrıca izin ister.")
+                 : t("Her AI özelliği yalnızca izin verdiğinde veri gönderir. İstediğin zaman kapatabilirsin."))
                 .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF9D9DA7))
             VStack(spacing: 0) {
                 ForEach(Array(features.enumerated()), id: \.offset) { index, item in
@@ -33,7 +35,7 @@ struct AiPrivacySheet: View {
             }
             .background(RoundedRectangle(cornerRadius: 20).fill(Color(argb: 0xFF17171B)))
             .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.08), lineWidth: 0.8))
-            Text("İzni kapatmak daha önce gönderilen verileri silmez. Veriler REAL sunucusu üzerinden Groq veya Google Gemini'ye iletilir ve yurt dışında işlenebilir.")
+            Text(t("İzni kapatmak daha önce gönderilen verileri silmez. Veriler REAL sunucusu üzerinden Groq veya Google Gemini'ye iletilir ve yurt dışında işlenebilir."))
                 .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF7E7E88))
             Spacer()
         }

@@ -407,7 +407,7 @@ struct CardBlockGrid<Block: View>: View {
                 now.span = span
                 onChange(key, now.normalized)
             }.onEnded { _ in handleStart = nil })
-            .accessibilityLabel("Genişliği değiştir")
+            .accessibilityLabel(t("Genişliği değiştir"))
     }
 
     /// Left edge: the right edge stays, the block widens / narrows to the left.
@@ -429,7 +429,7 @@ struct CardBlockGrid<Block: View>: View {
                 now.column = column; now.span = end - column
                 onChange(key, now.normalized)
             }.onEnded { _ in handleStart = nil })
-            .accessibilityLabel("Sola genişlet")
+            .accessibilityLabel(t("Sola genişlet"))
     }
 
     /// Bottom edge: height 80–800pt (catalog cards: drag up hides their buttons, down shows them).
@@ -453,7 +453,7 @@ struct CardBlockGrid<Block: View>: View {
                 now.minHeight = h
                 onChange(key, now.normalized)
             }.onEnded { _ in handleStart = nil })
-            .accessibilityLabel("Yüksekliği değiştir")
+            .accessibilityLabel(t("Yüksekliği değiştir"))
     }
 
     /// Top edge: the bottom edge stays where it is, the top moves up / down (neighbours frozen, never overlapped).
@@ -469,7 +469,7 @@ struct CardBlockGrid<Block: View>: View {
                       next != layout else { return }
                 onDrop(keys, next)
             }.onEnded { _ in handleStart = nil })
-            .accessibilityLabel("Üst kenarı taşı")
+            .accessibilityLabel(t("Üst kenarı taşı"))
     }
 
     private func handlePill(horizontal: Bool, highlighted: Bool, alignment: Alignment) -> some View {

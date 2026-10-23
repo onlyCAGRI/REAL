@@ -65,16 +65,16 @@ struct LocationTriggerSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(place.placeName).font(RealFont.inter(18, .semibold)).foregroundStyle(Color(argb: 0xFFF4F4F6)).lineLimit(2)
-            Text("Bir kere hatırlatır, sonra konum takibi biter.").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8E8E98))
+            Text(t("Bir kere hatırlatır, sonra konum takibi biter.")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8E8E98))
                 .padding(.top, 4)
             Picker("", selection: $onExit) {
-                Text("Varınca").tag(false)
-                Text("Ayrılınca").tag(true)
+                Text(t("Varınca")).tag(false)
+                Text(t("Ayrılınca")).tag(true)
             }
             .pickerStyle(.segmented).padding(.top, 16)
-            Text("Mesafe").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98)).padding(.top, 14)
+            Text(t("Mesafe")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98)).padding(.top, 14)
             Picker("", selection: $radius) {
-                ForEach(LocationTrigger.radiusChoices, id: \.self) { Text("\($0) m").tag($0) }
+                ForEach(LocationTrigger.radiusChoices, id: \.self) { Text(t("{0} m", $0)).tag($0) }
             }
             .pickerStyle(.segmented).padding(.top, 6)
             Button {
@@ -83,7 +83,7 @@ struct LocationTriggerSheet: View {
                 }
                 dismiss()
             } label: {
-                Text("Kaydet").font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                Text(t("Kaydet")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                     .frame(maxWidth: .infinity).frame(height: 50)
                     .background(Capsule().fill(place.latitude == nil ? Color(argb: 0xFF4A4A50) : Color(argb: 0xFFF3F3F5)))
             }

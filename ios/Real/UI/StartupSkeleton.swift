@@ -32,7 +32,7 @@ struct StartupSkeletonReveal: View {
             .ignoresSafeArea()
         }
         .contentShape(Rectangle())                          // taps do not reach the covered home controls
-        .accessibilityLabel("Kartlar yükleniyor")
+        .accessibilityLabel(t("Kartlar yükleniyor"))
         .task {
             try? await Task.sleep(for: .seconds(shown))
             if reduceAnimations { onDone(); return }

@@ -33,7 +33,7 @@ final class VoiceRecorderEngine: NSObject, AVAudioPlayerDelegate {
         stopPlayback()
         AVAudioApplication.requestRecordPermission { granted in
             DispatchQueue.main.async {
-                guard granted else { self.error = "Mikrofon izni gerekli. Ayarlar'dan REAL için mikrofonu açabilirsin."; return }
+                guard granted else { self.error = t("Mikrofon izni gerekli. Ayarlar'dan REAL için mikrofonu açabilirsin."); return }
                 self.beginRecording()
             }
         }
@@ -50,7 +50,7 @@ final class VoiceRecorderEngine: NSObject, AVAudioPlayerDelegate {
             let r = try AVAudioRecorder(url: url, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44_100,
                                                              AVNumberOfChannelsKey: 1, AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue])
             r.isMeteringEnabled = true
-            guard r.record() else { error = "Kayıt başlatılamadı."; return }
+            guard r.record() else { error = t("Kayıt başlatılamadı."); return }
             recorder = r
             startedAt = Date()
             error = nil
@@ -64,7 +64,7 @@ final class VoiceRecorderEngine: NSObject, AVAudioPlayerDelegate {
                 if self.elapsed >= 10 * 60 * 1000 { _ = self.stop() }
             }
         } catch {
-            self.error = "Kayıt başlatılamadı."
+            self.error = t("Kayıt başlatılamadı.")
         }
     }
 
@@ -100,7 +100,7 @@ final class VoiceRecorderEngine: NSObject, AVAudioPlayerDelegate {
             player = p
             playingId = r.id
         } catch {
-            self.error = "Ses kaydı oynatılamadı."
+            self.error = t("Ses kaydı oynatılamadı.")
         }
     }
 
@@ -128,13 +128,13 @@ struct VoiceRecordingBlock: View {
         let live = engine.recording ? sqrt(engine.level) : (engine.playingId != nil ? 0.35 : 0)
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Ses").font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
+                Text(t("Ses")).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
                 Spacer()
                 if editing, let onClose {
                     Button { engine.cancel(); onClose() } label: {
                         RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFA7A7B0)).frame(width: 32, height: 32)
                     }
-                    .accessibilityLabel("Ses bloğunu kaldır")
+                    .accessibilityLabel(t("Ses bloğunu kaldır"))
                 }
             }
             if engine.recording {
@@ -172,7 +172,7 @@ struct VoiceRecordingBlock: View {
                 RealSymbol("waveform", size: 24.1)
                     .foregroundStyle(active ? Color(argb: 0xFF91B9FF) : .white).frame(width: 48, height: 48)
             }
-            .accessibilityLabel(active ? "Ses kaydını durdur" : "Ses kaydını başlat")
+            .accessibilityLabel(active ? t("Ses kaydını durdur") : t("Ses kaydını başlat"))
             Spacer()
             Text(formatVoiceDuration(engine.elapsed)).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFEAEAF0)).monospacedDigit()
         }
@@ -186,14 +186,14 @@ struct VoiceRecordingBlock: View {
                 RealSymbol(playing ? "pause.fill" : "play.fill", size: 17.2).foregroundStyle(Color(argb: 0xFFEAEAF0))
                     .frame(width: 34, height: 34)
             }
-            .accessibilityLabel(playing ? "Ses kaydını duraklat" : "Ses kaydını oynat")
+            .accessibilityLabel(playing ? t("Ses kaydını duraklat") : t("Ses kaydını oynat"))
             Spacer()
             Text(formatVoiceDuration(r.durationMillis)).font(RealFont.inter(12, .medium)).foregroundStyle(Color(argb: 0xFFB8B8C2)).monospacedDigit()
             if editing {
                 Button { if playing { engine.stopPlayback() }; onRemove(r) } label: {
                     RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFFA7A7B0)).frame(width: 32, height: 32)
                 }
-                .accessibilityLabel("Ses kaydını sil")
+                .accessibilityLabel(t("Ses kaydını sil"))
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
