@@ -64,7 +64,7 @@ internal fun SharedCategorySheet(
     var members by remember { mutableStateOf<List<SharedMember>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var working by remember { mutableStateOf<String?>(null) } // full-screen t("Kategori paylaşılıyor") text
+    var working by remember { mutableStateOf<String?>(null) } // full-screen "Kategori paylaşılıyor" text
     var movedCount by remember { mutableIntStateOf(0) }
     var newAccess by remember { mutableStateOf("full") }
     var leaving by remember { mutableStateOf(false) }

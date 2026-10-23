@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import com.cagri.real.ui.components.RealMotion
 import com.cagri.real.ui.components.RealHaptics
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -286,7 +287,7 @@ fun WelcomeScreen(
                 .orEmpty()
         }
         if (resolvedName.isBlank()) {
-            authError = "Hesap bağlandı. Devam etmek için size nasıl hitap edeceğimizi yazın."
+            authError = t("Hesap bağlandı. Devam etmek için size nasıl hitap edeceğimizi yazın.")
         } else if (phase == WelcomePhase.NamePrompt) {
             name = resolvedName
             authError = null
@@ -373,7 +374,7 @@ fun WelcomeScreen(
             ) {
                 Text(
                     // Same typeface and colour as the word story before it (REAL_Welcome: 23px, #F3F1F4, 400).
-                    text = "Welcome to",
+                    text = t("Welcome to"),
                     color = Color(0xFFF3F1F4),
                     fontSize = 23.sp,
                     lineHeight = 32.sp,
@@ -426,7 +427,7 @@ fun WelcomeScreen(
                         }
                 ) {
                     Text(
-                        text = "Tanıştığımıza memnun oldum,\n${name.trim()}.",
+                        text = t("Tanıştığımıza memnun oldum,\n{0}.", name.trim()),
                         color = Color.White,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -452,7 +453,7 @@ fun WelcomeScreen(
                         }
                 ) {
                     Text(
-                        text = "Size nasıl hitap edelim?",
+                        text = t("Size nasıl hitap edelim?"),
                         color = Color(0xFFF7F7F8),
                         fontSize = 21.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -491,7 +492,7 @@ fun WelcomeScreen(
                         ) {
                             if (name.isEmpty()) {
                                 Text(
-                                    text = "Adınız",
+                                    text = t("Adınız"),
                                     color = Color(0xFF5A5A62),
                                     fontSize = 17.sp,
                                     fontWeight = FontWeight.Normal
@@ -545,10 +546,11 @@ fun WelcomeScreen(
 
                     Spacer(Modifier.height(14.dp))
                     WelcomeAuthButton(
-                        label = if (authBusy) "Google açılıyor…" else "Google ile devam et",
+                        label = if (authBusy) t("Google açılıyor…") else t("Google ile devam et"),
                         emphasized = true,
                         enabled = !authBusy && authController != null,
-                        modifier = Modifier.graphicsLayer { alpha = inputAlpha.value }
+                        modifier = Modifier.graphicsLayer { alpha = inputAlpha.value },
+                        logo = com.cagri.real.R.drawable.ic_logo_google
                     ) {
                         val active = authController ?: return@WelcomeAuthButton
                         keyboardController?.hide()
@@ -561,7 +563,7 @@ fun WelcomeScreen(
                             result.onSuccess(finishAfterAuthentication)
                                 .onFailure { throwable ->
                                     if (throwable !is AuthCancelled) {
-                                        authError = throwable.message ?: "Google ile giriş yapılamadı."
+                                        authError = throwable.message ?: t("Google ile giriş yapılamadı.")
                                     }
                                 }
                         }
@@ -569,14 +571,16 @@ fun WelcomeScreen(
                     Spacer(Modifier.height(9.dp))
                     // Shown for the iOS-ready sign-in set, but not available yet: it cannot be pressed.
                     WelcomeAuthButton(
-                        label = "Apple ile devam et",
+                        label = t("Apple ile devam et"),
                         emphasized = false,
                         enabled = false,
-                        modifier = Modifier.graphicsLayer { alpha = inputAlpha.value }
+                        modifier = Modifier.graphicsLayer { alpha = inputAlpha.value },
+                        logo = com.cagri.real.R.drawable.ic_logo_apple,
+                        tintLogo = true
                     ) {}
                     Spacer(Modifier.height(9.dp))
                     WelcomeAuthButton(
-                        label = "E-posta ile devam et",
+                        label = t("E-posta ile devam et"),
                         emphasized = false,
                         enabled = !authBusy && authController != null,
                         modifier = Modifier.graphicsLayer { alpha = inputAlpha.value }
@@ -653,6 +657,9 @@ private fun WelcomeAuthButton(
     emphasized: Boolean,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    /** Google / Apple mark before the label; [tintLogo]: one-colour marks follow the label colour. */
+    logo: Int? = null,
+    tintLogo: Boolean = false,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(24.dp)
@@ -690,16 +697,28 @@ private fun WelcomeAuthButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            color = when {
-                !enabled -> Color(0xFF66666E)
-                emphasized -> Color.Black
-                else -> Color.White
-            },
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold
-        )
+        val labelColor = when {
+            !enabled -> Color(0xFF66666E)
+            emphasized -> Color.Black
+            else -> Color.White
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (logo != null) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp).graphicsLayer { alpha = if (enabled || tintLogo) 1f else .5f },
+                    colorFilter = if (tintLogo) androidx.compose.ui.graphics.ColorFilter.tint(labelColor) else null
+                )
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(
+                text = label,
+                color = labelColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
     }
 }
 
@@ -774,7 +793,7 @@ private fun WelcomeWordmark(
         logoBitmap?.let {
             Image(
                 bitmap = it,
-                contentDescription = "Real",
+                contentDescription = t("Real"),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit
             )
@@ -877,7 +896,7 @@ private fun WelcomeWordStory(
         }
         at(12f); wordIn(WelcomeSomeday, fromDx = 0f, fromBlur = 14f, fromScale = 0.94f, duration = 900, dim = 0.55f)
         at(14f)                                          // "Today." snaps into focus
-        text = "Today."
+        text = t("Today.")
         launch { alpha.snapTo(0.5f); alpha.animateTo(1f, tween(290, easing = StoryEase)) }
         launch { blur.snapTo(8f); blur.animateTo(0f, tween(290, easing = StoryEase)) }
         launch { dx.snapTo(0f) }

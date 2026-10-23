@@ -115,8 +115,8 @@ internal fun scoreText(v: Double) = if (v % 1.0 == 0.0) v.toInt().toString() els
 private fun verdict(v: Double) = when { v >= 9 -> t("Efsane"); v >= 7 -> t("İyi"); v >= 5 -> t("İdare eder"); else -> t("Beğenmedim") }
 
 private data class Period(val short: String, val long: String, val days: Int?)
-private val Periods get() = listOf(Period("7", t("Son 7 gün"), 7), Period("30", t("Son 30 gün"), 30), Period(t("3 ay"), t("Son 3 ay"), 90),
-    Period(t("6 ay"), t("Son 6 ay"), 180), Period(t("1 yıl"), t("Son 1 yıl"), 365), Period(t("Tümü"), t("Tümü"), null))
+private val Periods get() = listOf(Period("7", t("Son 7 gün"), 7), Period("30", t("Son 30 gün"), 30), Period("3 ay", t("Son 3 ay"), 90),
+    Period("6 ay", t("Son 6 ay"), 180), Period("1 yıl", t("Son 1 yıl"), 365), Period("Tümü", t("Tümü"), null))
 
 private sealed interface RateTarget {
     data class Film(val media: MediaBlock, val initial: Double?, val past: Boolean, val inList: Boolean) : RateTarget

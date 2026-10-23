@@ -71,7 +71,7 @@ import kotlin.math.abs
 import kotlin.math.min
 
 private val DiscoveryAccent = Color(0xFFDDD4C6)
-private val DiscoveryBlue = Color(0xFF2F6BFF)   // seçili çipler, ana buton ve t("REAL'e ekle"); oyun ekranındaki turuncunun mavi karşılığı
+private val DiscoveryBlue = Color(0xFF2F6BFF)   // seçili çipler, ana buton ve "REAL'e ekle"; oyun ekranındaki turuncunun mavi karşılığı
 private const val PosterAspect = .667f
 private enum class DiscoveryPage { ENTRY, FILTERS, DISCOVER, WATCHLIST }
 
