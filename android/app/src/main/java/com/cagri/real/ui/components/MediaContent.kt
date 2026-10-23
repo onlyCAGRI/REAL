@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -67,14 +68,14 @@ fun MediaSearchSheet(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Film & Dizi", style = RealType.detailDialogTitle)
+            Text(t("Film & Dizi"), style = RealType.detailDialogTitle)
 
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it.take(200) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                placeholder = { Text("Film veya dizi ara") },
+                placeholder = { Text(t("Film veya dizi ara")) },
                 shape = RoundedCornerShape(24.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
@@ -101,10 +102,10 @@ fun MediaSearchSheet(
                     }
                     if (movies.isFailure && series.isFailure) {
                         results = emptyList()
-                        message = "İçerik kataloğuna şu anda ulaşılamadı."
+                        message = t("İçerik kataloğuna şu anda ulaşılamadı.")
                     } else {
                         results = mergeMediaResults(q, movies.getOrDefault(emptyList()), series.getOrDefault(emptyList()))
-                        if (results.isEmpty()) message = "Sonuç bulunamadı."
+                        if (results.isEmpty()) message = t("Sonuç bulunamadı.")
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -113,8 +114,8 @@ fun MediaSearchSheet(
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(if (searching) "Aranıyor…" else "", style = RealType.detailBlockMeta, color = Color(0xFFA5A5B0))
-                TextButton(onClick = onDismiss) { Text("Kapat", color = Color(0xFFBCBCC5)) }
+                Text(if (searching) t("Aranıyor…") else "", style = RealType.detailBlockMeta, color = Color(0xFFA5A5B0))
+                TextButton(onClick = onDismiss) { Text(t("Kapat"), color = Color(0xFFBCBCC5)) }
             }
 
             message?.let { Text(it, style = RealType.detailBlockMeta, color = Color(0xFFBCBCC5)) }
@@ -152,7 +153,7 @@ fun MediaSearchSheet(
                 }
             }
 
-            Text("Filmler TheTVDB • Diziler TVmaze", style = RealType.detailAttribution, color = Color(0xFF95959F))
+            Text(t("Filmler TheTVDB • Diziler TVmaze"), style = RealType.detailAttribution, color = Color(0xFF95959F))
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -229,7 +230,7 @@ fun MediaContentSection(
                             IconButton(onClick = { onRemove(block.id) }, modifier = Modifier.size(40.dp)) {
                                 ActionIcon(
                                     ActionGlyph.Close,
-                                    Modifier.size(15.dp).semantics { contentDescription = "İçeriği kaldır" },
+                                    Modifier.size(15.dp).semantics { contentDescription = t("İçeriği kaldır") },
                                     Color(0xFFB8B8C2)
                                 )
                             }
@@ -379,10 +380,10 @@ fun MediaTrackCard(
                     val uri = runCatching { Uri.parse(block.providerUrl) }.getOrNull()
                     if (uri?.scheme in listOf("http", "https")) {
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }.onFailure {
-                            com.cagri.real.ui.components.RealToast.show(context, "Bağlantı açılamadı")
+                            com.cagri.real.ui.components.RealToast.show(context, t("Bağlantı açılamadı"))
                         }
                     } else {
-                        com.cagri.real.ui.components.RealToast.show(context, "Bağlantı kullanılamıyor")
+                        com.cagri.real.ui.components.RealToast.show(context, t("Bağlantı kullanılamıyor"))
                     }
                 }
             ) {
@@ -399,12 +400,12 @@ internal fun mediaProviderName(block: MediaBlock): String = when (block.provider
     else -> block.provider
 }
 
-internal fun mediaOpenLabel(block: MediaBlock): String = "${mediaProviderName(block)}'de aç ↗"
+internal fun mediaOpenLabel(block: MediaBlock): String = t("{0}'de aç ↗", mediaProviderName(block))
 
 internal fun openMediaBlock(context: android.content.Context, block: MediaBlock) {
     val uri = runCatching { Uri.parse(block.providerUrl) }.getOrNull()
     if (uri?.scheme in listOf("http", "https")) {
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            .onFailure { RealToast.show(context, "Bağlantı açılamadı") }
-    } else RealToast.show(context, "Bağlantı kullanılamıyor")
+            .onFailure { RealToast.show(context, t("Bağlantı açılamadı")) }
+    } else RealToast.show(context, t("Bağlantı kullanılamıyor"))
 }

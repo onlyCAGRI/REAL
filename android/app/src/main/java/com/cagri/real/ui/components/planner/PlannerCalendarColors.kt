@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.i18n.t
 import androidx.compose.ui.graphics.Color
 import com.cagri.real.data.CustomCategory
 import com.cagri.real.ui.components.ReminderColorChoices
@@ -174,7 +175,7 @@ internal fun resolveGelenKutuVisual(customCategories: List<CustomCategory> = emp
     } else {
         ReminderColorChoices.getOrNull(2)?.color ?: Color(0xFF4558C8)
     }
-    val label = matched?.name ?: "Gelen kutu"
+    val label = matched?.name ?: t("Gelen kutu")
     val pastel = nearestCalendarPastel(rawColor)
     return PlannerCategoryVisual(
         name = label,

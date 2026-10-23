@@ -16,7 +16,10 @@ data class MusicBlock(
     val providerUrl: String,
     val previewUrl: String? = null,
     val previewDurationMillis: Long? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** Apple Music marks the song explicit (küfürlü sözler); shown as an "E" badge. */
+    val explicit: Boolean = false
+
 ) {
     companion object {
         fun encodeArray(blocks: List<MusicBlock>): JSONArray = JSONArray().apply {
@@ -27,6 +30,7 @@ data class MusicBlock(
                     put("provider", block.provider); put("providerTrackId", block.providerTrackId)
                     put("providerUrl", block.providerUrl); put("previewUrl", block.previewUrl)
                     put("previewDurationMillis", block.previewDurationMillis); put("createdAt", block.createdAt)
+                    if (block.explicit) put("explicit", true)
                 })
             }
         }
@@ -43,7 +47,7 @@ data class MusicBlock(
                     provider = item.optString("provider", ""), providerTrackId = optional("providerTrackId"),
                     providerUrl = item.optString("providerUrl", ""), previewUrl = optional("previewUrl"),
                     previewDurationMillis = item.optLong("previewDurationMillis", 0).takeIf { it > 0 },
-                    createdAt = item.optLong("createdAt", 0)))
+                    createdAt = item.optLong("createdAt", 0), explicit = item.optBoolean("explicit", false)))
             }
         }
     }

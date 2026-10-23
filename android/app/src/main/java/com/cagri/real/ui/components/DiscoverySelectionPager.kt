@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -67,7 +68,7 @@ internal fun DiscoverySelectionPager(
                 Box(Modifier.size(32.dp).clip(CircleShape)
                     .clickable { goTo(index) }
                     .semantics {
-                        contentDescription = "$title, ${index + 1}. sayfa, $count seçili"
+                        contentDescription = t("{0}, {1}. sayfa, {2} seçili", title, index + 1, count)
                         selected = active
                     }, contentAlignment = Alignment.Center) {
                     Box(Modifier.size(if (active) 7.dp else 5.dp).clip(CircleShape)

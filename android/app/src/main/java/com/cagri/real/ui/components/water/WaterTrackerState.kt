@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.water
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
@@ -60,7 +61,7 @@ internal class WaterTrackerState(
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) {
             ready = false
-            error = "İçecek kayıtları okunamadı. Yeniden dene."
+            error = t("İçecek kayıtları okunamadı. Yeniden dene.")
         }
     }
 

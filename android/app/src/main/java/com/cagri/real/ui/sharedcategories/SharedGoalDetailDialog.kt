@@ -1,5 +1,6 @@
 package com.cagri.real.ui.sharedcategories
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -53,14 +54,14 @@ internal fun SharedGoalDetailDialog(api: SharedCategoryApi, categoryId: String, 
             MediaContentSection(card.mediaBlocks, DesignStyle.LiquidGlass, false, {})
             card.cardStack?.let { CardStackContentSection(it, DesignStyle.LiquidGlass, false, onUpdate = {}, onRemove = {}) }
             com.cagri.real.ui.AttachmentMediaSection(card.attachments.filter { it.type == AttachmentType.IMAGE }, DesignStyle.LiquidGlass, false,
-                onOpen = { runCatching { api.open(it) }.onFailure { com.cagri.real.ui.components.RealToast.show(context, it.message ?: "Dosya açılamadı.") } }, onRemove = {})
+                onOpen = { runCatching { api.open(it) }.onFailure { com.cagri.real.ui.components.RealToast.show(context, it.message ?: t("Dosya açılamadı.")) } }, onRemove = {})
             ReminderContentSections(card.attachments, card.referenceUrl, false, DesignStyle.LiquidGlass, backdrop,
                 backdropPosition = { androidx.compose.ui.geometry.Offset.Zero }, onRemove = {}, onRemoveLink = {},
-                onOpenAttachment = { runCatching { api.open(it) }.onFailure { com.cagri.real.ui.components.RealToast.show(context, it.message ?: "Dosya açılamadı.") } }, allowSnippetEditing = false)
+                onOpenAttachment = { runCatching { api.open(it) }.onFailure { com.cagri.real.ui.components.RealToast.show(context, it.message ?: t("Dosya açılamadı.")) } }, allowSnippetEditing = false)
             card.voiceRecordings.forEach { VoicePlaybackRow(it, compact = true) }
             card.mood?.let { Text(it.label, color = Color.White) }
             card.journal?.let { Text(it.text, color = Color.White.copy(alpha = 0.8f)) }
-            if (unavailable) Text("Bazı dosyalar şu anda açılamıyor. İnternet bağlantısını kontrol et.", color = Color.Gray)
+            if (unavailable) Text(t("Bazı dosyalar şu anda açılamıyor. İnternet bağlantısını kontrol et."), color = Color.Gray)
             Spacer(Modifier.height(24.dp))
         }
     }

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
@@ -20,6 +21,6 @@ internal fun PanoLeaveDialog(board: PanoBoard, controller: PanoController, onDis
                     onLeft()
                 } finally { leaving = false }
             }
-        }) { Text(if (leaving) "Leaving…" else "Leave") } },
+        }) { Text(if (leaving) t("Leaving…") else t("Leave")) } },
         dismissButton = { TextButton(enabled = !leaving, onClick = onDismiss) { Text("Cancel") } })
 }

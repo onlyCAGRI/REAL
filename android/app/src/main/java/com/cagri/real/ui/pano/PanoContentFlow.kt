@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.annotation.SuppressLint
 
 import androidx.compose.animation.core.animateDpAsState

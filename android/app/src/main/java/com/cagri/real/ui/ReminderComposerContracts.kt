@@ -37,14 +37,22 @@ internal class ReminderComposerCallbacks(
     val onDraftReferenceUrlChange: (String?) -> Unit,
     val onShareDraftChange: (Boolean) -> Unit,
     val onSetRepeatPattern: (Long, Int, Long?) -> Unit,
-    val onSetTiming: (Long, Int?, Long?) -> Unit = { _, _, _ -> }
+    val onSetTiming: (Long, Int?, Long?) -> Unit = { _, _, _ -> },
+    val onSetAlarm: (Long, Boolean) -> Unit = { _, _ -> },
+    val onSetLocationTrigger: (Long, com.cagri.real.data.LocationTrigger?) -> Unit = { _, _ -> }
 )
 
-/** Early warning and end picked in the composer's date sheet, applied once the card exists. */
+/** Early warning, end and alarm picked in the composer, applied once the card exists. */
 internal object ComposerTimingDraft {
     var earlyAlertMinutes by androidx.compose.runtime.mutableStateOf<Int?>(null)
     var endAt by androidx.compose.runtime.mutableStateOf<Long?>(null)
-    fun clear() { earlyAlertMinutes = null; endAt = null }
+    /** Bell tapped a second time: the card rings as an alarm (needs a clock time). */
+    var alarm by androidx.compose.runtime.mutableStateOf(false)
+    /** "Konuma varınca hatırlat" picked from the composer pin. */
+    var locationTrigger by androidx.compose.runtime.mutableStateOf<com.cagri.real.data.LocationTrigger?>(null)
+    fun clear() { clearTiming(); locationTrigger = null }
+    /** The date was removed: what hangs on a clock time goes, a place reminder stays. */
+    fun clearTiming() { earlyAlertMinutes = null; endAt = null; alarm = false }
 }
 
 internal class ReminderVoiceActions(

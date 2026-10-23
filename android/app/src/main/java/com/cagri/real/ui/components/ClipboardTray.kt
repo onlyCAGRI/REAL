@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -182,17 +183,17 @@ fun ClipboardTray(
                                 contentAlignment = Alignment.Center
                             ) { ActionIcon(ActionGlyph.Paste, Modifier.size(14.dp), if (capturing) Color(0xFF91B9FF) else Color.White) }
                             Spacer(Modifier.width(8.dp))
-                            Text("Panodan ekle", color = if (capturing) Color(0xFF0B1A33) else Color.White,
+                            Text(t("Panodan ekle"), color = if (capturing) Color(0xFF0B1A33) else Color.White,
                                 fontSize = 13.sp, fontWeight = FontWeight.Medium)
                         }
                         Spacer(Modifier.weight(1f))
-                        Text("Bitti", color = Color(0xFFC9CBD3), fontSize = 14.sp,
+                        Text(t("Bitti"), color = Color(0xFFC9CBD3), fontSize = 14.sp,
                             modifier = Modifier.clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = ::close)
                                 .padding(horizontal = 8.dp, vertical = 6.dp))
                     }
                     Text(
-                        if (capturing) "Klavyedeki pano simgesine bas, eklemek istediklerine dokun."
-                        else "Klavyenin panosundaki son kopyaladıkların buraya gelir.",
+                        if (capturing) t("Klavyedeki pano simgesine bas, eklemek istediklerine dokun.")
+                        else t("Klavyenin panosundaki son kopyaladıkların buraya gelir."),
                         color = Color(0xFF8E8E93), fontSize = 12.sp, lineHeight = 16.sp,
                         modifier = Modifier.padding(top = 10.dp, bottom = 8.dp)
                     )
@@ -209,7 +210,7 @@ fun ClipboardTray(
                             }
                     )
                     if (items.isEmpty()) {
-                        Text("Henüz bir şey yok", color = Color(0xFF6E6E76), fontSize = 13.sp,
+                        Text(t("Henüz bir şey yok"), color = Color(0xFF6E6E76), fontSize = 13.sp,
                             modifier = Modifier.padding(vertical = 14.dp).fillMaxWidth())
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -218,7 +219,7 @@ fun ClipboardTray(
                                 TrayRow(item, enabled = !busy, onAppend = { onAppend(item) })
                             }
                         }
-                        Text("+ kartın sonuna ekler. Liste uygulama kapanana kadar durur.", color = Color(0xFF6E6E76),
+                        Text(t("+ kartın sonuna ekler. Liste uygulama kapanana kadar durur."), color = Color(0xFF6E6E76),
                             fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
@@ -240,17 +241,17 @@ private fun TrayRow(item: TrayItem, enabled: Boolean, onAppend: () -> Unit) {
                     val link = item.text.startsWith("http", ignoreCase = true)
                     Text(item.text.replace('\n', ' '), color = Color.White, fontSize = 13.sp,
                         maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(if (link) "Bağlantı" else "Metin", color = Color(0xFF8E8E93), fontSize = 11.sp)
+                    Text(if (link) t("Bağlantı") else t("Metin"), color = Color(0xFF8E8E93), fontSize = 11.sp)
                 }
                 is TrayItem.Image -> {
-                    Text("Fotoğraf", color = Color.White, fontSize = 13.sp)
-                    Text("Klavyenin panosundan", color = Color(0xFF8E8E93), fontSize = 11.sp)
+                    Text(t("Fotoğraf"), color = Color.White, fontSize = 13.sp)
+                    Text(t("Klavyenin panosundan"), color = Color(0xFF8E8E93), fontSize = 11.sp)
                 }
             }
         }
         Box(
             Modifier.size(34.dp).clip(CircleShape).background(Color(0xFF91B9FF).copy(alpha = if (enabled) 1f else .4f))
-                .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Sona ekle", onClick = onAppend),
+                .clickable(enabled = enabled, role = Role.Button, onClickLabel = t("Sona ekle"), onClick = onAppend),
             contentAlignment = Alignment.Center
         ) { Text("+", color = Color(0xFF0B1A33), fontSize = 20.sp, fontWeight = FontWeight.Medium) }
     }

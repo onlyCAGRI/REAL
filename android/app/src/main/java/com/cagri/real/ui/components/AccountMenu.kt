@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.core.Animatable
@@ -103,13 +104,13 @@ fun AccountMenuOverlay(
                 .graphicsLayer { alpha = progress }
                 .background(Color.Black.copy(alpha = 0.40f))
                 .clickable(interactionSource = dismissInteraction, indication = null, onClick = onDismiss)
-                .semantics { contentDescription = "Hesap menüsünü kapat" }
+                .semantics { contentDescription = t("Hesap menüsünü kapat") }
         )
 
         val panelContent: @Composable BoxScope.() -> Unit = {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 15.dp)) {
                 Text(
-                    text = "Hesap",
+                    text = t("Hesap"),
                     color = Color(0xFFF7F7F8),
                     fontSize = 21.sp,
                     lineHeight = 25.sp,
@@ -117,7 +118,7 @@ fun AccountMenuOverlay(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "Bu cihazdaki notlar",
+                    text = t("Bu cihazdaki notlar"),
                     color = Color(0xFFA4A4AD),
                     fontSize = 14.sp,
                     lineHeight = 18.sp,
@@ -131,7 +132,7 @@ fun AccountMenuOverlay(
                 ) {
                     ProfileAvatar(Modifier.size(44.dp))
                     Text(
-                        text = userName.trim().ifBlank { "Kullanıcı" },
+                        text = userName.trim().ifBlank { t("Kullanıcı") },
                         color = Color(0xFFF7F7F8),
                         fontSize = 16.sp,
                         lineHeight = 20.sp,
@@ -139,7 +140,7 @@ fun AccountMenuOverlay(
                     )
                 }
                 Spacer(Modifier.height(12.dp))
-                AccountMenuItem(icon = ActionGlyph.Person, label = "Fotoğrafın veya avatarın", onClick = {
+                AccountMenuItem(icon = ActionGlyph.Person, label = t("Fotoğrafın veya avatarın"), onClick = {
                     onDismiss()
                     context.startActivity(Intent(context, AvatarEditorActivity::class.java))
                 })
@@ -149,21 +150,21 @@ fun AccountMenuOverlay(
                     onClick = { showRealPro = true })
                 Spacer(Modifier.height(3.dp))
                 if (!signedIn) {
-                    AccountMenuItem(icon = ActionGlyph.Add, label = "Hesap ekle", onClick = {
+                    AccountMenuItem(icon = ActionGlyph.Add, label = t("Hesap ekle"), onClick = {
                         showAddAccount = true
                     })
                     Spacer(Modifier.height(3.dp))
                 }
-                AccountMenuItem(icon = ActionGlyph.Manage, label = syncHealth?.let { val count = it.issues.size + it.conflicts.size; if (count > 0) "Hesapları yönet · $count eşitleme sorunu" else "Hesapları yönet" } ?: "Hesapları yönet", onClick = {
+                AccountMenuItem(icon = ActionGlyph.Manage, label = syncHealth?.let { val count = it.issues.size + it.conflicts.size; if (count > 0) t("Hesapları yönet · {0} eşitleme sorunu", count) else t("Hesapları yönet") } ?: t("Hesapları yönet"), onClick = {
                     showManageAccounts = true
                 })
                 Spacer(Modifier.height(3.dp))
-                AccountMenuItem(icon = ActionGlyph.Category, label = "Kategori sıralaması", onClick = {
+                AccountMenuItem(icon = ActionGlyph.Category, label = t("Kategori sıralaması"), onClick = {
                     onDismiss()
                     onCategoryOrderClick()
                 })
                 Spacer(Modifier.height(3.dp))
-                AccountMenuItem(icon = ActionGlyph.Settings, label = "Ayarlar", onClick = {
+                AccountMenuItem(icon = ActionGlyph.Settings, label = t("Ayarlar"), onClick = {
                     onDismiss()
                     onSettingsClick()
                 })
@@ -276,7 +277,7 @@ fun ProfileAvatar(
         if (file != null) {
             AsyncImage(
                 model = profileRequest,
-                contentDescription = "Profil avatarı",
+                contentDescription = t("Profil avatarı"),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )

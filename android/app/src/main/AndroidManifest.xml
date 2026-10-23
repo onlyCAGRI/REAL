@@ -6,6 +6,7 @@
     <!-- One fix when the person taps "Şu anki konumum" in Konum ekle; never in the background. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
@@ -16,6 +17,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <queries>
@@ -37,6 +43,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
+        android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.Real">
 
 
@@ -50,7 +57,13 @@
             android:value="true" />
 
         <receiver android:name=".notifications.ReminderAlarmReceiver" android:exported="false" />
+        <receiver android:name=".notifications.DepartureReceiver" android:exported="false" />
         <receiver android:name=".notifications.NotificationActionReceiver" android:exported="false" />
+        <receiver android:name=".notifications.RealAlarmReceiver" android:exported="false" />
+        <receiver android:name=".notifications.LocationReminderReceiver" android:exported="false" />
+        <service android:name=".notifications.AlarmSoundService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <activity android:name=".ui.alarm.AlarmActivity" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true"
+            android:launchMode="singleTop" android:excludeFromRecents="true" android:taskAffinity="" android:theme="@style/Theme.Real" />
         <receiver android:name=".notifications.ProbeCancelReceiver" android:exported="false" />
         <receiver android:name=".notifications.NowBarReminderReceiver" android:exported="false" />
         <receiver android:name=".notifications.RestorePinnedReceiver" android:exported="false">
@@ -96,6 +109,16 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="real" android:host="connection" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".ui.AppleMusicConnectWebActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".ui.AppleMusicConnectActivity" android:exported="true" android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="real" android:host="apple-music" />
             </intent-filter>
         </activity>
         <activity android:name=".ui.share.SharedCardImportActivity" android:exported="true"

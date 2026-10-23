@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -51,6 +52,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -113,6 +115,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 @OptIn(ExperimentalFoundationApi::class)
+/** Alarm accent in the composer bell (the alarm screen itself takes the category colour). */
+internal val ComposerAlarmTone = Color(0xFFFF8A5B)
+
 @Composable
 fun GlassComposer(
     value: String,
@@ -166,6 +171,10 @@ fun GlassComposer(
     onComposerDurationMinutesChange: (Int?) -> Unit = {},
     voicePeople: List<String> = emptyList(),
     voiceLocationName: String? = null,
+    onPickLocation: () -> Unit = {},
+    /** A place reminder is waiting (REAL is watching location): a small dot on the pin. */
+    locationWatching: Boolean = false,
+    isAlarm: Boolean = false,
     isShareDraft: Boolean = false,
     isHomeReady: Boolean = true,
     isLabsOpen: Boolean = false,
@@ -452,9 +461,9 @@ fun GlassComposer(
                         if (value.isEmpty()) {
                             Text(
                                 when {
-                                    processing -> "REAL düşünüyor…"
+                                    processing -> t("REAL düşünüyor…")
                                     voicePhase == VoicePhase.Listening -> "Dinleniyor…"
-                                    else -> RealPetRuntime.placeholderOverride ?: "Aklında ne var?"
+                                    else -> RealPetRuntime.placeholderOverride ?: t("Aklında ne var?")
                                 },
                                 color = Color(0xFFA2C7FF),
                                 style = RealType.composerVoicePrompt
@@ -503,7 +512,7 @@ fun GlassComposer(
                                     if (!focusState.isFocused) RealPetRuntime.clearComposerTyping()
                                     onFocusChanged(focusState.isFocused)
                                 }
-                                .semantics { contentDescription = if (isChecklistMode) "Başlık" else "Hatırlatıcı metni" },
+                                .semantics { contentDescription = if (isChecklistMode) t("Başlık") else t("Hatırlatıcı metni") },
                             readOnly = saving,
                             singleLine = isChecklistMode,
                             visualTransformation = VisualTransformation.None,
@@ -532,7 +541,7 @@ fun GlassComposer(
                                     if (value.isEmpty()) {
                                         if (isChecklistMode) {
                                             Text(
-                                                text = "Başlık",
+                                                text = t("Başlık"),
                                                 color = Color(0xFFB8B8BF),
                                                 style = RealType.composerPrompt
                                             )
@@ -541,7 +550,7 @@ fun GlassComposer(
 
                                             
                                             Text(
-                                                text = RealPetRuntime.placeholderOverride ?: if (expanded) "Aklında ne var?" else "Add to REAL",
+                                                text = RealPetRuntime.placeholderOverride ?: if (expanded) t("Aklında ne var?") else t("Add to REAL"),
                                                 color = Color(0xFF8E8E96),
                                                 style = RealType.composerPrompt,
                                                 onTextLayout = { layoutResult ->
@@ -552,7 +561,7 @@ fun GlassComposer(
                                             
                                             if (shouldShimmer) {
                                                 Text(
-                                                    text = RealPetRuntime.placeholderOverride ?: if (expanded) "Aklında ne var?" else "Add to REAL",
+                                                    text = RealPetRuntime.placeholderOverride ?: if (expanded) t("Aklında ne var?") else t("Add to REAL"),
                                                     color = Color.White,
                                                     style = RealType.composerPrompt,
                                                     modifier = Modifier
@@ -610,7 +619,7 @@ fun GlassComposer(
                         },
                         interactionSource = submitInteractionSource,
                         enabled = canSubmit && !saving,
-                        modifier = Modifier.size(36.dp).semantics { contentDescription = "Listeyi kaydet" }
+                        modifier = Modifier.size(36.dp).semantics { contentDescription = t("Listeyi kaydet") }
                     ) {
                         Box(
                             Modifier
@@ -639,7 +648,7 @@ fun GlassComposer(
                         enabled = canSubmit && !saving,
                         modifier = Modifier.size(36.dp)
                             .then(if (expanded && !isChecklistMode) Modifier.padding(bottom = 6.dp) else Modifier)
-                            .semantics { contentDescription = "Hatırlatıcıyı kaydet" }
+                            .semantics { contentDescription = t("Hatırlatıcıyı kaydet") }
                     ) {
                         Box(
                             Modifier
@@ -669,11 +678,11 @@ fun GlassComposer(
                         .size(48.dp)
                         .realPetPerch(REAL_PET_PERCH_COMPOSER_MIC)
                         .semantics {
-                        contentDescription = if (listening) "Dinlemeyi bitir" else "Sesle REAL oluştur"
+                        contentDescription = if (listening) t("Dinlemeyi bitir") else t("Sesle REAL oluştur")
                         stateDescription = when {
-                            processing -> "REAL düşünüyor"
-                            listening -> "Dinleniyor"
-                            else -> "Mikrofon kapalı"
+                            processing -> t("REAL düşünüyor")
+                            listening -> t("Dinleniyor")
+                            else -> t("Mikrofon kapalı")
                         }
                     }
                 ) {
@@ -773,6 +782,13 @@ fun GlassComposer(
                     val hasDateOnly = !hasAlert && !hasPendingTime && dateHint != null
                     val isScheduled = hasAlert || hasPendingTime || hasDateOnly
 
+                    // Tools scroll sideways when they do not fit (a long date chip); the bell is the last of them.
+                    Row(
+                        modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+
                     if (isScheduled) {
                         val scheduleLabel = when {
                             hasAlert -> formatComposerScheduleLabel(alertAt!!, repeatRule)
@@ -780,9 +796,9 @@ fun GlassComposer(
                             hasDateOnly -> {
                                 val today = LocalDate.now(ZoneId.systemDefault())
                                 when (dateHint) {
-                                    today -> "Bugün"
-                                    today.plusDays(1) -> "Yarın"
-                                    else -> dateHint!!.format(DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("tr-TR")))
+                                    today -> com.cagri.real.i18n.t("Bugün")
+                                    today.plusDays(1) -> com.cagri.real.i18n.t("Yarın")
+                                    else -> dateHint!!.format(DateTimeFormatter.ofPattern(if (com.cagri.real.i18n.I18n.isEnglish) "MMMM d" else "d MMMM", com.cagri.real.i18n.I18n.locale))
                                 }
                             }
                             else -> ""
@@ -800,17 +816,16 @@ fun GlassComposer(
                                 .padding(horizontal = 9.dp, vertical = 5.dp)
                                 .semantics {
                                     contentDescription = when {
-                                        hasPendingTime -> "Zamanlama: $scheduleLabel"
-                                        hasDateOnly -> "Tarih: $scheduleLabel"
-                                        else -> "Tarih ve saat: $scheduleLabel"
+                                        hasPendingTime -> t("Zamanlama: {0}", scheduleLabel)
+                                        hasDateOnly -> t("Tarih: {0}", scheduleLabel)
+                                        else -> t("Tarih ve saat: {0}", scheduleLabel)
                                     }
                                 }
                         ) {
-                            ActionIcon(
-                                ActionGlyph.Calendar,
-                                Modifier.size(16.dp),
-                                if (hasPendingTime) Color(0xFF60A5FA) else Color(0xFF91B9FF)
-                            )
+                            val chipIconColor = if (hasPendingTime) Color(0xFF60A5FA) else Color(0xFF91B9FF)
+                            // An alarm card shows the alarm clock instead of the calendar.
+                            if (isAlarm) AlarmClockGlyph(chipIconColor, Modifier.size(16.dp))
+                            else ActionIcon(ActionGlyph.Calendar, Modifier.size(16.dp), chipIconColor)
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 text = scheduleLabel,
@@ -822,7 +837,7 @@ fun GlassComposer(
                         IconButton(
                             onClick = onClearDate,
                             enabled = !saving,
-                            modifier = Modifier.size(28.dp).semantics { contentDescription = "Tarih ve saati kaldır" }
+                            modifier = Modifier.size(28.dp).semantics { contentDescription = t("Tarih ve saati kaldır") }
                         ) {
                             ActionIcon(ActionGlyph.Close, Modifier.size(13.dp), Color(0xFFAAAAB4))
                         }
@@ -831,7 +846,7 @@ fun GlassComposer(
                             onClick = onPickDate,
                             enabled = !recording && !saving,
                             modifier = Modifier.size(40.dp).semantics {
-                                contentDescription = "Tarih ve saat ekle"
+                                contentDescription = t("Tarih ve saat ekle")
                             }
                         ) {
                             ActionIcon(
@@ -854,7 +869,7 @@ fun GlassComposer(
                         onClick = onPickCategory,
                         enabled = !recording && !saving,
                         modifier = Modifier.size(40.dp).semantics {
-                            contentDescription = if (isCatSelected) "Kategori: ${selectedCategory!!.name}" else "Kategori seç veya oluştur"
+                            contentDescription = if (isCatSelected) t("Kategori: {0}", selectedCategory!!.name) else t("Kategori seç veya oluştur")
                         }
                     ) {
                         if (isCatSelected) {
@@ -879,7 +894,7 @@ fun GlassComposer(
                             onClick = onPickAttachment,
                             enabled = !recording && !saving,
                             modifier = Modifier.size(40.dp).semantics {
-                                contentDescription = if (hasDraftAttachments) "Ekler: ${draftAttachments.size} fotoğraf" else "Ek ekle"
+                                contentDescription = if (hasDraftAttachments) t("Ekler: {0} fotoğraf", draftAttachments.size) else t("Ek ekle")
                             }
                         ) {
                             ActionIcon(
@@ -912,7 +927,7 @@ fun GlassComposer(
                         onClick = onToggleChecklistMode,
                         enabled = !recording && !saving,
                         modifier = Modifier.size(40.dp).semantics {
-                            contentDescription = if (isChecklistMode) "Liste modunu kapat" else "Liste modu"
+                            contentDescription = if (isChecklistMode) t("Liste modunu kapat") else t("Liste modu")
                         }
                     ) {
                         ActionIcon(
@@ -922,20 +937,49 @@ fun GlassComposer(
                         )
                     }
 
-                    if (alertAt == null && !hasPendingTime) {
+                    // Konum: a place on the card or "Konuma varınca hatırlat" (the pin's menu).
+                    Box(contentAlignment = Alignment.Center) {
                         IconButton(
-                            onClick = onToggleImmediateNotification,
+                            onClick = onPickLocation,
                             enabled = !recording && !saving,
                             modifier = Modifier.size(40.dp).semantics {
-                                contentDescription = if (sendImmediateNotification) "Anlık bildirim açık" else "Anlık bildirim kapalı"
+                                contentDescription = buildString {
+                                    append(if (voiceLocationName.isNullOrBlank()) t("Konum ekle") else t("Konum: {0}", voiceLocationName))
+                                    if (locationWatching) append(t(", konum hatırlatması için konum kullanılıyor"))
+                                }
                             }
                         ) {
                             ActionIcon(
-                                if (sendImmediateNotification) ActionGlyph.Bell else ActionGlyph.BellOff,
+                                ActionGlyph.Pin,
                                 Modifier.size(20.dp),
-                                if (sendImmediateNotification) Color(0xFF91B9FF) else Color(0xFFBABAC3)
+                                if (voiceLocationName.isNullOrBlank()) Color(0xFFBABAC3) else Color(0xFF91B9FF)
                             )
                         }
+                        if (locationWatching) {
+                            Box(
+                                Modifier.align(Alignment.TopEnd).offset(x = (-8).dp, y = 8.dp).size(6.dp)
+                                    .background(Color(0xFF55D3B4), CircleShape)
+                            )
+                        }
+                    }
+
+                    // Bell, last of the tools: notification on/off (an undated card notifies right away).
+                    // The alarm lives in the date sheet (Saat pushed right), so the bell has no alarm state.
+                    val bellOn = hasAlert || hasPendingTime || sendImmediateNotification
+                    IconButton(
+                        onClick = onToggleImmediateNotification,
+                        enabled = !recording && !saving,
+                        modifier = Modifier.size(40.dp).semantics {
+                            contentDescription = if (bellOn) t("Bildirim açık") else t("Bildirim kapalı")
+                        }
+                    ) {
+                        ActionIcon(
+                            if (bellOn) ActionGlyph.Bell else ActionGlyph.BellOff,
+                            Modifier.size(20.dp),
+                            if (bellOn) Color(0xFF91B9FF) else Color(0xFFBABAC3)
+                        )
+                    }
+
                     }
                 }
             }
@@ -963,7 +1007,7 @@ fun GlassComposer(
                                     .padding(horizontal = 7.dp, vertical = 3.dp)
                             ) {
                                 Text(
-                                    text = "$mins min",
+                                    text = t("{0} min", mins),
                                     color = if (selected) Color(0xFFDCE8FF) else Color(0xFFB0B0B8),
                                     fontSize = 10.5.sp,
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
@@ -979,7 +1023,7 @@ fun GlassComposer(
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "$minutes min",
+                                text = t("{0} min", minutes),
                                 color = Color(0xFFDCE8FF),
                                 style = RealType.composerAuxiliaryPill
                             )
@@ -1033,7 +1077,7 @@ fun GlassComposer(
                         Box(modifier = Modifier.size(40.dp)) {
                             AsyncImage(
                                 model = File(attachment.localPath),
-                                contentDescription = "Taslak ek ${index + 1}",
+                                contentDescription = t("Taslak ek {0}", index + 1),
                                 modifier = Modifier
                                     .size(36.dp)
                                     .align(Alignment.BottomStart)
@@ -1108,7 +1152,7 @@ fun GlassComposer(
                                 decorationBox = { field ->
                                     Box(contentAlignment = Alignment.CenterStart) {
                                         if (itemText.isEmpty()) {
-                                            Text("Madde ${index + 1}", color = Color(0xFF6C6C76), style = RealType.composerChecklistPlaceholder)
+                                            Text(t("Madde {0}", index + 1), color = Color(0xFF6C6C76), style = RealType.composerChecklistPlaceholder)
                                         }
                                         field()
                                     }
@@ -1143,7 +1187,7 @@ fun GlassComposer(
                     ) {
                         ActionIcon(ActionGlyph.Add, Modifier.size(13.dp), Color(0xFF91B9FF))
                         Text(
-                            "Madde ekle",
+                            t("Madde ekle"),
                             color = Color(0xFF91B9FF),
                             style = RealType.composerAction,
                             modifier = Modifier.padding(start = 6.dp)
@@ -1178,7 +1222,7 @@ fun GlassComposer(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Real Labs.",
+                            text = t("Real Labs."),
                             color = Color(0xFF7A7A85),
                             style = RealType.composerSectionLabel
                         )
@@ -1247,7 +1291,7 @@ fun GlassComposer(
                                 modifier = Modifier.padding(start = 8.dp)
                             ) {
                                 Text(
-                                    text = "WhatsApp'tan da gönderilecek",
+                                    text = t("WhatsApp'tan da gönderilecek"),
                                     color = whatsappGreen,
                                     style = RealType.composerStatus
                                 )
@@ -1258,7 +1302,7 @@ fun GlassComposer(
 
                         if (hasSavedRecipient) {
                             Text(
-                                text = "Numarayı değiştir",
+                                text = t("Numarayı değiştir"),
                                 color = Color(0xFF6B6B76),
                                 style = RealType.composerActionSmall,
                                 modifier = Modifier

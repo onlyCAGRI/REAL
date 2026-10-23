@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -175,7 +176,7 @@ private fun ShareCardRow(
             }
             AsyncImage(
                 model = model,
-                contentDescription = "Card image",
+                contentDescription = t("Card image"),
                 modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
@@ -183,7 +184,7 @@ private fun ShareCardRow(
         }
 
         Column(Modifier.weight(1f)) {
-            val title = card.title.trim().ifBlank { "Card ${index + 1}" }
+            val title = card.title.trim().ifBlank { t("Card {0}", index + 1) }
             Text(title, color = Color(0xFFF0F0F3), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val preview = card.body.trim().ifBlank { if (!card.imageUri.isNullOrBlank()) "Image card" else "Empty card" }
             Text(preview, color = Color(0xFFB4B5BE), fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))

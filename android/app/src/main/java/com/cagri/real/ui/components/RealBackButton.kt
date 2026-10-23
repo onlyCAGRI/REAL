@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,7 +26,7 @@ import androidx.compose.ui.unit.dp
 internal fun RealBackButton(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    description: String = "Geri",
+    description: String = t("Geri"),
     enabled: Boolean = true,
     tint: Color = Color.White,
     /** Screen-owned glass surface, drawn behind the shared glyph. */

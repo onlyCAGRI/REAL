@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -145,7 +146,7 @@ private fun BoardBlockFrame(item:PanoItem,shared:Boolean,zoom:Float,viewport:Boa
                 listOf("left", "center", "right").forEach { k -> PanoAlignButton(k, a.align == k) { a.setAlign(k) } }
                 Box(Modifier.width(1.dp).height(18.dp).background(Color.White.copy(alpha = 0.15f)))
                 Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable { a.toggleTitle() }.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                    Text(if (a.title) "Body" else "Title", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                    Text(if (a.title) t("Body") else t("Title"), color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
                 }
             }
         }
@@ -193,7 +194,7 @@ private fun BoardBlockFrame(item:PanoItem,shared:Boolean,zoom:Float,viewport:Boa
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Text(if (isExpanded) "Collapse" else "Expand", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                        Text(if (isExpanded) t("Collapse") else t("Expand"), color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
                     }
                 }
                 Box(

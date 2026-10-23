@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import android.widget.Toast
 import androidx.compose.runtime.*
 import com.cagri.real.data.*
@@ -46,22 +47,22 @@ internal fun reminderSubmitAction(
     var pendingVoiceMediaBlocks by voiceState.pendingVoiceMediaBlocks
     val submit: (String) -> Unit = { text ->
         if (voiceState.retryVoiceCreation.value != null) {
-            showVoiceFeedback(voiceState, "Kalan kartları kaydetmek için Kalanları tekrar dene’ye bas.")
+            showVoiceFeedback(voiceState, t("Kalan kartları kaydetmek için Kalanları tekrar dene’ye bas."))
         } else if (alertAt != null && pendingVoiceRepeatUntil != null &&
             java.time.Instant.ofEpochMilli(alertAt).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay() > pendingVoiceRepeatUntil!!) {
-            if (isVoiceDraft) showVoiceFeedback(voiceState, "Seçilen gün tekrarın bitiş tarihinden sonra. Tarihi düzelt.")
-            else com.cagri.real.ui.components.RealToast.show(context, "Seçilen gün tekrarın bitiş tarihinden sonra. Tarihi düzelt.", long = true)
+            if (isVoiceDraft) showVoiceFeedback(voiceState, t("Seçilen gün tekrarın bitiş tarihinden sonra. Tarihi düzelt."))
+            else com.cagri.real.ui.components.RealToast.show(context, t("Seçilen gün tekrarın bitiş tarihinden sonra. Tarihi düzelt."), long = true)
             requestPermissionForAction(PendingNotificationAction.OPEN_DATE_PICKER)
         } else if (requiresTimeSelection && alertAt == null) {
-            if (isVoiceDraft) showVoiceFeedback(voiceState, "Saat kaçta olsun?")
-            else com.cagri.real.ui.components.RealToast.show(context, "Lütfen bir saat seç.")
+            if (isVoiceDraft) showVoiceFeedback(voiceState, t("Saat kaçta olsun?"))
+            else com.cagri.real.ui.components.RealToast.show(context, t("Lütfen bir saat seç."))
             requestPermissionForAction(PendingNotificationAction.OPEN_DATE_PICKER)
         } else if (isChecklistMode) {
             val validItems = checklistDraftItems.map { it.trim() }.filter { it.isNotEmpty() }
             if (text.isNotBlank() && validItems.isNotEmpty() && !saving && !copyingPhotos) {
                 if (alertAt != null && alertAt <= System.currentTimeMillis()) {
-                    if (isVoiceDraft) showVoiceFeedback(voiceState, "Gelecekte bir tarih ve saat seç.")
-                    else com.cagri.real.ui.components.RealToast.show(context, "Gelecekte bir tarih ve saat seç.", long = true)
+                    if (isVoiceDraft) showVoiceFeedback(voiceState, t("Gelecekte bir tarih ve saat seç."))
+                    else com.cagri.real.ui.components.RealToast.show(context, t("Gelecekte bir tarih ve saat seç."), long = true)
                     showDatePicker = true
                 } else {
                     if (voiceAiParsing) {
@@ -88,7 +89,7 @@ internal fun reminderSubmitAction(
                                 else if (alertAt == null) pendingDateHintEpochDay else null
                             val createdId = onAddReminder(
                                 resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE,
-                                draftCategoryId, true, items, sendImmediateNotification, draftReferenceUrl,
+                                draftCategoryId, true, items, sendImmediateNotification && ComposerTimingDraft.locationTrigger == null, draftReferenceUrl,
                                 draftAttachments, emptyList(), pendingVoiceLocation,
                                 plannedDateForSave, quick24HourUntilAt, pendingVoiceMusicBlocks, pendingVoiceMediaBlocks
                             )
@@ -119,6 +120,8 @@ internal fun reminderSubmitAction(
                                 if (alertAt != null && (ComposerTimingDraft.earlyAlertMinutes != null || ComposerTimingDraft.endAt != null)) {
                                     onSetTiming(createdId, ComposerTimingDraft.earlyAlertMinutes, ComposerTimingDraft.endAt)
                                 }
+                                if (alertAt != null && ComposerTimingDraft.alarm) onSetAlarm(createdId, true)
+                                ComposerTimingDraft.locationTrigger?.let { onSetLocationTrigger(createdId, it) }
                                 ComposerTimingDraft.clear()
                                 composerDurationMinutes = null
                                 pendingVoiceDurationMinutes = null
@@ -160,7 +163,7 @@ internal fun reminderSubmitAction(
                                             recipient = recipientPhone
                                         )
                                         withContext(Dispatchers.Main) {
-                                            com.cagri.real.ui.components.RealToast.show(context, if (sendSuccess) "WhatsApp'a gönderildi" else "WhatsApp gönderilemedi")
+                                            com.cagri.real.ui.components.RealToast.show(context, if (sendSuccess) t("WhatsApp'a gönderildi") else t("WhatsApp gönderilemedi"))
                                         }
                                     }
                                 }
@@ -172,8 +175,8 @@ internal fun reminderSubmitAction(
         } else {
             if (text.isNotBlank() && !saving && !copyingPhotos) {
                 if (alertAt != null && alertAt <= System.currentTimeMillis()) {
-                    if (isVoiceDraft) showVoiceFeedback(voiceState, "Gelecekte bir tarih ve saat seç.")
-                    else com.cagri.real.ui.components.RealToast.show(context, "Gelecekte bir tarih ve saat seç.", long = true)
+                    if (isVoiceDraft) showVoiceFeedback(voiceState, t("Gelecekte bir tarih ve saat seç."))
+                    else com.cagri.real.ui.components.RealToast.show(context, t("Gelecekte bir tarih ve saat seç."), long = true)
                     showDatePicker = true
                 } else {
                     if (voiceAiParsing) {
@@ -199,7 +202,7 @@ internal fun reminderSubmitAction(
                                 else if (alertAt == null) pendingDateHintEpochDay else null
                             val createdId = onAddReminder(
                                 reminderText, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE,
-                                draftCategoryId, false, emptyList(), sendImmediateNotification, draftReferenceUrl,
+                                draftCategoryId, false, emptyList(), sendImmediateNotification && ComposerTimingDraft.locationTrigger == null, draftReferenceUrl,
                                 draftAttachments, emptyList(), pendingVoiceLocation,
                                 plannedDateForSave, quick24HourUntilAt, pendingVoiceMusicBlocks, pendingVoiceMediaBlocks
                             )
@@ -230,6 +233,8 @@ internal fun reminderSubmitAction(
                                 if (alertAt != null && (ComposerTimingDraft.earlyAlertMinutes != null || ComposerTimingDraft.endAt != null)) {
                                     onSetTiming(createdId, ComposerTimingDraft.earlyAlertMinutes, ComposerTimingDraft.endAt)
                                 }
+                                if (alertAt != null && ComposerTimingDraft.alarm) onSetAlarm(createdId, true)
+                                ComposerTimingDraft.locationTrigger?.let { onSetLocationTrigger(createdId, it) }
                                 ComposerTimingDraft.clear()
                                 composerDurationMinutes = null
                                 pendingVoiceDurationMinutes = null
@@ -269,7 +274,7 @@ internal fun reminderSubmitAction(
                                             recipient = recipientPhone
                                         )
                                         withContext(Dispatchers.Main) {
-                                            com.cagri.real.ui.components.RealToast.show(context, if (sendSuccess) "WhatsApp'a gönderildi" else "WhatsApp gönderilemedi")
+                                            com.cagri.real.ui.components.RealToast.show(context, if (sendSuccess) t("WhatsApp'a gönderildi") else t("WhatsApp gönderilemedi"))
                                         }
                                     }
                                 }

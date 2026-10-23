@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.cagri.real.data.boards.BoardRealContent
@@ -36,7 +37,7 @@ class PanoController(val repository:BoardRepository,private val scope:CoroutineS
     fun add(board:String,type:BoardBlockType,t:BoardTransform,onAdded:(String)->Unit,card:ReminderItem?=null,location:ReminderLocation?=null,uri:Uri?=null,includePrivate:Boolean=false,stackView:Boolean=false)=run {
         check(canEdit(board)) {"Enable Edit to add content"}
         val payload=when(type){
-            BoardBlockType.STACK->JSONObject().put("stack",CardStackBlock.encode(CardStackBlock(cards=(1..3).map { CardStackCard(title="Card $it") }))).put("images",JSONArray())
+            BoardBlockType.STACK->JSONObject().put("stack",CardStackBlock.encode(CardStackBlock(cards=(1..3).map { CardStackCard(title=t("Card {0}", it)) }))).put("images",JSONArray())
             BoardBlockType.TEXT->JSONObject().put("text","").put("title",false)
             BoardBlockType.CHECKLIST->BoardRealContent.checklistPayload(JSONObject().put("title",""), emptyList())
             BoardBlockType.LOCATION->BoardRealContent.locationPayload(checkNotNull(location))

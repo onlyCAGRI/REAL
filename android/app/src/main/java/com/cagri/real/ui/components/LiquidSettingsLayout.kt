@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -148,7 +149,7 @@ fun SettingsLayout(
             ) {
                 RealBackButton(onBack, Modifier.align(Alignment.CenterStart))
                 Text(
-                    text = "Ayarlar",
+                    text = t("Ayarlar"),
                     color = Color.White,
                     fontSize = 18.sp,
                     letterSpacing = (-0.3).sp,

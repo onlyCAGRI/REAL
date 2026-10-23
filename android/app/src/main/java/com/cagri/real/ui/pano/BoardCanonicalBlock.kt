@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton

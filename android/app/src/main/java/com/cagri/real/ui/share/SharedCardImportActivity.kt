@@ -1,5 +1,6 @@
 package com.cagri.real.ui.share
 
+import com.cagri.real.i18n.t
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity

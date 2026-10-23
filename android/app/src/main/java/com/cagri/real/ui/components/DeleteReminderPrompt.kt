@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import com.cagri.real.ui.DesignStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -40,38 +41,38 @@ fun DeleteReminderPrompt(
     DesignPanel(backdrop, backdropPosition, designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur, liquidDynamic = true,
         modifier = modifier.fillMaxWidth()
             .pointerInput(Unit) { detectTapGestures(onTap = {}) }
-            .semantics { paneTitle = if (scoped) "Tekrarlayan etkinlik silinsin mi?" else "Hatırlatıcı silinsin mi?" }, corners = 26.dp
+            .semantics { paneTitle = if (scoped) t("Tekrarlayan etkinlik silinsin mi?") else t("Hatırlatıcı silinsin mi?") }, corners = 26.dp
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(if (scoped) "Tekrarlayan etkinlik silinsin mi?" else "Hatırlatıcı silinsin mi?", color = Color(0xFFF5F5F8), fontWeight = FontWeight.SemiBold,
+            Text(if (scoped) t("Tekrarlayan etkinlik silinsin mi?") else t("Hatırlatıcı silinsin mi?"), color = Color(0xFFF5F5F8), fontWeight = FontWeight.SemiBold,
                 fontSize = 17.sp, lineHeight = 23.sp)
             reminderTitle?.takeIf { it.isNotBlank() }?.let {
                 Text(it, color = Color(0xFFF5F5F8), fontSize = 14.sp, lineHeight = 20.sp, maxLines = 3)
             }
-            Text(if (scoped && occurrenceIsNext) "Yalnızca sıradaki tekrarı ya da sıradaki tekrardan itibaren tüm tekrarları silebilirsin. Önceki tekrarlar korunur. Bu işlem geri alınamaz."
-                else if (scoped) "Yalnızca seçtiğin günü ya da seçtiğin günden itibaren tüm tekrarları silebilirsin. Önceki günler korunur. Bu işlem geri alınamaz."
-                else "Bu not listenden ve bildirim panelinden kaldırılacak. Bu işlem geri alınamaz.",
+            Text(if (scoped && occurrenceIsNext) t("Yalnızca sıradaki tekrarı ya da sıradaki tekrardan itibaren tüm tekrarları silebilirsin. Önceki tekrarlar korunur. Bu işlem geri alınamaz.")
+                else if (scoped) t("Yalnızca seçtiğin günü ya da seçtiğin günden itibaren tüm tekrarları silebilirsin. Önceki günler korunur. Bu işlem geri alınamaz.")
+                else t("Bu not listenden ve bildirim panelinden kaldırılacak. Bu işlem geri alınamaz."),
                 color = Color(0xFFBEBEC8), fontSize = 13.sp, lineHeight = 19.sp)
             if (scoped) {
                 Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onConfirmThisOccurrence!!,
                         modifier = Modifier.fillMaxWidth().height(46.dp).background(Color(0xFFFF858D).copy(alpha = 0.14f), RoundedCornerShape(23.dp))
-                    ) { Text(if (occurrenceIsNext) "Sadece sıradaki tekrarı sil" else "Sadece bu günü sil", color = Color(0xFFFFA4AA), fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+                    ) { Text(if (occurrenceIsNext) t("Sadece sıradaki tekrarı sil") else t("Sadece bu günü sil"), color = Color(0xFFFFA4AA), fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
                     TextButton(onClick = onConfirmThisAndFuture!!,
                         modifier = Modifier.fillMaxWidth().height(46.dp).background(Color(0xFFFF858D).copy(alpha = 0.14f), RoundedCornerShape(23.dp))
-                    ) { Text("Bu ve sonraki tüm tekrarları sil", color = Color(0xFFFFA4AA), fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+                    ) { Text(t("Bu ve sonraki tüm tekrarları sil"), color = Color(0xFFFFA4AA), fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
                     TextButton(onClick = onDismiss,
                         modifier = Modifier.fillMaxWidth().height(46.dp).background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(23.dp))
-                    ) { Text("Vazgeç", color = Color(0xFFE9E9EF), fontSize = 14.sp) }
+                    ) { Text(t("Vazgeç"), color = Color(0xFFE9E9EF), fontSize = 14.sp) }
                 }
             } else {
                 Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TextButton(onClick = onDismiss,
                         modifier = Modifier.weight(1f).height(46.dp).background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(23.dp))
-                    ) { Text("Vazgeç", color = Color(0xFFE9E9EF), fontSize = 14.sp) }
+                    ) { Text(t("Vazgeç"), color = Color(0xFFE9E9EF), fontSize = 14.sp) }
                     TextButton(onClick = onConfirm,
                         modifier = Modifier.weight(1f).height(46.dp).background(Color(0xFFFF858D).copy(alpha = 0.14f), RoundedCornerShape(23.dp))
-                    ) { Text("Sil", color = Color(0xFFFFA4AA), fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+                    ) { Text(t("Sil"), color = Color(0xFFFFA4AA), fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
                 }
             }
         }

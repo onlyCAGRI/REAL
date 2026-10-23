@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -140,13 +141,45 @@ internal fun BoxWithConstraintsScope.SwipeTutorial(kind: String, rightLabel: Str
             }.clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = .10f)).border(1.5.dp, Color.White.copy(alpha = .7f), RoundedCornerShape(16.dp)))
             Spacer(Modifier.height(28.dp))
             val (label, color) = when (phase) { 0 -> rightLabel to SwipeSave; 1 -> leftLabel to SwipePass; else -> (upLabel ?: "") to MusicTone }
-            Text(when (phase) { 0 -> "Sağa kaydır"; 1 -> "Sola kaydır"; else -> "Yukarı kaydır" }, color = Color.White.copy(alpha = .7f), fontSize = 14.sp)
+            Text(when (phase) { 0 -> t("Sağa kaydır"); 1 -> t("Sola kaydır"); else -> t("Yukarı kaydır") }, color = Color.White.copy(alpha = .7f), fontSize = 14.sp)
             Text(label, color = color, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
-        Text("Bir daha gösterme", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+        Text(t("Bir daha gösterme"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp).clip(RoundedCornerShape(22.dp))
                 .background(Color.White.copy(alpha = .12f)).clickable {
                     tutorialPrefs(context).edit().putBoolean(kind, true).apply(); visible = false
                 }.padding(horizontal = 18.dp, vertical = 11.dp))
+    }
+}
+
+/**
+ * Shaking the phone (a few strong jolts within a moment) calls [onShake] once; then it rests a second. Listens only
+ * while [enabled] and the screen is shown (the accelerometer is released when it leaves).
+ */
+@androidx.compose.runtime.Composable
+fun ShakeToUndo(enabled: Boolean, onShake: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val latest by androidx.compose.runtime.rememberUpdatedState(onShake)
+    androidx.compose.runtime.DisposableEffect(enabled) {
+        val manager = context.getSystemService(android.content.Context.SENSOR_SERVICE) as? android.hardware.SensorManager
+        val sensor = manager?.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)
+        if (!enabled || manager == null || sensor == null) return@DisposableEffect onDispose { }
+        val jolts = ArrayDeque<Long>()
+        var restUntil = 0L
+        val listener = object : android.hardware.SensorEventListener {
+            override fun onSensorChanged(event: android.hardware.SensorEvent) {
+                val (x, y, z) = Triple(event.values[0], event.values[1], event.values[2])
+                val g = kotlin.math.sqrt(x * x + y * y + z * z) / android.hardware.SensorManager.GRAVITY_EARTH
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (g < 2.3f || now < restUntil) return
+                if (jolts.lastOrNull()?.let { now - it < 120 } == true) return
+                jolts.addLast(now)
+                while (jolts.isNotEmpty() && now - jolts.first() > 900) jolts.removeFirst()
+                if (jolts.size >= 3) { jolts.clear(); restUntil = now + 1000; latest() }
+            }
+            override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
+        }
+        manager.registerListener(listener, sensor, android.hardware.SensorManager.SENSOR_DELAY_UI)
+        onDispose { manager.unregisterListener(listener) }
     }
 }

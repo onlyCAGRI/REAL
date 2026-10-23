@@ -1,5 +1,6 @@
 package com.cagri.real
 
+import com.cagri.real.i18n.t
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -238,7 +239,9 @@ class MainActivity : ComponentActivity() {
                     com.cagri.real.ui.components.LocalSetReminderTiming provides { id, early, end -> mutate {
                         repository.setTiming(id, early, end).firstOrNull { it.id == id }
                             ?.let { runCatching { ReminderNotifications.refreshEdited(this@MainActivity, it) } }
-                    } }
+                    } },
+                    com.cagri.real.ui.components.LocalSetReminderAlarm provides { id, on -> mutate { repository.setAlarm(id, on) } },
+                    com.cagri.real.ui.components.LocalSetReminderLocationTrigger provides { id, trigger -> mutate { repository.setLocationTrigger(id, trigger) } }
                 ) {
                 Box(Modifier.fillMaxSize()) {
                     Crossfade(
@@ -282,7 +285,7 @@ class MainActivity : ComponentActivity() {
                                 if (loadFailed) TextButton(onClick = { lifecycleScope.launch {
                                     if (perform(reloadRelated = true)) loadedStartupRevision = startup.revision
                                 } }) {
-                                    Text("Notlar açılamadı. Yeniden dene")
+                                    Text(t("Notlar açılamadı. Yeniden dene"))
                                 } else com.cagri.real.ui.components.RealSpinner()
                             }
                         }
@@ -542,7 +545,7 @@ class MainActivity : ComponentActivity() {
                             onRequestExactAlarms = ::openAlarmAccess,
                             customCategories = customCategories,
                             onCreateCategory = { name, iconKey, start, end, hide, useDarkText, blendFraction, customSolidColorArgb, description ->
-                                mutateCategory("Kategori oluşturulamadı.") {
+                                mutateCategory(t("Kategori oluşturulamadı.")) {
                                     val categories = categoryRepository.add(
                                         name, iconKey, start, end, hide, useDarkText,
                                         blendFraction, customSolidColorArgb
@@ -558,7 +561,7 @@ class MainActivity : ComponentActivity() {
                                 createVoiceCategory(name, iconKey, colorIndex)
                             },
                             onEditCategory = { id, name, iconKey, start, end, hide, useDarkText, blendFraction, customSolidColorArgb ->
-                                mutateCategory("Kategori güncellenemedi.") {
+                                mutateCategory(t("Kategori güncellenemedi.")) {
                                     categoryRepository.update(
                                         id, name, iconKey, start, end, hide, useDarkText,
                                         blendFraction, customSolidColorArgb
@@ -566,12 +569,12 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onDeleteCategory = { id, deleteReminders ->
-                                mutateCategory("Kategori silinemedi. Yeniden deneyebilirsin.") {
+                                mutateCategory(t("Kategori silinemedi. Yeniden deneyebilirsin.")) {
                                     deleteCategoryWithRollback(id, repository, categoryRepository, deleteReminders)
                                 }
                             },
                             onDeleteCategories = { ids ->
-                                mutateCategory("Kategoriler silinemedi. Yeniden deneyebilirsin.") {
+                                mutateCategory(t("Kategoriler silinemedi. Yeniden deneyebilirsin.")) {
                                     deleteCategoriesWithRollback(ids, repository, categoryRepository)
                                 }
                             },
@@ -614,6 +617,8 @@ class MainActivity : ComponentActivity() {
                     com.cagri.real.ui.ai.AiConsentHost(authUser?.id)
                     com.cagri.real.updates.RequiredUpdateHost(authUser?.id)
                     com.cagri.real.ui.subscription.ProAccessHost(authUser?.id)
+                    com.cagri.real.ui.account.CloudSpaceNoticeHost(authUser?.id)
+                    com.cagri.real.ui.auth.SignInRequiredHost()
 
                     if (!showWelcome && !startupBlocksHome && ready && realPetEnabled) {
                         com.cagri.real.ui.components.RealPetLayer(
@@ -652,7 +657,7 @@ class MainActivity : ComponentActivity() {
         commitPendingDeletes()
         pendingDeleteIds = pendingDeleteIds + ids
         val label = if (ids.size == 1) "Kart silindi" else "${ids.size} kart silindi"
-        val undoable = com.cagri.real.ui.components.RealToast.showAction(this, label, "Geri al", UNDO_WINDOW_MS) {
+        val undoable = com.cagri.real.ui.components.RealToast.showAction(this, label, t("Geri al"), UNDO_WINDOW_MS) {
             if (pendingDeleteIds.containsAll(ids)) {
                 pendingDeleteJob?.cancel(); pendingDeleteJob = null
                 pendingDeleteIds = pendingDeleteIds - ids
@@ -691,6 +696,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        com.cagri.real.i18n.I18n.refresh(this)
         if (::repository.isInitialized)
             com.cagri.real.platform.android.content.PendingContentDestination.returnedWithoutResult(this)
         exactAllowed = ReminderScheduler.canScheduleExact(this)
@@ -803,7 +809,7 @@ class MainActivity : ComponentActivity() {
             intent?.removeExtra(Intent.EXTRA_TITLE)
             intent?.action = null
             if (route !is com.cagri.real.content.ContentRouteResult.Deliver) {
-                com.cagri.real.ui.components.RealToast.show(this, "Konum hedefi artık geçerli değil. REAL’den yeniden konum seç.", long = true)
+                com.cagri.real.ui.components.RealToast.show(this, t("Konum hedefi artık geçerli değil. REAL’den yeniden konum seç."), long = true)
                 return
             }
             val request = route.request
@@ -812,7 +818,7 @@ class MainActivity : ComponentActivity() {
                     val location = withContext(Dispatchers.IO) { parseAndResolveSharedLocation(sharedText.orEmpty()) }
                         ?: error("Harita bağlantısı okunamadı")
                     check(request.isCurrent(System.currentTimeMillis(),
-                        com.cagri.real.platform.android.auth.AndroidBackend.auth.currentUser()?.id ?: "guest", "LOCATION")) { "Konum hedefi artık geçerli değil" }
+                        com.cagri.real.platform.android.auth.AndroidBackend.auth.currentUser()?.id ?: "guest", "LOCATION")) { t("Konum hedefi artık geçerli değil") }
                     when (val destination = request.destination) {
                         is com.cagri.real.content.ContentDestination.Board -> {
                             val user = com.cagri.real.platform.android.auth.AndroidBackend.auth.currentUser()
@@ -852,7 +858,7 @@ class MainActivity : ComponentActivity() {
                     val existing = com.cagri.real.speech.findVoiceCategory(name, categories)
                     require(existing != null || categories.none {
                         com.cagri.real.speech.voiceNameKey(it.name) == com.cagri.real.speech.voiceNameKey(name)
-                    }) { "Bu kategori adı birden fazla kategoriyle eşleşiyor." }
+                    }) { t("Bu kategori adı birden fazla kategoriyle eşleşiyor.") }
                     if (existing != null) {
                         existing to categoryRepository.load()
                     } else {
@@ -871,13 +877,13 @@ class MainActivity : ComponentActivity() {
             throw e
         } catch (e: Exception) {
             android.util.Log.e("Real", "Voice category creation failed", e)
-            com.cagri.real.ui.components.RealToast.show(this@MainActivity, "Kategori oluşturulamadı.", long = true)
+            com.cagri.real.ui.components.RealToast.show(this@MainActivity, t("Kategori oluşturulamadı."), long = true)
             null
         }
     }
 
     private fun mutateCategory(
-        errorMessage: String = "Kategori işlemi tamamlanamadı.",
+        errorMessage: String = t("Kategori işlemi tamamlanamadı."),
         action: () -> Unit
     ) {
         lifecycleScope.launch {
@@ -987,7 +993,7 @@ class MainActivity : ComponentActivity() {
                 refreshedPermissionState = permissionState
             }
             if (warnIfBlocked && result.waiting) {
-                com.cagri.real.ui.components.RealToast.show(this, "Not kaydedildi. Bildirimleri uygulama ayarlarından açın.", long = true)
+                com.cagri.real.ui.components.RealToast.show(this, t("Not kaydedildi. Bildirimleri uygulama ayarlarından açın."), long = true)
                 requestNotificationPermission()
             }
             true
@@ -995,7 +1001,7 @@ class MainActivity : ComponentActivity() {
         catch (e: Exception) {
             android.util.Log.e("Real", "Reminder operation failed", e)
             if (!ready) loadFailed = true
-            com.cagri.real.ui.components.RealToast.show(this, "İşlem tamamlanamadı. Notlarını silmeden yeniden deneyebilirsin.", long = true)
+            com.cagri.real.ui.components.RealToast.show(this, t("İşlem tamamlanamadı. Notlarını silmeden yeniden deneyebilirsin."), long = true)
             false
         }
     }

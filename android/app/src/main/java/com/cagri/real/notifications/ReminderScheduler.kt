@@ -19,7 +19,9 @@ object ReminderScheduler {
         NowBarReminderController.reconcile(context, repository)
         val now = System.currentTimeMillis()
         repository.deliverDue(now) { item ->
-            ReminderNotifications.show(context, item, alerting = true)
+            // An alarm rings full screen; one missed by more than 15 minutes (phone off) only notifies.
+            if (item.isAlarm && now - (item.alertAt ?: now) < 15 * 60_000L) { RealAlarm.ring(context, item); true }
+            else ReminderNotifications.show(context, item, alerting = true)
         }
         deliverEarlyAlerts(context, repository.load(), now)
         val manager = context.getSystemService(AlarmManager::class.java)
@@ -28,15 +30,24 @@ object ReminderScheduler {
                 action = "com.cagri.real.NEXT_REMINDER"
                 data = Uri.parse("real://next-reminder")
             }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val next = repository.load().nextAlertAfter(now)
+        val all = repository.load()
+        LocationReminders.sync(context, all)
+        DepartureReminder.plan(context, all)
+        val next = all.nextAlertAfter(now)
         if (next == null) { manager.cancel(pending); pending.cancel(); return@synchronized }
         try {
-            if (canScheduleExact(context)) manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, pending)
+            // The next alert being an alarm card: schedule it as a real alarm clock (status bar icon, never deferred).
+            val alarmNext = all.any { it.isAlarm && !it.isCompleted && it.alertAt == next && it.notifiedAlertAt != next }
+            if (alarmNext && canScheduleExact(context)) manager.setAlarmClock(AlarmManager.AlarmClockInfo(next, launchPending(context)), pending)
+            else if (canScheduleExact(context)) manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, pending)
             else manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, pending)
         } catch (_: SecurityException) {
             manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, pending)
         }
     }
+
+    private fun launchPending(context: Context): PendingIntent = PendingIntent.getActivity(context, 0,
+        Intent(context, com.cagri.real.MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
     /** "Erken uyarı": shows the heads-up once per alert time, between the warning time and the alert itself. */
     private fun deliverEarlyAlerts(context: Context, reminders: List<com.cagri.real.data.ReminderItem>, now: Long) {

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -184,7 +185,7 @@ fun MoodSuggestionsScreen(
                 uiState = SuggestionsUiState.Success(list)
             },
             onFailure = { error ->
-                uiState = SuggestionsUiState.Error(error.localizedMessage ?: "Öneriler alınamadı")
+                uiState = SuggestionsUiState.Error(error.localizedMessage ?: t("Öneriler alınamadı"))
             }
         )
     }
@@ -265,7 +266,7 @@ fun MoodSuggestionsScreen(
                 ) {
                     MoodV2Face(mood = mood, size = 32.dp, tint = accent)
                     Text(
-                        text = "REAL Önerileri",
+                        text = t("REAL Önerileri"),
                         color = Color(0xFFF4F4F6),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold
@@ -273,7 +274,7 @@ fun MoodSuggestionsScreen(
                 }
 
                 Text(
-                    text = if (createdRealIds.isNotEmpty()) "Bitti" else "Geç",
+                    text = if (createdRealIds.isNotEmpty()) t("Bitti") else t("Geç"),
                     color = Color(0xFF9898A2),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
@@ -287,7 +288,7 @@ fun MoodSuggestionsScreen(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = "Nasıl hissettiğine göre birkaç fikir",
+                text = t("Nasıl hissettiğine göre birkaç fikir"),
                 color = Color(0xFFE0E0E5),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -297,7 +298,7 @@ fun MoodSuggestionsScreen(
             Spacer(Modifier.height(4.dp))
 
             Text(
-                text = "Dilersen birini seçip tek dokunuşla REAL yapabilirsin.",
+                text = t("Dilersen birini seçip tek dokunuşla REAL yapabilirsin."),
                 color = Color(0xFF85858E),
                 fontSize = 13.sp,
                 lineHeight = 18.sp
@@ -468,7 +469,7 @@ fun MoodSuggestionsScreen(
                                                     }
                                                 )
                                                 .semantics {
-                                                    contentDescription = if (isAdded) "Eklenen REAL’i geri al" else "REAL olarak ekle"
+                                                    contentDescription = if (isAdded) t("Eklenen REAL’i geri al") else t("REAL olarak ekle")
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -506,7 +507,7 @@ fun MoodSuggestionsScreen(
                                                     }
                                                     Column(modifier = Modifier.weight(1f)) {
                                                         Text(
-                                                            text = suggestion.music?.track?.takeIf { it.isNotBlank() } ?: "Şarkı aranıyor…",
+                                                            text = suggestion.music?.track?.takeIf { it.isNotBlank() } ?: t("Şarkı aranıyor…"),
                                                             color = Color(0xFFE0E0E5),
                                                             fontSize = 14.sp,
                                                             fontWeight = FontWeight.Medium,
@@ -515,7 +516,7 @@ fun MoodSuggestionsScreen(
                                                         )
                                                         Spacer(Modifier.height(2.dp))
                                                         Text(
-                                                            text = suggestion.music?.artist?.takeIf { it.isNotBlank() }?.let { "$it • iTunes aranıyor…" } ?: "Şarkı aranıyor…",
+                                                            text = suggestion.music?.artist?.takeIf { it.isNotBlank() }?.let { t("{0} • iTunes aranıyor…", it) } ?: t("Şarkı aranıyor…"),
                                                             color = Color(0xFF85858E),
                                                             fontSize = 12.sp,
                                                             maxLines = 1,
@@ -552,14 +553,14 @@ fun MoodSuggestionsScreen(
                                                     ) {
                                                         ActionIcon(ActionGlyph.Music, Modifier.size(20.dp), Color(0xFF85858E))
                                                         Text(
-                                                            text = "Şarkı şu anda bulunamadı.",
+                                                            text = t("Şarkı şu anda bulunamadı."),
                                                             color = Color(0xFF85858E),
                                                             fontSize = 13.sp
                                                         )
                                                     }
                                                     if (suggestion.music != null) {
                                                         Text(
-                                                            text = "Tekrar dene",
+                                                            text = t("Tekrar dene"),
                                                             color = accent,
                                                             fontSize = 13.sp,
                                                             fontWeight = FontWeight.Medium,
@@ -579,8 +580,8 @@ fun MoodSuggestionsScreen(
                                     if (isMedia) {
                                         when (mediaResolutionState) {
                                             is MediaResolutionState.Loading -> {
-                                                val searchLabel = if (isMovie) "Film aranıyor…" else "Dizi aranıyor…"
-                                                val providerLabel = if (isMovie) "Film • TheTVDB aranıyor…" else "Dizi • TVmaze aranıyor…"
+                                                val searchLabel = if (isMovie) t("Film aranıyor…") else t("Dizi aranıyor…")
+                                                val providerLabel = if (isMovie) t("Film • TheTVDB aranıyor…") else t("Dizi • TVmaze aranıyor…")
                                                 Spacer(Modifier.height(14.dp))
                                                 Row(
                                                     modifier = Modifier
@@ -630,7 +631,7 @@ fun MoodSuggestionsScreen(
                                             }
 
                                             is MediaResolutionState.Failed -> {
-                                                val failText = if (isMovie) "Film şu anda bulunamadı." else "Dizi şu anda bulunamadı."
+                                                val failText = if (isMovie) t("Film şu anda bulunamadı.") else t("Dizi şu anda bulunamadı.")
                                                 Spacer(Modifier.height(12.dp))
                                                 Row(
                                                     modifier = Modifier
@@ -656,7 +657,7 @@ fun MoodSuggestionsScreen(
                                                     }
                                                     if (suggestion.media != null) {
                                                         Text(
-                                                            text = "Tekrar dene",
+                                                            text = t("Tekrar dene"),
                                                             color = accent,
                                                             fontSize = 13.sp,
                                                             fontWeight = FontWeight.Medium,
@@ -700,7 +701,7 @@ fun MoodSuggestionsScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (createdRealIds.isNotEmpty()) "Tamam" else "Geç",
+                                text = if (createdRealIds.isNotEmpty()) t("Tamam") else t("Geç"),
                                 color = Color(0xFFF4F4F6),
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium
@@ -802,7 +803,7 @@ private fun SuggestionsLoadingView(
         Spacer(Modifier.height(8.dp))
 
         Text(
-            text = "Öneriler hazırlanıyor…",
+            text = t("Öneriler hazırlanıyor…"),
             color = Color(0xFF85858E),
             fontSize = 13.sp,
             textAlign = TextAlign.Center,
@@ -827,7 +828,7 @@ private fun SuggestionsErrorView(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Öneriler şu anda alınamadı",
+            text = t("Öneriler şu anda alınamadı"),
             color = Color(0xFFF4F4F6),
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold
@@ -836,7 +837,7 @@ private fun SuggestionsErrorView(
         Spacer(Modifier.height(6.dp))
 
         Text(
-            text = "Bağlantını kontrol edip tekrar deneyebilir veya doğrudan devam edebilirsin.",
+            text = t("Bağlantını kontrol edip tekrar deneyebilir veya doğrudan devam edebilirsin."),
             color = Color(0xFF85858E),
             fontSize = 13.sp,
             textAlign = TextAlign.Center,
@@ -858,7 +859,7 @@ private fun SuggestionsErrorView(
                     .padding(horizontal = 20.dp, vertical = 10.dp)
             ) {
                 Text(
-                    text = "Tekrar dene",
+                    text = t("Tekrar dene"),
                     color = Color(0xFFF4F4F6),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
@@ -874,7 +875,7 @@ private fun SuggestionsErrorView(
                     .padding(horizontal = 20.dp, vertical = 10.dp)
             ) {
                 Text(
-                    text = "Geç",
+                    text = t("Geç"),
                     color = Color(0xFF9898A2),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,11 +40,11 @@ internal fun CardTextSettingsControl(onRemove: (() -> Unit)? = null, onSettings:
     Popup(alignment = Alignment.TopEnd, offset = IntOffset(0, offset)) {
         Row(Modifier.liquidDockChip(RoundedCornerShape(14.dp)), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onSettings, modifier = Modifier.size(28.dp)
-                .semantics { contentDescription = "Metin araçları" }) {
+                .semantics { contentDescription = t("Metin araçları") }) {
                 ActionIcon(ActionGlyph.Settings, Modifier.size(15.dp), Color(0xFFB7B7C0))
             }
             if (onRemove != null) IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)
-                .semantics { contentDescription = "Metin kutusunu kaldır" }) {
+                .semantics { contentDescription = t("Metin kutusunu kaldır") }) {
                 ActionIcon(ActionGlyph.Close, Modifier.size(15.dp), Color(0xFFB7B7C0))
             }
         }
@@ -77,10 +78,10 @@ internal fun CardStandaloneTextBox(
             if (editing) BasicTextField(
                 value = text, onValueChange = onTextChange, textStyle = style, maxLines = lines,
                 modifier = Modifier.fillMaxWidth().heightIn(min = if (placement.minHeight > 0) 0.dp else 96.dp)
-                    .semantics { contentDescription = "Metin kutusu" },
+                    .semantics { contentDescription = t("Metin kutusu") },
                 cursorBrush = SolidColor(ink), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 decorationBox = { field ->
-                    if (text.isEmpty()) Text("Metin yaz…", style = style.copy(color = ink.copy(alpha = .4f)))
+                    if (text.isEmpty()) Text(t("Metin yaz…"), style = style.copy(color = ink.copy(alpha = .4f)))
                     field()
                 }
             ) else SelectionContainer {

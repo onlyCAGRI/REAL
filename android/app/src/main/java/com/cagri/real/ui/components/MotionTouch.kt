@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.os.Build
 import android.os.SystemClock
 import android.os.VibrationEffect
@@ -123,7 +124,7 @@ object RealHaptics {
             if (isFrequent) lastTickLogTime = now
             Log.d(
                 TAG,
-                "[$actionName] backend=VIEW_HAPTIC constant=$constant performed=$performed " +
+                "[${actionName}] backend=VIEW_HAPTIC constant=${constant} performed=${performed} " +
                     "viewHapticEnabled=${view.isHapticFeedbackEnabled} sdk=${Build.VERSION.SDK_INT}"
             )
         }

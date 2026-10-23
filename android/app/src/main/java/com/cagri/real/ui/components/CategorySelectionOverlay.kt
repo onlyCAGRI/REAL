@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -104,7 +105,7 @@ fun CategorySelectionOverlay(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Kategori Seç",
+                            text = t("Kategori Seç"),
                             color = Color.White,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold
@@ -113,7 +114,7 @@ fun CategorySelectionOverlay(
                             onClick = onDismiss,
                             modifier = Modifier
                                 .size(32.dp)
-                                .semantics { contentDescription = "Kategori seçimini kapat" }
+                                .semantics { contentDescription = t("Kategori seçimini kapat") }
                         ) {
                             ActionIcon(ActionGlyph.Close, Modifier.size(16.dp), Color(0xFFA0A0AC))
                         }
@@ -128,7 +129,7 @@ fun CategorySelectionOverlay(
                     ) {
                         
                         CategoryOptionItem(
-                            title = "Kategori yok",
+                            title = t("Kategori yok"),
                             isSelected = selectedCategoryId == null,
                             badge = {
                                 Box(
@@ -151,7 +152,7 @@ fun CategorySelectionOverlay(
                         
                         if (onCreateCategoryClick != null) {
                             CategoryOptionItem(
-                                title = "Yeni kategori ekle...",
+                                title = t("Yeni kategori ekle..."),
                                 isSelected = false,
                                 badge = {
                                     Box(

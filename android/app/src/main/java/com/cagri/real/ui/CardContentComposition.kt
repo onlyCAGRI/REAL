@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import com.cagri.real.ui.motion.realEntrance
 import com.cagri.real.ui.motion.realGrow
 import com.cagri.real.ui.motion.realGrowGlow
@@ -491,7 +492,7 @@ internal fun applyCardDrop(
 }
 
 internal fun cardContentLabel(key: String): String = when (key.substringBefore(':')) {
-    "text" -> "Metin"; "photos" -> "Fotoğraf"; "files" -> "Ek"; "voice" -> "Ses"
-    "music" -> "Müzik"; "media" -> "Film / Dizi"; "game" -> "Oyun"; "location" -> "Konum"
-    "checklist" -> "Checklist"; "mood" -> "Mood"; "journal" -> "Günlük"; else -> "Kart destesi"
+    "text" -> t("Metin"); "photos" -> t("Fotoğraf"); "files" -> t("Ek"); "voice" -> t("Ses")
+    "music" -> t("Müzik"); "media" -> t("Film / Dizi"); "game" -> t("Oyun"); "location" -> t("Konum"); "weather" -> t("Hava durumu")
+    "checklist" -> t("Checklist"); "mood" -> t("Mood"); "journal" -> t("Günlük"); else -> t("Kart destesi")
 }

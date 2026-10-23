@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import androidx.compose.runtime.*
 import com.cagri.real.data.*
 import com.cagri.real.speech.*
@@ -131,7 +132,7 @@ internal fun reminderVoiceFinalize(
                         if (voiceAiRequestSerial == serial) {
                             voiceAiParsing = false
                             editing = true
-                            showVoiceFeedback(voiceState, error.message ?: "Kartlar kaydedilemedi.")
+                            showVoiceFeedback(voiceState, error.message ?: t("Kartlar kaydedilemedi."))
                         }
                     } finally { if (voiceAiRequestSerial == serial) voiceAiParsing = false }
                 }
@@ -151,7 +152,7 @@ internal fun reminderVoiceFinalize(
                 if (error is VoiceContentUnavailableException) {
                     offerRetry(requestSerial) { applyCreation(parsed, autoSave, requestSerial, existingCategory) }
                 }
-                showVoiceFeedback(voiceState, error.message ?: "İçerik hazırlanamadı; metin korundu.")
+                showVoiceFeedback(voiceState, error.message ?: t("İçerik hazırlanamadı; metin korundu."))
                 return
             }
         if (voiceAiRequestSerial != requestSerial) return
@@ -173,7 +174,7 @@ internal fun reminderVoiceFinalize(
             pendingAutoSubmit = false
             editing = true
             offerRetry(requestSerial) { applyCreation(parsed, autoSave, requestSerial, existingCategory) }
-            showVoiceFeedback(voiceState, "Kategori oluşturulamadı. Metin korundu.")
+            showVoiceFeedback(voiceState, t("Kategori oluşturulamadı. Metin korundu."))
             return
         }
 
@@ -184,7 +185,7 @@ internal fun reminderVoiceFinalize(
             isVoiceDraft = false
             if (createdCategory != null) {
                 RealHaptics.success(view)
-                showVoiceFeedback(voiceState, "${createdCategory.name} kategorisi hazır.")
+                showVoiceFeedback(voiceState, t("{0} kategorisi hazır.", createdCategory.name))
             }
             return
         }
@@ -219,7 +220,7 @@ internal fun reminderVoiceFinalize(
             onDraftChange(failedTitles.joinToString("\n"))
             isVoiceDraft = failedTitles.isNotEmpty()
             editing = failedTitles.isNotEmpty()
-            if (failedTitles.isNotEmpty()) showVoiceFeedback(voiceState, "Bazı kartlar kaydedilemedi. Kalan kartların tüm bilgileri korundu.")
+            if (failedTitles.isNotEmpty()) showVoiceFeedback(voiceState, t("Bazı kartlar kaydedilemedi. Kalan kartların tüm bilgileri korundu."))
             requiresTimeSelection = false
             pendingDateHintEpochDay = null
             pendingTimeOfDay = null
@@ -275,7 +276,7 @@ internal fun reminderVoiceFinalize(
         if (requiresTimeSelection) {
             editing = true
             voiceState.timeFollowUp.value = VoiceTimeFollowUp(prepared, createdCategory, autoSave)
-            showVoiceFeedback(voiceState, "Saat kaçta olsun?")
+            showVoiceFeedback(voiceState, t("Saat kaçta olsun?"))
             voiceState.requestTimeListening.value = true
         }
 
@@ -340,7 +341,7 @@ internal fun reminderVoiceFinalize(
                         voiceAiParsing = false
                         onDraftChange(pending.title)
                         editing = true
-                        showVoiceFeedback(voiceState, "Tekrar eden kart için saat gerekiyor. Saati elle seçebilirsin.")
+                        showVoiceFeedback(voiceState, t("Tekrar eden kart için saat gerekiyor. Saati elle seçebilirsin."))
                         return@launch
                     }
                     applyCreation(GeminiVoiceParseResult(intents = listOf(dayOnly)), timeFollowUp.autoSave, requestSerial,
@@ -352,7 +353,7 @@ internal fun reminderVoiceFinalize(
                     voiceState.requestTimeListening.value = false
                     voiceAiParsing = false
                     onDraftChange(timeFollowUp.prepared.intent.title)
-                    showVoiceFeedback(voiceState, "Saati elle seçebilirsin.")
+                    showVoiceFeedback(voiceState, t("Saati elle seçebilirsin."))
                     return@launch
                 }
                 val nowMillis = System.currentTimeMillis()
@@ -361,21 +362,21 @@ internal fun reminderVoiceFinalize(
                 val clockTranscript = timeFollowUp?.let { followUp ->
                     val hint = if (Regex("\\b(sabah\\w*|aksam\\w*|oglen\\w*|gece\\w*)\\b").containsMatchIn(voiceNameKey(transcript))) "" else when (followUp.prepared.intent.timeOfDay) {
                         TimeOfDay.Morning -> "sabah"
-                        TimeOfDay.Noon -> "öğlen"
-                        TimeOfDay.Evening -> "akşam"
+                        TimeOfDay.Noon -> t("öğlen")
+                        TimeOfDay.Evening -> t("akşam")
                         TimeOfDay.Night -> "gece"
                         else -> ""
                     }
                     val date = followUp.prepared.intent.date?.toString().orEmpty()
                     // Only the clock is read from this response; native task fields remain authoritative.
-                    "${followUp.prepared.intent.title} $date $hint saat $transcript"
+                    "${followUp.prepared.intent.title} ${date} ${hint} saat ${transcript}"
                 }
                 val localTranscript = if(timeFollowUp == null) transcript else {
                     val hasDaypart=Regex("\\b(sabah\\w*|aksam\\w*|oglen\\w*|gece\\w*)\\b").containsMatchIn(voiceNameKey(transcript))
                     val hint=if(hasDaypart) "" else when(timeFollowUp.prepared.intent.timeOfDay) {
                         TimeOfDay.Morning -> "sabah"
-                        TimeOfDay.Noon -> "öğlen"
-                        TimeOfDay.Evening -> "akşam"
+                        TimeOfDay.Noon -> t("öğlen")
+                        TimeOfDay.Evening -> t("akşam")
                         TimeOfDay.Night -> "gece"
                         else -> ""
                     }
@@ -414,10 +415,10 @@ internal fun reminderVoiceFinalize(
                     editing = true
                     showVoiceFeedback(voiceState,
                         if (aiResult.exceptionOrNull() is com.cagri.real.platform.android.access.ProRequired)
-                            "AI yardımı REAL Pro ile kullanılabilir. Metnin hazır; kart olarak ekleyebilirsin."
+                            t("AI yardımı REAL Pro ile kullanılabilir. Metnin hazır; kart olarak ekleyebilirsin.")
                         else if (aiResult.exceptionOrNull() is com.cagri.real.ai.AiConsentDeclined)
-                            "AI kullanılmadı. Metnin hazır; düzenleyebilir veya kart olarak ekleyebilirsin."
-                        else "AI çözümlenemedi. Metin korundu; tekrar söyleyebilir veya düzenleyebilirsin.")
+                            t("AI kullanılmadı. Metnin hazır; düzenleyebilir veya kart olarak ekleyebilirsin.")
+                        else t("AI çözümlenemedi. Metin korundu; tekrar söyleyebilir veya düzenleyebilirsin."))
                     voiceAiParsing = false
                     pendingAutoSubmit = false
                     return@launch
@@ -435,7 +436,7 @@ internal fun reminderVoiceFinalize(
                             voiceState.timeFollowUp.value = timeFollowUp.copy(prepared = timeFollowUp.prepared.copy(
                                 intent = timeFollowUp.prepared.intent.copy(timeOfDay = answer.timeOfDay)))
                         }
-                        showVoiceFeedback(voiceState, "Saat kaçta olsun?")
+                        showVoiceFeedback(voiceState, t("Saat kaçta olsun?"))
                         voiceState.requestTimeListening.value = true
                         return@launch
                     }
@@ -448,7 +449,7 @@ internal fun reminderVoiceFinalize(
                         onDraftChange(timeFollowUp.prepared.intent.title)
                         voiceAiParsing = false
                         editing = true
-                        showVoiceFeedback(voiceState, error.message ?: "Başka bir saat söyle.")
+                        showVoiceFeedback(voiceState, error.message ?: t("Başka bir saat söyle."))
                         return@launch
                     }
                     voiceState.timeFollowUp.value = null
@@ -469,7 +470,7 @@ internal fun reminderVoiceFinalize(
                         if (targetId != null && (current == null || original?.updatedAt != current.updatedAt)) {
                             voiceAiParsing = false; pendingAutoSubmit = false
                             onDraftChange(""); isVoiceDraft = false
-                            showVoiceFeedback(voiceState, "Kart bu sırada değişmiş. Komutu yeniden söyle; işlem yapılmadı.")
+                            showVoiceFeedback(voiceState, t("Kart bu sırada değişmiş. Komutu yeniden söyle; işlem yapılmadı."))
                             return
                         }
                         voiceAiParsing = false
@@ -505,7 +506,7 @@ internal fun reminderVoiceFinalize(
                     catch (error: Exception) {
                         if (voiceAiRequestSerial == requestSerial) {
                             voiceAiParsing = false; pendingAutoSubmit = false; editing = true
-                            showVoiceFeedback(voiceState, error.message ?: "Kartlar kaydedilemedi; metin korundu.")
+                            showVoiceFeedback(voiceState, error.message ?: t("Kartlar kaydedilemedi; metin korundu."))
                         }
                     }
                 }

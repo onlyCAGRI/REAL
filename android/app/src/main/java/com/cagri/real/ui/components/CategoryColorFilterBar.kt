@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -71,7 +72,7 @@ fun CategoryColorFilterButton(
             )
             .semantics {
                 role = Role.Button
-                contentDescription = if (hasFilter) "Renk filtresini değiştir" else "Renk filtresi"
+                contentDescription = if (hasFilter) t("Renk filtresini değiştir") else t("Renk filtresi")
             },
         contentAlignment = Alignment.Center
     ) {
@@ -88,7 +89,7 @@ fun CategoryColorFilterButton(
 @Composable
 fun CategoryEditButton(
     onClick: () -> Unit,
-    contentDescription: String = "Kategoriyi düzenle",
+    contentDescription: String = t("Kategoriyi düzenle"),
     modifier: Modifier = Modifier.size(44.dp),
     applyLiquidChrome: Boolean = true
 ) {
@@ -176,7 +177,7 @@ fun CategoryColorSelectorHeader(
                     .clickable {
                         onSelectColor(null) 
                     }
-                    .semantics { contentDescription = "Filtreyi temizle / Tümünü göster" },
+                    .semantics { contentDescription = t("Filtreyi temizle / Tümünü göster") },
                 contentAlignment = Alignment.Center
             ) {
                 ActionIcon(ActionGlyph.Close, Modifier.size(13.dp), Color(0xFFC8C8D0))
@@ -199,7 +200,7 @@ fun CategoryColorSelectorHeader(
                         .clickable {
                             onSelectColor(index) 
                         }
-                        .semantics { contentDescription = "${choice.label} rengine göre filtrele" },
+                        .semantics { contentDescription = t("{0} rengine göre filtrele", choice.label) },
                     contentAlignment = Alignment.Center
                 ) {
                     if (isSelected) {
@@ -216,7 +217,7 @@ fun CategoryColorSelectorHeader(
             onClick = onClose,
             modifier = Modifier
                 .size(34.dp)
-                .semantics { contentDescription = "Renk seçiciyi kapat" }
+                .semantics { contentDescription = t("Renk seçiciyi kapat") }
         ) {
             ActionIcon(ActionGlyph.Close, Modifier.size(18.dp), color = Color(0xFF888890))
         }

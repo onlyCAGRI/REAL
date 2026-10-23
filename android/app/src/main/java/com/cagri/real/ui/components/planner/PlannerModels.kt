@@ -10,7 +10,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-internal val PlannerLocale = Locale.forLanguageTag("tr-TR")
+internal val PlannerLocale: Locale get() = com.cagri.real.i18n.I18n.locale
 internal val PlannerTimeFormat = DateTimeFormatter.ofPattern("HH:mm", PlannerLocale)
 internal val PlannerPastels = RealCalendarPastels
 internal val PlannerInk = Color(0xFF242322)

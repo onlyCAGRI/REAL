@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -41,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -48,6 +50,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -284,6 +287,10 @@ fun ReminderCard(
     var swipeDragX by remember(reminder.id) { mutableFloatStateOf(0f) }
     var swipeDragging by remember(reminder.id) { mutableStateOf(false) }
     var swipeArmed by remember(reminder.id) { mutableStateOf(false) }
+    // Which way this drag may go: a card is swiped from its edge (delete from the right side, complete / 24 hour from
+    // the left side); a drag starting in the middle does not move it, so a scroll or a tap cannot throw a card away.
+    var swipeMayLeft by remember(reminder.id) { mutableStateOf(false) }
+    var swipeMayRight by remember(reminder.id) { mutableStateOf(false) }
     val swipeVelocityTracker = remember(reminder.id) { VelocityTracker() }
     val swipeFlingVelocityPx = with(density) { 520.dp.toPx() }
     val swipeFlingMinDistancePx = with(density) { 28.dp.toPx() }
@@ -303,7 +310,10 @@ fun ReminderCard(
     val swipeGestureModifier = if (swipeEnabled) {
         Modifier.pointerInput(reminder.id, onSwipeRightTo24Hour, onSwipeLeftDelete, swipeRightOn, swipeLeftOn, reduceAnimations) {
             detectHorizontalDragGestures(
-                onDragStart = {
+                onDragStart = { start ->
+                    val at = start.x / size.width.coerceAtLeast(1)
+                    swipeMayLeft = swipeLeftOn && at >= 0.6f
+                    swipeMayRight = swipeRightOn && at <= 0.4f
                     swipeDragging = true
                     swipeDragX = swipeAnim.value
                     swipeArmed = false
@@ -311,7 +321,7 @@ fun ReminderCard(
                 },
                 onHorizontalDrag = { change, dragAmount ->
                     val next = (swipeDragX + dragAmount)
-                        .coerceIn(if (swipeLeftOn) -swipeExitPx else 0f, if (swipeRightOn) swipeExitPx else 0f)
+                        .coerceIn(if (swipeMayLeft) -swipeExitPx else 0f, if (swipeMayRight) swipeExitPx else 0f)
                     if (next != swipeDragX || swipeDragX != 0f) {
                         change.consume()
                         swipeDragX = next
@@ -357,6 +367,10 @@ fun ReminderCard(
     } else Modifier
 
     Box(modifier.fillMaxWidth()) {
+        if (swipeEnabled) {
+            // The light rising from the edge the card leaves (as on the posters), brighter once the swipe will act.
+            Box(Modifier.matchParentSize().drawBehind { drawCardSwipeGlow(renderedSwipeX(), swipeThresholdPx) })
+        }
         if (swipeRightOn && swipeEnabled) {
             Text(
                 text = swipeRightLabel,
@@ -365,19 +379,27 @@ fun ReminderCard(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(start = 18.dp)
-                    .graphicsLayer { alpha = (renderedSwipeX() / swipeThresholdPx).coerceIn(0f, 1f) }
+                    .graphicsLayer {
+                        val p = (renderedSwipeX() / swipeThresholdPx).coerceIn(0f, 1f)
+                        alpha = p; scaleX = 0.85f + 0.15f * p; scaleY = scaleX
+                    }
             )
         }
         if (swipeLeftOn && swipeEnabled) {
-            Text(
-                text = "Sil",
-                color = Color(0xFFFF8A80),
-                style = RealType.cardSwipeAction,
-                modifier = Modifier
+            Row(
+                Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 18.dp)
-                    .graphicsLayer { alpha = (-renderedSwipeX() / swipeThresholdPx).coerceIn(0f, 1f) }
-            )
+                    .graphicsLayer {
+                        val p = (-renderedSwipeX() / swipeThresholdPx).coerceIn(0f, 1f)
+                        alpha = p; scaleX = 0.85f + 0.15f * p; scaleY = scaleX
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                TrashGlyph(Color(0xFFFF8A80), Modifier.size(18.dp))
+                Text(text = t("Sil"), color = Color(0xFFFF8A80), style = RealType.cardSwipeAction)
+            }
         }
         Box(
             Modifier
@@ -410,8 +432,8 @@ fun ReminderCard(
                 interactionSource = cardInteractionSource,
                 indication = null /* pressScale already gives the press feedback */,
                 role = Role.Button,
-                onClickLabel = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç") else "Hatırlatıcıyı aç",
-                onLongClickLabel = if (!isSelectionMode) "Çoklu seçim" else null,
+                onClickLabel = if (isSelectionMode) (if (isSelected) t("Seçimi kaldır") else t("Seç")) else t("Hatırlatıcıyı aç"),
+                onLongClickLabel = if (!isSelectionMode) t("Çoklu seçim") else null,
                 onLongClick = {
                     if (!isSelectionMode) onLongClick() else onSelectToggle()
                 },
@@ -507,8 +529,8 @@ fun ReminderCard(
                         }
                     )
                     .semantics {
-                        contentDescription = if (isSelectionMode) (if (isSelected) "Seçimi kaldır" else "Seç")
-                            else if (reminder.isCompleted) "Tamamlamayı geri al" else "Tamamla"
+                        contentDescription = if (isSelectionMode) (if (isSelected) t("Seçimi kaldır") else t("Seç"))
+                            else if (reminder.isCompleted) t("Tamamlamayı geri al") else t("Tamamla")
                     },
                     contentAlignment = Alignment.Center
                 ) {
@@ -600,26 +622,6 @@ fun ReminderCard(
             )
             com.cagri.real.ui.share.SharedCardAttribution(reminder.sentBy)
             val cardSubtextColor = if (useDark) Color(0xFF282832) else Color(0xFFA5A5B0)
-            if (reminder.isChecklist && reminder.checklistItems.isNotEmpty()) {
-                val completedCount = reminder.checklistItems.count { it.completedAt != null }
-                val totalCount = reminder.checklistItems.size
-                Row(
-                    modifier = Modifier.padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(18.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "$totalCount madde",
-                        color = cardSubtextColor,
-                        style = RealType.cardMetaSecondary
-                    )
-                    Text(
-                        text = "$completedCount tamamlandı",
-                        color = cardSubtextColor,
-                        style = RealType.cardMetaSecondary
-                    )
-                }
-            }
             val hasJournal = reminder.journal != null
             if (journalListMode) {
                 reminder.journal?.mood?.let { mood ->
@@ -650,7 +652,7 @@ fun ReminderCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "Günlük",
+                            t("Günlük"),
                             color = cardSubtextColor,
                             style = RealType.cardMetaPrimary
                         )
@@ -672,7 +674,7 @@ fun ReminderCard(
                             Text(
                                 buildString {
                                     append(formatVoiceDuration(recording.durationMillis))
-                                    if (reminder.voiceRecordings.size > 1) append(" • ${reminder.voiceRecordings.size} kayıt")
+                                    if (reminder.voiceRecordings.size > 1) append(t(" • {0} kayıt", reminder.voiceRecordings.size))
                                 },
                                 color = cardSubtextColor,
                                 style = RealType.cardMetaSecondary
@@ -680,27 +682,46 @@ fun ReminderCard(
                         }
                     }
                 }
-                if (!reminder.isCompleted) {
-                    reminder.alertAt?.let {
+                // One quiet line: date · place (grey pin, or the Varınca / Ayrılınca arrow) · ✓ 2/5 for a checklist.
+                // Photos, voice and stacks stay on the detail page.
+                val trigger = reminder.locationTrigger.takeUnless { reminder.isCompleted }
+                val plainPlace = reminder.location.takeIf { trigger == null && !reminder.isCompleted && it?.latitude != null }
+                    ?.let { reminderLocationLabel(it) }
+                val checklist = reminder.checklistItems.takeIf { reminder.isChecklist && it.isNotEmpty() }
+                val dated = !reminder.isCompleted && (reminder.alertAt != null || reminder.plannedDateEpochDay != null)
+                if (dated || trigger != null || plainPlace != null || checklist != null) Row(Modifier.padding(top = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    if (dated) reminder.alertAt?.let {
                         val isOverdue = it < System.currentTimeMillis()
                         val dateColor = when {
                             useDark -> if (isOverdue) Color(0xFFC53030) else Color(0xFF1E3A8A)
                             else -> if (isOverdue) Color(0xFFF87171) else Color(0xFF94B8F7)
                         }
                         val alertText = if (reminder.hasRepeat) "${reminderDate(it)} • ${reminder.repeatRule.displayName}" else reminderDate(it)
-                        Text(alertText, color = dateColor, style = RealType.cardMetaSecondary,
-                            modifier = Modifier.padding(top = 5.dp))
+                        Text(alertText, color = dateColor, style = RealType.cardMetaSecondary, maxLines = 1)
                     } ?: reminder.plannedDateEpochDay?.let { epochDay ->
-                        Text(
-                            reminderPlannedDate(epochDay),
-                            color = if (useDark) Color(0xFF1E3A8A) else Color(0xFF94B8F7),
-                            style = RealType.cardMetaSecondary,
-                            modifier = Modifier.padding(top = 5.dp)
-                        )
+                        Text(reminderPlannedDate(epochDay), color = if (useDark) Color(0xFF1E3A8A) else Color(0xFF94B8F7),
+                            style = RealType.cardMetaSecondary, maxLines = 1)
+                    }
+                    if (trigger != null) {
+                        val tone = if (trigger.onExit) Color(0xFFFFB86F) else Color(0xFF5DCAA5)
+                        PlaceTriggerGlyph(trigger.onExit, tone, Modifier.size(12.dp))
+                    } else if (plainPlace != null) {
+                        ActionIcon(ActionGlyph.Pin, Modifier.size(12.dp), cardSubtextColor)
+                    }
+                    (trigger?.placeName?.takeIf { it.isNotBlank() } ?: plainPlace)?.let { name ->
+                        Text(name, color = cardSubtextColor, style = RealType.cardMetaSecondary, maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    }
+                    checklist?.let { items ->
+                        if (dated || trigger != null || plainPlace != null) Text("·", color = cardSubtextColor, style = RealType.cardMetaSecondary)
+                        ActionIcon(ActionGlyph.Checklist, Modifier.size(12.dp), cardSubtextColor)
+                        Text("${items.count { it.completedAt != null }}/${items.size}", color = cardSubtextColor,
+                            style = RealType.cardMetaSecondary, maxLines = 1)
                     }
                 }
                 reminder.completedAt?.let {
-                    Text("Tamamlandı: ${reminderDate(it)}", color = if (useDark) Color(0xFF55555E) else Color(0xFF92929A), style = RealType.cardMetaSecondary,
+                    Text(t("Tamamlandı: {0}", reminderDate(it)), color = if (useDark) Color(0xFF55555E) else Color(0xFF92929A), style = RealType.cardMetaSecondary,
                         modifier = Modifier.padding(top = 5.dp))
                 }
                 categoryLabel?.let { c ->
@@ -739,3 +760,55 @@ fun ReminderCard(
 
 /** Outer ring of every starred card (list card, detail card, picker preview). */
 internal val StarCardBorderColor = Color.White.copy(alpha = 0.85f)
+
+/** Varınca: a navigation arrow pointing in; Ayrılınca: the same arrow turned around. */
+@Composable
+internal fun PlaceTriggerGlyph(onExit: Boolean, color: Color, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier.semantics { contentDescription = if (onExit) t("Ayrılınca hatırlatır") else t("Varınca hatırlatır") }) {
+        val w = size.width; val h = size.height
+        val arrow = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * .92f, h * .08f); lineTo(w * .08f, h * .45f); lineTo(w * .48f, h * .52f); lineTo(w * .55f, h * .92f); close()
+        }
+        if (onExit) rotate(180f) { drawPath(arrow, color) } else drawPath(arrow, color)
+    }
+}
+
+/** Light from the edge a swiped card leaves: red on the right (Sil), blue on the left (complete / 24 hour). */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCardSwipeGlow(x: Float, threshold: Float) {
+    if (x == 0f) return
+    val p = (kotlin.math.abs(x) / threshold).coerceIn(0f, 1.4f)
+    val s = (p / 1.4f).let { it * it * (3f - 2f * it) }
+    if (s <= 0.01f) return
+    val color = if (x < 0f) Color(0xFFFF4D6D) else Color(0xFF4D8DFF)
+    val edge = if (x < 0f) size.width else 0f
+    val center = androidx.compose.ui.geometry.Offset(edge, size.height / 2f)
+    val radius = (kotlin.math.abs(x) * 1.15f).coerceAtLeast(size.height * 0.8f)
+    val armed = if (p >= 1f) 1.35f else 1f
+    drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
+        0f to color.copy(alpha = (0.42f * s * armed).coerceAtMost(0.6f)), 0.45f to color.copy(alpha = 0.16f * s * armed),
+        1f to Color.Transparent, center = center, radius = radius), radius = radius, center = center)
+    val line = 2.5.dp.toPx()
+    drawRect(androidx.compose.ui.graphics.Brush.verticalGradient(
+        0f to Color.Transparent, 0.3f to color.copy(alpha = 0.75f * s), 0.5f to Color.White.copy(alpha = 0.9f * s),
+        0.7f to color.copy(alpha = 0.75f * s), 1f to Color.Transparent),
+        topLeft = androidx.compose.ui.geometry.Offset(if (x < 0f) size.width - line else 0f, 0f),
+        size = androidx.compose.ui.geometry.Size(line, size.height))
+}
+
+/** A small bin drawn with lines (no icon font needed). */
+@Composable
+private fun TrashGlyph(color: Color, modifier: Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val w = size.width; val h = size.height; val st = 1.6.dp.toPx()
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(st, cap = androidx.compose.ui.graphics.StrokeCap.Round,
+            join = androidx.compose.ui.graphics.StrokeJoin.Round)
+        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.12f, h * 0.24f), androidx.compose.ui.geometry.Offset(w * 0.88f, h * 0.24f), st, androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.38f, h * 0.1f), androidx.compose.ui.geometry.Offset(w * 0.62f, h * 0.1f), st, androidx.compose.ui.graphics.StrokeCap.Round)
+        val body = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.22f, h * 0.3f); lineTo(w * 0.28f, h * 0.9f); lineTo(w * 0.72f, h * 0.9f); lineTo(w * 0.78f, h * 0.3f)
+        }
+        drawPath(body, color, style = stroke)
+        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.42f, h * 0.42f), androidx.compose.ui.geometry.Offset(w * 0.43f, h * 0.78f), st, androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.58f, h * 0.42f), androidx.compose.ui.geometry.Offset(w * 0.57f, h * 0.78f), st, androidx.compose.ui.graphics.StrokeCap.Round)
+    }
+}

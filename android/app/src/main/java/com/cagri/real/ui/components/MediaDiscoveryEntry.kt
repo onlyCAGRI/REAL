@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -72,33 +73,33 @@ internal fun EntryContent(posterUrls: List<String>, savedCount: Int, canContinue
         Row(verticalAlignment = Alignment.CenterVertically) {
             ActionIcon(ActionGlyph.Video, Modifier.size(20.dp), Color.White)
             Spacer(Modifier.width(8.dp))
-            Text("Film & Dizi", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("Film & Dizi"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(14.dp))
         val titleStyle = RealType.editorialTitle.copy(fontSize = 44.sp, lineHeight = 48.sp,
             fontWeight = FontWeight.Medium, letterSpacing = (-1.4).sp)
-        Text("Bugün ne", style = titleStyle.copy(color = Color.White))
+        Text(t("Bugün ne"), style = titleStyle.copy(color = Color.White))
         Text("izlesek?", style = titleStyle.copy(color = EntryAccent))
         Spacer(Modifier.height(10.dp))
         Text(
             when {
-                loading -> "Önerilerin hazırlanıyor…"
-                savedCount > 0 -> "İzlenecek listende $savedCount başlık var. Yeni bir tür seç ya da kaldığın yerden devam et."
-                else -> "Türünü seç, sana uyan film ve dizi afişlerini keşfet."
+                loading -> t("Önerilerin hazırlanıyor…")
+                savedCount > 0 -> t("İzlenecek listende {0} başlık var. Yeni bir tür seç ya da kaldığın yerden devam et.", savedCount)
+                else -> t("Türünü seç, sana uyan film ve dizi afişlerini keşfet.")
             },
             color = Color.White.copy(alpha = .55f), fontSize = 15.sp, lineHeight = 21.sp, modifier = Modifier.padding(end = 24.dp))
         Spacer(Modifier.height(28.dp))
         if (canContinue) {
-            EntryPrimaryButton("Keşfetmeye devam et", enabled, onContinue)
+            EntryPrimaryButton(t("Keşfetmeye devam et"), enabled, onContinue)
             Spacer(Modifier.height(10.dp))
-            EntrySecondaryButton("Tür seç", enabled, onPickGenre)
-        } else EntryPrimaryButton("Tür seç", enabled, onPickGenre)
+            EntrySecondaryButton(t("Tür seç"), enabled, onPickGenre)
+        } else EntryPrimaryButton(t("Tür seç"), enabled, onPickGenre)
         Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(28.dp))
             .clickable(enabled = enabled, role = Role.Button, onClick = onWatchlist), contentAlignment = Alignment.Center) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ActionIcon(ActionGlyph.Calendar, Modifier.size(18.dp), if (enabled) Color.White else Color(0xFF66666C))
                 Spacer(Modifier.width(8.dp))
-                Text("İzlenecek listem ($savedCount)", color = if (enabled) Color.White else Color(0xFF66666C), fontSize = 15.sp)
+                Text(t("İzlenecek listem ({0})", savedCount), color = if (enabled) Color.White else Color(0xFF66666C), fontSize = 15.sp)
             }
         }
         Spacer(Modifier.height(8.dp))

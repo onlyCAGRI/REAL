@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -288,8 +289,8 @@ internal fun PanoBoardPeek(
                     }
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text(if (board.shared) "SHARED" else "PRIVATE", color = PanoInk, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp)
-                        Text(if (owner) "OWNER" else "MEMBER", color = PanoInk.copy(alpha = 0.45f), fontSize = 12.sp, letterSpacing = 0.4.sp)
+                        Text(if (board.shared) t("SHARED") else t("PRIVATE"), color = PanoInk, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp)
+                        Text(if (owner) t("OWNER") else t("MEMBER"), color = PanoInk.copy(alpha = 0.45f), fontSize = 12.sp, letterSpacing = 0.4.sp)
                     }
                 }
                 Spacer(Modifier.weight(1f))
@@ -313,7 +314,7 @@ internal fun PanoBoardPeek(
                                 .clickable(onClick = onPeople),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(if (owner) "INVITE PERSON" else "SEE PEOPLE", color = Color.White, fontSize = 16.sp,
+                            Text(if (owner) t("INVITE PERSON") else t("SEE PEOPLE"), color = Color.White, fontSize = 16.sp,
                                 textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
                             Box(Modifier.width(1.5.dp).fillMaxHeight().background(accent))
                             Box(Modifier.width(66.dp).fillMaxHeight(), contentAlignment = Alignment.Center) { PlusGlyph(Color.White, 22.dp) }

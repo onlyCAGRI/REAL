@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -287,7 +288,7 @@ fun VoiceListeningWindow(
             ) {
                 if (!processing) {
                     Text(
-                        text = if (checking) "Doğru mu anladım?" else if (showingFeedback) "REAL" else if (listening && !feedbackText.isNullOrBlank()) feedbackText else "Dinleniyor…",
+                        text = if (checking) t("Doğru mu anladım?") else if (showingFeedback) t("REAL") else if (listening && !feedbackText.isNullOrBlank()) feedbackText else t("Dinleniyor…"),
                         color = VoiceBlueSoft.copy(alpha = 0.9f),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
@@ -306,7 +307,7 @@ fun VoiceListeningWindow(
                             onUnderstandingCorrect, onLineCountChange, onUnderstandingPlace)
                     } else if (displayText.isEmpty()) {
                         Text(
-                            text = if (listening && !feedbackText.isNullOrBlank()) "Cevabını söyle…" else "Aklında ne var? Konuş…",
+                            text = if (listening && !feedbackText.isNullOrBlank()) t("Cevabını söyle…") else t("Aklında ne var? Konuş…"),
                             color = Color(0xFFA2C7FF),
                             fontSize = 16.sp,
                             lineHeight = 22.sp
@@ -347,8 +348,8 @@ fun VoiceListeningWindow(
                 modifier = Modifier
                     .size(48.dp)
                     .semantics {
-                        contentDescription = if (showingFeedback) "Yeni ses komutu" else if (listening) "Dinlemeyi bitir" else "REAL düşünüyor"
-                        stateDescription = if (showingFeedback) "Ses komutu sonucu" else if (processing) "REAL düşünüyor" else "Dinleniyor"
+                        contentDescription = if (showingFeedback) t("Yeni ses komutu") else if (listening) t("Dinlemeyi bitir") else t("REAL düşünüyor")
+                        stateDescription = if (showingFeedback) t("Ses komutu sonucu") else if (processing) t("REAL düşünüyor") else t("Dinleniyor")
                     }
             ) {
                 Box(
@@ -504,18 +505,18 @@ private fun UnderstandingCheckContent(
                     }
                     Spacer(Modifier.width(6.dp))
                 }
-                CheckChip("Kendim yazayım", filled = false, onClick = onCorrect)
+                CheckChip(t("Kendim yazayım"), filled = false, onClick = onCorrect)
             } else {
-                CheckChip("Doğru", filled = true, onClick = onConfirm)
+                CheckChip(t("Doğru"), filled = true, onClick = onConfirm)
                 Spacer(Modifier.width(6.dp))
                 if (onPlace != null) {
-                    CheckChip("Yeri yaz", filled = false, onClick = onPlace)
+                    CheckChip(t("Yeri yaz"), filled = false, onClick = onPlace)
                     Spacer(Modifier.width(6.dp))
                 }
-                CheckChip("Düzelt", filled = false, onClick = onCorrect)
+                CheckChip(t("Düzelt"), filled = false, onClick = onCorrect)
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    if (understanding.spans.isEmpty()) "ya da yukarı kaydır" else "altı çizili kelimeye dokun · yukarı kaydır",
+                    if (understanding.spans.isEmpty()) t("ya da yukarı kaydır") else t("altı çizili kelimeye dokun · yukarı kaydır"),
                     color = VoiceBlueSoft.copy(alpha = 0.75f), fontSize = 12.sp, maxLines = 1
                 )
             }

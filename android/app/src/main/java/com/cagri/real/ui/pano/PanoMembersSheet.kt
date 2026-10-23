@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -41,7 +42,7 @@ fun PanoMembersSheet(board:PanoBoard,members:List<PanoMember>,controller:PanoCon
         shape=RoundedCornerShape(topStart=28.dp,topEnd=28.dp)){
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=28.dp),
             verticalArrangement=Arrangement.spacedBy(10.dp)){
-            Text("People",fontSize=28.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(top=2.dp))
+            Text(t("People"),fontSize=28.sp,fontWeight=FontWeight.Bold,modifier=Modifier.padding(top=2.dp))
             Text("${members.size} ${if(members.size==1)"person" else "people"}",color=PanoMuted,fontSize=13.sp,modifier=Modifier.padding(bottom=6.dp))
 
             // Grouped list, one rounded surface with hairline separators (iOS inset-grouped style).
@@ -64,7 +65,7 @@ fun PanoMembersSheet(board:PanoBoard,members:List<PanoMember>,controller:PanoCon
             if(board.role=="OWNER"){
                 SheetLabel("Invite")
                 Column(Modifier.fillMaxWidth().panoSurface(22.dp).padding(14.dp)){
-                    com.cagri.real.ui.connections.ConnectionPeoplePicker(actionLabel="Pano'ya davet et",onSelect={person->
+                    com.cagri.real.ui.connections.ConnectionPeoplePicker(actionLabel=t("Pano'ya davet et"),onSelect={person->
                         controller.repository.inviteConnection(board.id,person.uid)
                     })
                 }

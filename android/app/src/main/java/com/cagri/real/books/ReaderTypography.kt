@@ -1,5 +1,6 @@
 package com.cagri.real.books
 
+import com.cagri.real.i18n.t
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +32,19 @@ fun rememberReaderFamily(): FontFamily {
             if (id != 0) Font(id, weight) else null
         }
         if (fonts.isEmpty()) FontFamily.SansSerif else FontFamily(fonts)
+    }
+}
+
+/** Okuyucu yazı tipi ("Tт" sırasından seçilir, bütün kitaplarda geçerli). */
+enum class ReaderFont(val label: String) { SANS("Inter"), SERIF("Serif"), MONO("Mono") }
+
+@Composable
+fun rememberReaderFamily(font: ReaderFont): FontFamily {
+    val sans = rememberReaderFamily()
+    return when (font) {
+        ReaderFont.SANS -> sans
+        ReaderFont.SERIF -> FontFamily.Serif
+        ReaderFont.MONO -> FontFamily.Monospace
     }
 }
 

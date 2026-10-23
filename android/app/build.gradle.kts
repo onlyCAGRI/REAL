@@ -31,8 +31,8 @@ android {
         applicationId = "com.cagri.real"
         minSdk = 26
         targetSdk = 36
-        versionCode = 62
-        versionName = "0.9.4"
+        versionCode = 64
+        versionName = "0.9.6"
 
     }
 
@@ -48,6 +48,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            // Phones only: the x86 / x86_64 native libraries are for emulators (~44 MB of the APK). Debug keeps them.
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -109,6 +111,8 @@ dependencies {
     releaseImplementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation("androidx.credentials:credentials:1.6.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    // "Konuma varınca hatırlat": battery-friendly geofences, registered only while such a card is waiting.
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
     implementation(platform("androidx.compose:compose-bom:2025.05.01"))
     implementation("androidx.activity:activity-compose:1.10.1")

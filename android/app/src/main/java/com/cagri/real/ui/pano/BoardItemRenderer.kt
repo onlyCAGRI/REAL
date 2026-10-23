@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import com.cagri.real.data.boards.BoardRealContent
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -102,7 +103,7 @@ private fun BoardTextBlock(item:PanoItem,selected:Boolean,controller:PanoControl
                     draft=it.take(10000);
                     dirty=true},latestTitle,textColor,textAlign,Modifier.fillMaxSize().onFocusChanged{if(!it.hasFocus)save()})}
         }else Box(Modifier.fillMaxSize().panoSurface(18.dp).verticalScroll(rememberScrollState()).padding(14.dp)){
-            Text(draft.ifBlank{"Tap to write"},color=if(draft.isBlank())PanoMuted else textColor,textAlign=textAlign,
+            Text(draft.ifBlank{t("Tap to write")},color=if(draft.isBlank())PanoMuted else textColor,textAlign=textAlign,
                 fontSize=if(latestTitle)28.sp else 18.sp,fontWeight=if(latestTitle)FontWeight.SemiBold else FontWeight.Normal,
                 modifier=Modifier.fillMaxWidth())}
     }

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import com.cagri.real.ui.motion.RealEntrancePop
 import com.cagri.real.ui.motion.realEntrance

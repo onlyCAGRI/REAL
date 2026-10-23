@@ -1,5 +1,6 @@
 package com.cagri.real
 
+import com.cagri.real.i18n.t
 import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
@@ -75,7 +76,7 @@ class AttachmentImportActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (::model.isInitialized && model.enqueue(Intent(intent)))
-            RealToast.show(this, "Yeni paylaşım sırada; bu bitince açılacak.", long = true)
+            RealToast.show(this, t("Yeni paylaşım sırada; bu bitince açılacak."), long = true)
     }
 }
 
@@ -169,10 +170,10 @@ internal class AttachmentImportModel(
                 val item = runCatching { AttachmentStorage.importUri(context, uri, intent.flags, intent.type) }.getOrNull()
                 if (item == null) failures++ else result = result.copy(attachments = result.attachments + item)
             }
-            store.save(result.copy(warning = "İçe aktarma yarıda kaldıysa eksik dosyaları yeniden paylaş."))
+            store.save(result.copy(warning = t("İçe aktarma yarıda kaldıysa eksik dosyaları yeniden paylaş.")))
         }
         require(!result.isEmpty) { "Okunabilir içerik bulunamadı. Dosyayı yeniden paylaşabilirsin." }
-        result = result.copy(warning = if (failures > 0) "$failures dosya okunamadı veya kopyalama sınırını (100 MB) aştı. Yalnızca aşağıdaki içerik eklenecek." else null)
+        result = result.copy(warning = if (failures > 0) t("{0} dosya okunamadı veya kopyalama sınırını (100 MB) aştı. Yalnızca aşağıdaki içerik eklenecek.", failures) else null)
         store.save(result)
         return result
     }
@@ -241,7 +242,7 @@ internal class AttachmentImportModel(
                 scope.launch { delay(1600); if (done != null) next() }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                error = e.message ?: "Kaydedilemedi"
+                error = e.message ?: t("Kaydedilemedi")
                 reminders = withContext(Dispatchers.IO) { repository.load().withoutDividers() }
             }
             finally { busy = false }
@@ -263,7 +264,7 @@ internal class AttachmentImportModel(
             val title = d.title.trim().ifBlank {
                 payload.suggestedTitle ?: payload.previewTitle?.takeIf { it.isNotBlank() } ?: payload.referenceUrl
                     ?: attachments.firstOrNull { it.type != AttachmentType.TEXT_SNIPPET }?.displayName
-                    ?: payload.voiceRecordings.firstOrNull()?.let { "" } ?: "Paylaşılan içerik"
+                    ?: payload.voiceRecordings.firstOrNull()?.let { "" } ?: t("Paylaşılan içerik")
             }.take(2000)
             val created = repository.add(text = title, plannedDateEpochDay = d.plannedDay, customCategoryId = d.categoryId,
                 sendImmediateNotification = false, referenceUrl = payload.referenceUrl,
@@ -278,11 +279,11 @@ internal class AttachmentImportModel(
         synchronized(ReminderRepository.mutationLock) {
             val current = repository.load().firstOrNull { it.id == d.id } ?: kotlin.error("Kart artık mevcut değil")
             check(payload.referenceUrl == null || current.referenceUrl == null || current.referenceUrl == payload.referenceUrl || d.replaceLink) {
-                "Bu kartın bağlantısı var. Değiştirmeyi onayla."
+                t("Bu kartın bağlantısı var. Değiştirmeyi onayla.")
             }
             val updated = repository.appendContent(d.id, attachments, payload.referenceUrl, payload.voiceRecordings, payload.musicBlocks)
             afterCardChange(updated)
-            "Karta eklendi" to openCard(d.id)
+            t("Karta eklendi") to openCard(d.id)
         }
 
     /** Every piece becomes its own block, stacked below what is already on the board. */

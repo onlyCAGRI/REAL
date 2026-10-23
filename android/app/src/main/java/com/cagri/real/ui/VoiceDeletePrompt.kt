@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -42,14 +43,14 @@ internal fun VoiceDeletePrompt(
         val card = reminders.firstOrNull { it.id == plan.cardId }
         onDismiss()
         if (!plan.stillMatches(card)) {
-            com.cagri.real.ui.components.RealToast.show(context, "Kart değişmiş; silinmedi. Komutu yeniden söyle.", long = true)
+            com.cagri.real.ui.components.RealToast.show(context, t("Kart değişmiş; silinmedi. Komutu yeniden söyle."), long = true)
             return
         }
         if (scope != null) {
             val occurrence = plan.occurrenceMillis ?: return
             callbacks.deleteOccurrence?.invoke(plan.cardId, occurrence, scope)
         } else if (plan.occurrenceMillis != null) {
-            com.cagri.real.ui.components.RealToast.show(context, "Tekrarlı kartı silmek için kart detayındaki tekrar seçimini kullan.", long = true)
+            com.cagri.real.ui.components.RealToast.show(context, t("Tekrarlı kartı silmek için kart detayındaki tekrar seçimini kullan."), long = true)
         } else onDeleteMany(setOf(plan.cardId))
     }
     val scoped = plan.occurrenceMillis != null && callbacks.deleteOccurrence != null

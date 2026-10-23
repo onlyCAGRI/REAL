@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -88,16 +89,18 @@ fun PermissionSheet(
     onLater: () -> Unit,
     reduceAnimations: Boolean = false,
     modifier: Modifier = Modifier,
-    primaryLabel: String = "İzin ver",
-    secondaryLabel: String = "Daha sonra",
+    primaryLabel: String = t("İzin ver"),
+    secondaryLabel: String = t("Daha sonra"),
     /** Null = no hero, just the title (e.g. the calendar web-link question). */
     glyph: PermissionGlyph? = PermissionGlyph.Brand,
     primaryEnabled: Boolean = true,
+    /** Back and scrim tap; separate when the secondary button is a real choice, not "later". */
+    onDismiss: () -> Unit = onLater,
     extraContent: @Composable () -> Unit = {}
 ) {
     val reduce = reduceAnimations || LocalLiquidReduceMotion.current
     if (visible) {
-        BackHandler(onBack = onLater)
+        BackHandler(onBack = onDismiss)
     }
 
     AnimatedVisibility(
@@ -113,7 +116,7 @@ fun PermissionSheet(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onLater
+                    onClick = onDismiss
                 )
         ) {
             val sheetShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
@@ -273,8 +276,8 @@ fun NotificationPermissionSheet(
 ) {
     PermissionSheet(
         visible = visible,
-        title = "Bildirimlere izin verilsin mi?",
-        description = "Real, hatırlatıcılarını zamanı geldiğinde gösterebilmek için bildirim iznine ihtiyaç duyar.",
+        title = t("Bildirimlere izin verilsin mi?"),
+        description = t("Real, hatırlatıcılarını zamanı geldiğinde gösterebilmek için bildirim iznine ihtiyaç duyar."),
         onAllow = onAllow,
         onLater = onLater,
         reduceAnimations = reduceAnimations,
@@ -293,8 +296,8 @@ fun MicrophonePermissionSheet(
 ) {
     PermissionSheet(
         visible = visible,
-        title = "Mikrofona izin verilsin mi?",
-        description = "Real, sesli hatırlatıcı oluşturabilmek için mikrofon iznine ihtiyaç duyar.",
+        title = t("Mikrofona izin verilsin mi?"),
+        description = t("Real, sesli hatırlatıcı oluşturabilmek için mikrofon iznine ihtiyaç duyar."),
         onAllow = onAllow,
         onLater = onLater,
         reduceAnimations = reduceAnimations,
@@ -312,13 +315,13 @@ fun LocationGuideSheet(
 ) {
     PermissionSheet(
         visible = visible,
-        title = "Konum ekle",
-        description = "Google Haritalar'da istediğiniz yeri seçin. Paylaş'a dokunun ve REAL'i seçin.",
+        title = t("Konum ekle"),
+        description = t("Google Haritalar'da istediğiniz yeri seçin. Paylaş'a dokunun ve REAL'i seçin."),
         onAllow = onOpenMaps,
         onLater = onCancel,
         reduceAnimations = reduceAnimations,
-        primaryLabel = "Google Haritalar'ı aç",
-        secondaryLabel = "Vazgeç",
+        primaryLabel = t("Google Haritalar'ı aç"),
+        secondaryLabel = t("Vazgeç"),
         glyph = PermissionGlyph.Pin
     )
 }

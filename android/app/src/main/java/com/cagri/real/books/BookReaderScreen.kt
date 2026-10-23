@@ -1,5 +1,6 @@
 package com.cagri.real.books
 
+import com.cagri.real.i18n.t
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -94,6 +95,7 @@ fun BookReaderScreen(
     chapterLabel: String, chapterTitle: String, paragraphs: List<String>, theme: ReaderTheme,
     onThemeChange: (ReaderTheme) -> Unit, onBack: () -> Unit,
     fontSp: Int, onFontSp: (Int) -> Unit,
+    readerFont: ReaderFont = ReaderFont.SANS, onReaderFont: (ReaderFont) -> Unit = {},
     modifier: Modifier = Modifier, loading: Boolean = false, error: String? = null,
     hasOriginal: Boolean = false, showOriginal: Boolean = false, onOriginal: () -> Unit = {},
     paged: PagedContent? = null, onRetry: () -> Unit = {}, reduceAnimations: Boolean = false,
@@ -106,7 +108,7 @@ fun BookReaderScreen(
     var currentPage by remember(paged) { mutableIntStateOf(paged?.initialPage ?: 0) }
     var pagedRestored by remember(paged) { mutableStateOf(false) }
     var pageRetry by remember { mutableIntStateOf(0) }
-    val family = rememberReaderFamily()
+    val family = rememberReaderFamily(readerFont)
     val bg = theme.background; val fg = theme.text
     val sectionInitials = remember(paragraphs) { ParagraphKind.sectionInitials(paragraphs) }
     val horizontal = paged != null && readMode == ReadMode.HORIZONTAL
@@ -187,7 +189,7 @@ fun BookReaderScreen(
                         PagedItem(i, paged, showOriginal, pageRetry, theme, family, bodyStyle, fontSp) { pageRetry++ }
                     }
                 } else {
-                    if (loading) item("loading") { Text("Sayfa hazırlanıyor…", color = theme.muted, fontFamily = family) }
+                    if (loading) item("loading") { Text(t("Sayfa hazırlanıyor…"), color = theme.muted, fontFamily = family) }
                     if (error != null) item("error") { ReaderRetry(error, theme, onRetry) }
                     itemsIndexed(paragraphs, key = { index, _ -> "paragraph_$index" }) { i, paragraph ->
                         ParagraphText(ParagraphKind.text(paragraph), first = i in sectionInitials, bodyStyle, fontSp, heading = ParagraphKind.isHeading(paragraph), attribution = ParagraphKind.isAttribution(paragraph), furniture = ParagraphKind.isFurniture(paragraph),
@@ -206,10 +208,23 @@ fun BookReaderScreen(
             AnimatedVisibility(chromeVisible,
                 enter = fadeIn(tween(if (reduceAnimations) 0 else 140)), exit = fadeOut(tween(if (reduceAnimations) 0 else 100))) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (hasOriginal) Text(if (showOriginal) "Metni oku" else "Orijinal sayfa", color = theme.muted, fontSize = 13.sp, fontFamily = family,
+                    if (hasOriginal) Text(if (showOriginal) t("Metni oku") else t("Orijinal sayfa"), color = theme.muted, fontSize = 13.sp, fontFamily = family,
                         modifier = Modifier.clickable(onClick = onOriginal).padding(6.dp))
                     AnimatedVisibility(showTextTools, enter = fadeIn(tween(if (reduceAnimations) 0 else 140)),
-                        exit = fadeOut(tween(if (reduceAnimations) 0 else 100))) { Row(verticalAlignment = Alignment.CenterVertically) {
+                        exit = fadeOut(tween(if (reduceAnimations) 0 else 100))) { Column(horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Yazı tipi: her seçenek kendi yazı tipiyle yazılır.
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ReaderFont.entries.forEach { f ->
+                                val on = f == readerFont
+                                Text(f.label, color = if (on) theme.background else theme.chromeText, fontSize = 13.sp,
+                                    fontFamily = rememberReaderFamily(f),
+                                    modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape)
+                                        .then(if (on) Modifier.background(theme.text) else Modifier.readerChrome(theme, 18.dp))
+                                        .clickable { onReaderFont(f) }.padding(horizontal = 14.dp, vertical = 8.dp))
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                         ReaderPill("A−", theme) { onFontSp((fontSp - 1).coerceAtLeast(ReaderDefaults.MIN_SP)) }
                         Text("$fontSp", color = theme.muted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 14.dp))
                         ReaderPill("A+", theme) { onFontSp((fontSp + 1).coerceAtMost(ReaderDefaults.MAX_SP)) }
@@ -219,7 +234,7 @@ fun BookReaderScreen(
                                 onReadMode(if (readMode == ReadMode.VERTICAL) ReadMode.HORIZONTAL else ReadMode.VERTICAL)
                             }
                         }
-                    } }
+                    } } }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(38.dp).readerChrome(theme, 19.dp).clickable { onThemeChange(theme.next()) }, contentAlignment = Alignment.Center) {
                             SunIcon(theme.chromeText)
@@ -301,12 +316,12 @@ private fun PagedItem(
         Text("${index + 1} / ${paged.count}", color = theme.muted, fontSize = 12.sp, fontFamily = family,
             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 14.dp))
         when (val s = state) {
-            PageState.Loading -> Text("Sayfa hazırlanıyor…", color = theme.muted, fontFamily = family)
-            PageState.Failed -> ReaderRetry("Sayfa şu an açılamadı. Biraz sonra tekrar deneyebilirsin.", theme, onRetry)
-            is PageState.Pic -> Image(s.bitmap.asImageBitmap(), "Orijinal sayfa ${index + 1}",
+            PageState.Loading -> Text(t("Sayfa hazırlanıyor…"), color = theme.muted, fontFamily = family)
+            PageState.Failed -> ReaderRetry(t("Sayfa şu an açılamadı. Biraz sonra tekrar deneyebilirsin."), theme, onRetry)
+            is PageState.Pic -> Image(s.bitmap.asImageBitmap(), t("Orijinal sayfa {0}", index + 1),
                 Modifier.fillMaxWidth().aspectRatio(s.bitmap.width.toFloat() / s.bitmap.height), contentScale = ContentScale.Fit)
             is PageState.Text -> if (s.paragraphs.isEmpty()) {
-                Text("Bu sayfada metin kalmadı. Orijinal sayfayı görüntüleyebilirsin.", color = theme.muted, fontFamily = family)
+                Text(t("Bu sayfada metin kalmadı. Orijinal sayfayı görüntüleyebilirsin."), color = theme.muted, fontFamily = family)
             } else {
               val initials = remember(s.paragraphs, s.followsHeading) { ParagraphKind.sectionInitials(s.paragraphs, s.followsHeading) }
               s.paragraphs.forEachIndexed { i, raw ->
@@ -317,7 +332,7 @@ private fun PagedItem(
                 if (pendingDelete == i) Column(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ReaderPill(if (heading) "Başlık değil" else "Başlık yap", theme) {
+                    ReaderPill(if (heading) t("Başlık değil") else t("Başlık yap"), theme) {
                         scope.launch {
                             try {
                                 paged.setHeading(index, i, !heading)
@@ -327,7 +342,7 @@ private fun PagedItem(
                             pendingDelete = -1
                         }
                     }
-                    ReaderPill("Sil", theme) {
+                    ReaderPill(t("Sil"), theme) {
                         scope.launch {
                             try {
                                 paged.deleteParagraph(index, i)
@@ -337,9 +352,9 @@ private fun PagedItem(
                             pendingDelete = -1
                         }
                     }
-                    ReaderPill("Vazgeç", theme) { pendingDelete = -1 }
+                    ReaderPill(t("Vazgeç"), theme) { pendingDelete = -1 }
                 }
-                ReaderPill("Metni yeniden ayır", theme, enabled = !rebuilding) {
+                ReaderPill(t("Metni yeniden ayır"), theme, enabled = !rebuilding) {
                     rebuildError = null
                     confirmRebuild = true
                 }
@@ -354,12 +369,12 @@ private fun PagedItem(
     if (confirmRebuild) Dialog(onDismissRequest = { if (!rebuilding) confirmRebuild = false }) {
         Column(Modifier.fillMaxWidth().readerChrome(theme, 24.dp).padding(22.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Sayfa metni yeniden ayrılsın mı?", color = theme.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Text("Yalnız bu sayfanın metni yeniden çıkarılır. Bu sayfada yaptığın başlık ve silme düzenlemeleri sıfırlanır. PDF dosyan değişmez.",
+            Text(t("Sayfa metni yeniden ayrılsın mı?"), color = theme.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("Yalnız bu sayfanın metni yeniden çıkarılır. Bu sayfada yaptığın başlık ve silme düzenlemeleri sıfırlanır. PDF dosyan değişmez."),
                 color = theme.muted, fontSize = 14.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ReaderPill("Vazgeç", theme, enabled = !rebuilding) { confirmRebuild = false }
-                ReaderPill(if (rebuilding) "Hazırlanıyor…" else "Yeniden ayır", theme, enabled = !rebuilding) {
+                ReaderPill(t("Vazgeç"), theme, enabled = !rebuilding) { confirmRebuild = false }
+                ReaderPill(if (rebuilding) t("Hazırlanıyor…") else t("Yeniden ayır"), theme, enabled = !rebuilding) {
                     rebuilding = true
                     scope.launch {
                         try {
@@ -370,7 +385,7 @@ private fun PagedItem(
                             onRetry()
                         } catch (e: CancellationException) { throw e }
                         catch (_: Exception) {
-                            rebuildError = "Metin yeniden ayrılamadı. Önceki metin korundu; tekrar deneyebilirsin."
+                            rebuildError = t("Metin yeniden ayrılamadı. Önceki metin korundu; tekrar deneyebilirsin.")
                             confirmRebuild = false
                         } finally { rebuilding = false }
                     }
@@ -384,7 +399,7 @@ private fun PagedItem(
 private fun ReaderRetry(message: String, theme: ReaderTheme, onRetry: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(message, color = theme.muted, fontSize = 12.sp)
-        Text("Tekrar dene", color = theme.text, fontSize = 13.sp,
+        Text(t("Tekrar dene"), color = theme.text, fontSize = 13.sp,
             modifier = Modifier.clickable(onClick = onRetry).padding(vertical = 12.dp))
     }
 }

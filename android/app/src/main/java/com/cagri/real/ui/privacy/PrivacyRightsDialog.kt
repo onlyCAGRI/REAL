@@ -1,5 +1,6 @@
 package com.cagri.real.ui.privacy
 
+import com.cagri.real.i18n.t
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context

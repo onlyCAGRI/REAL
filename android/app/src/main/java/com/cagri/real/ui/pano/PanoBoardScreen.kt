@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.rememberLauncherForActivityResult
 import com.cagri.real.ui.motion.RealEntrancePop
 import com.cagri.real.ui.motion.realEntrance
@@ -153,7 +154,7 @@ private fun PanoBarDivider(){
 
 @Composable
 private fun PanoPeopleChip(people:List<PanoMember>,canInvite:Boolean,onClick:()->Unit){
-    Row(Modifier.height(40.dp).liquidChrome(corners=20.dp).semantics{contentDescription="People"}
+    Row(Modifier.height(40.dp).liquidChrome(corners=20.dp).semantics{contentDescription=t("People")}
         .clickable(role=Role.Button,onClick=onClick).padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically){
         Row(horizontalArrangement=Arrangement.spacedBy((-8).dp),verticalAlignment=Alignment.CenterVertically){
             people.take(3).forEach{person->

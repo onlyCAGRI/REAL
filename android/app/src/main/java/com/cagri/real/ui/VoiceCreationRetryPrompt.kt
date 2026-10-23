@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -15,10 +16,10 @@ import androidx.compose.ui.unit.dp
 internal fun VoiceCreationRetryPrompt(busy: Boolean, onRetry: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     Surface(modifier.fillMaxWidth(), color = Color(0xF21C1C1E), shape = RoundedCornerShape(22.dp)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-            Text("Kaydedilemeyen kartların bilgileri korundu.", color = Color.White)
+            Text(t("Kaydedilemeyen kartların bilgileri korundu."), color = Color.White)
             Row {
-                TextButton(enabled = !busy, onClick = onRetry) { Text("Kalanları tekrar dene") }
-                TextButton(enabled = !busy, onClick = onDismiss) { Text("Kapat") }
+                TextButton(enabled = !busy, onClick = onRetry) { Text(t("Kalanları tekrar dene")) }
+                TextButton(enabled = !busy, onClick = onDismiss) { Text(t("Kapat")) }
             }
         }
     }

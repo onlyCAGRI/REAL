@@ -7,9 +7,41 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-/** Public iTunes catalog: no account, token, backend, or audio download. */
+/**
+ * The Apple Music catalog through the REAL Worker (/api/music-search: explicit originals too); the public iTunes
+ * catalog if the Worker fails or is not set up. The iTunes Search API only returns the "cleaned" version of explicit songs.
+ */
 object MusicCatalog {
-    suspend fun search(query: String): List<MusicBlock> = withContext(Dispatchers.IO) {
+    private const val ENDPOINT = "https://real-backend-staging.cagrigul1907.workers.dev/api/music-search"
+
+    suspend fun search(query: String): List<MusicBlock> =
+        runCatching { appleMusic(query) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: itunes(query)
+
+    private suspend fun appleMusic(query: String): List<MusicBlock> = withContext(Dispatchers.IO) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return@withContext emptyList()
+        val payload = JSONObject().put("query", trimmed.take(200)).put("storefront", storefront()).toString()
+        val response = com.cagri.real.network.WorkerClient(com.cagri.real.platform.android.auth.AndroidBackend.workerTransport)
+            .postJson(ENDPOINT, payload, 10_000, 10_000, readErrorBody = false)
+        check(response.statusCode in 200..299) { "HTTP ${response.statusCode} from REAL Worker music-search" }
+        val results = JSONObject(response.body).optJSONArray("results")
+        buildList {
+            for (index in 0 until (results?.length() ?: 0)) {
+                val item = results?.optJSONObject(index) ?: continue
+                val title = item.optString("title")
+                val link = secureUrl(item.optString("providerUrl")) ?: continue
+                if (title.isBlank()) continue
+                add(MusicBlock(title = title, artist = item.optString("artist"),
+                    album = item.optString("album").takeIf { it.isNotBlank() && it != "null" },
+                    artworkUrl = secureUrl(item.optString("artworkUrl")),
+                    provider = "iTunes", providerTrackId = item.optString("providerTrackId").takeIf { it.isNotBlank() && it != "null" },
+                    providerUrl = link, previewUrl = secureUrl(item.optString("previewUrl")),
+                    explicit = item.optBoolean("explicit", false)))
+            }
+        }
+    }
+
+    private suspend fun itunes(query: String): List<MusicBlock> = withContext(Dispatchers.IO) {
         val term = URLEncoder.encode(query.trim().take(200), "UTF-8")
         val connection = URL("https://itunes.apple.com/search?term=$term&entity=song&media=music&country=${storefront()}&limit=20")
             .openConnection() as HttpURLConnection

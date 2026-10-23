@@ -1,5 +1,6 @@
 package com.cagri.real.ui.share
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -35,16 +36,16 @@ internal fun SharedLinksSection(client: CardShareClient, currentId: String?) {
     val visible = links.filter { it.id != currentId }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Aktif paylaşım linkleri", Modifier.weight(1f), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("Aktif paylaşım linkleri"), Modifier.weight(1f), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
         }
         visible.forEach { link ->
             ConnectionCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(link.title.ifBlank { "Adsız kart" }, Modifier.weight(1f), color = Color.White, fontSize = 15.sp,
+                    Text(link.title.ifBlank { t("Adsız kart") }, Modifier.weight(1f), color = Color.White, fontSize = 15.sp,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.width(8.dp))
-                    ConnectionPill("Paylaşımı durdur", {
+                    ConnectionPill(t("Paylaşımı durdur"), {
                         busy = true
                         scope.launch {
                             try { client.revoke(link.id); links = links.filterNot { it.id == link.id }; error = null }
@@ -56,7 +57,7 @@ internal fun SharedLinksSection(client: CardShareClient, currentId: String?) {
                 }
             }
         }
-        if (visible.isEmpty() && !busy) Text("Şu an aktif paylaşım linkin yok.", color = ConnectionPalette.Muted, fontSize = 13.sp)
+        if (visible.isEmpty() && !busy) Text(t("Şu an aktif paylaşım linkin yok."), color = ConnectionPalette.Muted, fontSize = 13.sp)
         error?.let { ConnectionNote(it) }
     }
 }

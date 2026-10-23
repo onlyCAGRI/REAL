@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -95,7 +96,7 @@ internal fun DiscoveryLoadingButton(
             .background(Color.Black)
             .clickable(enabled = enabled && !loading, role = Role.Button, onClick = onClick),
             contentAlignment = Alignment.Center) {
-            Text(if (loading) "Hazırlanıyor…" else label, color = Color.White,
+            Text(if (loading) t("Hazırlanıyor…") else label, color = Color.White,
                 fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
     }

@@ -104,6 +104,17 @@ object ReminderJson {
                             sharedAuthorUid = item.optString("sharedAuthorUid", "").takeIf { it.isNotBlank() && it != "null" },
                             sharedAuthorName = item.optString("sharedAuthorName", "").takeIf { it.isNotBlank() && it != "null" },
                             earlyAlertMinutes = item.optInt("earlyAlertMinutes", 0).takeIf { it in 1..MAX_EARLY_ALERT_MINUTES },
+                            isAlarm = item.optBoolean("isAlarm", false),
+                            locationTrigger = item.optJSONObject("locationTrigger")?.let { t ->
+                                if (!t.has("latitude") || !t.has("longitude")) null
+                                else LocationTrigger(
+                                    placeName = t.optString("placeName", ""),
+                                    latitude = t.getDouble("latitude"),
+                                    longitude = t.getDouble("longitude"),
+                                    radiusMeters = t.optInt("radiusMeters", LocationTrigger.DEFAULT_RADIUS).coerceIn(50, 2000),
+                                    onExit = t.optBoolean("onExit", false)
+                                )
+                            },
                             isDivider = item.optBoolean("isDivider", false),
                             completionNote = item.optString("completionNote", "").takeIf { !item.isNull("completionNote") && it.isNotBlank() },
                             checkRequest = item.optJSONObject("checkRequest")?.let { c ->
@@ -181,6 +192,12 @@ object ReminderJson {
                         }
                         reminder.endAt?.let { obj.put("endAt", it) }
                         reminder.earlyAlertMinutes?.let { obj.put("earlyAlertMinutes", it) }
+                        if (reminder.isAlarm) obj.put("isAlarm", true)
+                        reminder.locationTrigger?.let { t ->
+                            obj.put("locationTrigger", JSONObject()
+                                .put("placeName", t.placeName).put("latitude", t.latitude).put("longitude", t.longitude)
+                                .put("radiusMeters", t.radiusMeters).put("onExit", t.onExit))
+                        }
                         if (reminder.isDivider) obj.put("isDivider", true)
                         reminder.completionNote?.let { obj.put("completionNote", it) }
                         reminder.checkRequest?.let { c -> obj.put("checkRequest", JSONObject().put("to", org.json.JSONArray(c.to)).put("at", c.at)

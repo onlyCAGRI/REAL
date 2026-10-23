@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.unit.IntOffset
 import androidx.activity.compose.BackHandler
@@ -124,9 +125,9 @@ fun CategoryEditor(
     val isBuiltIn = builtInCategory != null
     val isCustomEdit = customCategory != null
     val title = when {
-        isBuiltIn -> "${builtInCategory!!.title} Düzenle"
-        isCustomEdit -> "Kategoriyi Düzenle"
-        else -> "Yeni Kategori"
+        isBuiltIn -> t("{0} Düzenle", builtInCategory!!.title)
+        isCustomEdit -> t("Kategoriyi Düzenle")
+        else -> t("Yeni Kategori")
     }
 
     var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
@@ -289,7 +290,7 @@ fun CategoryEditor(
                 RealSheetHandle(Modifier.align(Alignment.CenterHorizontally))
                 EditorTopBar(
                     title = title,
-                    saveLabel = if (isCustomEdit || isBuiltIn) "Kaydet" else "Oluştur",
+                    saveLabel = if (isCustomEdit || isBuiltIn) t("Kaydet") else t("Oluştur"),
                     canSave = canSave,
                     onCancel = { requestDismiss() },
                     onSave = saveAction
@@ -300,7 +301,7 @@ fun CategoryEditor(
                     val previewCustomCategory = if (!isBuiltIn) {
                         CustomCategory(
                             id = customCategory?.id ?: Long.MIN_VALUE,
-                            name = name.ifBlank { "Yeni kategori" },
+                            name = name.ifBlank { t("Yeni kategori") },
                             iconKey = selectedIcon.key,
                             accentStart = selectedColor1 ?: DEFAULT_NEW_CATEGORY_COLOR_INDEX,
                             accentEnd = selectedColor2,
@@ -342,7 +343,7 @@ fun CategoryEditor(
                 ) {
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!isBuiltIn && !memberMode) {
-                        EditorSection(title = "AD") {
+                        EditorSection(title = t("AD")) {
                             EditorGroup {
                                 Row(
                                     Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp),
@@ -350,7 +351,7 @@ fun CategoryEditor(
                                 ) {
                                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                                         if (name.isEmpty()) {
-                                            Text("Kategori adı", color = Color(0xFF6F6F78), fontSize = 16.sp)
+                                            Text(t("Kategori adı"), color = Color(0xFF6F6F78), fontSize = 16.sp)
                                         }
                                         BasicTextField(
                                             value = name,
@@ -364,7 +365,7 @@ fun CategoryEditor(
                                             ),
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .semantics { contentDescription = "Kategori adı" }
+                                                .semantics { contentDescription = t("Kategori adı") }
                                         )
                                     }
                                     Text("${name.length}/20", color = Color(0xFF6F6F78), fontSize = 12.sp)
@@ -374,25 +375,25 @@ fun CategoryEditor(
                     }
 
                     if (memberMode) EditorSection(
-                        title = "AÇIKLAMA",
-                        footer = "Açıklamayı yalnızca kategori sahibi değiştirebilir."
+                        title = t("AÇIKLAMA"),
+                        footer = t("Açıklamayı yalnızca kategori sahibi değiştirebilir.")
                     ) {
                         EditorGroup {
                             Text(
-                                description.ifEmpty { "Kategori sahibi henüz açıklama yazmadı." },
+                                description.ifEmpty { t("Kategori sahibi henüz açıklama yazmadı.") },
                                 color = if (description.isEmpty()) Color(0xFF6F6F78) else Color(0xFFF3F3F5),
                                 fontSize = 15.sp, lineHeight = 20.sp,
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)
                             )
                         }
                     } else EditorSection(
-                        title = "AÇIKLAMA",
-                        footer = "Boş bırakırsan açıklama kutusu kaldırılır · ${categoryDescriptionWordCount(description)}/30 kelime"
+                        title = t("AÇIKLAMA"),
+                        footer = t("Boş bırakırsan açıklama kutusu kaldırılır · {0}/30 kelime", categoryDescriptionWordCount(description))
                     ) {
                         EditorGroup {
                             Box(Modifier.fillMaxWidth().heightIn(min = 76.dp).padding(horizontal = 16.dp, vertical = 14.dp)) {
                                 if (description.isEmpty()) {
-                                    Text("Bu kategori ne için?", color = Color(0xFF6F6F78), fontSize = 15.sp)
+                                    Text(t("Bu kategori ne için?"), color = Color(0xFF6F6F78), fontSize = 15.sp)
                                 }
                                 BasicTextField(
                                     value = description,
@@ -402,19 +403,19 @@ fun CategoryEditor(
                                     textStyle = TextStyle(color = Color(0xFFF3F3F5), fontSize = 15.sp, lineHeight = 20.sp),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .semantics { contentDescription = "Açıklama" }
+                                        .semantics { contentDescription = t("Açıklama") }
                                 )
                             }
                         }
                     }
                     }
 
-                    if (!memberMode) EditorSection(title = "RENK") {
+                    if (!memberMode) EditorSection(title = t("RENK")) {
                         EditorGroup {
                             val isColor2Enabled = !(isBuiltIn && selectedColor1 == null)
 
                             CategoryEditorColorRow(
-                                label = "Ana renk",
+                                label = t("Ana renk"),
                                 selectedIndex = selectedColor1,
                                 allowNone = isBuiltIn,
                                 noneGlyph = ActionGlyph.Undo,
@@ -433,7 +434,7 @@ fun CategoryEditor(
                             )
                             EditorDivider()
                             CategoryEditorColorRow(
-                                label = "Geçiş rengi",
+                                label = t("Geçiş rengi"),
                                 selectedIndex = selectedColor2,
                                 allowNone = true,
                                 noneGlyph = ActionGlyph.Close,
@@ -466,7 +467,7 @@ fun CategoryEditor(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "Geçiş",
+                                            text = t("Geçiş"),
                                             color = Color(0xFFF5F5F8),
                                             fontSize = 15.sp,
                                             modifier = Modifier.width(72.dp)
@@ -506,7 +507,7 @@ fun CategoryEditor(
                                                 .border(0.5.dp, Color.White.copy(alpha = 0.4f), CircleShape)
                                         )
                                         Text(
-                                            text = "Geçiş rengini kullan",
+                                            text = t("Geçiş rengini kullan"),
                                             color = Color(0xFFE2E2EA),
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Medium
@@ -518,7 +519,7 @@ fun CategoryEditor(
                     }
 
                     if (!isBuiltIn && !memberMode) {
-                        EditorSection(title = "İKON") {
+                        EditorSection(title = t("İKON")) {
                             EditorGroup {
                                 val selectableIcons = remember { CategoryIcon.selectableEntries }
                                 FlowRow(
@@ -547,7 +548,7 @@ fun CategoryEditor(
                                                     onClick = { selectedIcon = icon }
                                                 )
                                                 .semantics {
-                                                    contentDescription = if (isSelected) "İkon: ${icon.label}, seçili" else "İkon: ${icon.label}"
+                                                    contentDescription = if (isSelected) t("İkon: {0}, seçili", icon.label) else t("İkon: {0}", icon.label)
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -575,12 +576,12 @@ fun CategoryEditor(
                     // Text on the category colour is now black or white automatically (categoryPalette), so the
                     // manual "Koyu renk metin" switch is gone.
                     // "REAL takviminde göster" is gone: the category screen has its own goals / calendar button now.
-                    if (!isBuiltIn) EditorSection(title = "GÖRÜNÜM") {
+                    if (!isBuiltIn) EditorSection(title = t("GÖRÜNÜM")) {
                         EditorGroup {
                             if (!isBuiltIn) {
                                 EditorSwitchRow(
-                                    title = "Yalnızca kategori içinde göster",
-                                    subtitle = "Kartlar genel listelerde görünmez.",
+                                    title = t("Yalnızca kategori içinde göster"),
+                                    subtitle = t("Kartlar genel listelerde görünmez."),
                                     checked = hideFromGeneralLists,
                                     onCheckedChange = { hideFromGeneralLists = it }
                                 )
@@ -597,7 +598,7 @@ fun CategoryEditor(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Text(
-                                        text = "Bu kategoriyi silmek istiyor musun?",
+                                        text = t("Bu kategoriyi silmek istiyor musun?"),
                                         color = Color(0xFFF5F5F8),
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -605,7 +606,7 @@ fun CategoryEditor(
                                         modifier = Modifier.padding(horizontal = 16.dp)
                                     )
                                     EditorSwitchRow(
-                                        title = "Kategori içindeki kutucukları da sil",
+                                        title = t("Kategori içindeki kutucukları da sil"),
                                         checked = deleteRemindersOption,
                                         onCheckedChange = { deleteRemindersOption = it },
                                         tint = Color(0xFFFF6B73)
@@ -621,7 +622,7 @@ fun CategoryEditor(
                                                 .background(Color.White.copy(alpha = 0.08f))
                                                 .clickable(role = Role.Button) { showDeleteConfirm = false },
                                             contentAlignment = Alignment.Center
-                                        ) { Text("Vazgeç", color = Color(0xFFE9E9EF), fontSize = 15.sp, fontWeight = FontWeight.Medium) }
+                                        ) { Text(t("Vazgeç"), color = Color(0xFFE9E9EF), fontSize = 15.sp, fontWeight = FontWeight.Medium) }
                                         Box(
                                             modifier = Modifier
                                                 .weight(1f).height(46.dp)
@@ -633,7 +634,7 @@ fun CategoryEditor(
                                                     onDeleteCustomCategory.invoke(deleteRemindersOption)
                                                 },
                                             contentAlignment = Alignment.Center
-                                        ) { Text("Sil", color = Color(0xFFFF9AA0), fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                                        ) { Text(t("Sil"), color = Color(0xFFFF9AA0), fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
                                     }
                                 }
                             } else {
@@ -652,7 +653,7 @@ fun CategoryEditor(
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        text = "Kategoriyi sil",
+                                        text = t("Kategoriyi sil"),
                                         color = Color(0xFFFF9AA0),
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Medium
@@ -686,7 +687,7 @@ private fun EditorTopBar(title: String, saveLabel: String, canSave: Boolean, onC
                 .clickable(role = Role.Button, onClick = onCancel)
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center
-        ) { Text("Vazgeç", color = EditorBlue, fontSize = 16.sp) }
+        ) { Text(t("Vazgeç"), color = EditorBlue, fontSize = 16.sp) }
         Text(
             text = title,
             modifier = Modifier.weight(1f),
@@ -839,9 +840,9 @@ private fun CategoryEditorColorRow(
                             )
                             .semantics {
                                 contentDescription = if (selected) {
-                                    "$label: Varsayılan, seçili"
+                                    t("{0}: Varsayılan, seçili", label)
                                 } else {
-                                    "$label: Varsayılan"
+                                    t("{0}: Varsayılan", label)
                                 }
                             },
                         contentAlignment = Alignment.Center
@@ -882,7 +883,7 @@ private fun CategoryEditorColorRow(
                         )
                         .semantics {
                             contentDescription = if (selected) {
-                                "$label: ${choice.label}, seçili"
+                                t("{0}: {1}, seçili", label, choice.label)
                             } else {
                                 "$label: ${choice.label}"
                             }

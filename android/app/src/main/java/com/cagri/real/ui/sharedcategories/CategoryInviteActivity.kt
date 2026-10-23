@@ -1,5 +1,6 @@
 package com.cagri.real.ui.sharedcategories
 
+import com.cagri.real.i18n.t
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -57,22 +58,22 @@ private fun CategoryInviteScreen(token: String, onClose: () -> Unit, onSignIn: (
         LaunchedEffect(api) { if (api != null) preview() }
         Column(Modifier.fillMaxSize().background(Color.Black).systemBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.Center) {
-            Text("REAL kategori daveti", color = Color.White, fontSize = 28.sp)
+            Text(t("REAL kategori daveti"), color = Color.White, fontSize = 28.sp)
             Spacer(Modifier.height(16.dp))
             when {
                 user == null -> {
-                    Text("Daveti görmek için REAL hesabınla giriş yap, ardından bağlantıya geri dön.", color = Color.Gray)
-                    ConnectionPill("Giriş yap", onSignIn, Modifier.padding(top = 18.dp), filled = true)
+                    Text(t("Daveti görmek için REAL hesabınla giriş yap, ardından bağlantıya geri dön."), color = Color.Gray)
+                    ConnectionPill(t("Giriş yap"), onSignIn, Modifier.padding(top = 18.dp), filled = true)
                 }
                 user.displayName.isNullOrBlank() -> com.cagri.real.ui.auth.ProfileNameForm(user, onSaved = {})
                 accepted -> {
-                    Text("Kategoriye katıldın. Hedefler Kartlarım'a kopyalanmaz; takvimde Paylaşılan kategoriler altında görünür.", color = Color.Gray)
-                    ConnectionPill("Kategoriyi aç", { openCategory = true }, Modifier.padding(top = 18.dp), filled = true)
+                    Text(t("Kategoriye katıldın. Hedefler Kartlarım'a kopyalanmaz; takvimde Paylaşılan kategoriler altında görünür."), color = Color.Gray)
+                    ConnectionPill(t("Kategoriyi aç"), { openCategory = true }, Modifier.padding(top = 18.dp), filled = true)
                 }
                 title != null -> {
                     Text("$owner · $title", color = Color.White, fontSize = 20.sp)
-                    Text("Kabul edersen kategori hedeflerini, eklerini ve ortak linki görebilirsin. Ayrıca birbirinizin REAL Connections listesine ekleneceksiniz. Düzenleme kategori sahibine aittir.", color = Color.Gray, modifier = Modifier.padding(top = 10.dp))
-                    ConnectionPill("Kabul et", {
+                    Text(t("Kabul edersen kategori hedeflerini, eklerini ve ortak linki görebilirsin. Ayrıca birbirinizin REAL Connections listesine ekleneceksiniz. Düzenleme kategori sahibine aittir."), color = Color.Gray, modifier = Modifier.padding(top = 10.dp))
+                    ConnectionPill(t("Kabul et"), {
                         busy = true; error = null
                         scope.launch {
                             try { checkNotNull(api).accept(token); accepted = true
@@ -88,8 +89,8 @@ private fun CategoryInviteScreen(token: String, onClose: () -> Unit, onSignIn: (
                 }
             }
             if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.padding(top = 18.dp).size(24.dp), color = Color.White, strokeWidth = 2.dp)
-            error?.let { ConnectionNote(it); ConnectionPill("Yeniden dene", { scope.launch { preview() } }, enabled = !busy) }
-            ConnectionPill("Kapat", onClose, Modifier.padding(top = 18.dp))
+            error?.let { ConnectionNote(it); ConnectionPill(t("Yeniden dene"), { scope.launch { preview() } }, enabled = !busy) }
+            ConnectionPill(t("Kapat"), onClose, Modifier.padding(top = 18.dp))
         }
         if (openCategory) SharedCategoryBrowser(reduceAnimations = false) { openCategory = false }
     }

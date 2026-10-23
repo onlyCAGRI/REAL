@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -87,7 +88,7 @@ fun WhatsAppRecipientSheet(
         if (normalized != null) {
             onSaveRecipient(normalized)
         } else {
-            com.cagri.real.ui.components.RealToast.show(context, "Lütfen geçerli bir telefon numarası girin (örn. 05xx xxx xx xx)")
+            com.cagri.real.ui.components.RealToast.show(context, t("Lütfen geçerli bir telefon numarası girin (örn. 05xx xxx xx xx)"))
         }
     }
 
@@ -153,7 +154,7 @@ fun WhatsAppRecipientSheet(
 
                     
                     Text(
-                        text = "WhatsApp numaran",
+                        text = t("WhatsApp numaran"),
                         color = Color.White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
@@ -164,7 +165,7 @@ fun WhatsAppRecipientSheet(
 
                     
                     Text(
-                        text = "Hatırlatıcılarını hangi WhatsApp numarasına göndereyim?",
+                        text = t("Hatırlatıcılarını hangi WhatsApp numarasına göndereyim?"),
                         color = Color(0xFFA4A4AD),
                         fontSize = 14.sp,
                         lineHeight = 20.sp
@@ -185,7 +186,7 @@ fun WhatsAppRecipientSheet(
                     ) {
                         if (phoneInput.isEmpty()) {
                             Text(
-                                text = "+90 5xx xxx xx xx",
+                                text = t("+90 5xx xxx xx xx"),
                                 color = Color(0xFF6E6E78),
                                 fontSize = 16.sp
                             )
@@ -226,7 +227,7 @@ fun WhatsAppRecipientSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Kaydet",
+                            text = t("Kaydet"),
                             color = Color.Black,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
@@ -245,7 +246,7 @@ fun WhatsAppRecipientSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Vazgeç",
+                            text = t("Vazgeç"),
                             color = Color(0xFFA4A4AD),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium

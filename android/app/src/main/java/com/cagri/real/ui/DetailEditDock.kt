@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import com.cagri.real.ui.components.RealMotion
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -50,8 +51,8 @@ internal fun DetailEditDock(
         Box(
             Modifier.fillMaxWidth().height(20.dp)
                 .semantics {
-                    contentDescription = "Düzenleme dock'u"
-                    stateDescription = if (currentCollapsed) "Küçültülmüş" else "Açık"
+                    contentDescription = t("Düzenleme dock'u")
+                    stateDescription = if (currentCollapsed) t("Küçültülmüş") else t("Açık")
                 }
                 .pointerInput(enabled, density) {
                     if (!enabled) return@pointerInput
@@ -68,7 +69,7 @@ internal fun DetailEditDock(
                     )
                 }
                 .clickable(interactionSource = interaction, indication = null, enabled = enabled,
-                    role = Role.Button, onClickLabel = if (currentCollapsed) "Dock'u aç" else "Dock'u küçült") {
+                    role = Role.Button, onClickLabel = if (currentCollapsed) t("Dock'u aç") else t("Dock'u küçült")) {
                     currentChange(!currentCollapsed)
                 }, contentAlignment = Alignment.Center
         ) {

@@ -108,6 +108,7 @@ internal class AndroidSyncBinaries(private val context:Context,private val db:Sy
             when {
                 failure.status in setOf(401,403,423) -> throw failure
                 failure.status==413 -> throw SyncBinaryFailure(id, SyncBinaryCode.FILE_TOO_LARGE, false, failure)
+                failure.status==507 -> throw SyncBinaryFailure(id, SyncBinaryCode.STORAGE_FULL, true, failure)
                 failure.status in setOf(404,410) -> throw SyncBinaryFailure(id, SyncBinaryCode.REMOTE_FILE_UNAVAILABLE, false, failure)
                 failure.status in setOf(409,429) || failure.status>=500 -> throw SyncBinaryFailure(id, SyncBinaryCode.TRANSFER_PENDING, true, failure)
                 else -> throw failure

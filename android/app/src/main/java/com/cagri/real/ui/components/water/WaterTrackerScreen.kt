@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.water
 
+import com.cagri.real.i18n.t
 import android.os.Build
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -178,23 +179,23 @@ internal fun WaterTrackerScreen(
                 }
                 Box(Modifier.fillMaxWidth().weight(1f)) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
-                        com.cagri.real.ui.components.RealBackButton(onDismiss, description = "İçecek ekranını kapat")
+                        com.cagri.real.ui.components.RealBackButton(onDismiss, description = t("İçecek ekranını kapat"))
                         Spacer(Modifier.height(16.dp))
                         Text(beverage.label, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(2.dp))
                         BeverageGlassAmount(
-                            text = if (isWater) "Bugün: $totalMl / $targetMl ml" else "Bugün: ${beverageAmountText(beverage, totalMl)}",
+                            text = if (isWater) t("Bugün: {0} / {1} ml", totalMl, targetMl) else t("Bugün: {0}", beverageAmountText(beverage, totalMl)),
                             reduceAnimations = reduceAnimations,
                             modifier = Modifier
                                 .clickable(enabled = canWrite && isWater, role = Role.Button) { goalDialog = true }
-                                .semantics { contentDescription = if (isWater) "Su hedefini değiştir. Bugün $totalMl, hedef $targetMl mililitre" else "Bugün $totalMl mililitre ${beverage.label}" }
+                                .semantics { contentDescription = if (isWater) t("Su hedefini değiştir. Bugün {0}, hedef {1} mililitre", totalMl, targetMl) else t("Bugün {0} mililitre {1}", totalMl, beverage.label) }
                                 .padding(vertical = 9.dp)
                         )
                         if (state.error != null) {
                             Text(state.error.orEmpty(), color = Color(0xFFFFCEBB), fontSize = 14.sp,
                                 modifier = Modifier.clickable { state.retry() }.padding(vertical = 8.dp))
                         } else if (!state.ready) {
-                            Text("Yükleniyor…", color = Color.White.copy(alpha = 0.65f), fontSize = 14.sp)
+                            Text(t("Yükleniyor…"), color = Color.White.copy(alpha = 0.65f), fontSize = 14.sp)
                         }
                     }
                 }
@@ -228,7 +229,7 @@ internal fun WaterTrackerScreen(
                 ) {
                     Column(Modifier.fillMaxSize().padding(top = 18.dp)) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Bugün", color = Color.White, fontSize = 26.sp)
+                            Text(t("Bugün"), color = Color.White, fontSize = 26.sp)
                             Spacer(Modifier.weight(1f))
                             Text(
                                 if (isWater) "$displayPercent%"
@@ -239,7 +240,7 @@ internal fun WaterTrackerScreen(
                             )
                         }
                         if (entries.isEmpty()) {
-                            Text("İlk yudumunu ekle.", color = Color(0xFFA3A6AA), fontSize = 15.sp,
+                            Text(t("İlk yudumunu ekle."), color = Color(0xFFA3A6AA), fontSize = 15.sp,
                                 modifier = Modifier.padding(24.dp))
                         } else {
                             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
@@ -254,7 +255,7 @@ internal fun WaterTrackerScreen(
                                             color = Color.White.copy(alpha = 0.70f), fontSize = 13.sp)
                                         Box(Modifier.size(44.dp).clip(CircleShape)
                                             .clickable(enabled = canWrite, role = Role.Button) { state.remove(entry.id) }
-                                            .semantics { contentDescription = "${entry.amountMl} mililitre kaydını geri al" },
+                                            .semantics { contentDescription = t("{0} mililitre kaydını geri al", entry.amountMl) },
                                             contentAlignment = Alignment.Center) {
                                             Text("−", color = Color(0xFFB9BEC0), fontSize = 20.sp)
                                         }
@@ -266,7 +267,7 @@ internal fun WaterTrackerScreen(
                 }
             }
         }
-        if (goalDialog) WaterAmountDialog("Günlük su hedefi", "Hedef (ml)", state.snapshot.goalMl.toString(), 100..10_000,
+        if (goalDialog) WaterAmountDialog(t("Günlük su hedefi"), t("Hedef (ml)"), state.snapshot.goalMl.toString(), 100..10_000,
             onDismiss = { goalDialog = false }, onConfirm = { state.goal(it); goalDialog = false })
     }
 }
@@ -275,7 +276,7 @@ internal fun WaterTrackerScreen(
 private fun beverageAmountText(beverage: BeverageType, amountMl: Long): String {
     if (beverage != BeverageType.BEER) return "$amountMl ml"
     return if (amountMl % 10L == 0L) {
-        "${amountMl / 10L} cl"
+        t("{0} cl", amountMl / 10L)
     } else {
         val cl = amountMl / 10.0
         "${String.format(java.util.Locale.getDefault(), "%.1f", cl)} cl"
@@ -351,7 +352,7 @@ private fun QuickWaterAdd(
             Modifier.fillMaxWidth().heightIn(min = 50.dp)
                 .clip(RoundedCornerShape(26.dp))
                 .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-                .semantics { contentDescription = "$amountLabel $beverageLabel ekle" }
+                .semantics { contentDescription = t("{0} {1} ekle", amountLabel, beverageLabel) }
                 .padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -401,7 +402,7 @@ private fun WaterAmountDialog(
                 shape = RoundedCornerShape(20.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 isError = value.isNotEmpty() && !valid,
-                supportingText = { Text("${range.first}–${range.last} ml") },
+                supportingText = { Text(t("{0}–{1} ml", range.first, range.last)) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(18.dp))
@@ -413,7 +414,7 @@ private fun WaterAmountDialog(
                         .clickable(role = Role.Button, onClick = onDismiss),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Vazgeç", color = Color.White.copy(alpha = 0.76f), fontSize = 14.sp)
+                    Text(t("Vazgeç"), color = Color.White.copy(alpha = 0.76f), fontSize = 14.sp)
                 }
                 Box(
                     Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(24.dp))
@@ -424,7 +425,7 @@ private fun WaterAmountDialog(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Kaydet", color = Color.White.copy(alpha = if (valid) 0.96f else 0.38f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(t("Kaydet"), color = Color.White.copy(alpha = if (valid) 0.96f else 0.38f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }

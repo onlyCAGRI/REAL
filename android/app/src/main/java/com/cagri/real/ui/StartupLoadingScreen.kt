@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.*
 import androidx.compose.animation.core.*
 import androidx.compose.material3.*
@@ -77,9 +78,9 @@ fun StartupLoadingScreen(offline: Boolean, onRetry: () -> Unit, onUseLocal: () -
             Column(Modifier.fillMaxSize().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center) {
-                Text("Kartlar henüz yüklenemedi. Bağlantını kontrol edebilirsin.", color = Color.LightGray)
-                TextButton(onClick = onRetry) { Text("Yeniden dene") }
-                TextButton(onClick = onUseLocal) { Text("Yerel olarak devam et") }
+                Text(t("Kartlar henüz yüklenemedi. Bağlantını kontrol edebilirsin."), color = Color.LightGray)
+                TextButton(onClick = onRetry) { Text(t("Yeniden dene")) }
+                TextButton(onClick = onUseLocal) { Text(t("Yerel olarak devam et")) }
             }
         } else {
             StartupCardSkeleton(
@@ -119,7 +120,7 @@ private fun StartupCardSkeleton(modifier: Modifier = Modifier, categoryCount: In
     }
     Spacer(
         modifier
-            .semantics { contentDescription = "Kartlar yükleniyor" }
+            .semantics { contentDescription = t("Kartlar yükleniyor") }
             .drawWithCache {
                 // Match ReminderScreen: status inset, 20dp header top, 42dp header,
                 // 22dp gap, 16dp side margins and vertically overlapping categories.

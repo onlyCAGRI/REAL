@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.annotation.SuppressLint
 
 import androidx.compose.foundation.background
@@ -49,54 +50,54 @@ import com.cagri.real.ui.DesignStyle
 
 data class ReminderColorChoice(val label: String, val color: Color)
 
-val ReminderColorChoices = listOf(
+val ReminderColorChoices get() = listOf(
     // REAL 2026 palette — rebuilt from the approved visual references.
     // The six reference colors are kept at their exact supplied hex values.
-    ReminderColorChoice("Duman Beyazı", Color(0xFFEFF0F6)), // Smoky White — exact reference
-    ReminderColorChoice("Jet Siyahı", Color(0xFF292B2D)),   // Jet Black — exact reference
-    ReminderColorChoice("Royal Mavi", Color(0xFF4558C8)),  // Royal Blue — exact reference
-    ReminderColorChoice("Gece Mavisi", Color(0xFF263C74)),
-    ReminderColorChoice("Gökyüzü", Color(0xFF78C9F2)),
-    ReminderColorChoice("Petrol", Color(0xFF2E8793)),
-    ReminderColorChoice("Turkuaz", Color(0xFF50C4B7)),
-    ReminderColorChoice("Nane", Color(0xFF8ED9B6)),
-    ReminderColorChoice("Zümrüt", Color(0xFF36A269)),
+    ReminderColorChoice(t("Duman Beyazı"), Color(0xFFEFF0F6)), // Smoky White — exact reference
+    ReminderColorChoice(t("Jet Siyahı"), Color(0xFF292B2D)),   // Jet Black — exact reference
+    ReminderColorChoice(t("Royal Mavi"), Color(0xFF4558C8)),  // Royal Blue — exact reference
+    ReminderColorChoice(t("Gece Mavisi"), Color(0xFF263C74)),
+    ReminderColorChoice(t("Gökyüzü"), Color(0xFF78C9F2)),
+    ReminderColorChoice(t("Petrol"), Color(0xFF2E8793)),
+    ReminderColorChoice(t("Turkuaz"), Color(0xFF50C4B7)),
+    ReminderColorChoice(t("Nane"), Color(0xFF8ED9B6)),
+    ReminderColorChoice(t("Zümrüt"), Color(0xFF36A269)),
     ReminderColorChoice("Old Flax", Color(0xFFDFF37D)),    // Old flax — exact reference
-    ReminderColorChoice("Altın", Color(0xFFE5B84D)),
-    ReminderColorChoice("Bronz", Color(0xFFA77952)),
-    ReminderColorChoice("Somon Turuncu", Color(0xFFEE5E37)), // Salmon orange — exact reference
-    ReminderColorChoice("Mercan", Color(0xFFE9786A)),
-    ReminderColorChoice("Gül", Color(0xFFDE6D98)),
-    ReminderColorChoice("Yakut", Color(0xFFA83B5D)),
-    ReminderColorChoice("Fuşya", Color(0xFFC85AB4)),
-    ReminderColorChoice("Lavanta", Color(0xFFD9B8F3)),     // Purple — exact reference
-    ReminderColorChoice("Menekşe", Color(0xFF8666D6)),
-    ReminderColorChoice("Erik", Color(0xFF70436F)),
+    ReminderColorChoice(t("Altın"), Color(0xFFE5B84D)),
+    ReminderColorChoice(t("Bronz"), Color(0xFFA77952)),
+    ReminderColorChoice(t("Somon Turuncu"), Color(0xFFEE5E37)), // Salmon orange — exact reference
+    ReminderColorChoice(t("Mercan"), Color(0xFFE9786A)),
+    ReminderColorChoice(t("Gül"), Color(0xFFDE6D98)),
+    ReminderColorChoice(t("Yakut"), Color(0xFFA83B5D)),
+    ReminderColorChoice(t("Fuşya"), Color(0xFFC85AB4)),
+    ReminderColorChoice(t("Lavanta"), Color(0xFFD9B8F3)),     // Purple — exact reference
+    ReminderColorChoice(t("Menekşe"), Color(0xFF8666D6)),
+    ReminderColorChoice(t("Erik"), Color(0xFF70436F)),
     // Collection reference colors: append only, because saved choices use list indices.
-    ReminderColorChoice("Koleksiyon Lavanta", Color(0xFFDAB7F3)),
-    ReminderColorChoice("Koleksiyon Lime", Color(0xFFE0F37D)),
-    ReminderColorChoice("Koleksiyon Mavi", Color(0xFF4658C8)),
-    ReminderColorChoice("Koleksiyon Turuncu", Color(0xFFEE5E36)),
+    ReminderColorChoice(t("Koleksiyon Lavanta"), Color(0xFFDAB7F3)),
+    ReminderColorChoice(t("Koleksiyon Lime"), Color(0xFFE0F37D)),
+    ReminderColorChoice(t("Koleksiyon Mavi"), Color(0xFF4658C8)),
+    ReminderColorChoice(t("Koleksiyon Turuncu"), Color(0xFFEE5E36)),
     // Vivid companions (from the analytics references), each shown next to the colour it echoes. Index 24 + (k - 2)
     // is the companion of colour k; append only, since saved choices use list indices.
-    ReminderColorChoice("Elektrik Mavisi", Color(0xFF2F5BEA)),
-    ReminderColorChoice("Lacivert", Color(0xFF1B2A6B)),
+    ReminderColorChoice(t("Elektrik Mavisi"), Color(0xFF2F5BEA)),
+    ReminderColorChoice(t("Lacivert"), Color(0xFF1B2A6B)),
     ReminderColorChoice("Periwinkle", Color(0xFF8FA8E6)),
-    ReminderColorChoice("Adaçayı Koyu", Color(0xFF3E6E62)),
+    ReminderColorChoice(t("Adaçayı Koyu"), Color(0xFF3E6E62)),
     ReminderColorChoice("Aqua", Color(0xFF2ED3A2)),
-    ReminderColorChoice("Adaçayı", Color(0xFF8FB5A2)),
-    ReminderColorChoice("Yaprak", Color(0xFF6BB300)),
-    ReminderColorChoice("Neon Sarı", Color(0xFFE8F24A)),
-    ReminderColorChoice("Zeytin", Color(0xFFB6B12E)),
-    ReminderColorChoice("Bakır", Color(0xFFA0603C)),
-    ReminderColorChoice("Yanık Turuncu", Color(0xFFD9622B)),
-    ReminderColorChoice("Somon", Color(0xFFE6806D)),
-    ReminderColorChoice("Şeker Pembe", Color(0xFFE58BC6)),
-    ReminderColorChoice("Şarap", Color(0xFFA3123F)),
+    ReminderColorChoice(t("Adaçayı"), Color(0xFF8FB5A2)),
+    ReminderColorChoice(t("Yaprak"), Color(0xFF6BB300)),
+    ReminderColorChoice(t("Neon Sarı"), Color(0xFFE8F24A)),
+    ReminderColorChoice(t("Zeytin"), Color(0xFFB6B12E)),
+    ReminderColorChoice(t("Bakır"), Color(0xFFA0603C)),
+    ReminderColorChoice(t("Yanık Turuncu"), Color(0xFFD9622B)),
+    ReminderColorChoice(t("Somon"), Color(0xFFE6806D)),
+    ReminderColorChoice(t("Şeker Pembe"), Color(0xFFE58BC6)),
+    ReminderColorChoice(t("Şarap"), Color(0xFFA3123F)),
     ReminderColorChoice("Magenta", Color(0xFFE0136C)),
-    ReminderColorChoice("Leylak", Color(0xFFC9A6E8)),
-    ReminderColorChoice("Mor", Color(0xFF8D6BE0)),
-    ReminderColorChoice("Mürdüm", Color(0xFF5A2440))
+    ReminderColorChoice(t("Leylak"), Color(0xFFC9A6E8)),
+    ReminderColorChoice(t("Mor"), Color(0xFF8D6BE0)),
+    ReminderColorChoice(t("Mürdüm"), Color(0xFF5A2440))
 )
 
 /**
@@ -216,9 +217,9 @@ fun ReminderColorPicker(
             Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 13.dp),
             verticalArrangement = Arrangement.spacedBy(11.dp)
         ) {
-            Text("Kart renkleri", color = Color(0xFFF0F0F4), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            ColorChoiceRow("Ana renk", startIndex, onSelected = { value -> proAction { onStartChange(value) } })
-            ColorChoiceRow("Geçiş rengi", endIndex, onSelected = { value -> proAction { onEndChange(value) } })
+            Text(t("Kart renkleri"), color = Color(0xFFF0F0F4), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            ColorChoiceRow(t("Ana renk"), startIndex, onSelected = { value -> proAction { onStartChange(value) } })
+            ColorChoiceRow(t("Geçiş rengi"), endIndex, onSelected = { value -> proAction { onEndChange(value) } })
             // Star ring is always white now, so there is no ring colour to pick.
             if (startChoice != null && endChoice != null) {
                 val fraction = resolveGradientBlendFraction(gradientBlendFraction)
@@ -230,7 +231,7 @@ fun ReminderColorPicker(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Geçiş", color = Color(0xFFB7B7C0), fontSize = 11.sp, modifier = Modifier.width(96.dp))
+                        Text(t("Geçiş"), color = Color(0xFFB7B7C0), fontSize = 11.sp, modifier = Modifier.width(96.dp))
                         ContinuousGradientTransitionBar(
                             fraction = fraction,
                             onFractionChange = { value -> proAction { onGradientBlendFractionChange(value) } },
@@ -266,7 +267,7 @@ fun ReminderColorPicker(
                                         .border(0.5.dp, Color.White.copy(alpha = 0.4f), CircleShape)
                                 )
                                 Text(
-                                    text = "Geçiş rengini kullan",
+                                    text = t("Geçiş rengini kullan"),
                                     color = Color(0xFFC8C8D2),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium
@@ -315,7 +316,7 @@ fun ReminderColorPicker(
                         }
                     }
                     Text(
-                        text = "Koyu renk metin kullan (Siyah)",
+                        text = t("Koyu renk metin kullan (Siyah)"),
                         color = if (useDarkText) Color(0xFFF5F5F8) else Color(0xFFB7B7C0),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
@@ -356,7 +357,7 @@ private fun ColorChoiceRow(
                                 role = Role.RadioButton,
                                 onClick = { onSelected(null) }
                             )
-                            .semantics { contentDescription = "$label: Renk yok (Varsayılan)" },
+                            .semantics { contentDescription = t("{0}: Renk yok (Varsayılan)", label) },
                         contentAlignment = Alignment.Center
                     ) {
                         ActionIcon(
@@ -432,7 +433,7 @@ fun ContinuousGradientTransitionBar(
                     }
                 }
             }
-            .semantics { contentDescription = "Geçiş çubuğu" },
+            .semantics { contentDescription = t("Geçiş çubuğu") },
         contentAlignment = Alignment.CenterStart
     ) {
         val totalWidth = maxWidth

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.i18n.t
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -146,7 +147,7 @@ internal fun PlannerEventEditor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                error = "Kaydedilemedi. Yeniden dene."
+                error = t("Kaydedilemedi. Yeniden dene.")
             } finally {
                 saving = false
             }
@@ -214,7 +215,7 @@ internal fun PlannerEventEditor(
                     decorationBox = { inner ->
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                             if (title.isEmpty()) {
-                                Text("Aklında ne var?", color = Color(0xFF8E8E96), style = RealType.composerPrompt)
+                                Text(t("Aklında ne var?"), color = Color(0xFF8E8E96), style = RealType.composerPrompt)
                             }
                             inner()
                         }
@@ -232,7 +233,7 @@ internal fun PlannerEventEditor(
                             }
                         )
                         .clickable(enabled = valid && !saving, role = Role.Button, onClick = ::save)
-                        .semantics { contentDescription = "Takvim kartını kaydet" },
+                        .semantics { contentDescription = t("Takvim kartını kaydet") },
                     contentAlignment = Alignment.Center
                 ) {
                     if (saving) {
@@ -270,7 +271,7 @@ internal fun PlannerEventEditor(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Başlangıç", color = Color.White.copy(alpha = 0.50f), fontSize = 9.sp)
+                        Text(t("Başlangıç"), color = Color.White.copy(alpha = 0.50f), fontSize = 9.sp)
                         Text(
                             "${day.dayOfMonth} ${plannerMonthLabel(day)} · ${formatTimeAmPm(startMillis, ZoneId.systemDefault())}",
                             color = Color.White,
@@ -294,7 +295,7 @@ internal fun PlannerEventEditor(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Bitiş", color = Color.White.copy(alpha = 0.50f), fontSize = 9.sp)
+                        Text(t("Bitiş"), color = Color.White.copy(alpha = 0.50f), fontSize = 9.sp)
                         Text(
                             if (endMillis != null) {
                                 val endDay = java.time.Instant.ofEpochMilli(endMillis).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -336,7 +337,7 @@ internal fun PlannerEventEditor(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "$mins min",
+                            t("{0} min", mins),
                             color = if (isSelected) Color(0xFFDCE9FF) else Color.White.copy(alpha = 0.72f),
                             fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
@@ -354,7 +355,7 @@ internal fun PlannerEventEditor(
                 verticalAlignment = Alignment.Top
             ) {
                 PlannerToolButton(
-                    title = "Kişi",
+                    title = t("Kişi"),
                     glyph = ActionGlyph.Person,
                     selected = activeTool == PlannerEditorTool.People,
                     modifier = Modifier.weight(1f),
@@ -362,7 +363,7 @@ internal fun PlannerEventEditor(
                     onClick = { activeTool = activeTool.toggle(PlannerEditorTool.People) }
                 )
                 PlannerToolButton(
-                    title = "Kart",
+                    title = t("Kart"),
                     glyph = ActionGlyph.Cards,
                     selected = activeTool == PlannerEditorTool.Card,
                     modifier = Modifier.weight(1f),
@@ -370,7 +371,7 @@ internal fun PlannerEventEditor(
                     onClick = { activeTool = activeTool.toggle(PlannerEditorTool.Card) }
                 )
                 PlannerToolButton(
-                    title = "Kategori",
+                    title = t("Kategori"),
                     glyph = ActionGlyph.Category,
                     selected = activeTool == PlannerEditorTool.Category,
                     modifier = Modifier.weight(1f),
@@ -426,7 +427,7 @@ internal fun PlannerEventEditor(
 
             if (duration.isNotEmpty() && (durationMinutes == null || durationMinutes !in 1..1440)) {
                 Text(
-                    "Süre 1–1440 dakika arasında olmalı.",
+                    t("Süre 1–1440 dakika arasında olmalı."),
                     color = Color(0xFFFFBAA7),
                     style = PlannerType.editorSupportingText,
                     modifier = Modifier.padding(start = 8.dp, top = 8.dp)
@@ -501,7 +502,7 @@ internal fun PlannerEventEditor(
             onRequestExactAlarms = onRequestExactAlarms,
             onDismiss = { showEndPicker = false },
             onConfirm = { at, _ ->
-                if (at > startMillis) { endAt = at; error = null } else error = "Bitiş, başlangıçtan sonra olmalı."
+                if (at > startMillis) { endAt = at; error = null } else error = t("Bitiş, başlangıçtan sonra olmalı.")
                 showEndPicker = false
             }
         )
@@ -566,7 +567,7 @@ private fun PlannerPeopleTool(
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (people.isEmpty()) {
-                    Text("İsimleri virgülle ayır", color = Color.White.copy(alpha = 0.34f), style = PlannerType.peoplePlaceholder)
+                    Text(t("İsimleri virgülle ayır"), color = Color.White.copy(alpha = 0.34f), style = PlannerType.peoplePlaceholder)
                 }
                 inner()
             }
@@ -592,7 +593,7 @@ private fun PlannerCardTool(
                     .clip(CircleShape)
                     .background(color)
                     .clickable(enabled = enabled, role = Role.Button) { onColorSelected(index) }
-                    .semantics { contentDescription = "Kart rengi ${index + 1}" },
+                    .semantics { contentDescription = t("Kart rengi {0}", index + 1) },
                 contentAlignment = Alignment.Center
             ) {
                 if (index == colorIndex) {
@@ -615,7 +616,7 @@ private fun PlannerCategoryTool(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         PlannerCategoryChip(
-            label = "Kategori yok",
+            label = t("Kategori yok"),
             selected = selectedCategoryId == null,
             enabled = enabled,
             onClick = { onSelect(null) }

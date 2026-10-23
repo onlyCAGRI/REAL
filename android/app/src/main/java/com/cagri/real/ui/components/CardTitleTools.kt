@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -32,21 +33,21 @@ internal fun CardTitleTools(placement: CardBlockPlacement, onChange: (CardBlockP
         Column(Modifier.fillMaxWidth().liquidDockChip(RoundedCornerShape(24.dp)).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Metin biçimi", color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Bitti", color = Color.White) }
+                Text(t("Metin biçimi"), color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                androidx.compose.material3.TextButton(onClick = onDismiss) { Text(t("Bitti"), color = Color.White) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("start" to "Sola", "center" to "Ortala", "end" to "Sağa").forEach { (key, label) ->
+                listOf("start" to t("Sola"), "center" to t("Ortala"), "end" to t("Sağa")).forEach { (key, label) ->
                     TitleTool(label, placement.textAlignment == key, Modifier.weight(1f)) {
                         onChange(placement.copy(textAlignment = key))
                     }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TitleTool("Kalın", placement.textBold, Modifier.weight(1f), bold = true) {
+                TitleTool(t("Kalın"), placement.textBold, Modifier.weight(1f), bold = true) {
                     onChange(placement.copy(textBold = !placement.textBold))
                 }
-                TitleTool("İtalik", placement.textItalic, Modifier.weight(1f), italic = true) {
+                TitleTool(t("İtalik"), placement.textItalic, Modifier.weight(1f), italic = true) {
                     onChange(placement.copy(textItalic = !placement.textItalic))
                 }
             }

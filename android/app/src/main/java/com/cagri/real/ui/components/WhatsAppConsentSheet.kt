@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -108,7 +109,7 @@ fun WhatsAppConsentSheet(
 
                     
                     Text(
-                        text = "WhatsApp için internet erişimi",
+                        text = t("WhatsApp için internet erişimi"),
                         color = Color.White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
@@ -119,7 +120,7 @@ fun WhatsAppConsentSheet(
 
                     
                     Text(
-                        text = "Real normal kullanımda internete ihtiyaç duymaz.\nWhatsApp’a da göndermek için yalnızca bu özellik kullanıldığında internet bağlantısı kullanılacak.",
+                        text = t("Real normal kullanımda internete ihtiyaç duymaz.\nWhatsApp’a da göndermek için yalnızca bu özellik kullanıldığında internet bağlantısı kullanılacak."),
                         color = Color(0xFFA4A4AD),
                         fontSize = 14.sp,
                         lineHeight = 20.sp
@@ -129,7 +130,7 @@ fun WhatsAppConsentSheet(
 
                     
                     Text(
-                        text = "İzin veriyor musun?",
+                        text = t("İzin veriyor musun?"),
                         color = Color(0xFFE2E2E8),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold
@@ -148,7 +149,7 @@ fun WhatsAppConsentSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "İzin ver",
+                            text = t("İzin ver"),
                             color = Color.Black,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
@@ -167,7 +168,7 @@ fun WhatsAppConsentSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Şimdi değil",
+                            text = t("Şimdi değil"),
                             color = Color(0xFFA4A4AD),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium

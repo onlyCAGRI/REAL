@@ -32,7 +32,7 @@ data class CardBlockPlacement(
     }
 }
 
-val CARD_CONTENT_TYPES = listOf("text", "card_stack", "mood", "checklist", "photos", "files", "voice", "music", "media", "game", "location", "journal")
+val CARD_CONTENT_TYPES = listOf("text", "card_stack", "mood", "checklist", "photos", "files", "voice", "music", "media", "game", "location", "weather", "journal")
 
 fun isCardLayoutKey(key: String): Boolean = key.length <= 160 &&
     key.substringBefore(':') in CARD_CONTENT_TYPES &&
@@ -86,6 +86,8 @@ fun ReminderItem.cardContentKeys(includeEmptyChecklist: Boolean = false, include
     mediaBlocks.forEach { add("media:${it.id}") }
     gameBlocks.forEach { add("game:${it.id}") }
     if (location != null) add("location")
+    // Hava durumu: never added by hand; there whenever the card has a date and a place on the map.
+    if ((alertAt != null || plannedDateEpochDay != null) && location?.latitude != null && location.longitude != null) add("weather")
     if (journal != null || includeJournal) add("journal")
 }
 

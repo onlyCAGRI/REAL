@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,12 +45,12 @@ internal fun CalendarPublicationPrompt(state: CalendarConnectionState, reminders
                 state.refresh()
                 state.publicationCardId = null
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { message = error.message ?: "Kart REAL'de kaydedildi; bağlantı eklenemedi. Yeniden deneyebilirsin." }
+            catch (error: Exception) { message = error.message ?: t("Kart REAL'de kaydedildi; bağlantı eklenemedi. Yeniden deneyebilirsin.") }
             finally { busy = false }
         }
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) publish() else message = "Yazma izni verilmedi. İçeriğin REAL'de duruyor; bağlantı eklenmedi."
+        if (granted) publish() else message = t("Yazma izni verilmedi. İçeriğin REAL'de duruyor; bağlantı eklenmedi.")
     }
     // A plain bottom sheet like the notification question: just the question and two answers.
     fun close() { if (!busy) state.publicationCardId = null }
@@ -62,12 +63,12 @@ internal fun CalendarPublicationPrompt(state: CalendarConnectionState, reminders
         LaunchedEffect(Unit) { shown = true }
         com.cagri.real.ui.components.PermissionSheet(
             visible = shown,
-            title = "Takvime web bağlantısı eklensin mi?",
+            title = t("Takvime web bağlantısı eklensin mi?"),
             description = "",
             onAllow = { if (state.provider.canWrite()) publish() else permission.launch(Manifest.permission.WRITE_CALENDAR) },
             onLater = ::close,
-            primaryLabel = if (busy) "Ekleniyor…" else "Evet, bağlantı ekle",
-            secondaryLabel = "Hayır, REAL'de kalsın",
+            primaryLabel = if (busy) t("Ekleniyor…") else t("Evet, bağlantı ekle"),
+            secondaryLabel = t("Hayır, REAL'de kalsın"),
             glyph = null,
             primaryEnabled = !busy,
             extraContent = {

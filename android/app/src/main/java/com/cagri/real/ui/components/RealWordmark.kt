@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import com.cagri.real.R
 
 import android.graphics.BitmapFactory
@@ -49,7 +50,7 @@ fun RealWordmark(modifier: Modifier = Modifier) {
                 BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()?.also { cache.put(width, it) }
         }
     }
-    bitmap?.let { Image(it, "Real", modifier, contentScale = ContentScale.Fit) }
-        ?: Text("Real", modifier, color = Color.White)
+    bitmap?.let { Image(it, t("Real"), modifier, contentScale = ContentScale.Fit) }
+        ?: Text(t("Real"), modifier, color = Color.White)
 }
 

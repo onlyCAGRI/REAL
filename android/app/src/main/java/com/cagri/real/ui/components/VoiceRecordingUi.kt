@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -153,7 +154,7 @@ fun VoiceRecorderInline(
             errorText = null
         } else {
             VoiceRecordingStorage.deleteRecordingFile(context, path)
-            errorText = "Ses kaydı oluşturulamadı."
+            errorText = t("Ses kaydı oluşturulamadı.")
         }
     }
 
@@ -188,13 +189,13 @@ fun VoiceRecorderInline(
             runCatching { current.reset() }
             runCatching { current.release() }
             output.delete()
-            errorText = "Mikrofon başlatılamadı."
+            errorText = t("Mikrofon başlatılamadı.")
         }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted && permissionStartPending) startRecording()
-        else if (!granted && permissionStartPending) errorText = "Ses kaydı için mikrofon izni gerekli."
+        else if (!granted && permissionStartPending) errorText = t("Ses kaydı için mikrofon izni gerekli.")
         permissionStartPending = false
     }
 
@@ -298,12 +299,12 @@ fun VoiceRecorderInline(
         ) {
             if (showHeader || (enabled && onClose != null)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (showHeader) Text("Ses", color = Color(0xFFA5A5B0),
+                    if (showHeader) Text(t("Ses"), color = Color(0xFFA5A5B0),
                         fontSize = if (compact) 12.sp else 14.sp, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.weight(1f))
                     if (enabled && onClose != null) IconButton(
                         onClick = { cancelRecording(); onClose() },
-                        modifier = Modifier.size(32.dp).semantics { contentDescription = "Ses bloğunu kaldır" }
+                        modifier = Modifier.size(32.dp).semantics { contentDescription = t("Ses bloğunu kaldır") }
                     ) { ActionIcon(ActionGlyph.Close, Modifier.size(16.dp), Color(0xFFA7A7B0)) }
                 }
             }
@@ -351,7 +352,7 @@ private fun RecorderControlRow(elapsedMillis: Long, activityLevel: Float, active
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         IconButton(onClick = onClick, modifier = Modifier.size(48.dp).semantics {
-            contentDescription = if (active) "Ses kaydını durdur" else "Ses kaydını başlat"
+            contentDescription = if (active) t("Ses kaydını durdur") else t("Ses kaydını başlat")
         }) {
             ActionIcon(ActionGlyph.AudioWave, Modifier.size(23.dp), if (active) Color(0xFF91B9FF) else Color.White)
         }
@@ -443,7 +444,7 @@ fun VoicePlaybackRow(
         IconButton(
             onClick = togglePlayback,
             modifier = Modifier.size(if (compact) 28.dp else 34.dp).semantics {
-                contentDescription = if (playing) "Ses kaydını duraklat" else "Ses kaydını oynat"
+                contentDescription = if (playing) t("Ses kaydını duraklat") else t("Ses kaydını oynat")
             }
         ) {
             ActionIcon(
@@ -465,7 +466,7 @@ fun VoicePlaybackRow(
                     releasePlayer()
                     onDelete()
                 },
-                modifier = Modifier.size(if (compact) 28.dp else 32.dp).semantics { contentDescription = "Ses kaydını sil" }
+                modifier = Modifier.size(if (compact) 28.dp else 32.dp).semantics { contentDescription = t("Ses kaydını sil") }
             ) {
                 ActionIcon(ActionGlyph.Close, Modifier.size(if (compact) 11.dp else 13.dp), Color(0xFFA7A7B0))
             }

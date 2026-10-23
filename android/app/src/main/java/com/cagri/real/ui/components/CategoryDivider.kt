@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -49,9 +50,9 @@ fun CategoryDividerRow(title: String, editable: Boolean, onEdit: () -> Unit, onD
     Box(modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth()
-                .combinedClickable(enabled = editable, onClick = {}, onLongClickLabel = "Ayracı düzenle", onLongClick = { menu = true })
+                .combinedClickable(enabled = editable, onClick = {}, onLongClickLabel = t("Ayracı düzenle"), onLongClick = { menu = true })
                 .padding(horizontal = 28.dp, vertical = 14.dp)
-                .semantics { contentDescription = if (title.isBlank()) "Ayraç" else "Ayraç: $title" },
+                .semantics { contentDescription = if (title.isBlank()) t("Ayraç") else t("Ayraç: {0}", title) },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -64,8 +65,8 @@ fun CategoryDividerRow(title: String, editable: Boolean, onEdit: () -> Unit, onD
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.align(Alignment.Center)) {
-            DropdownMenuItem(text = { Text("Başlığı düzenle") }, onClick = { menu = false; onEdit() })
-            DropdownMenuItem(text = { Text("Sil", color = Color(0xFFFF9AA0)) }, onClick = { menu = false; onDelete() })
+            DropdownMenuItem(text = { Text(t("Başlığı düzenle")) }, onClick = { menu = false; onEdit() })
+            DropdownMenuItem(text = { Text(t("Sil"), color = Color(0xFFFF9AA0)) }, onClick = { menu = false; onDelete() })
         }
     }
 }
@@ -81,26 +82,26 @@ fun DividerTitleDialog(initial: String, editing: Boolean, onDismiss: () -> Unit,
             Modifier.fillMaxWidth().background(Color(0xFF16161A), RoundedCornerShape(26.dp)).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(if (editing) "Ayracı düzenle" else "Ayraç ekle", color = Color(0xFFF5F5F8), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text("Kartlarının arasına bir çizgi ve kısa bir başlık. Boş bırakırsan sadece çizgi olur.",
+            Text(if (editing) t("Ayracı düzenle") else t("Ayraç ekle"), color = Color(0xFFF5F5F8), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("Kartlarının arasına bir çizgi ve kısa bir başlık. Boş bırakırsan sadece çizgi olur."),
                 color = Color(0xFFBEBEC8), fontSize = 13.sp, lineHeight = 19.sp)
             Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
                 .padding(horizontal = 14.dp, vertical = 14.dp)) {
-                if (text.isEmpty()) Text("Ör. 1. hafta bitti", color = Color(0xFF6F6F78), fontSize = 15.sp)
+                if (text.isEmpty()) Text(t("Ör. 1. hafta bitti"), color = Color(0xFF6F6F78), fontSize = 15.sp)
                 BasicTextField(
                     value = text, onValueChange = { text = it.take(ReminderRepository.DIVIDER_TITLE_MAX) }, singleLine = true,
                     cursorBrush = SolidColor(Color(0xFF91B9FF)), textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Ayraç başlığı" }
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = t("Ayraç başlığı") }
                 )
             }
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(46.dp)
                     .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(23.dp))) {
-                    Text("Vazgeç", color = Color(0xFFE9E9EF), fontSize = 14.sp)
+                    Text(t("Vazgeç"), color = Color(0xFFE9E9EF), fontSize = 14.sp)
                 }
                 TextButton(onClick = { onSave(text.trim()) }, modifier = Modifier.weight(1f).height(46.dp)
                     .background(Color.White, RoundedCornerShape(23.dp))) {
-                    Text(if (editing) "Kaydet" else "Ekle", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (editing) t("Kaydet") else t("Ekle"), color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -133,7 +134,7 @@ fun ShortTextDialog(title: String, body: String, hint: String, initial: String, 
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 TextButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(46.dp)
                     .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(23.dp))) {
-                    Text("Vazgeç", color = Color(0xFFE9E9EF), fontSize = 14.sp)
+                    Text(t("Vazgeç"), color = Color(0xFFE9E9EF), fontSize = 14.sp)
                 }
                 TextButton(onClick = { onSave(text.trim()) }, modifier = Modifier.weight(1f).height(46.dp)
                     .background(Color.White, RoundedCornerShape(23.dp))) {

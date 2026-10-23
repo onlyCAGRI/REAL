@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,9 +27,11 @@ import com.cagri.real.ui.theme.RealType
 import java.time.LocalDate
 import java.util.Locale
 
-enum class DateSuggestionType(val label: String) {
-    TODAY("Bugün'e ekle"),
-    TOMORROW("Yarına ekle");
+enum class DateSuggestionType(private val trLabel: String) {
+    TODAY(t("Bugün'e ekle")),
+    TOMORROW(t("Yarına ekle"));
+
+    val label: String get() = t(trLabel)
 
     fun targetDate(today: LocalDate = LocalDate.now()): LocalDate = when (this) {
         TODAY -> today

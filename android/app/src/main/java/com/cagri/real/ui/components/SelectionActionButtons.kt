@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,13 +52,13 @@ fun SelectionActionButtons(
                     .clickable(
                         role = Role.Button,
                         enabled = enabled,
-                        onClickLabel = "Vazgeç",
+                        onClickLabel = t("Vazgeç"),
                         onClick = onCancel
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Vazgeç",
+                    text = t("Vazgeç"),
                     color = Color(0xFFE4E4EA),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -75,13 +76,13 @@ fun SelectionActionButtons(
                     .clickable(
                         role = Role.Button,
                         enabled = enabled && selectedCount > 0,
-                        onClickLabel = "Seçilenleri sil",
+                        onClickLabel = t("Seçilenleri sil"),
                         onClick = onDelete
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Sil ($selectedCount)",
+                    text = t("Sil ({0})", selectedCount),
                     color = if (selectedCount > 0) Color(0xFFF87171) else Color(0xFF8E8E93),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -96,11 +97,11 @@ fun SelectionActionButtons(
                     .fillMaxSize()
                     .background(CheckRequests.OtherColor.copy(alpha = 0.12f), shape)
                     .border(0.75.dp, CheckRequests.OtherColor.copy(alpha = 0.32f), shape)
-                    .clickable(role = Role.Button, enabled = enabled && selectedCount > 0, onClickLabel = "Kontrol ettir",
+                    .clickable(role = Role.Button, enabled = enabled && selectedCount > 0, onClickLabel = t("Kontrol ettir"),
                         onClick = { onCheck?.invoke() }),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Kontrol", color = if (selectedCount > 0) CheckRequests.OtherColor else Color(0xFF8E8E93),
+                Text(t("Kontrol"), color = if (selectedCount > 0) CheckRequests.OtherColor else Color(0xFF8E8E93),
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             }
         }

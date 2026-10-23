@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import com.cagri.real.data.ReminderItem
 import com.cagri.real.data.RecurrenceRule
 import com.cagri.real.data.computeNextRepeat
@@ -91,7 +92,7 @@ internal data class CalendarSyncResult(
     val inserted: Int = 0, val updated: Int = 0, val removed: Int = 0,
     val conflicts: Int = 0, val unavailable: Int = 0
 ) {
-    val message: String get() = "Takvim: $inserted eklendi, $updated güncellendi, $removed kaldırıldı." +
-        if (unavailable > 0) " Hedef takvim kullanılamıyor; cihaz hesabını ve seçimini kontrol et."
-        else if (conflicts > 0) " $conflicts dış değişiklik korundu. Google/Samsung Takvim’den kontrol et." else ""
+    val message: String get() = t("Takvim: {0} eklendi, {1} güncellendi, {2} kaldırıldı.", inserted, updated, removed) +
+        if (unavailable > 0) t(" Hedef takvim kullanılamıyor; cihaz hesabını ve seçimini kontrol et.")
+        else if (conflicts > 0) t(" {0} dış değişiklik korundu. Google/Samsung Takvim’den kontrol et.", conflicts) else ""
 }

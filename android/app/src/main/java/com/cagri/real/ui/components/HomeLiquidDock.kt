@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -107,7 +108,7 @@ fun HomeLiquidDock(
             .semantics {
                 customActions = listOf(
                     CustomAccessibilityAction(
-                        if (navigationExpanded) "Alt paneli küçült" else "Alt paneli genişlet"
+                        if (navigationExpanded) t("Alt paneli küçült") else t("Alt paneli genişlet")
                     ) {
                         navigationExpanded = !navigationExpanded && !listState.isScrollInProgress
                         true
@@ -149,7 +150,7 @@ fun HomeLiquidDock(
                                 .fillMaxSize()
                                 .graphicsLayer { alpha = (1f - progress * 2f).coerceIn(0f, 1f) }
                                 .clickable(enabled = interactionEnabled, role = Role.Button, onClick = openPlanner)
-                                .semantics { contentDescription = "Takvim" },
+                                .semantics { contentDescription = t("Takvim") },
                             contentAlignment = Alignment.Center
                         ) {
                             ActionIcon(ActionGlyph.Calendar, Modifier.size(22.dp))
@@ -171,7 +172,7 @@ fun HomeLiquidDock(
                     Modifier
                         .fillMaxSize()
                         .clickable(enabled = interactionEnabled && micEnabled, role = Role.Button, onClick = onMicClick)
-                        .semantics { contentDescription = "Sesle REAL oluştur" },
+                        .semantics { contentDescription = t("Sesle REAL oluştur") },
                     contentAlignment = Alignment.Center
                 ) {
                     HomeDockGlass(
@@ -223,7 +224,7 @@ private fun HomeDockExpandedNavigation(
 ) {
     Row(modifier.padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
         HomeDockNavigationItem(
-            label = "Yaşam",
+            label = t("Yaşam"),
             glyph = ActionGlyph.Cards,
             enabled = enabled,
             selected = false,
@@ -232,7 +233,7 @@ private fun HomeDockExpandedNavigation(
             modifier = Modifier.weight(1f)
         )
         HomeDockNavigationItem(
-            label = "Pano",
+            label = t("Pano"),
             glyph = ActionGlyph.Board,
             enabled = enabled,
             selected = false,
@@ -241,7 +242,7 @@ private fun HomeDockExpandedNavigation(
             modifier = Modifier.weight(1f)
         )
         HomeDockNavigationItem(
-            label = "Takvim",
+            label = t("Takvim"),
             glyph = ActionGlyph.Calendar,
             enabled = enabled,
             selected = true,
@@ -277,9 +278,9 @@ private fun HomeDockNavigationItem(
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics {
                 stateDescription = when {
-                    selected -> "Seçili"
-                    !enabled -> "Henüz kullanılamıyor"
-                    else -> "Kullanılabilir"
+                    selected -> t("Seçili")
+                    !enabled -> t("Henüz kullanılamıyor")
+                    else -> t("Kullanılabilir")
                 }
             },
         verticalArrangement = Arrangement.Center,

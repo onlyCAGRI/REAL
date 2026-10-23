@@ -69,6 +69,11 @@ internal class PdfBoxText(context: Context) {
                 if (isItalic(p)) italicLetters++
             }
             if (right <= left || bottom <= top) return
+            // Real word boxes from the glyph positions; the text itself still comes from the file.
+            glyphWords(clean, positions)?.let { words ->
+                for (w in words) addWord(w.first, w.second)
+                return
+            }
             // Words split by an inline space inside one writeString call keep one box per token.
             val tokens = clean.split(Regex("\\s+")).filter { it.isNotEmpty() }
             val total = tokens.sumOf { it.length }.coerceAtLeast(1).toFloat()
@@ -82,6 +87,66 @@ internal class PdfBoxText(context: Context) {
                     bold = letters > 0 && boldLetters * 2 > letters))
                 x += w
             }
+        }
+
+        /**
+         * Splits a writeString call into words by its glyphs. Space glyphs separate words; a run with no space at all
+         * (some PDFs place each word by position and never write the space) is split where the gap between two glyphs
+         * is clearly wider than letter spacing. Null when the glyphs do not line up with the text (ligatures etc.).
+         */
+        private fun glyphWords(clean: String, positions: List<TextPosition>): List<Pair<String, List<TextPosition>>>? {
+            val groups = ArrayList<MutableList<TextPosition>>()
+            var cur = ArrayList<TextPosition>()
+            for (p in positions) {
+                if (p.unicode.orEmpty().isBlank()) { if (cur.isNotEmpty()) { groups.add(cur); cur = ArrayList() }; continue }
+                cur.add(p)
+            }
+            if (cur.isNotEmpty()) groups.add(cur)
+            val spaceless = clean.none { it.isWhitespace() } && clean.count { it.isLetter() } >= 15
+            val split = if (spaceless && groups.size == 1) splitByGaps(groups[0]) else groups
+            val words = split.map { g -> BookDocumentRepository.cleanNativeText(g.joinToString("") { it.unicode.orEmpty() }).trim() to g }
+                .filter { it.first.isNotEmpty() }
+            if (words.isEmpty()) return null
+            // Without a split the file's own tokens must match the glyph groups one to one.
+            if (split === groups && words.joinToString("") { it.first } != clean.replace(Regex("\\s+"), "")) return null
+            return words
+        }
+
+        private fun splitByGaps(glyphs: List<TextPosition>): List<MutableList<TextPosition>> {
+            if (glyphs.size < 2) return listOf(glyphs.toMutableList())
+            val gaps = (0 until glyphs.size - 1).map { glyphs[it + 1].xDirAdj - (glyphs[it].xDirAdj + glyphs[it].widthDirAdj) }
+            val space = glyphs.map { it.widthOfSpace }.filter { it.isFinite() && it > 0f }.sorted().let { if (it.isEmpty()) 0f else it[it.size / 2] }
+            val height = glyphs.map { it.heightDir }.sorted()[glyphs.size / 2].coerceAtLeast(1f)
+            val letterGap = gaps.sorted()[gaps.size / 2].coerceAtLeast(0f)
+            // Letter spacing sits near zero; a word space is at least a third of the font's space (or of the x-height).
+            val threshold = maxOf(letterGap + 0.08f * height, if (space > 0f) 0.4f * space else 0.3f * height)
+            val out = ArrayList<MutableList<TextPosition>>()
+            var cur = mutableListOf(glyphs[0])
+            for (i in 1 until glyphs.size) {
+                if (gaps[i - 1] > threshold) { out.add(cur); cur = mutableListOf() }
+                cur.add(glyphs[i])
+            }
+            out.add(cur)
+            return out
+        }
+
+        private fun addWord(text: String, glyphs: List<TextPosition>) {
+            var left = Float.MAX_VALUE; var right = 0f; var top = Float.MAX_VALUE; var bottom = 0f
+            var boldLetters = 0; var italicLetters = 0; var letters = 0
+            for (p in glyphs) {
+                left = minOf(left, p.xDirAdj); right = maxOf(right, p.xDirAdj + p.widthDirAdj)
+                top = minOf(top, p.yDirAdj - p.heightDir); bottom = maxOf(bottom, p.yDirAdj)
+                if (p.unicode.orEmpty().none { it.isLetterOrDigit() }) continue
+                letters++
+                if (isBold(p)) boldLetters++
+                if (isItalic(p)) italicLetters++
+            }
+            if (right <= left || bottom <= top) return
+            val l = (left * scale).toInt(); val t = (top * scale).toInt()
+            current.add(PageLayout.StyledWord(text,
+                Rect(l, t, (right * scale).toInt().coerceAtLeast(l + 1), (bottom * scale).toInt().coerceAtLeast(t + 1)),
+                italic = letters > 0 && italicLetters * 2 > letters,
+                bold = letters > 0 && boldLetters * 2 > letters))
         }
 
         override fun writeLineSeparator() { flushLine() }

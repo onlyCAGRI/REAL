@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -60,8 +61,8 @@ fun PanoAddSheet(cards:List<ReminderItem>,onDismiss:()->Unit,onAdd:(BoardBlockTy
                         SectionLabel("Create")
                         TileGrid(listOf(
                             AddEntry("Aa", "Text") { onAdd(BoardBlockType.TEXT,null,null,false) },
-                            AddEntry("✓", "Checklist") { onAdd(BoardBlockType.CHECKLIST,null,null,false) },
-                            AddEntry("▭", "REAL card") { page = "card" },
+                            AddEntry("✓", t("Checklist")) { onAdd(BoardBlockType.CHECKLIST,null,null,false) },
+                            AddEntry("▭", t("REAL card")) { page = "card" },
                             AddEntry("▤", "Card Stack") { onStack() }
                         ))
                         SectionLabel("Media")
@@ -76,7 +77,7 @@ fun PanoAddSheet(cards:List<ReminderItem>,onDismiss:()->Unit,onAdd:(BoardBlockTy
                             AddEntry("⌖", "Location") { onLocation() },
                             AddEntry("♪", "Music") { onContent(BoardBlockType.MUSIC) },
                             AddEntry("▶", "Movie / TV") { onContent(BoardBlockType.MEDIA) },
-                            AddEntry("☺", "Mood") { onContent(BoardBlockType.MOOD) },
+                            AddEntry("☺", t("Mood")) { onContent(BoardBlockType.MOOD) },
                             AddEntry("↗", "Link / snippet") { onContent(BoardBlockType.LINK) }
                         ))
                     }
@@ -107,7 +108,7 @@ fun PanoAddSheet(cards:List<ReminderItem>,onDismiss:()->Unit,onAdd:(BoardBlockTy
                                 .clickable{onAdd(BoardBlockType.CARD,card,null,sensitive)}
                                 .padding(horizontal = 16.dp, vertical = 14.dp)){
                                 Text(card.text, color = Color.White, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text(if(card.isChecklist)"${card.checklistItems.size} checklist items" else "REAL card",
+                                Text(if(card.isChecklist)t("{0} checklist items", card.checklistItems.size) else t("REAL card"),
                                     color = MutedText, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
                             }
                         }

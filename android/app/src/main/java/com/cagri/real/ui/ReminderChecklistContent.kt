@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
@@ -45,7 +46,7 @@ internal fun DetailChecklistBox(
     val total = items.size
     val completedCount = items.count { it.isCompleted }
     val summaryText = if (total > 0) {
-        if (completedCount > 0) "$total madde • $completedCount tamamlandı" else "$total madde"
+        if (completedCount > 0) t("{0} madde • {1} tamamlandı", total, completedCount) else t("{0} madde", total)
     } else ""
 
     Box(
@@ -75,7 +76,7 @@ internal fun DetailChecklistBox(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Checklist",
+                    t("Checklist"),
                     color = Color(0xFFB7B7C0),
                     style = RealType.detailBlockHeader,
                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
@@ -97,7 +98,7 @@ internal fun DetailChecklistBox(
                         enabled = !savingDetail,
                         modifier = Modifier
                             .size(28.dp)
-                            .semantics { contentDescription = "Checklist kutusunu kaldır" }
+                            .semantics { contentDescription = t("Checklist kutusunu kaldır") }
                     ) {
                         ActionIcon(ActionGlyph.Close, Modifier.size(15.dp), Color(0xFF8E8E98))
                     }
@@ -293,7 +294,7 @@ private fun EditableChecklistItemRow(
                 .padding(vertical = 4.dp)
                 .focusRequester(focusRequester)
                 .onFocusChanged { if (it.isFocused) onFocus() }
-                .semantics { contentDescription = "Madde metni" },
+                .semantics { contentDescription = t("Madde metni") },
             textStyle = RealType.detailChecklistItemEdit.copy(
                 color = if (item.isCompleted) Color(0xFF8E8E98) else Color(0xFFF1F1F5),
                 textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None
@@ -306,7 +307,7 @@ private fun EditableChecklistItemRow(
             onClick = onDelete,
             modifier = Modifier
                 .size(28.dp)
-                .semantics { contentDescription = "Maddeyi sil" }
+                .semantics { contentDescription = t("Maddeyi sil") }
         ) {
             ActionIcon(ActionGlyph.Close, Modifier.size(16.dp), Color(0xFF8E8E98))
         }
@@ -367,7 +368,7 @@ private fun AddChecklistItemRow(
                 .padding(vertical = 4.dp)
                 .focusRequester(focusRequester)
                 .onFocusChanged { if (it.isFocused) onFocus() }
-                .semantics { contentDescription = "Yeni madde ekle" },
+                .semantics { contentDescription = t("Yeni madde ekle") },
             textStyle = RealType.detailChecklistItemEdit.copy(
                 color = Color.White
             ),
@@ -384,7 +385,7 @@ private fun AddChecklistItemRow(
             decorationBox = { innerTextField ->
                 if (text.isEmpty()) {
                     Text(
-                        "Yeni madde ekle...",
+                        t("Yeni madde ekle..."),
                         color = Color(0xFF6E6E77),
                         style = RealType.composerPrompt
                     )
@@ -398,7 +399,7 @@ private fun AddChecklistItemRow(
                 onClick = onAdd,
                 modifier = Modifier
                     .size(28.dp)
-                    .semantics { contentDescription = "Maddeyi kaydet" }
+                    .semantics { contentDescription = t("Maddeyi kaydet") }
             ) {
                 ActionIcon(ActionGlyph.Check, Modifier.size(16.dp), Color(0xFF91B9FF))
             }

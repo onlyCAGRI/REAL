@@ -1,5 +1,6 @@
 package com.cagri.real.calendar
 
+import com.cagri.real.i18n.t
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
@@ -62,7 +63,7 @@ internal fun rememberExternalCalendarEvents(
         if (!lifecycle.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
         val options = store.options()
         if (options.readIds.isEmpty()) { result = ExternalCalendarRead(); return@LaunchedEffect }
-        if (!provider.canRead()) { result = ExternalCalendarRead(error = "Takvim okuma izni gerekli. Ayarlar → Takvim bağlantısı."); return@LaunchedEffect }
+        if (!provider.canRead()) { result = ExternalCalendarRead(error = t("Takvim okuma izni gerekli. Ayarlar → Takvim bağlantısı.")); return@LaunchedEffect }
         delay(150)
         try {
             val events = withContext(Dispatchers.IO) {
@@ -71,12 +72,12 @@ internal fun rememberExternalCalendarEvents(
             }
             if (store.isCurrent()) {
                 val unchanged = result.error == null && result.events == events
-                calendarSyncLog("reader: ${events.size} events, " + (if (unchanged) "no-op" else "CHANGED") + " refreshKey=$refreshKey")
+                calendarSyncLog("reader: ${events.size} events, " + (if (unchanged) "no-op" else "CHANGED") + " refreshKey=${refreshKey}")
                 if (!unchanged) result = ExternalCalendarRead(events)
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) {
-            result = ExternalCalendarRead(error = "Cihaz takvimi okunamadı. Ayarlardan yenileyebilirsin.")
+            result = ExternalCalendarRead(error = t("Cihaz takvimi okunamadı. Ayarlardan yenileyebilirsin."))
         }
     }
     return result

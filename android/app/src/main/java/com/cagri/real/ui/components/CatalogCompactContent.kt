@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
@@ -35,7 +36,7 @@ internal fun CatalogCompactContent(
         }
         if (editing) {
             IconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
-                ActionIcon(ActionGlyph.Close, Modifier.size(15.dp).semantics { contentDescription = "İçeriği kaldır" }, Color.White)
+                ActionIcon(ActionGlyph.Close, Modifier.size(15.dp).semantics { contentDescription = t("İçeriği kaldır") }, Color.White)
             }
         }
     }

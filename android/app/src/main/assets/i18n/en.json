@@ -2312,5 +2312,6 @@
   "Dosya doğrulanamadı. Tekrar indir.": "The file couldn't be verified. Download again.",
   "APK okunamadı.": "Couldn't read the APK.",
   "Paket veya sürüm uyuşmuyor.": "The package or version doesn't match.",
-  "İmza uyuşmuyor. Mevcut uygulamanın imzasıyla derle.": "The signature doesn't match. Build with the existing app's signature."
+  "İmza uyuşmuyor. Mevcut uygulamanın imzasıyla derle.": "The signature doesn't match. Build with the existing app's signature.",
+  "Su": "Water"
 }

@@ -1,5 +1,6 @@
 package com.cagri.real.ui.pano
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -52,7 +53,7 @@ internal fun BoardChecklistBlock(item: PanoItem, selected: Boolean, controller: 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).onFocusChanged { if (!it.hasFocus) save() }) {
         if (selected) OutlinedTextField(payload.optString("title"),
             { update(JSONObject(draft).put("title", it.take(300))) },
-            label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
+            label = { Text(t("Title")) }, modifier = Modifier.fillMaxWidth())
         else payload.optString("title").takeIf { it.isNotBlank() }?.let { Text(it, color = Color.White) }
         DetailChecklistBox(style, selected, items, newText, { newText = it.take(1000) },
             onAddItem = {

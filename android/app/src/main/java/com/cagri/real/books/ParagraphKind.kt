@@ -1,5 +1,7 @@
 package com.cagri.real.books
 
+import com.cagri.real.i18n.t
+
 /**
  * PDF / OCR paragraflarında başlık algısı. Önbellek formatı değişmez (JSON string listesi):
  * elle verilen karar paragrafın başına görünmez bir işaret karakteri koyarak saklanır.

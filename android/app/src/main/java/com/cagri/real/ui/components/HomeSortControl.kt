@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -51,9 +52,9 @@ fun HomeSortControl(
                 role = Role.Button
                 contentDescription = when (sortOrder) {
                     ReminderSortOrder.RECENTLY_ADDED, ReminderSortOrder.OLDEST_FIRST ->
-                        "Son eklenene göre sıralanıyor. Bildirim zamanına göre sırala."
+                        t("Son eklenene göre sıralanıyor. Bildirim zamanına göre sırala.")
                     ReminderSortOrder.REMINDER_TIME, ReminderSortOrder.NEAREST_DATE ->
-                        "Bildirim zamanına göre sıralanıyor. Son eklenene göre sırala."
+                        t("Bildirim zamanına göre sıralanıyor. Son eklenene göre sırala.")
                 }
             },
         contentAlignment = Alignment.Center
