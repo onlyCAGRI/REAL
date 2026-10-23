@@ -1,5 +1,6 @@
 package com.cagri.real.ui
 
+import com.cagri.real.i18n.t
 import com.cagri.real.BuildConfig
 import kotlinx.coroutines.launch
 import android.app.NotificationManager
@@ -160,29 +161,29 @@ fun SettingsScreen(
             if (showDeveloperTools) showDeveloperTools = false else onBack()
         }) {
             if (showDeveloperTools) {
-                SettingsSectionHeader("GELİŞTİRİCİ ARAÇLARI")
-                SettingsSectionHeader("BAĞLAM KARTLARI TESTİ")
+                SettingsSectionHeader(t("GELİŞTİRİCİ ARAÇLARI"))
+                SettingsSectionHeader(t("BAĞLAM KARTLARI TESTİ"))
 
                 SettingsGlassGroup {
                     val testCardTypes = listOf(
-                        Triple(com.cagri.real.contextcards.ContextCardType.WATER, ActionGlyph.Bell, "Su kartını göster"),
-                        Triple(com.cagri.real.contextcards.ContextCardType.MOOD, ActionGlyph.MoodNeutral, "Mood kartını göster"),
-                        Triple(com.cagri.real.contextcards.ContextCardType.BOOK, ActionGlyph.Note, "Kitap kartını göster"),
-                        Triple(com.cagri.real.contextcards.ContextCardType.MEDIA, ActionGlyph.Video, "Film & dizi kartını göster"),
-                        Triple(com.cagri.real.contextcards.ContextCardType.WATCH, ActionGlyph.Play, "Sıradaki bölüm kartını göster"),
-                        Triple(com.cagri.real.contextcards.ContextCardType.LISTEN, ActionGlyph.Music, "Müzik kartını göster"),
-                        Triple(com.cagri.real.contextcards.ContextCardType.PLAY, ActionGlyph.Cards, "Oyun kartını göster"),
-                        Triple(com.cagri.real.contextcards.ContextCardType.JOURNAL, ActionGlyph.Edit, "Günlük kartını göster")
+                        Triple(com.cagri.real.contextcards.ContextCardType.WATER, ActionGlyph.Bell, t("Su kartını göster")),
+                        Triple(com.cagri.real.contextcards.ContextCardType.MOOD, ActionGlyph.MoodNeutral, t("Mood kartını göster")),
+                        Triple(com.cagri.real.contextcards.ContextCardType.BOOK, ActionGlyph.Note, t("Kitap kartını göster")),
+                        Triple(com.cagri.real.contextcards.ContextCardType.MEDIA, ActionGlyph.Video, t("Film & dizi kartını göster")),
+                        Triple(com.cagri.real.contextcards.ContextCardType.WATCH, ActionGlyph.Play, t("Sıradaki bölüm kartını göster")),
+                        Triple(com.cagri.real.contextcards.ContextCardType.LISTEN, ActionGlyph.Music, t("Müzik kartını göster")),
+                        Triple(com.cagri.real.contextcards.ContextCardType.PLAY, ActionGlyph.Cards, t("Oyun kartını göster")),
+                        Triple(com.cagri.real.contextcards.ContextCardType.JOURNAL, ActionGlyph.Edit, t("Günlük kartını göster"))
                     )
                     SettingsActionRow(
                         icon = ActionGlyph.Board,
-                        title = "Tüm kartları göster",
-                        subtitle = "Sadece test: bütün kart türleri altta yan yana dizilir (normalde tek kart gelir)",
+                        title = t("Tüm kartları göster"),
+                        subtitle = t("Sadece test: bütün kart türleri altta yan yana dizilir (normalde tek kart gelir)"),
                         onClick = {
                             contextCardStore.setEnabled(true)
                             contextCardsEnabled = true
                             contextCardStore.forceAll()
-                            com.cagri.real.ui.components.RealToast.show(context, "Ana ekranın en altına bak")
+                            com.cagri.real.ui.components.RealToast.show(context, t("Ana ekranın en altına bak"))
                         }
                     )
                     SettingsDivider()
@@ -191,37 +192,37 @@ fun SettingsScreen(
                         SettingsActionRow(
                             icon = glyph,
                             title = label,
-                            subtitle = "Saat ve limit kurallarını yok sayar; ana ekranın en altında görünür",
+                            subtitle = t("Saat ve limit kurallarını yok sayar; ana ekranın en altında görünür"),
                             onClick = {
                                 contextCardStore.setEnabled(true)
                                 contextCardsEnabled = true
                                 contextCardStore.force(type)
-                                com.cagri.real.ui.components.RealToast.show(context, "Ana ekranın en altına bak")
+                                com.cagri.real.ui.components.RealToast.show(context, t("Ana ekranın en altına bak"))
                             }
                         )
                     }
                     SettingsDivider()
                     SettingsActionRow(
                         icon = ActionGlyph.Edit,
-                        title = "Kart geçmişini sıfırla",
-                        subtitle = "Günlük limit, bekleme ve sessize alma sayaçlarını temizler",
+                        title = t("Kart geçmişini sıfırla"),
+                        subtitle = t("Günlük limit, bekleme ve sessize alma sayaçlarını temizler"),
                         onClick = {
                             contextCardStore.resetHistory()
-                            com.cagri.real.ui.components.RealToast.show(context, "Kart geçmişi sıfırlandı")
+                            com.cagri.real.ui.components.RealToast.show(context, t("Kart geçmişi sıfırlandı"))
                         }
                     )
                     SettingsDivider()
                     SettingsActionRow(
                         icon = ActionGlyph.Theme,
-                        title = "Karşılama ekranını önizle",
-                        subtitle = "İlk açılış animasyonunu oynatır; hesabını ve ayarlarını değiştirmez",
+                        title = t("Karşılama ekranını önizle"),
+                        subtitle = t("İlk açılış animasyonunu oynatır; hesabını ve ayarlarını değiştirmez"),
                         onClick = { showWelcomePreview = true }
                     )
                     SettingsDivider()
                     SettingsActionRow(
                         icon = ActionGlyph.Cards,
-                        title = "Sayı Kulesi",
-                        subtitle = "Mini oyun: gelen sayıyı 10 yuvaya küçükten büyüğe diz",
+                        title = t("Sayı Kulesi"),
+                        subtitle = t("Mini oyun: gelen sayıyı 10 yuvaya küçükten büyüğe diz"),
                         onClick = { showNumberTower = true }
                     )
                 }
@@ -249,7 +250,7 @@ fun SettingsScreen(
                     SettingsGlassGroup {
                         SettingsActionRow(
                             icon = ActionGlyph.Cat,
-                            title = "Pet senaryoları",
+                            title = t("Pet senaryoları"),
                             subtitle = "",
                             onClick = { showPetScenarios = true }
                         )
@@ -266,7 +267,7 @@ fun SettingsScreen(
                         SettingsRow(
                             icon = ActionGlyph.Cat,
                             title = "Kelime tetikleyicileri",
-                            subtitle = "Yazdığın bazı kelimeler REAL Pet davranışlarını tetikleyebilir.",
+                            subtitle = t("Yazdığın bazı kelimeler REAL Pet davranışlarını tetikleyebilir."),
                             badge = "Deneysel",
                             checked = petKeywordsEnabled,
                             onCheckedChange = {
@@ -281,21 +282,21 @@ fun SettingsScreen(
                 // ==========================================
                 // 4. GELİŞTİRİCİ VE DEMO (Design / Demo)
                 // ==========================================
-                SettingsSectionHeader("GELİŞTİRİCİ VE DEMO")
+                SettingsSectionHeader(t("GELİŞTİRİCİ VE DEMO"))
 
                 SettingsGlassGroup {
                     SettingsActionRow(
                         icon = ActionGlyph.Cards,
-                        title = "Widget tasarımları",
-                        subtitle = "Yaşam widget önizlemeleri",
+                        title = t("Widget tasarımları"),
+                        subtitle = t("Yaşam widget önizlemeleri"),
                         onClick = { showWidgetDesigns = true }
                     )
                     SettingsDivider()
                     // Concept demo entry
                     SettingsActionRow(
                         icon = ActionGlyph.Edit,
-                        title = "Tasarım demosu",
-                        subtitle = "Takvim, kategoriler ve hızlı ses konsepti",
+                        title = t("Tasarım demosu"),
+                        subtitle = t("Takvim, kategoriler ve hızlı ses konsepti"),
                         onClick = {
                             context.startActivity(Intent(context, com.cagri.real.demo.CategoryConceptDemoActivity::class.java).apply {
                                 putExtra("reduce_motion", reduceAnimations)
@@ -343,13 +344,13 @@ fun SettingsScreen(
                             val characteristics = NowBarProbe.hasPromotableCharacteristics(context)
 
                             Text("Android promoted access", color = Color(0xFFCCCCD3), fontSize = 13.sp)
-                            Text(if (supported) "Açık" else "Sistem tarafından bildirilmedi", color = Color(0xFFA5A5AF), fontSize = 12.sp, modifier = Modifier.padding(top = 1.dp, bottom = 8.dp))
+                            Text(if (supported) t("Açık") else t("Sistem tarafından bildirilmedi"), color = Color(0xFFA5A5AF), fontSize = 12.sp, modifier = Modifier.padding(top = 1.dp, bottom = 8.dp))
 
                             Text("Samsung Now Bar metadata", color = Color(0xFFCCCCD3), fontSize = 13.sp)
                             Text("Hazır", color = Color(0xFFA5A5AF), fontSize = 12.sp, modifier = Modifier.padding(top = 1.dp, bottom = 8.dp))
 
                             Text("Notification structure", color = Color(0xFFCCCCD3), fontSize = 13.sp)
-                            Text(if (characteristics) "Uygun" else "Uygun değil", color = Color(0xFFA5A5AF), fontSize = 12.sp, modifier = Modifier.padding(top = 1.dp, bottom = 12.dp))
+                            Text(if (characteristics) t("Uygun") else t("Uygun değil"), color = Color(0xFFA5A5AF), fontSize = 12.sp, modifier = Modifier.padding(top = 1.dp, bottom = 12.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -405,7 +406,7 @@ fun SettingsScreen(
                         if (moodTestExpanded) {
                             Spacer(Modifier.height(10.dp))
                             Text(
-                                "Moods ve REAL kartlarındaki Mood kayıtlarını siler. Günlük kayıtlarına dokunmaz.",
+                                t("Moods ve REAL kartlarındaki Mood kayıtlarını siler. Günlük kayıtlarına dokunmaz."),
                                 color = Color(0xFF92929C),
                                 fontSize = 12.sp,
                                 lineHeight = 17.sp
@@ -426,13 +427,62 @@ fun SettingsScreen(
                 // ==========================================
                 // 1. GÖRÜNÜM (Appearance)
                 // ==========================================
-                SettingsSectionHeader("GÖRÜNÜM")
+                SettingsSectionHeader(t("GÖRÜNÜM"))
 
                 SettingsGlassGroup {
+                    var showLanguageDialog by remember { mutableStateOf(false) }
+                    val languageLabel = when (com.cagri.real.i18n.I18n.selected) {
+                        com.cagri.real.i18n.AppLanguage.System -> com.cagri.real.i18n.t("Telefonun dili")
+                        com.cagri.real.i18n.AppLanguage.Turkish -> t("Türkçe")
+                        com.cagri.real.i18n.AppLanguage.English -> "English"
+                    }
+                    SettingsActionRow(
+                        icon = ActionGlyph.Theme,
+                        title = "Dil",
+                        subtitle = languageLabel,
+                        onClick = { showLanguageDialog = true }
+                    )
+                    if (showLanguageDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showLanguageDialog = false },
+                            containerColor = Color(0xFF1C1C21),
+                            title = { Text(com.cagri.real.i18n.t("Uygulama dilini seç"), color = Color.White) },
+                            text = {
+                                Column {
+                                    listOf(
+                                        com.cagri.real.i18n.AppLanguage.System to com.cagri.real.i18n.t("Telefonun dili"),
+                                        com.cagri.real.i18n.AppLanguage.Turkish to t("Türkçe"),
+                                        com.cagri.real.i18n.AppLanguage.English to "English"
+                                    ).forEach { (lang, label) ->
+                                        val picked = com.cagri.real.i18n.I18n.selected == lang
+                                        Row(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .selectable(selected = picked, role = Role.RadioButton) {
+                                                    com.cagri.real.i18n.I18n.set(context, lang)
+                                                    showLanguageDialog = false
+                                                }
+                                                .padding(vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(label, color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                                            if (picked) ActionIcon(ActionGlyph.Check, Modifier.size(18.dp), color = Color(0xFF3B82F6))
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showLanguageDialog = false }) { Text(com.cagri.real.i18n.t("Kapat"), color = Color(0xFF91B9FF)) }
+                            }
+                        )
+                    }
+
+                    SettingsDivider()
+
                     SettingsRow(
                         icon = ActionGlyph.MotionOff,
                         title = "Animasyonu azalt",
-                        subtitle = "Arayüz hareketlerini ve geçiş efektlerini sakinleştirir",
+                        subtitle = t("Arayüz hareketlerini ve geçiş efektlerini sakinleştirir"),
                         checked = reduceAnimations,
                         onCheckedChange = onReduceAnimationsChange
                     )
@@ -441,8 +491,8 @@ fun SettingsScreen(
 
                     SettingsRow(
                         icon = ActionGlyph.BlurOff,
-                        title = "Dinamik bulanıklığı azalt",
-                        subtitle = "Bulanıklık efektleri yerine sabit koyu yüzeyler kullanır",
+                        title = t("Dinamik bulanıklığı azalt"),
+                        subtitle = t("Bulanıklık efektleri yerine sabit koyu yüzeyler kullanır"),
                         checked = reduceDynamicBlur,
                         onCheckedChange = onReduceDynamicBlurChange
                     )
@@ -453,7 +503,7 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = ActionGlyph.Cat,
                         title = "REAL Pet",
-                        subtitle = "Geçici olarak devre dışı bırakıldı",
+                        subtitle = t("Geçici olarak devre dışı bırakıldı"),
                         checked = false,
                         onCheckedChange = {},
                         enabled = false
@@ -463,8 +513,8 @@ fun SettingsScreen(
 
                     SettingsRow(
                         icon = ActionGlyph.Bell,
-                        title = "Bağlam kartları",
-                        subtitle = "Ana ekranın altında arada su, mood, kitap ve film önerisi gösterir",
+                        title = t("Bağlam kartları"),
+                        subtitle = t("Ana ekranın altında arada su, mood, kitap ve film önerisi gösterir"),
                         checked = contextCardsEnabled,
                         onCheckedChange = {
                             contextCardsEnabled = it
@@ -476,8 +526,8 @@ fun SettingsScreen(
 
                     SettingsActionRow(
                         icon = ActionGlyph.Calendar,
-                        title = "Takvim bağlantısı",
-                        subtitle = "Google / Samsung takvimlerini göster ve planlarını gönder",
+                        title = t("Takvim bağlantısı"),
+                        subtitle = t("Google / Samsung takvimlerini göster ve planlarını gönder"),
                         onClick = onOpenCalendarConnection
                     )
 
@@ -488,7 +538,7 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = ActionGlyph.Check,
                         title = "Sade kartlar",
-                        subtitle = "Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır.",
+                        subtitle = t("Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır."),
                         badge = "Deneysel",
                         checked = plainHomeCards,
                         onCheckedChange = {
@@ -508,8 +558,8 @@ fun SettingsScreen(
                     var musicSource by remember { mutableStateOf(com.cagri.real.ui.components.MusicSource.saved(musicContext)) }
                     SettingsActionRow(
                         icon = ActionGlyph.Music,
-                        title = "Müzik uygulaması",
-                        subtitle = musicSource.label + " · şarkılar burada açılır",
+                        title = t("Müzik uygulaması"),
+                        subtitle = musicSource.label + t(" · şarkılar burada açılır"),
                         onClick = {
                             val next = if (musicSource == com.cagri.real.ui.components.MusicSource.Apple)
                                 com.cagri.real.ui.components.MusicSource.Spotify else com.cagri.real.ui.components.MusicSource.Apple
@@ -520,21 +570,41 @@ fun SettingsScreen(
 
                     SettingsDivider()
 
+                    // Apple Music hesabı: "Sana özel" in Müzik keşfi, right swipe also adds to the library.
+                    var appleMusicLinked by remember { mutableStateOf(com.cagri.real.discovery.AppleMusicAccount.isConnected(musicContext)) }
+                    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+                        appleMusicLinked = com.cagri.real.discovery.AppleMusicAccount.isConnected(musicContext)
+                        onPauseOrDispose { }
+                    }
+                    SettingsActionRow(
+                        icon = ActionGlyph.Music,
+                        title = t("Apple Music hesabı"),
+                        subtitle = if (appleMusicLinked) t("Bağlı · dokun, bağlantıyı kes") else t("Bağla · sana özel öneriler, REAL çalma listesi"),
+                        onClick = {
+                            if (appleMusicLinked) {
+                                com.cagri.real.discovery.AppleMusicAccount.disconnect(musicContext)
+                                appleMusicLinked = false
+                            } else com.cagri.real.discovery.AppleMusicAccount.connect(musicContext)
+                        }
+                    )
+
+                    SettingsDivider()
+
                     // Öneriler (müzik, film / dizi, oyun): geçilenler yeniden gelebilir, desteler baştan kurulur; kayıtlı listeler ve
                     // İzledim / Oynadım kalır.
                     var confirmMusicReset by remember { mutableStateOf(false) }
                     SettingsActionRow(
                         icon = ActionGlyph.Music,
-                        title = "Önerileri sıfırla",
-                        subtitle = "Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez",
+                        title = t("Önerileri sıfırla"),
+                        subtitle = t("Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez"),
                         onClick = { confirmMusicReset = true }
                     )
                     if (confirmMusicReset) {
                         val musicScope = rememberCoroutineScope()
                         com.cagri.real.ui.components.RealAlertDialog(
                             onDismissRequest = { confirmMusicReset = false },
-                            title = { Text("Önerileri sıfırlamak istediğine emin misin?") },
-                            text = { Text("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır.", color = Color(0xFFA5A5AF), fontSize = 14.sp) },
+                            title = { Text(t("Önerileri sıfırlamak istediğine emin misin?")) },
+                            text = { Text(t("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır."), color = Color(0xFFA5A5AF), fontSize = 14.sp) },
                             confirmButton = {
                                 TextButton(onClick = {
                                     confirmMusicReset = false
@@ -547,11 +617,11 @@ fun SettingsScreen(
                                                 com.cagri.real.discovery.GameDiscoveryRepository(musicContext, uid).resetSeen()
                                             }
                                         }.isSuccess
-                                        com.cagri.real.ui.components.RealToast.show(musicContext, if (ok) "Öneriler sıfırlandı" else "Sıfırlanamadı")
+                                        com.cagri.real.ui.components.RealToast.show(musicContext, if (ok) t("Öneriler sıfırlandı") else t("Sıfırlanamadı"))
                                     }
-                                }) { Text("Sıfırla", color = Color(0xFFFF8A80)) }
+                                }) { Text(t("Sıfırla"), color = Color(0xFFFF8A80)) }
                             },
-                            dismissButton = { TextButton(onClick = { confirmMusicReset = false }) { Text("Vazgeç", color = Color.White) } }
+                            dismissButton = { TextButton(onClick = { confirmMusicReset = false }) { Text(t("Vazgeç"), color = Color.White) } }
                         )
                     }
 
@@ -562,26 +632,26 @@ fun SettingsScreen(
                     val ratingScope = rememberCoroutineScope()
                     SettingsActionRow(
                         icon = ActionGlyph.Delete,
-                        title = "Puanlarımı sıfırla",
-                        subtitle = "Film, dizi ve bölüm puanlarının hepsini siler",
+                        title = t("Puanlarımı sıfırla"),
+                        subtitle = t("Film, dizi ve bölüm puanlarının hepsini siler"),
                         onClick = { confirmRatingReset = true }
                     )
                     if (confirmRatingReset) {
                         com.cagri.real.ui.components.RealAlertDialog(
                             onDismissRequest = { confirmRatingReset = false },
-                            title = { Text("Puanları sıfırlamak istediğine emin misin?") },
-                            text = { Text("Puanlarım listesi boşalır. Bu geri alınamaz.", color = Color(0xFFA5A5AF), fontSize = 14.sp) },
+                            title = { Text(t("Puanları sıfırlamak istediğine emin misin?")) },
+                            text = { Text(t("Puanlarım listesi boşalır. Bu geri alınamaz."), color = Color(0xFFA5A5AF), fontSize = 14.sp) },
                             confirmButton = {
                                 TextButton(onClick = {
                                     confirmRatingReset = false
                                     val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
                                     if (uid != null) ratingScope.launch {
                                         val ok = runCatching { com.cagri.real.discovery.MediaRatingRepository(musicContext, uid).reset() }.isSuccess
-                                        com.cagri.real.ui.components.RealToast.show(musicContext, if (ok) "Puanlar sıfırlandı" else "Sıfırlanamadı")
+                                        com.cagri.real.ui.components.RealToast.show(musicContext, if (ok) t("Puanlar sıfırlandı") else t("Sıfırlanamadı"))
                                     }
-                                }) { Text("Sıfırla", color = Color(0xFFFF8A80)) }
+                                }) { Text(t("Sıfırla"), color = Color(0xFFFF8A80)) }
                             },
-                            dismissButton = { TextButton(onClick = { confirmRatingReset = false }) { Text("Vazgeç", color = Color.White) } }
+                            dismissButton = { TextButton(onClick = { confirmRatingReset = false }) { Text(t("Vazgeç"), color = Color.White) } }
                         )
                     }
 
@@ -605,18 +675,18 @@ fun SettingsScreen(
                 // ==========================================
                 // 2. BİLDİRİMLER VE DAVRANIŞ (Behavior)
                 // ==========================================
-                SettingsSectionHeader("BİLDİRİMLER VE DAVRANIŞ")
+                SettingsSectionHeader(t("BİLDİRİMLER VE DAVRANIŞ"))
 
                 SettingsGlassGroup {
                     // Notification permission
                     SettingsStatusRow(
                         icon = ActionGlyph.Bell,
                         title = "Bildirim izni",
-                        status = if (notificationsAllowed) "Açık" else "Kapalı",
+                        status = if (notificationsAllowed) t("Açık") else t("Kapalı"),
                         statusColor = if (notificationsAllowed) Color(0xFF91B9FF) else Color(0xFFA5A5AF),
-                        subtitle = if (notificationsAllowed) "Hatırlatıcı bildirimleri bu cihazda etkin."
-                        else "Bildirimleri alabilmek için bildirim iznini açabilirsin.",
-                        actionLabel = if (!notificationsAllowed) "İzni aç" else null,
+                        subtitle = if (notificationsAllowed) t("Hatırlatıcı bildirimleri bu cihazda etkin.")
+                        else t("Bildirimleri alabilmek için bildirim iznini açabilirsin."),
+                        actionLabel = if (!notificationsAllowed) t("İzni aç") else null,
                         onActionClick = if (!notificationsAllowed) onRequestNotifications else null
                     )
 
@@ -625,11 +695,11 @@ fun SettingsScreen(
                     // Reminder channel
                     SettingsStatusRow(
                         icon = ActionGlyph.Settings,
-                        title = "Hatırlatıcı kanalı",
+                        title = t("Hatırlatıcı kanalı"),
                         status = when {
-                            isChannelBlocked -> "Kapalı"
-                            isChannelVibrationEnabled -> "Açık • Titreşimli"
-                            else -> "Açık • Titreşimsiz"
+                            isChannelBlocked -> t("Kapalı")
+                            isChannelVibrationEnabled -> t("Açık • Titreşimli")
+                            else -> t("Açık • Titreşimsiz")
                         },
                         statusColor = when {
                             isChannelBlocked -> Color(0xFFA5A5AF)
@@ -637,11 +707,11 @@ fun SettingsScreen(
                             else -> Color(0xFFA5A5AF)
                         },
                         subtitle = when {
-                            isChannelBlocked -> "Hatırlatıcı bildirim kanalı sistem ayarlarından kapatılmış."
-                            isChannelVibrationEnabled -> "Bildirim geldiğinde ses ve titreşim uyarısı verilir."
-                            else -> "Kanal açık fakat titreşim sistem ayarlarından kapatılmış."
+                            isChannelBlocked -> t("Hatırlatıcı bildirim kanalı sistem ayarlarından kapatılmış.")
+                            isChannelVibrationEnabled -> t("Bildirim geldiğinde ses ve titreşim uyarısı verilir.")
+                            else -> t("Kanal açık fakat titreşim sistem ayarlarından kapatılmış.")
                         },
-                        actionLabel = "Kanal ayarları",
+                        actionLabel = t("Kanal ayarları"),
                         onActionClick = {
                             try {
                                 val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
@@ -666,14 +736,95 @@ fun SettingsScreen(
                     // Exact alarms
                     SettingsStatusRow(
                         icon = ActionGlyph.Calendar,
-                        title = "Tam saatinde hatırlatma",
-                        status = if (exactAlarmsAllowed) "Açık" else "Kapalı",
+                        title = t("Tam saatinde hatırlatma"),
+                        status = if (exactAlarmsAllowed) t("Açık") else t("Kapalı"),
                         statusColor = if (exactAlarmsAllowed) Color(0xFF91B9FF) else Color(0xFFA5A5AF),
-                        subtitle = if (exactAlarmsAllowed) "Alarmlar tam zamanında çalacak şekilde ayarlandı."
-                        else "Android'in bildirim saatini geciktirmemesi için alarm iznini açabilirsin.",
-                        actionLabel = if (!exactAlarmsAllowed) "İzni aç" else null,
+                        subtitle = if (exactAlarmsAllowed) t("Alarmlar tam zamanında çalacak şekilde ayarlandı.")
+                        else t("Android'in bildirim saatini geciktirmemesi için alarm iznini açabilirsin."),
+                        actionLabel = if (!exactAlarmsAllowed) t("İzni aç") else null,
                         onActionClick = if (!exactAlarmsAllowed) onRequestExactAlarms else null
                     )
+
+                    SettingsDivider()
+
+                    // Alarm cards: sound (the phone's ringtone by default) and snooze length.
+                    var alarmSound by remember { mutableStateOf(com.cagri.real.notifications.RealAlarm.soundTitle(context)) }
+                    var alarmSnooze by remember { mutableStateOf(com.cagri.real.notifications.RealAlarm.snoozeMinutes(context)) }
+                    val alarmSoundPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+                        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+                    ) { result ->
+                        val data = result.data ?: return@rememberLauncherForActivityResult
+                        if (result.resultCode != android.app.Activity.RESULT_OK) return@rememberLauncherForActivityResult
+                        @Suppress("DEPRECATION")
+                        val picked = data.getParcelableExtra<android.net.Uri>(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                        com.cagri.real.notifications.RealAlarm.setSound(context, picked)
+                        alarmSound = com.cagri.real.notifications.RealAlarm.soundTitle(context)
+                    }
+                    SettingsActionRow(
+                        icon = ActionGlyph.Bell,
+                        title = "Alarm sesi",
+                        subtitle = alarmSound,
+                        onClick = {
+                            val intent = Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE,
+                                    android.media.RingtoneManager.TYPE_RINGTONE or android.media.RingtoneManager.TYPE_ALARM)
+                                putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TITLE, "Alarm sesi")
+                                putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, android.provider.Settings.System.DEFAULT_RINGTONE_URI)
+                                putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                                putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, com.cagri.real.notifications.RealAlarm.soundUri(context))
+                            }
+                            runCatching { alarmSoundPicker.launch(intent) }
+                        }
+                    )
+
+                    SettingsDivider()
+
+                    SettingsActionRow(
+                        icon = ActionGlyph.Repeat,
+                        title = "Alarm erteleme",
+                        subtitle = t("{0} dakika · değiştirmek için dokun", alarmSnooze),
+                        onClick = {
+                            val choices = com.cagri.real.notifications.RealAlarm.SNOOZE_CHOICES
+                            alarmSnooze = choices[(choices.indexOf(alarmSnooze) + 1) % choices.size]
+                            com.cagri.real.notifications.RealAlarm.setSnoozeMinutes(context, alarmSnooze)
+                        }
+                    )
+
+                    // Optional: full screen also while the phone is in use; re-read when coming back from the system page.
+                    var overPhone by remember { mutableStateOf(com.cagri.real.notifications.RealAlarm.canShowOverPhone(context)) }
+                    val alarmLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+                    DisposableEffect(alarmLifecycle) {
+                        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) overPhone = com.cagri.real.notifications.RealAlarm.canShowOverPhone(context)
+                        }
+                        alarmLifecycle.addObserver(observer)
+                        onDispose { alarmLifecycle.removeObserver(observer) }
+                    }
+                    SettingsDivider()
+                    SettingsStatusRow(
+                        icon = ActionGlyph.Bell,
+                        title = t("Telefon açıkken tam ekran alarm"),
+                        status = if (overPhone) t("Açık") else t("Kapalı"),
+                        statusColor = if (overPhone) Color(0xFF91B9FF) else Color(0xFFA5A5AF),
+                        subtitle = if (overPhone) t("Alarm, telefonu kullanırken de tam ekran açılır.")
+                        else t("Kapalıyken telefonu kullanırken alarm üstte bildirim olarak görünür."),
+                        actionLabel = if (overPhone) "Kapat" else t("İzni aç"),
+                        onActionClick = { com.cagri.real.notifications.RealAlarm.openOverPhoneSettings(context) }
+                    )
+
+                    if (!com.cagri.real.notifications.RealAlarm.canRingFullScreen(context)) {
+                        SettingsDivider()
+                        SettingsStatusRow(
+                            icon = ActionGlyph.Bell,
+                            title = "Tam ekran alarm",
+                            status = t("Kapalı"),
+                            statusColor = Color(0xFFA5A5AF),
+                            subtitle = t("Alarmların kilit ekranında tam ekran açılması için bu izni aç."),
+                            actionLabel = t("İzni aç"),
+                            onActionClick = { com.cagri.real.notifications.RealAlarm.openFullScreenSettings(context) }
+                        )
+                    }
 
                     SettingsDivider()
 
@@ -682,8 +833,8 @@ fun SettingsScreen(
                     SettingsRow(
                         icon = ActionGlyph.NowBar,
                         title = "Samsung Now Bar",
-                        subtitle = "Geliştiriliyor. Açıkken kartın üstündeki Yapıştır butonunun yerinde Now Bar butonu olur.",
-                        badge = "Geliştiriliyor",
+                        subtitle = t("Geliştiriliyor. Açıkken kartın üstündeki Yapıştır butonunun yerinde Now Bar butonu olur."),
+                        badge = t("Geliştiriliyor"),
                         checked = nowBarEnabled,
                         onCheckedChange = {
                             nowBarEnabled = it
@@ -704,7 +855,7 @@ fun SettingsScreen(
                         onClick = { showRealPro = true }
                     )
                 }
-                SettingsSectionHeader("GİZLİLİK")
+                SettingsSectionHeader(t("GİZLİLİK"))
                 SettingsGlassGroup {
                     SettingsActionRow(
                         icon = ActionGlyph.Note,
@@ -734,8 +885,8 @@ fun SettingsScreen(
                     val pictureScope = rememberCoroutineScope()
                     SettingsRow(
                         icon = ActionGlyph.Person,
-                        title = "Fotoğrafımı kişilerimle paylaş",
-                        subtitle = "Profil fotoğrafın Kişilerim'de ve ortak kategorilerde görünür. Avatar her zaman görünür.",
+                        title = t("Fotoğrafımı kişilerimle paylaş"),
+                        subtitle = t("Profil fotoğrafın Kişilerim'de ve ortak kategorilerde görünür. Avatar her zaman görünür."),
                         checked = sharePhoto,
                         onCheckedChange = { on ->
                             sharePhoto = on
@@ -775,26 +926,26 @@ fun SettingsScreen(
 
                     SettingsActionRow(
                         icon = ActionGlyph.Note,
-                        title = "Açık kaynak lisansları",
-                        subtitle = "Humation, Tabler Icons ve üçüncü taraf bildirimleri",
+                        title = t("Açık kaynak lisansları"),
+                        subtitle = t("Humation, Tabler Icons ve üçüncü taraf bildirimleri"),
                         onClick = { showLicensesDialog = true }
                     )
 
                     SettingsDivider()
                     SettingsActionRow(
                         icon = ActionGlyph.Note,
-                        title = "Veri kaynakları ve lisanslar",
+                        title = t("Veri kaynakları ve lisanslar"),
                         subtitle = "TheTVDB, TVmaze ve IGDB",
                         onClick = { showDataSources = true }
                     )
                 }
 
-                SettingsSectionHeader("GELİŞTİRİCİ")
+                SettingsSectionHeader(t("GELİŞTİRİCİ"))
                 SettingsGlassGroup {
                     SettingsActionRow(
                         icon = ActionGlyph.Settings,
-                        title = "Geliştirici araçları",
-                        subtitle = "Tanılama, testler ve tasarım demoları",
+                        title = t("Geliştirici araçları"),
+                        subtitle = t("Tanılama, testler ve tasarım demoları"),
                         onClick = { showDeveloperTools = true }
                     )
                 }
@@ -821,9 +972,9 @@ fun SettingsScreen(
     if (showClearMoodConfirm) {
         com.cagri.real.ui.components.RealAlertDialog(
             onDismissRequest = { showClearMoodConfirm = false },
-            title = { Text("Tüm mood kayıtlarını sil?") },
+            title = { Text(t("Tüm mood kayıtlarını sil?")) },
             text = {
-                Text("Moods kayıtları ve REAL kartlarındaki Mood blokları silinecek. Günlükler korunacak.")
+                Text(t("Moods kayıtları ve REAL kartlarındaki Mood blokları silinecek. Günlükler korunacak."))
             },
             confirmButton = {
                 TextButton(
@@ -837,7 +988,7 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearMoodConfirm = false }) {
-                    Text("Vazgeç")
+                    Text(t("Vazgeç"))
                 }
             }
         )
@@ -865,7 +1016,7 @@ private fun SettingsGlassGroup(
 @Composable
 private fun SettingsSectionHeader(title: String) {
     Text(
-        text = title,
+        text = com.cagri.real.i18n.t(title),
         color = Color(0xFFA3A3AB).copy(alpha = 0.9f),
         fontSize = 11.5.sp,
         fontWeight = FontWeight.SemiBold,
@@ -907,7 +1058,7 @@ private fun SettingsIconTile(icon: ActionGlyph) {
 @Composable
 private fun SettingsTitle(text: String) {
     Text(
-        text = text,
+        text = com.cagri.real.i18n.t(text),
         color = Color.White,
         fontSize = 16.sp,
         lineHeight = 21.sp,
@@ -919,7 +1070,7 @@ private fun SettingsTitle(text: String) {
 @Composable
 private fun SettingsSubtitle(text: String, modifier: Modifier = Modifier) {
     Text(
-        text = text,
+        text = com.cagri.real.i18n.t(text),
         color = Color(0xFF9A9AA5),
         fontSize = 12.5.sp,
         lineHeight = 17.sp,
@@ -1063,7 +1214,7 @@ private fun SettingsStatusRow(
                             .padding(horizontal = 10.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = status,
+                            text = com.cagri.real.i18n.t(status),
                             color = statusColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
@@ -1103,9 +1254,9 @@ private fun LicensesDialog(onDismiss: () -> Unit) {
     var selectedIndex by remember { mutableIntStateOf(0) }
     val licenseEntries = remember {
         listOf(
-            Triple("Humation", "Humation 1 avatar varlıkları (MIT)", "licenses/Humation-MIT.txt"),
-            Triple("Tabler Icons", "Tabler Icons vektör simge seti (MIT)", "licenses/Tabler-Icons-MIT.txt"),
-            Triple("Inter Font", "Inter değişken yazı tipi (SIL OFL 1.1)", "licenses/Inter-OFL.txt")
+            Triple("Humation", t("Humation 1 avatar varlıkları (MIT)"), "licenses/Humation-MIT.txt"),
+            Triple("Tabler Icons", t("Tabler Icons vektör simge seti (MIT)"), "licenses/Tabler-Icons-MIT.txt"),
+            Triple("Inter Font", t("Inter değişken yazı tipi (SIL OFL 1.1)"), "licenses/Inter-OFL.txt")
         )
     }
 
@@ -1207,7 +1358,7 @@ private fun PetScenariosDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                "Pet senaryoları",
+                t("Pet senaryoları"),
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold
@@ -1259,40 +1410,40 @@ private data class CatalogSourceNotice(
     val terms: String
 )
 
-private val catalogSourceNotices = listOf(
+private val catalogSourceNotices get() = listOf(
     CatalogSourceNotice(
         "TheTVDB",
-        "Film bilgileri TheTVDB tarafından sağlanır. API kullanımı TheTVDB'nin proje lisansı ve kullanım koşullarına tabidir. Afişler ve oyuncu görselleri ilgili hak sahiplerine aittir; API erişimi görsel kullanım haklarını otomatik olarak vermez.",
+        t("Film bilgileri TheTVDB tarafından sağlanır. API kullanımı TheTVDB'nin proje lisansı ve kullanım koşullarına tabidir. Afişler ve oyuncu görselleri ilgili hak sahiplerine aittir; API erişimi görsel kullanım haklarını otomatik olarak vermez."),
         "https://thetvdb.com/",
         "https://www.thetvdb.com/api-information"
     ),
     CatalogSourceNotice(
         "TVmaze",
-        "Dizi bilgileri TVmaze tarafından sağlanır. API verileri CC BY-SA lisansıyla sunulur; kaynak gösterme ve uyarlanmış materyal için aynı lisans koşullarını koruma yükümlülüğü vardır. Kapaklar ve oyuncu görselleri ilgili hak sahiplerine aittir.",
+        t("Dizi bilgileri TVmaze tarafından sağlanır. API verileri CC BY-SA lisansıyla sunulur; kaynak gösterme ve uyarlanmış materyal için aynı lisans koşullarını koruma yükümlülüğü vardır. Kapaklar ve oyuncu görselleri ilgili hak sahiplerine aittir."),
         "https://www.tvmaze.com/",
         "https://www.tvmaze.com/api#licensing"
     ),
     CatalogSourceNotice(
         "IGDB",
-        "Oyun bilgileri ve kapaklar IGDB'den alınır. IGDB, ticari kullanım için partner başvurusu ve görünür kaynak gösterimi ister. API'nin ücretsiz sunulması bu başvuru koşulunu kaldırmaz. Oyun kapakları ve marka hakları ilgili hak sahiplerine aittir.",
+        t("Oyun bilgileri ve kapaklar IGDB'den alınır. IGDB, ticari kullanım için partner başvurusu ve görünür kaynak gösterimi ister. API'nin ücretsiz sunulması bu başvuru koşulunu kaldırmaz. Oyun kapakları ve marka hakları ilgili hak sahiplerine aittir."),
         "https://www.igdb.com/",
         "https://api-docs.igdb.com/#business-related-faq"
     ),
     CatalogSourceNotice(
         "Apple iTunes",
-        "Müzik araması, kapaklar ve önizleme bağlantıları Apple iTunes Search API'den alınır. Önizlemeler tanıtım amaçlıdır; indirilip kitaplığa kaydedilmez. Apple'ın önizleme, kaynak gösterimi ve mağazaya bağlantı koşulları geçerlidir.",
+        t("Müzik araması, kapaklar ve önizleme bağlantıları Apple iTunes Search API'den alınır. Önizlemeler tanıtım amaçlıdır; indirilip kitaplığa kaydedilmez. Apple'ın önizleme, kaynak gösterimi ve mağazaya bağlantı koşulları geçerlidir."),
         "https://www.apple.com/itunes/",
         "https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/index.html"
     ),
     CatalogSourceNotice(
         "OpenFreeMap / OpenStreetMap",
-        "Harita karoları OpenFreeMap üzerinden gelir. OpenMapTiles ve OpenStreetMap katkıda bulunanları harita verisinin kaynaklarıdır. Haritada görünen kaynak gösterimi korunmalıdır; bu sayfa harita üzerindeki kaynak gösteriminin yerine geçmez.",
+        t("Harita karoları OpenFreeMap üzerinden gelir. OpenMapTiles ve OpenStreetMap katkıda bulunanları harita verisinin kaynaklarıdır. Haritada görünen kaynak gösterimi korunmalıdır; bu sayfa harita üzerindeki kaynak gösteriminin yerine geçmez."),
         "https://openfreemap.org/",
         "https://osmfoundation.org/wiki/Licence/Attribution_Guidelines"
     ),
     CatalogSourceNotice(
         "Humation",
-        "Çizim avatar düzenleyicisi Humation'ın açık kaynak kodunu ve görsellerini kullanır. Proje bunları MIT lisansıyla sunar. MIT telif ve lisans metninin dağıtımda korunması gerekir.",
+        t("Çizim avatar düzenleyicisi Humation'ın açık kaynak kodunu ve görsellerini kullanır. Proje bunları MIT lisansıyla sunar. MIT telif ve lisans metninin dağıtımda korunması gerekir."),
         "https://humation.app/",
         "https://github.com/humation-labs/humation"
     )
@@ -1305,15 +1456,15 @@ private fun CatalogSourcesSection() {
     fun open(url: String) {
         linkError = null
         try { uri.openUri(url) }
-        catch (_: Exception) { linkError = "Bağlantı açılamadı. Bir tarayıcı yüklü olduğundan emin ol." }
+        catch (_: Exception) { linkError = t("Bağlantı açılamadı. Bir tarayıcı yüklü olduğundan emin ol.") }
     }
-    SettingsSectionHeader("VERİ KAYNAKLARI VE LİSANSLAR")
+    SettingsSectionHeader(t("VERİ KAYNAKLARI VE LİSANSLAR"))
     catalogSourceNotices.forEach { source ->
         SettingsGlassGroup {
             SettingsActionRow(
                 icon = ActionGlyph.Note,
                 title = source.name,
-                subtitle = "Resmî kaynağı aç",
+                subtitle = t("Resmî kaynağı aç"),
                 onClick = { open(source.website) }
             )
             Text(source.summary, color = Color(0xFFA3A3AB), fontSize = 13.sp,
@@ -1321,7 +1472,7 @@ private fun CatalogSourcesSection() {
             SettingsDivider()
             SettingsActionRow(
                 icon = ActionGlyph.Note,
-                title = "Lisans ve kullanım koşulları",
+                title = t("Lisans ve kullanım koşulları"),
                 subtitle = source.name,
                 onClick = { open(source.terms) }
             )
@@ -1350,8 +1501,8 @@ private fun ShareShortcutSettings() {
     }
     SettingsRow(
         icon = ActionGlyph.Share,
-        title = "Paylaş menüsü kısayolları",
-        subtitle = "Başka bir uygulamada Paylaş deyince REAL kategorilerin menünün üst sırasında çıkar.",
+        title = t("Paylaş menüsü kısayolları"),
+        subtitle = t("Başka bir uygulamada Paylaş deyince REAL kategorilerin menünün üst sırasında çıkar."),
         checked = enabled,
         onCheckedChange = { enabled = it; shortcuts.setEnabled(context, it); republish() }
     )
@@ -1360,21 +1511,21 @@ private fun ShareShortcutSettings() {
         val names = selected.mapNotNull { id -> categories.firstOrNull { it.id == id }?.name }
         SettingsActionRow(
             icon = ActionGlyph.Category,
-            title = "Kısayol kategorileri",
-            subtitle = if (names.isEmpty()) "Otomatik · en çok kullandığın kategoriler" else names.joinToString(", "),
+            title = t("Kısayol kategorileri"),
+            subtitle = if (names.isEmpty()) t("Otomatik · en çok kullandığın kategoriler") else names.joinToString(", "),
             onClick = { picking = true }
         )
     }
     if (picking) {
         com.cagri.real.ui.components.RealAlertDialog(
             onDismissRequest = { picking = false },
-            title = { Text("Kısayol kategorileri") },
+            title = { Text(t("Kısayol kategorileri")) },
             text = {
                 Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
-                    Text("En fazla ${shortcuts.MAX} kategori seç. Hiçbirini seçmezsen en çok kullandıkların çıkar.",
+                    Text(t("En fazla {0} kategori seç. Hiçbirini seçmezsen en çok kullandıkların çıkar.", shortcuts.MAX),
                         color = Color(0xFFA5A5AF), fontSize = 13.sp)
                     Spacer(Modifier.height(10.dp))
-                    if (categories.isEmpty()) Text("Henüz kategori yok.", color = Color(0xFFA5A5AF), fontSize = 14.sp)
+                    if (categories.isEmpty()) Text(t("Henüz kategori yok."), color = Color(0xFFA5A5AF), fontSize = 14.sp)
                     categories.forEach { c ->
                         val on = c.id in selected
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
@@ -1392,9 +1543,9 @@ private fun ShareShortcutSettings() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { shortcuts.setSelected(context, selected); picking = false; republish() }) { Text("Kaydet") }
+                TextButton(onClick = { shortcuts.setSelected(context, selected); picking = false; republish() }) { Text(t("Kaydet")) }
             },
-            dismissButton = { TextButton(onClick = { selected = shortcuts.selected(context); picking = false }) { Text("Vazgeç") } }
+            dismissButton = { TextButton(onClick = { selected = shortcuts.selected(context); picking = false }) { Text(t("Vazgeç")) } }
         )
     }
 }

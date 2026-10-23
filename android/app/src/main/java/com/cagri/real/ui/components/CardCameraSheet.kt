@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.t
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -60,7 +61,7 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
     var error by remember { mutableStateOf<String?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         permission = it
-        if (!it) error = "Kamera izni verilmedi. Fotoğraf eklemek için galeriyi de kullanabilirsin."
+        if (!it) error = t("Kamera izni verilmedi. Fotoğraf eklemek için galeriyi de kullanabilirsin.")
     }
     LaunchedEffect(Unit) {
         if (!permission) { requested = true; permissionLauncher.launch(Manifest.permission.CAMERA) }
@@ -116,7 +117,7 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
                                 .addUseCase(preview).addUseCase(capture).build()
                             p.bindToLifecycle(lifecycle, selector, group)
                         }.onSuccess { cameraReady = true; error = null }
-                            .onFailure { error = "Kamera açılamadı. Galeriden fotoğraf ekleyebilirsin." }
+                            .onFailure { error = t("Kamera açılamadı. Galeriden fotoğraf ekleyebilirsin.") }
                     }
                 }
             }, executor)
@@ -134,22 +135,22 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
             Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)
                 .realEntrance(entrance, durationMs = 400, slideY = 16.dp)) {
                 Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Fotoğraf", style = com.cagri.real.ui.theme.RealType.editorialSubtitle, modifier = Modifier.weight(1f))
-                    CameraControl(ActionGlyph.Close, "Kapat", !busy, onDismiss)
+                    Text(t("Fotoğraf"), style = com.cagri.real.ui.theme.RealType.editorialSubtitle, modifier = Modifier.weight(1f))
+                    CameraControl(ActionGlyph.Close, t("Kapat"), !busy, onDismiss)
                 }
                 Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(24.dp)).background(Color(0xFF121214)),
                     contentAlignment = Alignment.Center) {
                     val shown = photo
-                    if (shown != null) AsyncImage(shown, "Çekilen fotoğraf", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    if (shown != null) AsyncImage(shown, t("Çekilen fotoğraf"), Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     else if (permission) AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
                     else Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         ActionIcon(ActionGlyph.Camera, Modifier.size(36.dp), Color.White)
-                        Text("Kamera için izin gerekiyor", modifier = Modifier.padding(top = 14.dp, bottom = 12.dp))
+                        Text(t("Kamera için izin gerekiyor"), modifier = Modifier.padding(top = 14.dp, bottom = 12.dp))
                         TextButton(onClick = {
                             if (requested) context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                                 Uri.parse("package:${context.packageName}")))
                             else { requested = true; permissionLauncher.launch(Manifest.permission.CAMERA) }
-                        }) { Text("İzni aç", color = Color.White) }
+                        }) { Text(t("İzni aç"), color = Color.White) }
                     }
                     if (permission && !cameraReady && shown == null && error == null) com.cagri.real.ui.components.RealSpinner(color = Color.White)
                     Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
@@ -157,7 +158,7 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
                         verticalAlignment = Alignment.CenterVertically) {
                         if (photo != null) {
                             TextButton(enabled = !busy, onClick = { photo?.delete(); photo = null; error = null }) {
-                                Text("Yeniden çek", color = Color.White)
+                                Text(t("Yeniden çek"), color = Color.White)
                             }
                             Row(Modifier.clip(RoundedCornerShape(24.dp)).liquidChrome(24.dp)
                                 .clickable(enabled = !busy) {
@@ -166,10 +167,10 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
                                 }.padding(horizontal = 20.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 ActionIcon(ActionGlyph.Add, Modifier.size(18.dp), Color.White)
-                                Text("Karta ekle", color = Color.White)
+                                Text(t("Karta ekle"), color = Color.White)
                             }
                         } else {
-                            CameraControl(ActionGlyph.Repeat, "Kamerayı değiştir", canFlip && !busy) { front = !front }
+                            CameraControl(ActionGlyph.Repeat, t("Kamerayı değiştir"), canFlip && !busy) { front = !front }
                             Box(Modifier.size(68.dp).border(2.dp, Color.White, CircleShape).padding(5.dp)
                                 .clip(CircleShape).background(if (cameraReady && !busy) Color.White else Color.DarkGray)
                                 .clickable(enabled = cameraReady && !busy) {
@@ -185,11 +186,11 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
                                             }
                                             override fun onError(exception: ImageCaptureException) {
                                                 file.delete()
-                                                if (alive) { busy = false; error = "Fotoğraf çekilemedi. Tekrar deneyebilirsin." }
+                                                if (alive) { busy = false; error = t("Fotoğraf çekilemedi. Tekrar deneyebilirsin.") }
                                             }
                                         }) } catch (_: Exception) {
                                         file.delete(); busy = false
-                                        error = "Fotoğraf çekilemedi. Tekrar deneyebilirsin."
+                                        error = t("Fotoğraf çekilemedi. Tekrar deneyebilirsin.")
                                     }
                                 }.semanticsCameraCapture(), contentAlignment = Alignment.Center) {
                                 if (busy) com.cagri.real.ui.components.RealSpinner(Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
@@ -206,7 +207,7 @@ internal fun CardCameraSheet(reduceAnimations: Boolean, onDismiss: () -> Unit, o
 }
 
 private fun Modifier.semanticsCameraCapture(): Modifier = this.then(Modifier.semantics {
-    contentDescription = "Fotoğraf çek"
+    contentDescription = t("Fotoğraf çek")
 })
 
 @Composable

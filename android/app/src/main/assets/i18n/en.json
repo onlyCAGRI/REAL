@@ -1950,5 +1950,15 @@
   "Ses kayıtları": "Voice recordings",
   "Kategori yüklenemedi.": "Couldn't load the category.",
   "{0} kategorime katıl: {1}": "Join my {0} category: {1}",
-  "Kişi eklenemedi.": "Couldn't add the person."
+  "Kişi eklenemedi.": "Couldn't add the person.",
+  "Çekilen fotoğraf": "Captured photo",
+  "Önerileri sıfırlamak istediğine emin misin?": "Are you sure you want to reset suggestions?",
+  "Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır.": "The music, film, series and game cards you passed and the current decks will be cleared. Your saved lists and what you marked as Watched / Played stay.",
+  "Sıfırla": "Reset",
+  "Puanları sıfırlamak istediğine emin misin?": "Are you sure you want to reset ratings?",
+  "Puanlarım listesi boşalır. Bu geri alınamaz.": "Your ratings list will be emptied. This can't be undone.",
+  "Tüm mood kayıtlarını sil?": "Delete all mood records?",
+  "Moods kayıtları ve REAL kartlarındaki Mood blokları silinecek. Günlükler korunacak.": "Mood records and the Mood blocks on REAL cards will be deleted. Journals are kept.",
+  "En fazla {0} kategori seç. Hiçbirini seçmezsen en çok kullandıkların çıkar.": "Pick up to {0} categories. If you pick none, your most used ones appear.",
+  "Henüz kategori yok.": "No categories yet."
 }
