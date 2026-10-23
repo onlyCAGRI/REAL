@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.i18n.t
 import com.cagri.real.ui.components.RealMotion
 import android.content.Context
 import android.os.Build
@@ -229,7 +230,7 @@ fun PlannerScreen(
             throw cancelled
         } catch (_: Exception) {
             ready = false
-            error = "Plan ayrıntıları okunamadı. Yeniden denemek için dokun."
+            error = t("Plan ayrıntıları okunamadı. Yeniden denemek için dokun.")
         }
     }
 
@@ -395,7 +396,7 @@ fun PlannerScreen(
                 else event.start
                 event.eventId == -id && (occurrenceMillis == null || displayedStart == occurrenceMillis)
             }
-            if (openedExternalEvent == null) error = "Etkinlik değişmiş olabilir. Takvimi yenile."
+            if (openedExternalEvent == null) error = t("Etkinlik değişmiş olabilir. Takvimi yenile.")
             return
         }
         editDay = null
@@ -418,7 +419,7 @@ fun PlannerScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                error = "Süre kaydedilemedi. Yeniden dene."
+                error = t("Süre kaydedilemedi. Yeniden dene.")
             }
         }
     }
@@ -444,9 +445,9 @@ fun PlannerScreen(
                 else fadeIn(tween(200)) + expandVertically(tween(260, easing = com.cagri.real.ui.components.RealMotion.Emphasized)),
             exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(100)) + shrinkVertically(tween(160))
         ) {
-            val startTimeStr = if (itemEvent.isDateOnly24Hour) "Saat ekle" else formatTimeAmPm(itemEvent.startMillis, zone)
+            val startTimeStr = if (itemEvent.isDateOnly24Hour) t("Saat ekle") else formatTimeAmPm(itemEvent.startMillis, zone)
             val endMillis = itemEvent.endMillis
-            val endTimeStr = if (itemEvent.isDateOnly24Hour || endMillis == null) "Bitiş ekle" else formatTimeAmPm(endMillis, zone)
+            val endTimeStr = if (itemEvent.isDateOnly24Hour || endMillis == null) t("Bitiş ekle") else formatTimeAmPm(endMillis, zone)
             PlannerInlineEventEditor(
                 startTime = startTimeStr,
                 endTime = endTimeStr,
@@ -502,14 +503,14 @@ fun PlannerScreen(
                         check(calendarStore.isCurrent())
                         provider.calendars().singleOrNull { it.id == event.calendarId &&
                             calendarStore.options().readIdentities[it.id] == it.identity }
-                            ?: error("Kaynak takvim değişti; seçimi yenile.")
+                            ?: error(t("Kaynak takvim değişti; seçimi yenile."))
                     }
                     val existing = calendarCards.associations().firstOrNull {
                         it.eventId == event.eventId && it.calendarId == event.calendarId && it.identity == source.identity &&
                             reminders.any { r -> r.id == it.cardId }
                     }
                     val id = existing?.cardId ?: onCreateCalendarCard(event.title.take(2000))
-                        ?: error("REAL kartı oluşturulamadı.")
+                        ?: error(t("REAL kartı oluşturulamadı."))
                     kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
                         check(calendarStore.isCurrent())
                         if (existing == null) calendarCards.associate(event, source, id)
@@ -702,7 +703,7 @@ fun PlannerScreen(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                "Önündeki 24 saatte etkinlik yok.",
+                                                t("Önündeki 24 saatte etkinlik yok."),
                                                 color = Color(0xFF8E8E93),
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.Normal
@@ -805,7 +806,7 @@ fun PlannerScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             com.cagri.real.ui.components.RealBackButton(
-                                ::calendarBack, description = "Önceki görünüme dön",
+                                ::calendarBack, description = t("Önceki görünüme dön"),
                                 visualSize = 44.dp, glyphSize = 20.dp, surface = {
                                     PlannerGlass(Modifier.fillMaxSize(), 22.dp, designStyle, scene,
                                         { scenePosition }, reduceDynamicBlur, pressFeedback = false) {}
@@ -860,7 +861,7 @@ fun PlannerScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            "Takvim",
+                                            t("Takvim"),
                                             color = if (calendar) Color.White else Color(0xFFB0B0B8),
                                             fontSize = 13.sp,
                                             fontWeight = if (calendar) FontWeight.SemiBold else FontWeight.Medium
@@ -884,7 +885,7 @@ fun PlannerScreen(
                                             }
                                             add(targetDay, nextHour.hour)
                                         }
-                                        .semantics { contentDescription = "Yeni etkinlik ekle" },
+                                        .semantics { contentDescription = t("Yeni etkinlik ekle") },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     ActionIcon(ActionGlyph.Add, Modifier.size(20.dp), Color.White)
@@ -1076,7 +1077,7 @@ fun PlannerScreen(
                     ) { title, at, repeatRule, metadata, priorId, categoryId ->
                         val id = priorId ?: onCreateReminder(title, at, repeatRule, categoryId)
                         if (id == null) {
-                            PlannerSaveResult(null, false, "Kart kaydedilemedi. Yeniden dene.")
+                            PlannerSaveResult(null, false, t("Kart kaydedilemedi. Yeniden dene."))
                         } else {
                             try {
                                 details = repository.put(id, metadata)
@@ -1087,7 +1088,7 @@ fun PlannerScreen(
                                 PlannerSaveResult(
                                     id,
                                     false,
-                                    "REAL kartı kaydedildi; plan ayrıntıları kaydedilemedi. Yeniden dene; ikinci kart oluşturulmayacak."
+                                    t("REAL kartı kaydedildi; plan ayrıntıları kaydedilemedi. Yeniden dene; ikinci kart oluşturulmayacak.")
                                 )
                             }
                         }
@@ -1184,7 +1185,7 @@ fun PlannerScreen(
                                         }
                                         categoryPlannerPreferences.setLink(categoryPlannerKey(null, shownCategory)!!, value)
                                     } catch (cancelled: CancellationException) { throw cancelled }
-                                    catch (failure: Exception) { com.cagri.real.ui.components.RealToast.show(context, failure.message ?: "Link kaydedilemedi.", long = true) }
+                                    catch (failure: Exception) { com.cagri.real.ui.components.RealToast.show(context, failure.message ?: t("Link kaydedilemedi."), long = true) }
                                 }
                             },
                             onAddMember = { manageCategory = shownCategory },
@@ -1265,7 +1266,7 @@ fun PlannerScreen(
                                 } catch (cancelled: CancellationException) {
                                     throw cancelled
                                 } catch (_: Exception) {
-                                    error = "Plan süresi kaydedilemedi; saat yine de ayarlandı."
+                                    error = t("Plan süresi kaydedilemedi; saat yine de ayarlandı.")
                                 }
                             }
                         }
@@ -1294,7 +1295,7 @@ fun PlannerScreen(
                     onConfirm = { endAt, _ ->
                         // Bitiş: day and time; the duration (Süre) stays as set.
                         if (endAt > startAt) setReminderTiming(reminder.id, reminder.earlyAlertMinutes, endAt)
-                        else error = "Bitiş, başlangıçtan sonra olmalı."
+                        else error = t("Bitiş, başlangıçtan sonra olmalı.")
                         endTimeEditorId = null
                     }
                 )
@@ -1348,7 +1349,7 @@ private fun PlannerInlineEventEditor(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text("Başlangıç", color = Color.White.copy(alpha = 0.48f), fontSize = 8.sp)
+                    Text(t("Başlangıç"), color = Color.White.copy(alpha = 0.48f), fontSize = 8.sp)
                     Text(startTime, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
             }
@@ -1364,7 +1365,7 @@ private fun PlannerInlineEventEditor(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text("Bitiş", color = Color.White.copy(alpha = 0.48f), fontSize = 8.sp)
+                    Text(t("Bitiş"), color = Color.White.copy(alpha = 0.48f), fontSize = 8.sp)
                     Text(endTime, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
             }
@@ -1394,7 +1395,7 @@ private fun PlannerInlineEventEditor(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "$minutes min",
+                        t("{0} min", minutes),
                         color = if (selected) Color.Black else Color.White.copy(alpha = 0.76f),
                         fontSize = 9.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
@@ -1457,7 +1458,7 @@ private fun PlannerDurationChoices(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "$minutes min",
+                    t("{0} min", minutes),
                     color = when {
                         chosen && dark -> Color.Black
                         chosen -> Color.White

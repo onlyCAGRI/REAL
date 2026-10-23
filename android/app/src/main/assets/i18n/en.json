@@ -1921,5 +1921,15 @@
   "Kayıtları görüntüle": "View records",
   "Bugün plan yok": "Nothing planned today",
   "Bugün tamamlanan": "Completed today",
-  "Su verisi şu an okunamadı": "Water data can't be read right now"
+  "Su verisi şu an okunamadı": "Water data can't be read right now",
+  "Son gün {0} {1}": "Last day {0} {1}",
+  "Geçerli bir web bağlantısı kopyala.": "Copy a valid web link.",
+  "Kare": "Square",
+  "Dikdörtgen": "Rectangle",
+  "Etkinlik değişmiş olabilir. Takvimi yenile.": "The event may have changed. Refresh the calendar.",
+  "Kaynak takvim değişti; seçimi yenile.": "The source calendar changed; refresh the selection.",
+  "REAL kartı oluşturulamadı.": "Couldn't create the REAL card.",
+  "{0}, {1} etkinlik, bugün": "{0}, {1} events, today",
+  "{0}, {1} etkinlik": "{0}, {1} events",
+  "Link kaydedilemedi.": "Couldn't save the link."
 }

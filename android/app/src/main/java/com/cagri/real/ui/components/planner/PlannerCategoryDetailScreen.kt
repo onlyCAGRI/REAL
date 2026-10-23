@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.i18n.t
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -160,7 +161,7 @@ data class PlannerCategoryDetailUi(
     /** Same people with their uid and shared picture (Manage avatars); falls back to [members] names when empty. */
     val people: List<com.cagri.real.sharedcategories.SharedCategoryMember> = emptyList(),
     /** Text shown on the link page of the swipe card. */
-    val linkText: String = "link yazılacak"
+    val linkText: String = t("link yazılacak")
 )
 
 object PlannerWeekHistoryStore {
@@ -340,7 +341,7 @@ internal fun plannerCategoryDetailUi(
         ).joinToString("  ·  ")
         PlannerGoalUi(
             id = r.id,
-            title = r.text.trim().ifBlank { "Untitled" },
+            title = r.text.trim().ifBlank { t("Untitled") },
             caption = caption,
             done = r.isCompleted,
             progress = if (!r.isCompleted && items.isNotEmpty() && checked > 0) checked / items.size.toFloat() else null,
@@ -506,9 +507,9 @@ fun PlannerCategoryDetailScreen(
                         .border(1.dp, Color(0xFF6FD6FF).copy(alpha = 0.45f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) { LinkMark(Color.White, Modifier.size(26.dp)) }
-                Text("Kategori linki", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                Text(t("Kategori linki"), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Meet, Zoom veya başka bir web bağlantısını kopyala; klavye açmadan buradan yapıştır.",
+                    t("Meet, Zoom veya başka bir web bağlantısını kopyala; klavye açmadan buradan yapıştır."),
                     color = Color(0xFF9A9AA2), fontSize = 14.sp, lineHeight = 20.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
@@ -518,16 +519,16 @@ fun PlannerCategoryDetailScreen(
                             val clipboard = contextForLink.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                             val value = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(contextForLink)?.toString().orEmpty()
                             val link = com.cagri.real.ui.components.validPlannerLink(value)
-                            if (link == null) com.cagri.real.ui.components.RealToast.show(contextForLink, "Geçerli bir web bağlantısı kopyala.")
+                            if (link == null) com.cagri.real.ui.components.RealToast.show(contextForLink, t("Geçerli bir web bağlantısı kopyala."))
                             else { onPasteLink(link); showPasteLink = false }
                         },
                     contentAlignment = Alignment.Center
-                ) { Text("Panodan yapıştır", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+                ) { Text(t("Panodan yapıştır"), color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
                 Box(
                     Modifier.fillMaxWidth().height(44.dp).clip(CircleShape)
                         .clickable(role = Role.Button) { showPasteLink = false },
                     contentAlignment = Alignment.Center
-                ) { Text("Vazgeç", color = Color(0xFF9A9AA2), fontSize = 15.sp) }
+                ) { Text(t("Vazgeç"), color = Color(0xFF9A9AA2), fontSize = 15.sp) }
             }
         }
     }
@@ -699,7 +700,7 @@ fun PlannerCategoryDetailScreen(
                                     reorderMode = !reorderMode
                                 }
                                 .semantics {
-                                    contentDescription = if (reorderMode) "Sıralamayı bitir" else "Hedefleri sırala"
+                                    contentDescription = if (reorderMode) t("Sıralamayı bitir") else t("Hedefleri sırala")
                                 },
                             contentAlignment = Alignment.Center
                         ) {
@@ -740,7 +741,7 @@ fun PlannerCategoryDetailScreen(
                         onShareLink = {
                             val link = com.cagri.real.ui.components.validPlannerLink(ui.linkText)
                             if (link != null) runCatching { uriHandler.openUri(link) }
-                                .onFailure { com.cagri.real.ui.components.RealToast.show(contextForLink, "Bağlantı açılamadı.") }
+                                .onFailure { com.cagri.real.ui.components.RealToast.show(contextForLink, t("Bağlantı açılamadı.")) }
                             else if (onPasteLink != null) showPasteLink = true else onShareLink()
                         },
                         onEditLink = if (onPasteLink != null) ({ showPasteLink = true }) else null,
@@ -765,7 +766,7 @@ fun PlannerCategoryDetailScreen(
                     listOf(
                         PlannerWeekActivityUi(
                             weekKey = "prev_2",
-                            title = "2 weeks ago",
+                            title = t("2 weeks ago"),
                             doneCount = 0,
                             activity = List(7) { 0 },
                             weekLabels = ui.weekLabels,
@@ -774,7 +775,7 @@ fun PlannerCategoryDetailScreen(
                         ),
                         PlannerWeekActivityUi(
                             weekKey = "prev_1",
-                            title = "Last week",
+                            title = t("Last week"),
                             doneCount = 0,
                             activity = List(7) { 0 },
                             weekLabels = ui.weekLabels,
@@ -783,7 +784,7 @@ fun PlannerCategoryDetailScreen(
                         ),
                         PlannerWeekActivityUi(
                             weekKey = "current",
-                            title = "This week",
+                            title = t("This week"),
                             doneCount = currentDone,
                             activity = ui.weekActivity,
                             weekLabels = ui.weekLabels,
@@ -840,11 +841,11 @@ fun PlannerCategoryDetailScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Goals ($total)",
+                            "Goals (${total})",
                             style = RealType.editorialSection.copy(color = Color.White),
                             modifier = Modifier.weight(1f)
                         )
-                        if (!readOnly) RoundIconButton(40.dp, DetailFaint, "Add goal", { composing = true; onAddGoal() }) {
+                        if (!readOnly) RoundIconButton(40.dp, DetailFaint, t("Add goal"), { composing = true; onAddGoal() }) {
                             PlusMark(Color.White, Modifier.size(16.dp))
                         }
                     }
@@ -906,7 +907,7 @@ fun PlannerCategoryDetailScreen(
                         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
                     ) {
                         PlusMark(accent, Modifier.size(15.dp))
-                        Text("Add goal", color = accent, fontSize = 14.sp, modifier = Modifier.padding(start = 10.dp))
+                        Text(t("Add goal"), color = accent, fontSize = 14.sp, modifier = Modifier.padding(start = 10.dp))
                     }
                 }
             }
@@ -956,11 +957,11 @@ private fun BoxScope.GoalComposerWindow(
             .liquidChrome(corners = 30.dp)
             .padding(start = 20.dp, end = 10.dp, top = 12.dp, bottom = 10.dp)
     ) {
-        Text("New goal in $categoryName", color = DetailMuted, fontSize = 12.sp, maxLines = 1,
+        Text("New goal in ${categoryName}", color = DetailMuted, fontSize = 12.sp, maxLines = 1,
             overflow = TextOverflow.Ellipsis)
         Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).heightIn(min = 44.dp), contentAlignment = Alignment.CenterStart) {
-                if (text.isEmpty()) Text("Add to REAL", color = Color(0xFF7C7C85), fontSize = 18.sp)
+                if (text.isEmpty()) Text(t("Add to REAL"), color = Color(0xFF7C7C85), fontSize = 18.sp)
                 BasicTextField(
                     value = text, onValueChange = { text = it },
                     textStyle = TextStyle(color = Color.White, fontSize = 18.sp),
@@ -974,7 +975,7 @@ private fun BoxScope.GoalComposerWindow(
                 Modifier.size(44.dp).clip(CircleShape)
                     .background(if (text.isBlank()) Color.White.copy(alpha = 0.10f) else accent)
                     .clickable(enabled = text.isNotBlank(), role = Role.Button) { submit() }
-                    .semantics { contentDescription = "Add goal" },
+                    .semantics { contentDescription = t("Add goal") },
                 contentAlignment = Alignment.Center
             ) {
                 PlusMark(if (text.isBlank()) Color(0xFF7C7C85) else PlannerInk, Modifier.size(16.dp))
@@ -1030,7 +1031,7 @@ private fun WeekActivity(
 ) {
     val fallback = ui.weekHistory.lastOrNull() ?: PlannerWeekActivityUi(
         weekKey = "current",
-        title = "This week",
+        title = t("This week"),
         doneCount = ui.weekActivity.sum(),
         activity = ui.weekActivity,
         weekLabels = ui.weekLabels,
@@ -1100,14 +1101,14 @@ private fun PlannerSwipeCard(
                         }
                         Spacer(Modifier.weight(1f))
                         Text(
-                            if (linkText.isBlank()) "Link yapıştır" else plannerLinkHost(linkText),
+                            if (linkText.isBlank()) t("Link yapıştır") else plannerLinkHost(linkText),
                             color = if (linkText.isBlank()) muted else ink,
                             fontSize = 17.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium,
                             maxLines = 2, overflow = TextOverflow.Ellipsis,
                             modifier = if (onEditLink != null) Modifier.clickable(role = Role.Button, onClick = onEditLink) else Modifier
                         )
                     }
-                    PagerActionButton(if (linkText.isBlank()) "Yapıştır" else "Aç", accent, true, onShareLink, ActionGlyph.ChevronRight, ink)
+                    PagerActionButton(if (linkText.isBlank()) t("Yapıştır") else t("Aç"), accent, true, onShareLink, ActionGlyph.ChevronRight, ink)
                 }
                 else -> {
                     Column(Modifier.weight(1f).fillMaxHeight().padding(start = 18.dp, top = 14.dp, bottom = 14.dp, end = 6.dp)) {
@@ -1135,7 +1136,7 @@ private fun PlannerSwipeCard(
                                 Modifier.size(36.dp).clip(CircleShape).border(1.dp, DetailFaint, CircleShape)
                                     .background(DetailBlack)
                                     .clickable(role = Role.Button, onClick = onAddMember)
-                                    .semantics { contentDescription = "Add member" },
+                                    .semantics { contentDescription = t("Add member") },
                                 contentAlignment = Alignment.Center
                             ) { PlusMark(Color.White, Modifier.size(14.dp)) }
                         }
@@ -1277,7 +1278,7 @@ private fun PlannerGoalRow(
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f).padding(top = 2.dp, bottom = if (isLast) 14.dp else 30.dp)) {
             val caption = when {
-                goal.done -> "Tamamlandı"
+                goal.done -> t("Tamamlandı")
                 goal.caption.isNotBlank() -> goal.caption
                 state == GoalState.Active -> "In progress"
                 else -> "Up next"
@@ -1313,7 +1314,7 @@ private fun PlannerGoalRow(
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { saveNote() }),
                     decorationBox = { inner ->
                         Box {
-                            if (noteDraft.isEmpty()) Text("Not yaz…", color = DetailFaint, fontSize = 13.sp, lineHeight = 18.sp)
+                            if (noteDraft.isEmpty()) Text(t("Not yaz…"), color = DetailFaint, fontSize = 13.sp, lineHeight = 18.sp)
                             inner()
                         }
                     },
@@ -1328,7 +1329,7 @@ private fun PlannerGoalRow(
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
                     modifier = Modifier.padding(top = 6.dp)
                         .then(if (readOnly) Modifier else Modifier.clickable(role = Role.Button) { startNote() })
-                        .semantics { contentDescription = "Tamamlama notu: ${goal.note}" }
+                        .semantics { contentDescription = t("Tamamlama notu: {0}", goal.note) }
                 )
             }
             goal.progress?.takeIf { !goal.done }?.let { p ->
@@ -1354,7 +1355,7 @@ private fun PlannerGoalRow(
                                 )
                             } else Modifier
                         )
-                        .semantics { if (reorderMode) contentDescription = "Reorder goal" },
+                        .semantics { if (reorderMode) contentDescription = t("Reorder goal") },
                     contentAlignment = Alignment.CenterStart
                 ) {
                     DotsMark(
@@ -1369,7 +1370,7 @@ private fun PlannerGoalRow(
                 Box(
                     Modifier.size(32.dp).clip(CircleShape)
                         .clickable(role = Role.Button) { if (goal.done) startNote() else onEdit() }
-                        .semantics { contentDescription = if (goal.done) "Tamamlama notu yaz" else "Edit goal" },
+                        .semantics { contentDescription = if (goal.done) t("Tamamlama notu yaz") else t("Edit goal") },
                     contentAlignment = Alignment.Center
                 ) { PencilMark(Color(0xFF8C8C95), Modifier.size(18.dp)) }
                 Spacer(Modifier.weight(1f))
@@ -1432,7 +1433,7 @@ private fun CategoryStylePopup(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 if (onPickPastel != null) {
-                    Text("Renk", color = Color(0xFF8C8C95), fontSize = 12.sp)
+                    Text(t("Renk"), color = Color(0xFF8C8C95), fontSize = 12.sp)
                     // 10 app pastels, two rows of five.
                     RealCalendarPastels.chunked(5).forEach { row ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1442,7 +1443,7 @@ private fun CategoryStylePopup(
                                     Modifier.size(40.dp).clip(CircleShape).background(pastel)
                                         .then(if (selected) Modifier.border(2.dp, Color.White, CircleShape) else Modifier)
                                         .clickable(role = Role.RadioButton) { onPickPastel(pastel) }
-                                        .semantics { contentDescription = if (selected) "Selected color" else "Color" },
+                                        .semantics { contentDescription = if (selected) t("Selected color") else t("Color") },
                                     contentAlignment = Alignment.Center
                                 ) { if (selected) CheckMark(PlannerInk, Modifier.size(16.dp)) }
                             }
@@ -1450,7 +1451,7 @@ private fun CategoryStylePopup(
                     }
                 }
                 if (cardShape != null && onCardShapeChange != null) {
-                    Text("Kart şekli", color = Color(0xFF8C8C95), fontSize = 12.sp)
+                    Text(t("Kart şekli"), color = Color(0xFF8C8C95), fontSize = 12.sp)
                     // Single-select: exactly one of the two is active.
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         PlannerCategoryCardShape.entries.forEach { option ->
@@ -1460,7 +1461,7 @@ private fun CategoryStylePopup(
                                     .background(if (selected) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.05f))
                                     .border(1.dp, if (selected) Color.White.copy(alpha = 0.7f) else Color.Transparent, RoundedCornerShape(18.dp))
                                     .clickable(role = Role.RadioButton) { onCardShapeChange(option) }
-                                    .semantics { contentDescription = if (selected) "Selected shape" else "Shape" }
+                                    .semantics { contentDescription = if (selected) t("Selected shape") else t("Shape") }
                                     .padding(vertical = 12.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1469,7 +1470,7 @@ private fun CategoryStylePopup(
                                 val (w, h) = if (option == PlannerCategoryCardShape.Square) 26.dp to 26.dp else 42.dp to 26.dp
                                 Box(Modifier.size(w, h).border(1.8.dp, previewColor, RoundedCornerShape(7.dp)))
                                 Text(
-                                    if (option == PlannerCategoryCardShape.Square) "Kare" else "Dikdörtgen",
+                                    if (option == PlannerCategoryCardShape.Square) t("Kare") else t("Dikdörtgen"),
                                     color = if (selected) Color.White else Color(0xFF8C8C95), fontSize = 13.sp
                                 )
                             }
@@ -1479,11 +1480,11 @@ private fun CategoryStylePopup(
                 if (onCalendarVisibilityChange != null) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         androidx.compose.material3.Checkbox(checked = visibleInCalendar, onCheckedChange = onCalendarVisibilityChange)
-                        Text("REAL takviminde göster", color = Color.White, fontSize = 13.sp)
+                        Text(t("REAL takviminde göster"), color = Color.White, fontSize = 13.sp)
                     }
                 }
                 Text(
-                    "Hedefleri sırala", color = Color.White, fontSize = 14.sp,
+                    t("Hedefleri sırala"), color = Color.White, fontSize = 14.sp,
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                         .background(Color.White.copy(alpha = 0.05f))
                         .clickable(role = Role.Button, onClick = onReorder)

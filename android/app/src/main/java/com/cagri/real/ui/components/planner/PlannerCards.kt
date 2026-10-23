@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.i18n.t
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,8 +51,8 @@ internal fun PlannerTodayHeader(now: Instant, zone: ZoneId) {
         }
         Box(Modifier.width(1.dp).height(98.dp).background(Color(0xFF3A3A42)))
         Column(Modifier.width(118.dp).padding(start = 18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            PlannerWorldClock(now, "Europe/Istanbul", "Türkiye")
-            PlannerWorldClock(now, "Europe/Berlin", "Almanya")
+            PlannerWorldClock(now, "Europe/Istanbul", t("Türkiye"))
+            PlannerWorldClock(now, "Europe/Berlin", t("Almanya"))
         }
     }
 }
@@ -117,8 +118,8 @@ internal fun PlannerNext24Card(
         lastDay != null && !event.isDateOnly24Hour && event.spanEndMillis != null -> formatTimeAmPm(event.spanEndMillis, zone)
         else -> "—"
     }
-    val endLabel = lastDay?.let { "Son gün ${it.dayOfMonth} ${it.format(java.time.format.DateTimeFormatter.ofPattern("MMM", PlannerLocale))}" } ?: "End"
-    val durationStr = if (event.isDateOnly24Hour) "24h" else durationMinutes?.let { "${it} min" } ?: "Süre ekle"
+    val endLabel = lastDay?.let { t("Son gün {0} {1}", it.dayOfMonth, it.format(java.time.format.DateTimeFormatter.ofPattern("MMM", PlannerLocale))) } ?: t("Bitiş")
+    val durationStr = if (event.isDateOnly24Hour) "24h" else durationMinutes?.let { t("{0} min", it) } ?: t("Süre ekle")
     val surface = cardColor
     val ink = if (cardColor.luminance() > 0.45f) PlannerInk else Color.White
 

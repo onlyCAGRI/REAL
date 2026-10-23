@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components.planner
 
+import com.cagri.real.i18n.t
 import com.cagri.real.ui.components.RealMotion
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
@@ -215,7 +216,7 @@ internal fun PlannerMonthOverview(
                     color = Color.White,
                     style = PlannerType.monthTitle,
                     modifier = Modifier.semantics {
-                        contentDescription = month.format(DateTimeFormatter.ofPattern("MMMM yyyy", PlannerLocale))
+                        contentDescription = month.format(DateTimeFormatter.ofPattern(t("MMMM yyyy"), PlannerLocale))
                     }
                 )
             }
@@ -238,13 +239,13 @@ internal fun PlannerMonthOverview(
                     }
                     .padding(horizontal = 14.dp, vertical = 7.dp)
             ) {
-                Text("Bugün", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Text(t("Bugün"), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             }
         }
 
         // Weekday labels
         Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp)) {
-            listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz").forEach {
+            listOf(t("Pzt"), t("Sal"), t("Çar"), t("Per"), t("Cum"), t("Cmt"), t("Paz")).forEach {
                 Box(Modifier.weight(1f).height(30.dp), contentAlignment = Alignment.Center) {
                     Text(it, color = Color(0xFF8E9094), style = PlannerType.weekdayLabel)
                 }
@@ -392,7 +393,7 @@ internal fun PlannerMonthOverview(
                                 )
                                 .semantics {
                                     selected = isSelected
-                                    contentDescription = "${day.format(DateTimeFormatter.ofPattern("d MMMM yyyy", PlannerLocale))}, ${dayEvents.size} etkinlik${if (isToday) ", bugün" else ""}"
+                                    contentDescription = if (isToday) t("{0}, {1} etkinlik, bugün", day.format(DateTimeFormatter.ofPattern("d MMMM yyyy", PlannerLocale)), dayEvents.size) else t("{0}, {1} etkinlik", day.format(DateTimeFormatter.ofPattern("d MMMM yyyy", PlannerLocale)), dayEvents.size)
                                 }
                         ) {
                             Text(
@@ -436,7 +437,7 @@ internal fun PlannerMonthOverview(
                 style = PlannerType.selectedDayHeader
             )
             Text(
-                if (selectedDayEvents.isEmpty()) "Bu gün için plan yok" else "${selectedDayEvents.size} plan",
+                if (selectedDayEvents.isEmpty()) t("Bu gün için plan yok") else t("{0} plan", selectedDayEvents.size),
                 color = Color(0xFF8C8C95),
                 fontSize = 13.sp,
                 modifier = Modifier.padding(top = 4.dp)
@@ -475,14 +476,14 @@ internal fun PlannerMonthOverview(
                     .padding(horizontal = 14.dp, vertical = 6.dp)
             ) {
                 Text(
-                    "Kategori renkleri",
+                    t("Kategori renkleri"),
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "Etkinlik kapsüllerinde kullanılan renkler.",
+                    t("Etkinlik kapsüllerinde kullanılan renkler."),
                     color = Color(0xFF8E9094),
                     fontSize = 11.sp
                 )
