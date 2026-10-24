@@ -1,11 +1,15 @@
 import MapKit
 import SwiftUI
+import WebKit
 
 /// Under a card's place (iOS only, Apple Maps): street-level Look Around preview when Apple has it, and the place's
 /// phone and website when it is a business Apple Maps knows. Nothing is stored; looked up when the card opens.
+/// Where Apple has no Look Around, a "Sokak görünümü" chip opens Google's keyless Street View embed on tap.
 struct PlaceDetails: View {
     let location: ReminderLocation
     @State private var scene: MKLookAroundScene?
+    @State private var noLookAround = false
+    @State private var streetView = false
     @State private var item: MKMapItem?
 
     private var coordinate: CLLocationCoordinate2D? {
@@ -22,13 +26,36 @@ struct PlaceDetails: View {
             }
             let phone = item?.phoneNumber.flatMap { $0.isEmpty ? nil : $0 }
             let site = item?.url
-            if phone != nil || site != nil {
+            let showStreetView = noLookAround && scene == nil && coordinate != nil
+            if showStreetView || phone != nil || site != nil {
                 HStack(spacing: 8) {
+                    if showStreetView {
+                        chip("binoculars.fill", t("Sokak görünümü")) { streetView = true }
+                    }
                     if let phone, let tel = URL(string: "tel:" + phone.filter { $0.isNumber || $0 == "+" }) {
                         chip("phone.fill", t("Ara")) { UIApplication.shared.open(tel) }
                     }
                     if let site { chip("safari", t("Web sitesi")) { UIApplication.shared.open(site) } }
                     Spacer(minLength: 0)
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $streetView) {
+            if let c = coordinate {
+                ZStack(alignment: .topTrailing) {
+                    Color.black.ignoresSafeArea()
+                    StreetViewEmbedWebView(coordinate: c)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .ignoresSafeArea()
+                    Button { streetView = false } label: {
+                        Text("✕")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(.black.opacity(0.55)))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(16)
                 }
             }
         }
@@ -57,6 +84,8 @@ struct PlaceDetails: View {
     }
 
     private func load() async {
+        scene = nil
+        noLookAround = false
         guard let c = coordinate else { return }
         async let look = try? await MKLookAroundSceneRequest(coordinate: c).scene
         // The business at the pin: Apple Maps' result for its name, only when it is really this place (within 150 m
@@ -71,6 +100,41 @@ struct PlaceDetails: View {
                 && Self.sameName(m.name, location.placeName)
         }
         let s = await look
-        withAnimation(.easeOut(duration: 0.25)) { scene = s; item = found }
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.25)) {
+            scene = s
+            noLookAround = (s == nil)
+            item = found
+        }
     }
+}
+
+/// Google's own keyless Share → Embed iframe, used only where Apple has no Look Around.
+private struct StreetViewEmbedWebView: UIViewRepresentable {
+    let coordinate: CLLocationCoordinate2D
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        config.allowsInlineMediaPlayback = true
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        webView.isOpaque = false
+        webView.backgroundColor = .black
+        webView.scrollView.backgroundColor = .black
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        let posix = Locale(identifier: "en_US_POSIX")
+        let lat = String(format: "%.6f", locale: posix, coordinate.latitude)
+        let lng = String(format: "%.6f", locale: posix, coordinate.longitude)
+        let html = """
+        <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+        <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{position:fixed;inset:0;border:0;width:100%;height:100%}</style></head>
+        <body><iframe allowfullscreen referrerpolicy="no-referrer-when-downgrade"
+        src="https://www.google.com/maps/embed?pb=!6m6!1m5!2m2!1d\(lat)!2d\(lng)!4f-0!5f1"></iframe></body></html>
+        """
+        webView.loadHTMLString(html, baseURL: URL(string: "https://real-backend-staging.cagrigul1907.workers.dev"))
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
