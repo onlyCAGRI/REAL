@@ -101,9 +101,9 @@ struct YasamScreen: View {
         .fullScreenCover(isPresented: $showWater) { WaterTrackerScreen().liftedTopSafeArea().presentationBackground(.black) }
         .fullScreenCover(isPresented: $showMoodAdd) { MoodAddSheet().liftedTopSafeArea() }
         .sheet(isPresented: $showJournalSheet) {
-            YasamJournalSheet { text in
+            YasamJournalSheet { text, styles in
                 _ = store.addReminder(text: YasamJournalSheet.title()) { r in
-                    r.journal = ReminderJournal(mood: nil, text: text, createdAt: .now, updatedAt: .now)
+                    r.journal = ReminderJournal(mood: nil, text: text, createdAt: .now, updatedAt: .now, styles: styles)
                 }
                 return true
             }

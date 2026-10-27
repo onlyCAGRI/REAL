@@ -122,6 +122,9 @@ enum NotificationScheduler {
         region.notifyOnExit = place.onExit
         let content = content(for: item, alerting: true)
         content.subtitle = (place.onExit ? t("Ayrıldın · ") : t("Vardın · ")) + place.placeName
+        // The trigger is cleared once it fires, so the tap reads the place from here (LocationArrivalFocusScreen).
+        content.userInfo = ArrivalFocusContext(id: item.id, placeName: place.placeName, onExit: place.onExit,
+                                               latitude: place.latitude, longitude: place.longitude).userInfo
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: placeIdentifier(item.id), content: content,
             trigger: UNLocationNotificationTrigger(region: region, repeats: false)))
     }

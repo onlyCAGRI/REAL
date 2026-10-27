@@ -18,6 +18,8 @@ struct RootView: View {
     @State private var showWelcome = false
     /// Cold start: the skeleton with its shimmer, then a wipe to the real home (StartupSkeletonReveal).
     @State private var startupShown = !ProcessInfo.processInfo.arguments.contains("-REALNoStartup")
+    /// Varınca / Ayrılınca notification tapped (or the developer test): the arrival focus screen.
+    @State private var arrival: ArrivalFocusContext?
 
     init(initialPath: [Route] = []) {
         _path = State(initialValue: initialPath)
@@ -77,10 +79,33 @@ struct RootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .realOpenReminder)) { note in
-            if let id = note.userInfo?["reminderId"] as? Int64, store.reminder(id) != nil { path.append(.detail(id)) }
+            if let ctx = ArrivalFocusContext(userInfo: note.userInfo ?? [:]), ctx.sample || store.reminder(ctx.id) != nil {
+                arrival = ctx
+            } else if let id = note.userInfo?["reminderId"] as? Int64, store.reminder(id) != nil {
+                path.append(.detail(id))
+            }
+        }
+        .fullScreenCover(item: $arrival) { ctx in
+            LocationArrivalFocusScreen(
+                context: ctx,
+                onOpenCard: {
+                    closeArrival()
+                    if !ctx.sample { path.append(.detail(ctx.id)) }
+                },
+                onClose: closeArrival
+            )
+            .environment(store)
+            .presentationBackground(.clear)
         }
         .onAppear { ReminderStore.current = store }
         .onAppear { if store.ownerName.trimmingCharacters(in: .whitespaces).isEmpty || ProcessInfo.processInfo.arguments.contains("-REALWelcome") { showWelcome = true } }
+    }
+
+    /// The focus screen already shrank into a dot itself; the cover leaves without its slide.
+    private func closeArrival() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { arrival = nil }
     }
 }
 
@@ -301,9 +326,9 @@ struct HomeView: View {
                 case .listen: MusicDiscoveryScreen(startInList: false) { contextTarget = nil }
                 case .play: DiscoveryScreen(kind: .game) { contextTarget = nil }
                 case .journal:
-                    YasamJournalSheet { text in
+                    YasamJournalSheet { text, styles in
                         _ = store.addReminder(text: YasamJournalSheet.title()) { r in
-                            r.journal = ReminderJournal(mood: nil, text: text, createdAt: .now, updatedAt: .now)
+                            r.journal = ReminderJournal(mood: nil, text: text, createdAt: .now, updatedAt: .now, styles: styles)
                         }
                         return true
                     }

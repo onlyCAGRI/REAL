@@ -268,6 +268,8 @@ struct CardBlockGrid<Block: View>: View {
     let editing: Bool
     let onChange: (String, CardBlockPlacement) -> Void
     var onDrop: ([String], [String: CardBlockPlacement]) -> Void = { _, _ in }
+    /// True while a block is lifted, so the screen can slide its docks away.
+    var onMovingChange: (Bool) -> Void = { _ in }
     @ViewBuilder let block: (String) -> Block
 
     @State private var selected: String?
@@ -297,6 +299,7 @@ struct CardBlockGrid<Block: View>: View {
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: layout)
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: keys)
         .onChange(of: editing) { _, on in if !on { selected = nil; moving = nil } }
+        .onChange(of: moving != nil) { _, lifted in onMovingChange(lifted) }
     }
 
     private func placement(_ key: String) -> CardBlockPlacement { (layout[key] ?? CardBlockPlacement()).normalized }

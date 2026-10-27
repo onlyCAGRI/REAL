@@ -16,14 +16,21 @@ enum LiquidGlassTokens {
     static let contentEdgeTop = Color(argb: 0x26FFFFFF)
     static let contentEdgeBottom = Color(argb: 0x0AFFFFFF)
     static let dockSelectedPill = Color(argb: 0x73000000)
+    // Dock with "Dinamik bulanıklığı azalt": a flat grey with a quiet edge instead of glass, rim and sheen.
+    static let dockSolid = Color(argb: 0xFF2E2E31)
+    static let dockSolidEdge = Color(argb: 0xFF3D3D41)
 }
 
 enum LiquidGlassRole { case dock, chrome, sheet }
 
 extension View {
     /// LiquidGlassSurface: the real Liquid Glass material on iOS 26, a tinted blur with the Android edge stroke before.
-    @ViewBuilder
     func liquidGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole = .dock, dim: Double = 0) -> some View {
+        modifier(LiquidGlassSurface(shape: shape, role: role, dim: dim))
+    }
+
+    @ViewBuilder
+    fileprivate func systemOrFallbackGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole, dim: Double) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             // Clear Liquid Glass everywhere: it takes the colour of what passes behind it. The only tint is inside the
@@ -77,12 +84,36 @@ extension View {
                 .shadow(color: .black.opacity(0.35), radius: 9, y: 3)
     }
 
+    fileprivate func flatDock<S: InsettableShape>(_ shape: S, dim: Double) -> some View {
+        background {
+            ZStack {
+                shape.fill(LiquidGlassTokens.dockSolid)
+                if dim > 0 { shape.fill(Color.black.opacity(dim)) }
+            }
+        }
+        .overlay { shape.strokeBorder(LiquidGlassTokens.dockSolidEdge, lineWidth: LiquidGlassTokens.dockEdgeWidth).allowsHitTesting(false) }
+        .shadow(color: .black.opacity(0.35), radius: 9, y: 3)
+    }
+
     /// cardContentChrome: the quiet dark surface content blocks sit on, with a faint top edge.
     func cardContentChrome(corners: CGFloat = 22) -> some View {
         let shape = RoundedRectangle(cornerRadius: corners, style: .continuous)
         return background(shape.fill(LiquidGlassTokens.contentColor))
             .overlay(shape.strokeBorder(LinearGradient(colors: [LiquidGlassTokens.contentEdgeTop, LiquidGlassTokens.contentEdgeBottom],
                                                        startPoint: .top, endPoint: .bottom), lineWidth: 0.7))
+    }
+}
+
+/// LiquidGlassSurface.kt: with "Dinamik bulanıklığı azalt" the dock pieces turn flat (Android flatDock); the rest keep glass.
+struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
+    let shape: S
+    let role: LiquidGlassRole
+    let dim: Double
+    @AppStorage("reduce_dynamic_blur") private var reduceDynamicBlur = false
+
+    func body(content: Content) -> some View {
+        if reduceDynamicBlur && role == .dock { content.flatDock(shape, dim: dim) }
+        else { content.systemOrFallbackGlass(shape, role: role, dim: dim) }
     }
 }
 

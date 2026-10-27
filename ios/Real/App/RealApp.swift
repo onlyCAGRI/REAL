@@ -150,7 +150,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             case NotificationScheduler.snoozeAction:
                 store?.snooze(id)
             case UNNotificationDefaultActionIdentifier:
-                NotificationCenter.default.post(name: .realOpenReminder, object: nil, userInfo: ["reminderId": id])
+                // A place notification also carries its place: RootView opens the arrival focus screen for it.
+                NotificationCenter.default.post(name: .realOpenReminder, object: nil, userInfo: response.notification.request.content.userInfo)
             default: break
             }
         }

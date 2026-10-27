@@ -46,15 +46,7 @@ struct VoiceListeningWindow: View {
                 shape.fill(Color.black.opacity(0.26))
                 if processing {
                     TimelineView(.animation) { tl in
-                        let p = (tl.date.timeIntervalSinceReferenceDate / 1.4).truncatingRemainder(dividingBy: 1)
-                        GeometryReader { g in
-                            let cx = g.size.width * (1.30 - p * 1.60)
-                            LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: blueDeep.opacity(0.09), location: 0.22),
-                                                   .init(color: blue.opacity(0.23), location: 0.46), .init(color: blue.opacity(0.28), location: 0.62),
-                                                   .init(color: blueDeep.opacity(0.09), location: 0.82), .init(color: .clear, location: 1)],
-                                           startPoint: UnitPoint(x: (cx + g.size.width * 0.72) / g.size.width, y: 0.12),
-                                           endPoint: UnitPoint(x: (cx - g.size.width * 0.72) / g.size.width, y: 0.88))
-                        }
+                        RealSweepBand(progress: (tl.date.timeIntervalSinceReferenceDate / 1.4).truncatingRemainder(dividingBy: 1))
                     }
                 } else {
                     GeometryReader { g in

@@ -123,7 +123,17 @@ struct ComposerBar: View {
 
     private enum Field: Hashable { case title, item(Int) }
 
-    private var expanded: Bool { focus != nil || !text.isEmpty || checklistMode || voice.phase != .idle }
+    @AppStorage("reduce_animations") private var reduceAnimations = false
+    /// The panel as shown. Opened by focus alone, the bar and the panel do not morph into each other riding the
+    /// keyboard (ReminderScreen.kt composerUp): the bar fades out, then the panel fades and slides in on its own
+    /// slower curve; closing mirrors it. The layout jumps while both are hidden.
+    @State private var expanded = false
+    @State private var swapOut: Double = 0
+    @State private var swapIn: Double = 1
+    @State private var swapTask: Task<Void, Never>?
+
+    private var otherExpanded: Bool { !text.isEmpty || checklistMode || voice.phase != .idle }
+    private var wantsExpanded: Bool { focus != nil || otherExpanded }
     private var showChrome: Bool { isHome && !expanded }
 
     var body: some View {
@@ -161,10 +171,12 @@ struct ComposerBar: View {
             }
         }
         .padding(.horizontal, 16)
+        .opacity((1 - swapOut) * swapIn)
+        .scaleEffect((1 - 0.06 * swapOut) * (0.95 + 0.05 * swapIn), anchor: .bottom)
+        .offset(y: (1 - swapIn) * (expanded ? 26 : 10) + swapOut * (expanded ? 18 : 0))
         // Dock bottom edge on the safe area (~34pt above the screen edge), like Android's nav-bar inset + 12dp: a swipe
         // starting on the dock stays clear of the home-indicator gesture, so it no longer sends people to the launcher.
         .padding(.bottom, expanded ? 8 : 0)
-        .animation(.spring(response: 0.32, dampingFraction: 0.85), value: expanded)
         .animation(.spring(response: 0.34, dampingFraction: 0.85), value: navExpanded)
         .highPriorityGesture(
             DragGesture(minimumDistance: 20).onEnded { value in
@@ -172,6 +184,10 @@ struct ComposerBar: View {
                 if value.translation.height < -28 { navExpanded = true } else if value.translation.height > 28 { navExpanded = false }
             }
         )
+        .onChange(of: wantsExpanded) { _, want in
+            swapTask?.cancel()
+            swapTask = Task { @MainActor in await swapPanel(to: want) }
+        }
         .onChange(of: expanded) { _, e in if e { navExpanded = false } }
         .onAppear(perform: reset)
         .onReceive(NotificationCenter.default.publisher(for: .realStartVoice)) { _ in if isHome { startVoiceIfIdle() } }
@@ -229,6 +245,30 @@ struct ComposerBar: View {
         }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
         .onChange(of: photoItems) { _, items in importPhotos(items) }
+    }
+
+    @MainActor
+    private func swapPanel(to want: Bool) async {
+        // Voice, a checklist or typed text open it with the old morph; reduced motion jumps.
+        if reduceAnimations || otherExpanded {
+            withAnimation(reduceAnimations ? nil : .spring(response: 0.32, dampingFraction: 0.85)) {
+                expanded = want; swapOut = 0; swapIn = 1
+            }
+            return
+        }
+        if expanded == want {
+            // Turned back mid-way: bring whatever is showing back to rest.
+            withAnimation(.easeOut(duration: 0.15)) { swapOut = 0; swapIn = 1 }
+            return
+        }
+        let outTime = want ? 0.12 : 0.17
+        withAnimation(.easeOut(duration: outTime)) { swapOut = 1 }
+        try? await Task.sleep(for: .seconds(outTime))
+        guard !Task.isCancelled else { return }
+        var jump = Transaction()
+        jump.disablesAnimations = true
+        withTransaction(jump) { expanded = want; swapOut = 0; swapIn = 0 }
+        withAnimation(.timingCurve(0.2, 0, 0, 1, duration: want ? 0.34 : 0.26)) { swapIn = 1 }
     }
 
     // MARK: Dock chrome

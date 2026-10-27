@@ -14,7 +14,7 @@ extension DemoData {
         }
         let base = now.epochMillis - 3_600_000
         func note(_ id: String, _ text: String) -> ReminderAttachment {
-            ReminderAttachment(id: id, type: .textSnippet, text: text, sourceTitle: "REAL_TEXT_BLOCK")
+            ReminderAttachment(id: id, type: .textSnippet, text: text)
         }
 
         var categories: [CustomCategory] = [

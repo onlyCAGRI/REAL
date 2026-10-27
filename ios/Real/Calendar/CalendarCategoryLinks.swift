@@ -37,12 +37,28 @@ final class CalendarCategoryLinks {
 }
 
 /// Calendar events swiped off once they ended ("Gizle"), by occurrence. Only today's can be swiped, so keys of
-/// earlier days are dropped on the next write.
-@Observable
+/// earlier days are dropped on the next write. [revision] also moves on when the next shown event ends and at
+/// midnight, so a card fades / leaves while the screen stays open.
+@MainActor @Observable
 final class CalendarPastDismissals {
     static let shared = CalendarPastDismissals()
     private(set) var revision = 0
     @ObservationIgnored private let key = "calendar_past_dismissed"
+    @ObservationIgnored private var refreshAt: Date?
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+
+    /// Bumps [revision] at [date] (one pending refresh; a new time replaces it).
+    func refresh(at date: Date) {
+        guard refreshAt != date else { return }
+        refreshTask?.cancel()
+        refreshAt = date
+        refreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(1, date.timeIntervalSinceNow)))
+            guard !Task.isCancelled, let self else { return }
+            self.refreshAt = nil
+            self.revision += 1
+        }
+    }
 
     func isDismissed(_ o: CalendarOccurrence) -> Bool {
         (UserDefaults.standard.dictionary(forKey: key) as? [String: Double])?[o.id] != nil
@@ -78,6 +94,9 @@ enum CalendarCards {
         let items = connection.occurrences(from: today, to: end)
             .filter { $0.end > today && ($0.end > Date() || !dismissals.isDismissed($0)) }
             .filter { seen.insert(CalendarCategoryLinks.eventKey($0)).inserted }
+        let now = Date()
+        let midnight = Calendar.real.date(byAdding: .day, value: 1, to: today)!
+        dismissals.refresh(at: min(items.map(\.end).filter { $0 > now }.min() ?? midnight, midnight))
         cache = (stamp, items)
         return items
     }

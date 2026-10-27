@@ -15,7 +15,7 @@ struct ReminderAttachment: Codable, Identifiable, Hashable {
     var displayName: String? = nil
     var sizeBytes: Int64? = nil
     var text: String? = nil
-    /// "REAL_TEXT_BLOCK" marks a standalone text box added from the edit dock.
+    /// Snippet origin title; the retired "REAL_TEXT_BLOCK" text boxes are turned into stack cards on decode.
     var sourceTitle: String? = nil
     /// Text snippet origin (Android SnippetSource): "WHATSAPP_TEXT", "EMAIL_TEXT", "PLAIN_TEXT". Kept so an edit here
     /// never drops what Android set.
@@ -72,6 +72,30 @@ struct ReminderJournal: Codable, Hashable {
     var text: String
     var createdAt: EpochMillis
     var updatedAt: EpochMillis
+    /// Format bar styles over `text` (Android ReminderJournal.styles, stored as "styles").
+    var styles: [BodySpan] = []
+}
+
+extension ReminderJournal {
+    enum CodingKeys: String, CodingKey { case mood, text, createdAt, updatedAt, styles }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mood = try c.decodeIfPresent(JournalMood.self, forKey: .mood)
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        createdAt = try c.decode(EpochMillis.self, forKey: .createdAt)
+        updatedAt = try c.decodeIfPresent(EpochMillis.self, forKey: .updatedAt) ?? createdAt
+        styles = BodySpans.normalize((try? c.decodeIfPresent(StoredBodySpans.self, forKey: .styles))?.spans ?? [], text.utf16.count)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(mood, forKey: .mood)
+        try c.encode(text, forKey: .text)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        if !styles.isEmpty { try c.encode(styles, forKey: .styles) }
+    }
 }
 
 struct ChecklistItem: Codable, Identifiable, Hashable {
@@ -120,6 +144,37 @@ struct CardStackCard: Codable, Identifiable, Hashable {
     var colorArgb: Int? = nil
     var imageUri: String? = nil
     var stackGroupId: String? = nil
+    /// Format bar styles over `body` (UTF-16 ranges) and the stack's writing settings; both left out of JSON when empty.
+    var bodyStyles: [BodySpan] = []
+    var bodyFormat = BodyFormat()
+}
+
+extension CardStackCard {
+    enum CodingKeys: String, CodingKey { case id, title, body, colorArgb, imageUri, stackGroupId, bodyStyles, bodyFormat }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        body = try c.decodeIfPresent(String.self, forKey: .body) ?? ""
+        colorArgb = try c.decodeIfPresent(Int.self, forKey: .colorArgb)
+        imageUri = try c.decodeIfPresent(String.self, forKey: .imageUri)
+        stackGroupId = try c.decodeIfPresent(String.self, forKey: .stackGroupId)
+        bodyStyles = BodySpans.normalize((try? c.decodeIfPresent(StoredBodySpans.self, forKey: .bodyStyles))?.spans ?? [], body.utf16.count)
+        bodyFormat = (try? c.decodeIfPresent(BodyFormat.self, forKey: .bodyFormat)) ?? BodyFormat()
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(body, forKey: .body)
+        try c.encodeIfPresent(colorArgb, forKey: .colorArgb)
+        try c.encodeIfPresent(imageUri, forKey: .imageUri)
+        try c.encodeIfPresent(stackGroupId, forKey: .stackGroupId)
+        if !bodyStyles.isEmpty { try c.encode(bodyStyles, forKey: .bodyStyles) }
+        if !bodyFormat.isDefault { try c.encode(bodyFormat, forKey: .bodyFormat) }
+    }
 }
 
 struct CardStackBlock: Codable, Hashable {
@@ -365,6 +420,35 @@ extension ReminderItem {
         isDivider = try c.decodeIfPresent(Bool.self, forKey: .isDivider) ?? false
         completionNote = (try c.decodeIfPresent(String.self, forKey: .completionNote)).flatMap { $0.isEmpty ? nil : $0 }
         checkRequest = try? c.decodeIfPresent(CheckRequest.self, forKey: .checkRequest)
+        migrateTextBoxesToCardStack()
+    }
+
+    /// The standalone text box is gone (withTextBoxesAsCardStacks on Android): each written box becomes a stack card,
+    /// empty ones are dropped, and the box's place in the order goes to the stack.
+    private mutating func migrateTextBoxesToCardStack() {
+        let boxes = attachments.filter { $0.sourceTitle == "REAL_TEXT_BLOCK" }
+        guard !boxes.isEmpty else { return }
+        attachments.removeAll { $0.sourceTitle == "REAL_TEXT_BLOCK" }
+        let cards = boxes.compactMap { box -> CardStackCard? in
+            let body = (box.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !body.isEmpty else { return nil }
+            let group = "tb" + String(box.id.filter { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }.prefix(70))
+            return CardStackCard(id: box.id, body: body, stackGroupId: group)
+        }
+        let boxKeys = Set(boxes.map { "files:\($0.id)" })
+        var order: [String] = []
+        for key in contentBlockOrder {
+            let mapped = boxKeys.contains(key) ? (cards.isEmpty && cardStack == nil ? nil : "card_stack") : key
+            if let mapped, !order.contains(mapped) { order.append(mapped) }
+        }
+        contentBlockOrder = order
+        for key in boxKeys {
+            if let p = contentBlockLayout.removeValue(forKey: key), contentBlockLayout["card_stack"] == nil, !cards.isEmpty { contentBlockLayout["card_stack"] = p }
+        }
+        guard !cards.isEmpty else { return }
+        var stack = cardStack ?? CardStackBlock()
+        stack.cards += cards
+        cardStack = stack
     }
 }
 

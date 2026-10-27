@@ -20,16 +20,20 @@ struct ReminderDetailView: View {
     @State private var trayBusy = false
     @State private var secondaryExpanded = false
     @State private var dockCollapsed = false
+    /// A block is lifted in the grid: the bottom docks slide away until the finger lifts.
+    @State private var blockMoving = false
     @State private var showMusicSearch = false
     @State private var voiceRecorderOpen = false
     /// "Hava durumunu gizle" on this card (kept by CardWeatherRepository).
     @State private var weatherHidden = false
     @State private var weatherUnavailable = false
-    @State private var textToolsKey: String?
     @State private var showMediaSearch = false
     @State private var showGameSearch = false
     @State private var showCardShare = false
     @State private var deleting = false
+    /// When Kaydet sent the sweep through the dock; the normal dock's buttons appear as it passes them.
+    @State private var saveSweepStart: Date?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var reordering = false
     @State private var newChecklistText = ""
     @State private var checklistOpen = false
@@ -81,7 +85,10 @@ struct ReminderDetailView: View {
                                       layout: heroKey.map { heroLiftedLayout(r.contentBlockLayout, hero: $0) } ?? r.contentBlockLayout,
                                       editing: editing,
                                       onChange: { key, p in draft?.contentBlockLayout[key] = p },
-                                      onDrop: { keys, layout in draft?.contentBlockOrder = keys; draft?.contentBlockLayout = layout }) { key in
+                                      onDrop: { keys, layout in draft?.contentBlockOrder = keys; draft?.contentBlockLayout = layout },
+                                      onMovingChange: { lifted in
+                                          withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: lifted ? 0.2 : 0.26)) { blockMoving = lifted }
+                                      }) { key in
                             block(key, r).transition(.opacity.combined(with: .scale(scale: 0.97)))
                         }
                         Text(createdLine(r))
@@ -93,6 +100,13 @@ struct ReminderDetailView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
                     .padding(.bottom, editing ? (secondaryExpanded ? 520 : 300) : 130)
+                    .background {
+                        // isCardDetailBackgroundTap: while editing, a tap on empty space (not on a block, which
+                        // takes its own taps first) saves and closes the editor quietly, without Kaydet's sweep.
+                        if editing {
+                            Color.clear.contentShape(Rectangle()).onTapGesture { saveFromBackgroundTap() }
+                        }
+                    }
                     .animation(.spring(duration: 0.3), value: blockOrder(r))
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -129,22 +143,17 @@ struct ReminderDetailView: View {
             LinkEditor(initial: draft?.referenceUrl ?? "") { draft?.referenceUrl = $0 }.presentationDetents([.height(220)])
         }
         .sheet(item: $editingStackCard) { card in
-            CardStackEditor(card: card, isNew: shown?.cardStack?.cards.contains { $0.id == card.id } != true) { updated in
+            CardStackEditor(card: seededStackCard(card), isNew: shown?.cardStack?.cards.contains { $0.id == card.id } != true) { updated in
                 updateStack { stack in
                     if let updated {
                         if let i = stack.cards.firstIndex(where: { $0.id == updated.id }) { stack.cards[i] = updated } else { stack.cards.append(updated) }
+                        // Writing settings belong to the whole stack.
+                        for i in stack.cards.indices { stack.cards[i].bodyFormat = updated.bodyFormat }
                     } else {
                         stack.cards.removeAll { $0.id == card.id }
                     }
                 }
             }
-        }
-        .sheet(item: Binding(get: { textToolsKey.map(IdentifiedKey.init) }, set: { textToolsKey = $0?.id })) { k in
-            CardTextTools(placement: (draft?.contentBlockLayout[k.id] ?? CardBlockPlacement()).normalized) { p in
-                draft?.contentBlockLayout[k.id] = p
-            }
-            .presentationDetents([.height(230)])
-            .presentationBackground(.clear)
         }
         .sheet(isPresented: $showMusicSearch) {
             MusicSearchSheet { m in withAnimation(.spring(duration: 0.3)) { draft?.musicBlocks.append(m) } }
@@ -188,6 +197,14 @@ struct ReminderDetailView: View {
             }
         }
         .fullScreenCover(item: $previewPhoto) { a in PhotoPreview(attachment: a) }
+    }
+
+    /// A new stack card starts with the stack's writing settings ("Kart ekle" on Android copies them).
+    private func seededStackCard(_ card: CardStackCard) -> CardStackCard {
+        guard let stack = shown?.cardStack, !stack.cards.contains(where: { $0.id == card.id }), let format = stack.cards.first?.bodyFormat else { return card }
+        var seeded = card
+        seeded.bodyFormat = format
+        return seeded
     }
 
     /// "Oluşturuldu · Pazartesi • 12 Eki 2026, 18:21"
@@ -250,8 +267,7 @@ struct ReminderDetailView: View {
         case "files":
             if id == "reference", let url = r.referenceUrl { linkBlock(url) }
             else if let a = r.attachments.first(where: { $0.id == id }) {
-                if a.sourceTitle == "REAL_TEXT_BLOCK" { textBoxBlock(a, r) }
-                else if a.type == .textSnippet {
+                if a.type == .textSnippet {
                     SnippetBlockView(attachment: a, editing: editing, onSave: { updateSnippet(a.id, $0) }, onRemove: { removeAttachment(a) })
                 } else { fileBlock(a) }
             }
@@ -729,58 +745,6 @@ struct ReminderDetailView: View {
         .buttonStyle(.plain)
     }
 
-    /// CardStandaloneTextBox: a free text box that carries the card colour.
-    /// CardStandaloneTextBox: 28pt surface, 21/31 text, "Metin yaz…", detached gear/× chip and the "Metin biçimi" tools.
-    private func textBoxBlock(_ a: ReminderAttachment, _ r: ReminderItem) -> some View {
-        let key = "files:\(a.id)"
-        let placement = (r.contentBlockLayout[key] ?? CardBlockPlacement()).normalized
-        let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: false, blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
-        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
-        let compact = (1..<200).contains(placement.minHeight)
-        let ink = r.autoDarkText ? Color(argb: 0xFF101010) : Color(argb: 0xFFF4F4F6)
-        let align: TextAlignment = placement.textAlignment == "center" ? .center : (placement.textAlignment == "end" ? .trailing : .leading)
-        let frameAlign: Alignment = placement.textAlignment == "center" ? .top : (placement.textAlignment == "end" ? .topTrailing : .topLeading)
-        let font = RealFont.inter(21, placement.textBold ? .bold : .regular)
-        return ZStack(alignment: .topTrailing) {
-            Group {
-                if editing {
-                    TextField("", text: Binding(get: { a.text ?? "" }, set: { v in
-                        draft?.attachments = (draft?.attachments ?? []).map { item in
-                            var copy = item
-                            if item.id == a.id { copy.text = v }
-                            return copy
-                        }
-                    }), prompt: Text(t("Metin yaz…")).foregroundStyle(ink.opacity(0.4)), axis: .vertical)
-                    .tint(ink)
-                    .frame(minHeight: placement.minHeight > 0 ? 0 : 96, alignment: .topLeading)
-                } else {
-                    Text(a.text ?? "").textSelection(.enabled)
-                }
-            }
-            .font(font).italic(placement.textItalic).lineSpacing(10)
-            .multilineTextAlignment(align)
-            .foregroundStyle(ink)
-            .frame(maxWidth: .infinity, alignment: frameAlign)
-            .padding(.horizontal, 22).padding(.vertical, compact ? 8 : 25)
-            .background {
-                if let accent { shape.fill(accent) }
-                else { shape.fill(LinearGradient(colors: [Color(argb: 0xFF18181A), LiquidGlassTokens.contentColor], startPoint: .top, endPoint: .bottom)) }
-            }
-            .clipShape(shape)
-            if editing {
-                HStack(spacing: 0) {
-                    Button { textToolsKey = key } label: { ActionIcon(.settings, color: Color(argb: 0xFFB7B7C0), size: 15).frame(width: 28, height: 28) }
-                        .accessibilityLabel(t("Metin araçları"))
-                    Button { removeAttachment(a) } label: { ActionIcon(.close, color: Color(argb: 0xFFB7B7C0), size: 15).frame(width: 28, height: 28) }
-                        .accessibilityLabel(t("Metin kutusunu kaldır"))
-                }
-                .buttonStyle(.plain)
-                .liquidGlass(RoundedRectangle(cornerRadius: 14, style: .continuous), role: .chrome)
-                .offset(y: -32)
-            }
-        }
-    }
-
     private func locationBlock(_ l: ReminderLocation, card: ReminderItem) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if let lat = l.latitude, let lon = l.longitude {
@@ -826,11 +790,18 @@ struct ReminderDetailView: View {
                 if let mood = j.mood { Text("\(mood.emoji) \(mood.label)").font(RealFont.inter(12)).foregroundStyle(RealColors.subtext) }
             }
             if editing {
-                TextField(t("Günlük notu"), text: Binding(get: { draft?.journal?.text ?? "" }, set: { draft?.journal?.text = $0; draft?.journal?.updatedAt = .now }), axis: .vertical)
+                TextField(t("Günlük notu"), text: Binding(get: { draft?.journal?.text ?? "" }, set: { v in
+                    guard let old = draft?.journal else { return }
+                    // No format bar here: the styles just follow the edit.
+                    draft?.journal?.styles = BodySpans.applyEdit(old.styles, old: old.text, new: v, typingMarks: [])
+                    draft?.journal?.text = v; draft?.journal?.updatedAt = .now
+                }), axis: .vertical)
                     .font(RealFont.inter(15)).lineLimit(2...12)
-            } else {
-                Text(j.text.isEmpty ? t("Günlük notu") : j.text).font(RealFont.inter(15)).foregroundStyle(j.text.isEmpty ? RealColors.textMuted : Color(argb: 0xFFE9E9EF))
+            } else if j.text.isEmpty {
+                Text(t("Günlük notu")).font(RealFont.inter(15)).foregroundStyle(RealColors.textMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                StyledBodyText(text: j.text, styles: j.styles, foreground: Color(argb: 0xFFE9E9EF), size: 15)
             }
             Text(RealDates.reminder(j.createdAt)).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF6F6F78))
         }
@@ -914,28 +885,40 @@ struct ReminderDetailView: View {
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 2) // Android: bar bottom ~36dp above the screen edge
+        .offset(y: blockMoving ? 220 : 0)
+        .opacity(blockMoving ? 0 : 1)
+        .allowsHitTesting(!blockMoving)
         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.24), value: editing)
         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.24), value: secondaryExpanded)
         .animation(.easeOut(duration: 0.2), value: deleting)
     }
 
+    /// Both sets of actions stay laid out on top of each other; DetailDockMotion blurs one out and the other in.
     private func actionBar(_ r: ReminderItem) -> some View {
-        HStack(spacing: 0) {
-            if editing {
+        ZStack {
+            HStack(spacing: 0) {
                 DetailAction(label: t("Vazgeç"), symbol: "xmark") { draft = nil; secondaryExpanded = false; checklistOpen = false }
+                    .detailDockItem(visible: editing, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
                 DetailAction(label: t("Kaydet"), symbol: "checkmark", color: Color(argb: 0xFF91B9FF),
-                             enabled: !(draft?.text.trimmingCharacters(in: .whitespaces).isEmpty ?? true)) { saveDraft() }
-            } else {
+                             enabled: !(draft?.text.trimmingCharacters(in: .whitespaces).isEmpty ?? true)) {
+                    if !reduceMotion { saveSweepStart = Date() }
+                    saveDraft()
+                }
+                .detailDockItem(visible: editing, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
+            }
+            HStack(spacing: 0) {
                 DetailAction(label: r.isCompleted ? t("Geri al") : t("Tamamla"), symbol: r.isCompleted ? "arrow.uturn.backward" : "checkmark", enabled: !deleting) {
                     if !r.isCompleted { UINotificationFeedbackGenerator().notificationOccurred(.success) }
                     withAnimation { store.toggleCompleted(reminderId) }
                 }
+                .detailDockItem(visible: !editing, enterDelay: DetailDockMotion.enterDelay(0, of: 4, sweepStart: saveSweepStart), reduceMotion: reduceMotion)
                 DetailAction(label: t("Düzenle"), symbol: "pencil", enabled: !deleting) {
                     dockCollapsed = false   // every edit starts with the dock raised
                     draft = r
                     categorySelection = r.customCategoryId
                     checklistOpen = !r.checklistItems.isEmpty
                 }
+                .detailDockItem(visible: !editing, enterDelay: DetailDockMotion.enterDelay(1, of: 4, sweepStart: saveSweepStart), reduceMotion: reduceMotion)
                 Button { showCardShare = true } label: {
                     VStack(spacing: 1) {
                         RealSymbol("square.and.arrow.up", size: 20.7)
@@ -946,10 +929,19 @@ struct ReminderDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(deleting)
+                .detailDockItem(visible: !editing, enterDelay: DetailDockMotion.enterDelay(2, of: 4, sweepStart: saveSweepStart), reduceMotion: reduceMotion)
                 DetailAction(label: t("Sil"), symbol: "trash") { deleting.toggle() }
+                    .detailDockItem(visible: !editing, enterDelay: DetailDockMotion.enterDelay(3, of: 4, sweepStart: saveSweepStart), reduceMotion: reduceMotion)
             }
         }
         .padding(.horizontal, 6)
+        .background {
+            ZStack {
+                DetailDockDrops(slots: editing ? 2 : 4, sweepStart: saveSweepStart)
+                DetailDockSweep(start: saveSweepStart)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
         .liquidGlass(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
@@ -1047,9 +1039,6 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "rectangle.stack", label: t("Kart Yığını"), active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
                         editingStackCard = CardStackCard()
                     }
-                    QuickAction(symbol: "text.alignleft", label: t("Metin kutusu ekle"), active: d?.attachments.contains { $0.sourceTitle == "REAL_TEXT_BLOCK" } ?? false) {
-                        addAttachment(ReminderAttachment(id: UUID().uuidString, type: .textSnippet, text: "", sourceTitle: "REAL_TEXT_BLOCK"))
-                    }
                     QuickAction(symbol: "mappin", label: t("Konum"), active: d?.location != nil) { withoutAnimation { showLocationGuide = true } }
                     QuickAction(symbol: "waveform", label: t("Ses kaydı"), active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
                                 count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
@@ -1102,6 +1091,12 @@ struct ReminderDetailView: View {
     }
 
     // MARK: Actions
+
+    /// Same check as Kaydet: an empty text keeps the editor open.
+    private func saveFromBackgroundTap() {
+        guard editing, !(draft?.text.trimmingCharacters(in: .whitespaces).isEmpty ?? true) else { return }
+        saveDraft()
+    }
 
     private func saveDraft() {
         guard var d = draft else { return }
@@ -1285,7 +1280,8 @@ struct CardStackDeck: View {
     private func card(_ c: CardStackCard, index: Int) -> some View {
         let color = c.colorArgb.map { Color(argbInt: $0) } ?? Color(argb: 0xFF292B2D)
         let hasImage = c.imageUri != nil
-        let fg: Color = hasImage || luminance(color) < 0.48 ? .white : Color(argb: 0xFF161616)
+        let dark = hasImage || luminance(color) < 0.48
+        let fg: Color = dark ? .white : Color(argb: 0xFF161616)
         let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -1301,7 +1297,9 @@ struct CardStackDeck: View {
             }
             Spacer(minLength: 0)
             if !c.title.isEmpty { Text(c.title).font(RealFont.inter(28)).kerning(-0.6).foregroundStyle(fg).lineLimit(3) }
-            if !c.body.isEmpty { Text(c.body).font(RealFont.inter(14)).lineSpacing(6).foregroundStyle(fg.opacity(0.9)).lineLimit(10) }
+            if !c.body.isEmpty {
+                StyledBodyText(text: c.body, styles: c.bodyStyles, format: c.bodyFormat, foreground: fg.opacity(0.9), onDark: dark, lineLimit: 10)
+            }
         }
         .padding(.horizontal, 24).padding(.vertical, 22)
         .frame(maxWidth: .infinity, minHeight: 390, alignment: .topLeading)
@@ -1332,12 +1330,28 @@ struct CardStackEditor: View {
     /// nil = delete the card.
     let onSave: (CardStackCard?) -> Void
     @State private var photo: PhotosPickerItem?
+    @State private var selection = NSRange(location: 0, length: 0)
+    @State private var pending: Set<BodyMark>?
+    @State private var formatOpen = false
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField(t("Başlık"), text: $card.title)
-                TextField(t("Metin"), text: $card.body, axis: .vertical).lineLimit(3...12)
+                VStack(alignment: .leading, spacing: 10) {
+                    ZStack(alignment: .topLeading) {
+                        if card.body.isEmpty {
+                            Text(t("Metin")).font(RealFont.inter(card.bodyFormat.size.points)).foregroundStyle(.tertiary).allowsHitTesting(false)
+                        }
+                        RichBodyEditor(text: $card.body, styles: $card.bodyStyles, selection: $selection, pending: $pending,
+                                       format: card.bodyFormat, foreground: .primary, onDark: scheme == .dark, minHeight: 66)
+                    }
+                    BodyFormatControls(text: card.body, selection: selection, styles: $card.bodyStyles, pending: $pending,
+                                       open: $formatOpen, foreground: .primary, onDark: scheme == .dark)
+                }
+                .padding(.vertical, 4)
+                Section(t("Kart yığını")) { CardBodyFormatSettings(format: $card.bodyFormat) }
                 Section(t("Renk")) {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 10) {
                         ForEach(pickerColorChoices) { choice in
@@ -1950,56 +1964,6 @@ enum AttachmentStorage {
     static func remove(_ attachment: ReminderAttachment) {
         guard !attachment.localPath.isEmpty else { return }
         try? FileManager.default.removeItem(at: directory.appendingPathComponent(attachment.localPath))
-    }
-}
-
-struct IdentifiedKey: Identifiable { let id: String }
-
-/// CardTitleTools: "Metin biçimi" — Sola / Ortala / Sağa, Kalın, İtalik.
-struct CardTextTools: View {
-    let placement: CardBlockPlacement
-    let onChange: (CardBlockPlacement) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var current: CardBlockPlacement
-
-    init(placement: CardBlockPlacement, onChange: @escaping (CardBlockPlacement) -> Void) {
-        self.placement = placement
-        self.onChange = onChange
-        _current = State(initialValue: placement)
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text(t("Metin biçimi")).font(RealFont.inter(16)).foregroundStyle(.white)
-                Spacer()
-                Button(t("Bitti")) { dismiss() }.foregroundStyle(.white)
-            }
-            HStack(spacing: 6) {
-                ForEach([("start", t("Sola")), ("center", t("Ortala")), ("end", t("Sağa"))], id: \.0) { key, label in
-                    tool(label, active: current.textAlignment == key) { current.textAlignment = key }
-                }
-            }
-            HStack(spacing: 6) {
-                tool(t("Kalın"), active: current.textBold, bold: true) { current.textBold.toggle() }
-                tool(t("İtalik"), active: current.textItalic, italic: true) { current.textItalic.toggle() }
-            }
-        }
-        .padding(16)
-        .liquidGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .sheet)
-        .padding(.horizontal, 16)
-        .onChange(of: current) { _, p in onChange(p) }
-    }
-
-    private func tool(_ label: String, active: Bool, bold: Bool = false, italic: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: { withAnimation(.easeOut(duration: 0.16)) { action() } }) {
-            Text(label).font(RealFont.inter(13, bold ? .bold : .regular)).italic(italic)
-                .foregroundStyle(active ? .white : Color(argb: 0xFFB7B7C0))
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .background(RoundedRectangle(cornerRadius: 14).fill(.white.opacity(active ? 0.18 : 0.04)))
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 

@@ -406,9 +406,37 @@ struct SettingsScreen: View {
         Color.clear.frame(height: 40)
     }
 
+    /// Opens the Varınca / Ayrılınca focus screen as a notification tap would: a card with a place trigger, else an
+    /// open checklist card, else a sample list (nothing written). The place falls back to a test spot in Kadıköy.
+    private func openArrivalTest(onExit: Bool) {
+        let card = store.reminders.first { $0.locationTrigger != nil && !$0.isCompleted }
+            ?? store.reminders.first { $0.isChecklist && !$0.checklistItems.isEmpty && !$0.isCompleted }
+        let trigger = card?.locationTrigger
+        let place = card?.location
+        let ctx = ArrivalFocusContext(
+            id: card?.id ?? -9_001,
+            placeName: trigger?.placeName ?? place?.placeName ?? t("Test konumu"),
+            onExit: onExit,
+            latitude: trigger?.latitude ?? place?.latitude ?? 40.9901,
+            longitude: trigger?.longitude ?? place?.longitude ?? 29.0290,
+            sample: card == nil
+        )
+        NotificationCenter.default.post(name: .realOpenReminder, object: nil, userInfo: ctx.userInfo)
+    }
+
     @ViewBuilder
     private var developerPage: some View {
         SettingsSectionHeader(title: t("GELİŞTİRİCİ ARAÇLARI"))
+        SettingsSectionHeader(title: t("VARINCA / AYRILINCA TESTİ"))
+        SettingsGlassGroup {
+            SettingsActionRow(icon: .pin, title: t("Varınca ekranını dene"), subtitle: t("Konumla hatırlatma kurulu kart, yoksa listeli kart, yoksa örnek liste")) {
+                openArrivalTest(onExit: false)
+            }
+            SettingsDivider()
+            SettingsActionRow(icon: .pin, title: t("Ayrılınca ekranını dene"), subtitle: t("Aynı kartla, konumdan ayrılmış gibi")) {
+                openArrivalTest(onExit: true)
+            }
+        }
         SettingsSectionHeader(title: t("BAĞLAM KARTLARI TESTİ"))
         SettingsGlassGroup {
             let tests: [(ContextCardType, ActionGlyph, String)] = [(.water, .bell, t("Su kartını göster")), (.mood, .moodNeutral, t("Mood kartını göster")),
