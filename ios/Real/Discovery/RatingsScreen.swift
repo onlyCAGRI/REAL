@@ -156,8 +156,8 @@ struct RatingsScreen: View {
         .sheet(item: $target) { t in sheet(for: t) }
     }
 
-    @ViewBuilder private func sheet(for t: RateTarget) -> some View {
-        switch t {
+    @ViewBuilder private func sheet(for target: RateTarget) -> some View {
+        switch target {
         case let .film(media, initial, past, inList):
             FilmRatingSheet(media: media, meta: [media.year.map(String.init), t("Film")].compactMap { $0 }.joined(separator: " · "), initial: initial,
                             onRemove: inList ? { ratings.remove(ratingKey(media)) } : nil, removeLabel: t("Listeden çıkar")) { ratings.rate(media, $0, past: past) }
