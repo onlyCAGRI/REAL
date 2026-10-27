@@ -8,7 +8,7 @@ import UIKit
 @Observable
 final class AppUpdateGate {
     static let shared = AppUpdateGate()
-    static var blockedMessage: String { t("Bu sürümde ekleme yapılamaz. Önce REAL'i güncelle.") }
+    nonisolated static var blockedMessage: String { t("Bu sürümde ekleme yapılamaz. Önce REAL'i güncelle.") }
     /// "ios/12": CFBundleVersion (CURRENT_PROJECT_VERSION) as the version code the admin compares.
     nonisolated static let clientTag: String = {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
