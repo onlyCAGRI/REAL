@@ -163,6 +163,9 @@ struct RichBodyEditor: UIViewRepresentable {
     var size: CGFloat? = nil
     var minHeight: CGFloat = 0
     var autoFocus = false
+    /// A tap anywhere outside the editor's row (its Form cell: the text and its format bar) puts the keyboard down;
+    /// the tap still reaches what was under it (a colour, a setting).
+    var dismissOnOutsideTap = false
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -196,12 +199,44 @@ struct RichBodyEditor: UIViewRepresentable {
         return CGSize(width: width, height: max(ceil(fit.height), minHeight))
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: RichBodyEditor
         /// What the view shows now; compared with the bindings to know when to redraw.
         var drawn: Snapshot?
         private var typing = false
         private var applying = false
+        private var outsideTap: UITapGestureRecognizer?
+        private weak var editing: UITextView?
+
+        func textViewDidBeginEditing(_ view: UITextView) {
+            guard parent.dismissOnOutsideTap, outsideTap == nil, let window = view.window else { return }
+            editing = view
+            let tap = UITapGestureRecognizer(target: self, action: #selector(tappedOutside(_:)))
+            tap.cancelsTouchesInView = false
+            tap.delegate = self
+            window.addGestureRecognizer(tap)
+            outsideTap = tap
+        }
+
+        func textViewDidEndEditing(_ view: UITextView) {
+            if let tap = outsideTap { tap.view?.removeGestureRecognizer(tap) }
+            outsideTap = nil
+        }
+
+        @objc private func tappedOutside(_ tap: UITapGestureRecognizer) {
+            guard let view = editing, let window = view.window else { return }
+            // The row holding the text (and its format bar) keeps the keyboard; anything else puts it down.
+            var row: UIView = view
+            var up = view.superview
+            while let v = up {
+                if v is UICollectionViewCell || v is UITableViewCell { row = v; break }
+                up = v.superview
+            }
+            let point = tap.location(in: window)
+            if !row.convert(row.bounds, to: window).contains(point) { view.resignFirstResponder() }
+        }
+
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 
         struct Snapshot: Equatable {
             var text: String; var styles: [BodySpan]; var format: BodyFormat; var onDark: Bool; var size: CGFloat?

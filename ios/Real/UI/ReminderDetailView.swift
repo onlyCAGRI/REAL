@@ -1345,7 +1345,8 @@ struct CardStackEditor: View {
                             Text(t("Metin")).font(RealFont.inter(card.bodyFormat.size.points)).foregroundStyle(.tertiary).allowsHitTesting(false)
                         }
                         RichBodyEditor(text: $card.body, styles: $card.bodyStyles, selection: $selection, pending: $pending,
-                                       format: card.bodyFormat, foreground: .primary, onDark: scheme == .dark, minHeight: 66)
+                                       format: card.bodyFormat, foreground: .primary, onDark: scheme == .dark, minHeight: 66,
+                                       dismissOnOutsideTap: true)
                     }
                     BodyFormatControls(text: card.body, selection: selection, styles: $card.bodyStyles, pending: $pending,
                                        open: $formatOpen, foreground: .primary, onDark: scheme == .dark)

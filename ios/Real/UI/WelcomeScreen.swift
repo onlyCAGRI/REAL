@@ -444,8 +444,7 @@ struct WelcomeScreen: View {
             try? await Task.sleep(for: .milliseconds(60))
             withAnimation(emphasized(0.3)) { inputOffset = 0 }
             withAnimation(.easeOut(duration: 0.3)) { inputAlpha = 1 }
-            try? await Task.sleep(for: .milliseconds(350))
-            focused = true
+            // No automatic keyboard: the name field waits for a tap (guest is the default way in).
         }
     }
 }
