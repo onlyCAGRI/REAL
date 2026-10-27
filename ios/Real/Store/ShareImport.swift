@@ -14,7 +14,7 @@ enum ShareImport {
             if apply(item, dir, store) { added += 1 }
             ShareInbox.discard(item.id)
         }
-        if added > 0 { RealToast.shared.show(added == 1 ? "Paylaşım REAL'e eklendi" : "\(added) paylaşım REAL'e eklendi") }
+        if added > 0 { RealToast.shared.show(added == 1 ? t("Paylaşım REAL'e eklendi") : t("{0} paylaşım REAL'e eklendi", added)) }
         writeSnapshot(store)
     }
 

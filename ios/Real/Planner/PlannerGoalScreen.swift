@@ -188,7 +188,7 @@ struct PlannerGoalScreen: View {
                 RealSymbol("chevron.left", size: 21.8).foregroundStyle(.white)
                     .frame(width: 44, height: 44)
             }
-            .accessibilityLabel("Geri")
+            .accessibilityLabel(t("Geri"))
             Spacer()
             Button("Done") { dismiss() }
                 .font(RealFont.inter(15))
@@ -273,7 +273,7 @@ struct PlannerGoalScreen: View {
             }
             .frame(maxWidth: .infinity, alignment: .topTrailing)
             .padding(5)
-            .accessibilityLabel(reorderMode ? "Sıralamayı bitir" : "Hedefleri sırala")
+            .accessibilityLabel(reorderMode ? t("Sıralamayı bitir") : t("Hedefleri sırala"))
         }
     }
 
@@ -298,13 +298,13 @@ struct PlannerGoalScreen: View {
                 VStack(alignment: .leading) {
                     Label("Link", systemImage: "link").font(RealFont.inter(12)).foregroundStyle(Self.muted)
                     Spacer()
-                    Text(link.isEmpty ? "Link yapıştır" : (URL(string: link)?.host?.replacingOccurrences(of: "www.", with: "") ?? link))
+                    Text(link.isEmpty ? t("Link yapıştır") : (URL(string: link)?.host?.replacingOccurrences(of: "www.", with: "") ?? link))
                         .font(RealFont.inter(17, .medium)).foregroundStyle(link.isEmpty ? Self.muted : .white).lineLimit(2)
                         .onTapGesture { showPasteLink = true }
                 }
                 .padding(.leading, 18).padding(.vertical, 14).padding(.trailing, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                PagerActionButton(label: link.isEmpty ? "Yapıştır" : "Aç", symbol: "chevron.right", accent: accent, enabled: true) {
+                PagerActionButton(label: link.isEmpty ? t("Yapıştır") : t("Aç"), symbol: "chevron.right", accent: accent, enabled: true) {
                     if let url = URL(string: link), !link.isEmpty { openURL(url) } else { showPasteLink = true }
                 }
             }
@@ -333,7 +333,7 @@ struct PlannerGoalScreen: View {
                                 .frame(width: 36, height: 36)
                                 .background(Circle().fill(Self.black)).overlay(Circle().strokeBorder(Self.faint, lineWidth: 1))
                         }
-                        .accessibilityLabel("Kişi ekle")
+                        .accessibilityLabel(t("Kişi ekle"))
                     }
                 }
                 .padding(.leading, 18).padding(.vertical, 14).padding(.trailing, 6)
@@ -447,7 +447,7 @@ struct PlannerGoalScreen: View {
     private func goalRow(_ goal: Goal, number: Int, active: Bool, isLast: Bool) -> some View {
         let state: Int = goal.done ? 0 : (active ? 1 : 2) // Done, Active, Locked
         let rail: Double = state == 0 ? 1 : (state == 1 ? (goal.progress ?? 0) : 0)
-        let caption = goal.done ? "Tamamlandı" : (!goal.caption.isEmpty ? goal.caption : (state == 1 ? "In progress" : "Up next"))
+        let caption = goal.done ? t("Tamamlandı") : (!goal.caption.isEmpty ? goal.caption : (state == 1 ? "In progress" : "Up next"))
         return HStack(alignment: .top, spacing: 14) {
             VStack(spacing: 0) {
                 ZStack {
@@ -493,7 +493,7 @@ struct PlannerGoalScreen: View {
                     .onTapGesture { path.append(.detail(goal.id)) }
                 // Tamamlama notu under a completed goal. The pencil (or a tap on the note) writes it in place.
                 if goal.done && noteGoalId == goal.id {
-                    TextField("Not yaz…", text: $noteText, axis: .vertical)
+                    TextField(t("Not yaz…"), text: $noteText, axis: .vertical)
                         .font(RealFont.inter(13)).italic()
                         .foregroundStyle(Color(argb: 0xFFE6E6EC)).tint(accent)
                         .focused($noteFocused)
@@ -732,7 +732,7 @@ private struct CategoryStylePopup: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Kart şekli").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8C8C95))
+            Text(t("Kart şekli")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8C8C95))
             HStack(spacing: 10) {
                 ForEach(["square", "rectangle"], id: \.self) { shape in
                     let selected = (store.categoryCardShape[categoryId] ?? "square") == shape
@@ -740,7 +740,7 @@ private struct CategoryStylePopup: View {
                         VStack(spacing: 8) {
                             RoundedRectangle(cornerRadius: 7).strokeBorder(selected ? .white : Color(argb: 0xFF8C8C95), lineWidth: 1.8)
                                 .frame(width: shape == "square" ? 26 : 42, height: 26)
-                            Text(shape == "square" ? "Kare" : "Dikdörtgen").font(RealFont.inter(13))
+                            Text(shape == "square" ? t("Kare") : t("Dikdörtgen")).font(RealFont.inter(13))
                                 .foregroundStyle(selected ? .white : Color(argb: 0xFF8C8C95))
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 12)
@@ -750,7 +750,7 @@ private struct CategoryStylePopup: View {
                 }
             }
             Button(action: onReorder) {
-                Text("Hedefleri sırala").font(RealFont.inter(14)).foregroundStyle(.white)
+                Text(t("Hedefleri sırala")).font(RealFont.inter(14)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16).padding(.vertical, 13)
                     .background(RoundedRectangle(cornerRadius: 16).fill(.white.opacity(0.05)))
@@ -773,8 +773,8 @@ private struct PasteLinkSheet: View {
                 .background(Circle().fill(LinearGradient(colors: [Color(argb: 0xFF6FD6FF).opacity(0.38), Color(argb: 0xFF6FD6FF).opacity(0.12)],
                                                          startPoint: .topLeading, endPoint: .bottomTrailing)))
                 .overlay(Circle().strokeBorder(Color(argb: 0xFF6FD6FF).opacity(0.45), lineWidth: 1))
-            Text("Kategori linki").font(RealFont.inter(20, .semibold)).foregroundStyle(.white)
-            Text(error ? "Geçerli bir web bağlantısı kopyala." : "Meet, Zoom veya başka bir web bağlantısını kopyala; klavye açmadan buradan yapıştır.")
+            Text(t("Kategori linki")).font(RealFont.inter(20, .semibold)).foregroundStyle(.white)
+            Text(error ? t("Geçerli bir web bağlantısı kopyala.") : t("Meet, Zoom veya başka bir web bağlantısını kopyala; klavye açmadan buradan yapıştır."))
                 .font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF9A9AA2)).multilineTextAlignment(.center)
             Button {
                 let value = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -783,10 +783,10 @@ private struct PasteLinkSheet: View {
                     dismiss()
                 } else { error = true }
             } label: {
-                Text("Panodan yapıştır").font(RealFont.inter(16, .semibold)).foregroundStyle(.black)
+                Text(t("Panodan yapıştır")).font(RealFont.inter(16, .semibold)).foregroundStyle(.black)
                     .frame(maxWidth: .infinity).frame(height: 52).background(Capsule().fill(.white))
             }
-            Button("Vazgeç") { dismiss() }.font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFF9A9AA2)).frame(height: 44)
+            Button(t("Vazgeç")) { dismiss() }.font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFF9A9AA2)).frame(height: 44)
         }
         .padding(22)
         .presentationBackground(Color(argb: 0xFF111115))

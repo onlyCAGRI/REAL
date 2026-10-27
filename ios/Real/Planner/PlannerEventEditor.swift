@@ -53,7 +53,7 @@ struct PlannerEventEditor: View {
             Capsule().fill(.white.opacity(0.28)).frame(width: 36, height: 3).frame(maxWidth: .infinity)
             Color.clear.frame(height: 8)
             HStack {
-                TextField("", text: $title, prompt: Text("Aklında ne var?").foregroundStyle(Color(argb: 0xFF8E8E96)))
+                TextField("", text: $title, prompt: Text(t("Aklında ne var?")).foregroundStyle(Color(argb: 0xFF8E8E96)))
                     .font(RealFont.inter(19)).foregroundStyle(Color(argb: 0xFFF7F7F8)).tint(Color(argb: 0xFF9AB9FF))
                     .focused($focused).submitLabel(.done).onSubmit(save)
                     .padding(.horizontal, 8)
@@ -63,15 +63,15 @@ struct PlannerEventEditor: View {
                         .background(Circle().fill(valid ? Color(argb: 0xFF295799) : Color(argb: 0xFF1E1E24)))
                 }
                 .buttonStyle(.plain).disabled(!valid)
-                .accessibilityLabel("Takvim kartını kaydet")
+                .accessibilityLabel(t("Takvim kartını kaydet"))
             }
             .frame(minHeight: 58)
             Color.clear.frame(height: 10)
             HStack(spacing: 8) {
-                tile("Başlangıç", "\(Calendar.real.component(.day, from: startDate)) \(Self.month(startDate)) · \(Self.ampm(startDate))") {
+                tile(t("Başlangıç"), "\(Calendar.real.component(.day, from: startDate)) \(Self.month(startDate)) · \(Self.ampm(startDate))") {
                     activeTool = nil; withoutAnimation { showStart = true }
                 }
-                tile("Bitiş", endDate.map { "\(Calendar.real.component(.day, from: $0)) \(Self.month($0)) · \(Self.ampm($0))" } ?? "—") {
+                tile(t("Bitiş"), endDate.map { "\(Calendar.real.component(.day, from: $0)) \(Self.month($0)) · \(Self.ampm($0))" } ?? "—") {
                     endDraft = Self.draft(endDate ?? startDate.addingTimeInterval(Double(duration ?? 60) * 60))
                     withoutAnimation { showEnd = true }
                 }
@@ -94,9 +94,9 @@ struct PlannerEventEditor: View {
             }
             Color.clear.frame(height: 10)
             HStack(alignment: .top, spacing: 2) {
-                toolButton("Kişi", .person, .people)
-                toolButton("Kart", .cards, .card)
-                toolButton("Kategori", .category, .category, accent: store.category(categoryId).map { paletteColor($0.accentStart) ?? Color(argb: 0xFF91B9FF) })
+                toolButton(t("Kişi"), .person, .people)
+                toolButton(t("Kart"), .cards, .card)
+                toolButton(t("Kategori"), .category, .category, accent: store.category(categoryId).map { paletteColor($0.accentStart) ?? Color(argb: 0xFF91B9FF) })
             }
             if let tool = activeTool {
                 toolBody(tool)
@@ -149,7 +149,7 @@ struct PlannerEventEditor: View {
     private func toolBody(_ tool: PlannerEditorTool) -> some View {
         switch tool {
         case .people:
-            TextField("", text: $people, prompt: Text("İsimleri virgülle ayır").foregroundStyle(.white.opacity(0.34)))
+            TextField("", text: $people, prompt: Text(t("İsimleri virgülle ayır")).foregroundStyle(.white.opacity(0.34)))
                 .font(RealFont.inter(14)).foregroundStyle(.white).tint(Color(argb: 0xFF9AB9FF))
                 .padding(.horizontal, 12).padding(.vertical, 10)
                 .background(RoundedRectangle(cornerRadius: 14).fill(.black.opacity(0.18)))
@@ -163,14 +163,14 @@ struct PlannerEventEditor: View {
                                 .overlay { if i == colorIndex { Circle().fill(Color(argb: 0xFF242322).opacity(0.78)).frame(width: 11, height: 11) } }
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Kart rengi \(i + 1)")
+                        .accessibilityLabel(t("Kart rengi {0}", i + 1))
                     }
                 }
             }
         case .category:
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    categoryChip("Kategori yok", selected: categoryId == nil, accent: Color(argb: 0xFFBABAC3), symbol: nil) { categoryId = nil }
+                    categoryChip(t("Kategori yok"), selected: categoryId == nil, accent: Color(argb: 0xFFBABAC3), symbol: nil) { categoryId = nil }
                     ForEach(store.categories) { c in
                         categoryChip(c.name, selected: categoryId == c.id, accent: paletteColor(c.accentStart) ?? Color(argb: 0xFF91B9FF), symbol: c.icon.symbol) {
                             categoryId = c.id
@@ -237,7 +237,7 @@ struct PlannerEventEditor: View {
     }
 
     private static func month(_ d: Date) -> String {
-        ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"][Calendar.real.component(.month, from: d) - 1]
+        ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"].map { t($0) }[Calendar.real.component(.month, from: d) - 1]
     }
 
     /// formatTimeAmPm: "12:00 am".

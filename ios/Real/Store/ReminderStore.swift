@@ -316,8 +316,8 @@ final class ReminderStore {
         let removed = reminders.enumerated().filter { ids.contains($0.element.id) }
         guard !removed.isEmpty else { return }
         delete(ids)
-        let label = removed.count == 1 ? "Kart silindi" : "\(removed.count) kart silindi"
-        RealToast.shared.showAction(label, "Geri al") { [weak self] in
+        let label = removed.count == 1 ? t("Kart silindi") : t("{0} kart silindi", removed.count)
+        RealToast.shared.showAction(label, t("Geri al")) { [weak self] in
             guard let self else { return }
             for (index, item) in removed where !self.reminders.contains(where: { $0.id == item.id }) {
                 self.reminders.insert(item, at: min(index, self.reminders.count))

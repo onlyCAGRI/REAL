@@ -113,7 +113,7 @@ struct PanoScreen: View {
                     RealSymbol("chevron.left", size: 21.8).foregroundStyle(.white)
                         .frame(width: 44, height: 44).liquidGlass(Circle(), role: .chrome)
                 }
-                .accessibilityLabel("Geri")
+                .accessibilityLabel(t("Geri"))
                 Spacer()
                 Button { withoutAnimation { creating = true } } label: {
                     RealSymbol("plus", size: 29.9).foregroundStyle(.white).frame(width: 48, height: 48)

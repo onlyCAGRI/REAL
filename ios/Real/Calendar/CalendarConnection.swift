@@ -87,7 +87,7 @@ final class CalendarConnection {
             }
             .map { e in
                 CalendarOccurrence(id: (e.eventIdentifier ?? UUID().uuidString) + "@\(Int(e.startDate.timeIntervalSince1970))",
-                                   calendarId: e.calendar.calendarIdentifier, title: e.title ?? "Etkinlik",
+                                   calendarId: e.calendar.calendarIdentifier, title: e.title ?? t("Etkinlik"),
                                    start: e.startDate, end: e.endDate, allDay: e.isAllDay, calendarName: e.calendar.title,
                                    color: Color(cgColor: e.calendar.cgColor), location: e.location, notes: e.notes)
             }
@@ -131,7 +131,7 @@ final class CalendarConnection {
     func reconcile(_ reminders: [ReminderItem]) -> String {
         guard options.exportEnabled else { return "" }
         guard writable, let targetId = options.targetId, let target = store.calendar(withIdentifier: targetId) else {
-            let msg = "Hedef takvim kullanılamıyor; seçimini kontrol et."
+            let msg = t("Hedef takvim kullanılamıyor; seçimini kontrol et.")
             status = msg
             return msg
         }
@@ -179,7 +179,7 @@ final class CalendarConnection {
         }
         try? store.commit()
         links = current
-        let msg = "Takvim: \(inserted) eklendi, \(updated) güncellendi, \(removed) kaldırıldı." + (conflicts > 0 ? " \(conflicts) dış değişiklik korundu." : "")
+        let msg = t("Takvim: {0} eklendi, {1} güncellendi, {2} kaldırıldı.", inserted, updated, removed) + (conflicts > 0 ? t(" {0} dış değişiklik korundu.", conflicts) : "")
         status = msg
         return msg
     }
@@ -206,8 +206,8 @@ struct CalendarConnectionScreen: View {
     var body: some View {
         SettingsLayout(onBack: onBack, title: "") {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Takvim bağlantısı").font(RealFont.inter(28, .semibold)).foregroundStyle(.white)
-                Text("Telefondaki takvimleri REAL'de gör, istersen planlarını takvime gönder.")
+                Text(t("Takvim bağlantısı")).font(RealFont.inter(28, .semibold)).foregroundStyle(.white)
+                Text(t("Telefondaki takvimleri REAL'de gör, istersen planlarını takvime gönder."))
                     .font(RealFont.inter(14)).foregroundStyle(muted).lineSpacing(4)
             }
             .padding(.top, 14).padding(.horizontal, 6)
@@ -216,7 +216,7 @@ struct CalendarConnectionScreen: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Button { withAnimation(.easeOut(duration: 0.2)) { howOpen.toggle() } } label: {
                         HStack {
-                            Text("Nasıl çalışır?").font(RealFont.inter(15, .medium)).foregroundStyle(.white)
+                            Text(t("Nasıl çalışır?")).font(RealFont.inter(15, .medium)).foregroundStyle(.white)
                             Spacer()
                             RealSymbol("chevron.right", size: 13).foregroundStyle(muted).rotationEffect(.degrees(howOpen ? 90 : 0))
                         }
@@ -225,9 +225,9 @@ struct CalendarConnectionScreen: View {
                     .buttonStyle(.plain)
                     if howOpen {
                         VStack(alignment: .leading, spacing: 8) {
-                            bullet("Takvimden gelenler REAL'de yalnızca gösterilir, değiştirilmez.")
-                            bullet("'Takvime gönder' açıksa başlık, gün ve saat seçtiğin takvime yazılır.")
-                            bullet("Eşitleme uygulamayı açınca, takvime girince ve ayar kaydedince yapılır; arka planda sürekli çalışmaz.")
+                            bullet(t("Takvimden gelenler REAL'de yalnızca gösterilir, değiştirilmez."))
+                            bullet(t("'Takvime gönder' açıksa başlık, gün ve saat seçtiğin takvime yazılır."))
+                            bullet(t("Eşitleme uygulamayı açınca, takvime girince ve ayar kaydedince yapılır; arka planda sürekli çalışmaz."))
                         }
                         .padding(.horizontal, 18).padding(.bottom, 16)
                     }
@@ -236,21 +236,21 @@ struct CalendarConnectionScreen: View {
             .padding(.top, 14)
             if !connection.status.isEmpty {
                 SettingsGlassGroup {
-                    Text(connection.busy ? "Eşitleniyor…" : connection.status).font(RealFont.inter(14)).foregroundStyle(.white)
+                    Text(connection.busy ? t("Eşitleniyor…") : connection.status).font(RealFont.inter(14)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 14)
                 }
                 .padding(.top, 12)
             }
             if !connection.readable {
-                section("Başlamak için") {
-                    SettingsActionRow(icon: .calendar, title: "Takvimleri görmeye izin ver", subtitle: "iPhone'da Google hesabı ve takvimleri açık olmalı.") {
+                section(t("Başlamak için")) {
+                    SettingsActionRow(icon: .calendar, title: t("Takvimleri görmeye izin ver"), subtitle: t("iPhone'da Google hesabı ve takvimleri açık olmalı.")) {
                         Task { _ = await connection.requestRead() }
                     }
                 }
             } else {
-                section("REAL'de göster") {
+                section(t("REAL'de göster")) {
                     if connection.calendars.isEmpty {
-                        Text("Takvim bulunamadı. iPhone ayarlarından Google hesabını ekleyip takvimleri aç.").font(RealFont.inter(14)).foregroundStyle(muted).padding(18)
+                        Text(t("Takvim bulunamadı. iPhone ayarlarından Google hesabını ekleyip takvimleri aç.")).font(RealFont.inter(14)).foregroundStyle(muted).padding(18)
                     }
                     ForEach(Array(connection.calendars.enumerated()), id: \.element.calendarIdentifier) { i, c in
                         if i > 0 { SettingsDivider() }
@@ -259,13 +259,13 @@ struct CalendarConnectionScreen: View {
                         }
                     }
                 }
-                section("Takvime gönder", footer: draft.exportEnabled ? nil : "Kapatınca takvimdeki mevcut kayıtlar silinmez.") {
-                    SettingsToggleRow(icon: .calendar, title: "REAL planlarını takvime gönder", subtitle: "", isOn: $draft.exportEnabled)
+                section(t("Takvime gönder"), footer: draft.exportEnabled ? nil : t("Kapatınca takvimdeki mevcut kayıtlar silinmez.")) {
+                    SettingsToggleRow(icon: .calendar, title: t("REAL planlarını takvime gönder"), subtitle: "", isOn: $draft.exportEnabled)
                 }
                 if draft.exportEnabled {
-                    section("Hangi takvime?", footer: connection.hasLinks ? "Gönderilmiş planlar varken hedef takvim değiştirilemez." : nil) {
+                    section(t("Hangi takvime?"), footer: connection.hasLinks ? t("Gönderilmiş planlar varken hedef takvim değiştirilemez.") : nil) {
                         if connection.writableCalendars.isEmpty {
-                            Text("Yazılabilir takvim bulunamadı.").font(RealFont.inter(14)).foregroundStyle(muted).padding(18)
+                            Text(t("Yazılabilir takvim bulunamadı.")).font(RealFont.inter(14)).foregroundStyle(muted).padding(18)
                         }
                         ForEach(Array(connection.writableCalendars.enumerated()), id: \.element.calendarIdentifier) { i, c in
                             if i > 0 { SettingsDivider() }
@@ -274,16 +274,16 @@ struct CalendarConnectionScreen: View {
                             }
                         }
                     }
-                    section("Hangi planlar?", footer: "Yalnızca tarihi olan kartlar gönderilir. Tekrarlılarda gelecek 90 gün.") {
-                        LiquidSegmentedControl(labels: ["Tüm planlı kartlar", "Seçtiklerim"], selected: Binding(get: { draft.exportAll ? 0 : 1 }, set: { draft.exportAll = $0 == 0 }))
+                    section(t("Hangi planlar?"), footer: t("Yalnızca tarihi olan kartlar gönderilir. Tekrarlılarda gelecek 90 gün.")) {
+                        LiquidSegmentedControl(labels: [t("Tüm planlı kartlar"), t("Seçtiklerim")], selected: Binding(get: { draft.exportAll ? 0 : 1 }, set: { draft.exportAll = $0 == 0 }))
                             .frame(height: 40).padding(12)
                         if draft.exportAll {
-                            Text("Yeni planlar da otomatik gönderilir.").font(RealFont.inter(13)).foregroundStyle(muted).padding(.horizontal, 18).padding(.bottom, 14)
+                            Text(t("Yeni planlar da otomatik gönderilir.")).font(RealFont.inter(13)).foregroundStyle(muted).padding(.horizontal, 18).padding(.bottom, 14)
                         } else if datedPlans.isEmpty {
-                            Text("Tarihi veya saati olan plan yok.").font(RealFont.inter(13)).foregroundStyle(muted).padding(.horizontal, 18).padding(.bottom, 14)
+                            Text(t("Tarihi veya saati olan plan yok.")).font(RealFont.inter(13)).foregroundStyle(muted).padding(.horizontal, 18).padding(.bottom, 14)
                         } else {
                             ForEach(datedPlans) { r in
-                                checkRow(r.text, r.alertAt.map { "\(RealDates.dayLabel($0.date)), \(RealDates.time($0.date))" } ?? "Tüm gün", color: nil, checked: draft.selectedIds.contains(r.id)) {
+                                checkRow(r.text, r.alertAt.map { "\(RealDates.dayLabel($0.date)), \(RealDates.time($0.date))" } ?? t("Tüm gün"), color: nil, checked: draft.selectedIds.contains(r.id)) {
                                     if draft.selectedIds.contains(r.id) { draft.selectedIds.remove(r.id) } else { draft.selectedIds.insert(r.id) }
                                 }
                             }
@@ -291,21 +291,21 @@ struct CalendarConnectionScreen: View {
                     }
                 }
             }
-            section("İzinler") {
-                permissionRow("Takvimi okuma", granted: connection.readable) { Task { _ = await connection.requestRead() } }
+            section(t("İzinler")) {
+                permissionRow(t("Takvimi okuma"), granted: connection.readable) { Task { _ = await connection.requestRead() } }
                 SettingsDivider()
-                permissionRow("Takvime yazma", granted: connection.writable) { Task { _ = await connection.requestRead() } }
+                permissionRow(t("Takvime yazma"), granted: connection.writable) { Task { _ = await connection.requestRead() } }
                 SettingsDivider()
-                SettingsActionRow(icon: .settings, title: "Uygulama izinlerini aç", subtitle: "") {
+                SettingsActionRow(icon: .settings, title: t("Uygulama izinlerini aç"), subtitle: "") {
                     if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) }
                 }
             }
             if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFBAA7)).padding(.top, 10).padding(.horizontal, 8) }
             Button {
-                if draft.exportEnabled && draft.targetId == nil { error = "Göndermek için yazma izni ver ve bir hedef takvim seç."; return }
+                if draft.exportEnabled && draft.targetId == nil { error = t("Göndermek için yazma izni ver ve bir hedef takvim seç."); return }
                 if draft.exportEnabled && !connection.options.exportEnabled { confirm = true } else { commit() }
             } label: {
-                Text(dirty ? "Değişiklikleri kaydet" : "Kaydedildi").font(RealFont.inter(15, .semibold))
+                Text(dirty ? t("Değişiklikleri kaydet") : t("Kaydedildi")).font(RealFont.inter(15, .semibold))
                     .foregroundStyle(dirty ? .black : .white.opacity(0.6))
                     .frame(maxWidth: .infinity).frame(height: 52)
                     .background(Capsule().fill(dirty ? .white : .white.opacity(0.08)))
@@ -313,11 +313,11 @@ struct CalendarConnectionScreen: View {
             .buttonStyle(.plain).disabled(!dirty).padding(.top, 16)
             Color.clear.frame(height: 30)
         }
-        .alert("Takvime gönderilsin mi?", isPresented: $confirm) {
-            Button("Onayla ve gönder") { commit() }
-            Button("Vazgeç", role: .cancel) {}
+        .alert(t("Takvime gönderilsin mi?"), isPresented: $confirm) {
+            Button(t("Onayla ve gönder")) { commit() }
+            Button(t("Vazgeç"), role: .cancel) {}
         } message: {
-            Text("• Başlık, gün ve saat takvime yazılır.\n• Tekrarlı planlarda gelecek 90 gün gönderilir.\n• REAL'de sildiğin plan takvimden de silinir. Takvimde değiştirdiğin kopyaya dokunulmaz.")
+            Text(t("• Başlık, gün ve saat takvime yazılır.\n• Tekrarlı planlarda gelecek 90 gün gönderilir.\n• REAL'de sildiğin plan takvimden de silinir. Takvimde değiştirdiğin kopyaya dokunulmaz."))
         }
     }
 
@@ -329,7 +329,7 @@ struct CalendarConnectionScreen: View {
 
     private func section<C: View>(_ title: String, footer: String? = nil, @ViewBuilder content: @escaping () -> C) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            SettingsSectionHeader(title: title.uppercased(with: Locale(identifier: "tr_TR")))
+            SettingsSectionHeader(title: title.uppercased(with: I18n.locale))
             SettingsGlassGroup { content() }
             if let footer { Text(footer).font(RealFont.inter(12)).foregroundStyle(muted).padding(.horizontal, 12).padding(.top, 8) }
         }
@@ -374,7 +374,7 @@ struct CalendarConnectionScreen: View {
             Text(label).font(RealFont.inter(15)).foregroundStyle(.white)
             Spacer()
             Button(action: action) {
-                Text(granted ? "Verildi" : "İzin ver").font(RealFont.inter(14, .medium))
+                Text(granted ? t("Verildi") : t("İzin ver")).font(RealFont.inter(14, .medium))
                     .foregroundStyle(granted ? muted : Color(argb: 0xFF91B9FF))
             }
             .buttonStyle(.plain).disabled(granted)
@@ -415,27 +415,27 @@ struct ExternalCalendarEventDetail: View {
                 Text(event.calendarName).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF9A9AA5))
             }
             Text(event.title).font(RealFont.inter(24, .semibold)).foregroundStyle(.white)
-            Text(event.allDay ? "Tüm gün · " + RealDates.dayLabel(event.start) : "\(RealDates.dayLabel(event.start)), \(RealDates.time(event.start))" + " – " + RealDates.time(event.end))
+            Text(event.allDay ? t("Tüm gün · ") + RealDates.dayLabel(event.start) : "\(RealDates.dayLabel(event.start)), \(RealDates.time(event.start))" + " – " + RealDates.time(event.end))
                 .font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.8))
             if let l = event.location, !l.isEmpty { Text(l).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF9A9AA5)) }
             if let n = event.notes, !n.isEmpty { Text(n).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.7)).lineLimit(6) }
-            Text(linkedCard == nil ? "Bu etkinlik takvimden gösteriliyor; REAL'e kopyalanmadı." : "Bu etkinliğe bağlı bir REAL kartı var.")
+            Text(linkedCard == nil ? t("Bu etkinlik takvimden gösteriliyor; REAL'e kopyalanmadı.") : t("Bu etkinliğe bağlı bir REAL kartı var."))
                 .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF77777F))
             HStack(spacing: 10) {
                 Button {
                     if let u = URL(string: "calshow:\(event.start.timeIntervalSinceReferenceDate)") { openURL(u) }
                 } label: {
-                    Text("Takvimde aç").font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                    Text(t("Takvimde aç")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                         .frame(maxWidth: .infinity).frame(height: 48).background(Capsule().fill(.white))
                 }
                 Button { dismiss() } label: {
-                    Text("Kapat").font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                    Text(t("Kapat")).font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).frame(height: 48).background(Capsule().fill(.white.opacity(0.08)))
                 }
             }
             .buttonStyle(.plain).padding(.top, 6)
             Button { addRealContent() } label: {
-                Text(linkedCard == nil ? "REAL içeriği ekle" : "REAL kartını aç").font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                Text(linkedCard == nil ? t("REAL içeriği ekle") : t("REAL kartını aç")).font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity).frame(height: 48).background(Capsule().fill(.white.opacity(0.08)))
             }
             .buttonStyle(.plain)
@@ -453,7 +453,7 @@ struct ExternalCalendarEventDetail: View {
         Button { withAnimation(.spring(duration: 0.3)) { categorizeOpen.toggle() } } label: {
             HStack(spacing: 8) {
                 if let current { Circle().fill(current.visual.stripe.0).frame(width: 12, height: 12) }
-                Text(current?.name ?? "Kategorize et").font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                Text(current?.name ?? t("Kategorize et")).font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity).frame(height: 48).background(Capsule().fill(.white.opacity(0.08)))
         }
@@ -467,7 +467,7 @@ struct ExternalCalendarEventDetail: View {
                             if whole { Circle().fill(.white); Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.black) }
                         }
                         .frame(width: 20, height: 20)
-                        Text("\(event.calendarName) takvimindeki tüm etkinlikler").font(RealFont.inter(14)).foregroundStyle(.white)
+                        Text(t("{0} takvimindeki tüm etkinlikler", event.calendarName)).font(RealFont.inter(14)).foregroundStyle(.white)
                     }
                 }
                 .buttonStyle(.plain)
@@ -492,13 +492,13 @@ struct ExternalCalendarEventDetail: View {
                         links.link(event, categoryId: made.id, wholeCalendar: whole)
                         categorizeOpen = false
                     } label: {
-                        Text("+ Yeni kategori: \(event.calendarName)").font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.85))
+                        Text(t("+ Yeni kategori: {0}", event.calendarName)).font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.85))
                     }
                     .buttonStyle(.plain)
                 }
                 if current != nil {
                     Button { links.link(event, categoryId: nil, wholeCalendar: false); categorizeOpen = false } label: {
-                        Text("Kategoriden çıkar").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFFB4AB))
+                        Text(t("Kategoriden çıkar")).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFFB4AB))
                     }
                     .buttonStyle(.plain)
                 }

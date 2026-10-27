@@ -71,7 +71,7 @@ enum MediaCatalog {
     }
 
     @MainActor static func attribution(_ type: MediaType) -> String {
-        type == .TV ? "TVmaze" : (RealAuth.shared.account != nil ? "TheTVDB" : "iTunes • Türkiye kataloğu")
+        type == .TV ? "TVmaze" : (RealAuth.shared.account != nil ? "TheTVDB" : t("iTunes • Türkiye kataloğu"))
     }
 
     /// RealMediaCatalogClient.searchMovies: TheTVDB V4 via the Worker (no TheTVDB key on the device).
@@ -166,8 +166,8 @@ struct MediaSearchSheet: View {
     @State private var message: String?
 
     var body: some View {
-        CatalogPanel(title: "Film & Dizi", placeholder: "Film veya dizi ara", query: $query, searching: searching, message: message,
-                     attribution: "Filmler \(MediaCatalog.attribution(.MOVIE)) • Diziler TVmaze", onClose: { dismiss() }) {
+        CatalogPanel(title: t("Film & Dizi"), placeholder: t("Film veya dizi ara"), query: $query, searching: searching, message: message,
+                     attribution: t("Filmler {0} • Diziler TVmaze", MediaCatalog.attribution(.MOVIE)), onClose: { dismiss() }) {
             ForEach(results) { m in
                 Button { onSelect(m); dismiss() } label: {
                     HStack(spacing: 12) {
@@ -197,12 +197,12 @@ struct MediaSearchSheet: View {
         message = nil
         async let movies = try? MediaCatalog.search(q, type: .MOVIE)
         async let series = try? MediaCatalog.search(q, type: .TV)
-        let (m, t) = await (movies, series)
+        let (m, shows) = await (movies, series)
         guard !Task.isCancelled else { return }
         searching = false
-        if m == nil && t == nil { results = []; message = "İçerik kataloğuna şu anda ulaşılamadı."; return }
-        results = Self.merge(q, m ?? [], t ?? [])
-        if results.isEmpty { message = "Sonuç bulunamadı." }
+        if m == nil && shows == nil { results = []; message = t("İçerik kataloğuna şu anda ulaşılamadı."); return }
+        results = Self.merge(q, m ?? [], shows ?? [])
+        if results.isEmpty { message = t("Sonuç bulunamadı.") }
     }
 
     private static func merge(_ query: String, _ movies: [MediaBlock], _ series: [MediaBlock]) -> [MediaBlock] {
@@ -230,9 +230,9 @@ struct MusicSearchSheet: View {
     @State private var source = MusicSource.saved
 
     var body: some View {
-        CatalogPanel(title: "Müzik", placeholder: source == .apple ? "Şarkı veya sanatçı ara" : "Şarkı ara veya Spotify bağlantısı yapıştır",
+        CatalogPanel(title: t("Müzik"), placeholder: source == .apple ? t("Şarkı veya sanatçı ara") : t("Şarkı ara veya Spotify bağlantısı yapıştır"),
                      query: $query, searching: searching, message: message,
-                     attribution: "Apple Music • \(MusicStorefront.name) kataloğu",
+                     attribution: t("Apple Music • {0} kataloğu", MusicStorefront.name),
                      onClose: { dismiss() }, header: AnyView(sourceHeader)) {
             ForEach(results) { m in
                 Button { onSelect(m); dismiss() } label: {
@@ -282,17 +282,17 @@ struct MusicSearchSheet: View {
             let found = await LinkResolver.resolve(String(q[r])).music
             guard !Task.isCancelled else { return }
             searching = false
-            if let found, found.provider == "Spotify" { results = [found] } else { results = []; message = "Bu bağlantıdan şarkı okunamadı." }
+            if let found, found.provider == "Spotify" { results = [found] } else { results = []; message = t("Bu bağlantıdan şarkı okunamadı.") }
             return
         }
         do {
             let found = try await MusicCatalog.search(q)
             guard !Task.isCancelled else { return }
             results = found
-            message = found.isEmpty ? "Sonuç bulunamadı. Başka bir şarkı veya sanatçı dene." : nil
+            message = found.isEmpty ? t("Sonuç bulunamadı. Başka bir şarkı veya sanatçı dene.") : nil
         } catch {
             guard !Task.isCancelled else { return }
-            message = "Müzik araması yapılamadı. Bağlantını kontrol edip yeniden dene."
+            message = t("Müzik araması yapılamadı. Bağlantını kontrol edip yeniden dene.")
         }
         searching = false
     }
@@ -308,7 +308,7 @@ struct GameSearchSheet: View {
     @State private var message: String?
 
     var body: some View {
-        CatalogPanel(title: "Oyun", placeholder: "Oyun ara", query: $query, searching: searching, message: message,
+        CatalogPanel(title: t("Oyun"), placeholder: t("Oyun ara"), query: $query, searching: searching, message: message,
                      attribution: "Kaynak: IGDB", onClose: { dismiss() }) {
             ForEach(results, id: \.providerId) { g in
                 Button { var picked = g; picked.id = UUID().uuidString.lowercased(); onSelect(picked); dismiss() } label: {
@@ -341,10 +341,10 @@ struct GameSearchSheet: View {
             let found = try await GameSearch.search(q)
             guard !Task.isCancelled else { return }
             results = found
-            message = found.isEmpty ? "Sonuç bulunamadı. Oyunun adını farklı yazmayı dene." : nil
+            message = found.isEmpty ? t("Sonuç bulunamadı. Oyunun adını farklı yazmayı dene.") : nil
         } catch {
             guard !Task.isCancelled else { return }
-            message = (error as? LocalizedError)?.errorDescription ?? "Oyun araması yapılamadı. Bağlantını kontrol edip yeniden dene."
+            message = (error as? LocalizedError)?.errorDescription ?? t("Oyun araması yapılamadı. Bağlantını kontrol edip yeniden dene.")
         }
         searching = false
     }
@@ -365,27 +365,27 @@ private struct CatalogPanel<Rows: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(RealFont.inter(19, .semibold)).foregroundStyle(.white)
+            Text(t(title)).font(RealFont.inter(19, .semibold)).foregroundStyle(.white)
             if let header { header }
-            TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(Color(argb: 0xFF8E8E98)))
+            TextField("", text: $query, prompt: Text(t(placeholder)).foregroundStyle(Color(argb: 0xFF8E8E98)))
                 .font(RealFont.inter(16)).foregroundStyle(.white).tint(.white)
                 .focused($focused).submitLabel(.search)
                 .onSubmit { focused = false }
                 .padding(.horizontal, 18).frame(height: 52)
                 .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(focused ? Color(argb: 0xFF85858D) : Color(argb: 0xFF424248), lineWidth: 1))
             HStack {
-                Text(searching ? "Aranıyor…" : "").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA5A5B0))
+                Text(searching ? t("Aranıyor…") : "").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFA5A5B0))
                 Spacer()
-                Button("Kapat", action: onClose).foregroundStyle(Color(argb: 0xFFBCBCC5)).font(RealFont.inter(15, .medium))
+                Button(t("Kapat"), action: onClose).foregroundStyle(Color(argb: 0xFFBCBCC5)).font(RealFont.inter(15, .medium))
             }
             .padding(.vertical, 4)
-            if let message { Text(message).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFBCBCC5)) }
+            if let message { Text(t(message)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFBCBCC5)) }
             ScrollView {
                 LazyVStack(spacing: 6) { rows() }
             }
             .frame(maxHeight: 340)
             .fixedSize(horizontal: false, vertical: true)
-            Text(attribution).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF95959F))
+            Text(t(attribution)).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF95959F))
         }
         .padding(12)
         .liquidGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .sheet)
@@ -463,7 +463,7 @@ struct ExplicitBadge: View {
         Text("E").font(RealFont.inter(size * 0.72, .bold)).foregroundStyle(Color.black.opacity(0.85))
             .frame(width: size + 2, height: size + 2)
             .background(color, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-            .accessibilityLabel("Müstehcen")
+            .accessibilityLabel(t("Müstehcen"))
     }
 }
 
@@ -530,7 +530,7 @@ struct MusicBlockView: View {
                 HStack {
                     Spacer()
                     Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 36, height: 36) }
-                        .accessibilityLabel("İçeriği kaldır")
+                        .accessibilityLabel(t("İçeriği kaldır"))
                 }
             }
             HStack(alignment: .top, spacing: 12) {
@@ -543,7 +543,7 @@ struct MusicBlockView: View {
                 // Source logo top-right; on Spotify it turns the card over to its Spotify Code.
                 if spotifyCodeId != nil {
                     Button { flipped = true } label: { MusicSourceLogo(provider: block.provider, size: 18).frame(width: 30, height: 30) }
-                        .buttonStyle(.plain).accessibilityLabel("Spotify kodunu göster")
+                        .buttonStyle(.plain).accessibilityLabel(t("Spotify kodunu göster"))
                 } else {
                     MusicSourceLogo(provider: musicOpensIn(block), size: 18)
                 }
@@ -557,14 +557,14 @@ struct MusicBlockView: View {
                         }
                         .foregroundStyle(.white).frame(width: 36, height: 36)
                     }
-                    .accessibilityLabel(playing ? "Önizlemeyi durdur" : "Önizlemeyi çal")
+                    .accessibilityLabel(playing ? t("Önizlemeyi durdur") : t("Önizlemeyi çal"))
                     Spacer()
-                    Text(playing && !preview.loading ? String(format: "0:%02d", Int(preview.elapsed)) : "Önizleme")
+                    Text(playing && !preview.loading ? String(format: "0:%02d", Int(preview.elapsed)) : t("Önizleme"))
                         .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFB1B1BC)).monospacedDigit()
                 }
             }
             Button { if playing { preview.toggle(block) }; openMusicBlock(block) } label: {
-                Text("\(musicProviderLabel(musicOpensIn(block)))'\(musicOpensIn(block) == "Spotify" ? "da" : "te") aç ↗").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD0D0D8))
+                Text(musicOpensIn(block) == "Spotify" ? t("{0}'da aç ↗", musicProviderLabel(musicOpensIn(block))) : t("{0}'te aç ↗", musicProviderLabel(musicOpensIn(block)))).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD0D0D8))
                     .frame(maxWidth: .infinity).frame(height: 40)
                     .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 24))
             }
@@ -595,16 +595,16 @@ struct MusicBlockView: View {
                         .background(Circle().fill(Color.white.opacity(0.12)))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(playing ? "Önizlemeyi durdur" : "Önizlemeyi çal")
-                    Text(playing && !preview.loading ? String(format: "0:%02d", Int(preview.elapsed)) : "Önizleme")
+                    .accessibilityLabel(playing ? t("Önizlemeyi durdur") : t("Önizlemeyi çal"))
+                    Text(playing && !preview.loading ? String(format: "0:%02d", Int(preview.elapsed)) : t("Önizleme"))
                         .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFB1B1BC)).monospacedDigit()
                 }
             }
-            HeroOpenRow(label: "\(musicProviderLabel(opensIn))'\(opensIn == "Spotify" ? "da" : "te") aç ↗",
+            HeroOpenRow(label: opensIn == "Spotify" ? t("{0}'da aç ↗", musicProviderLabel(opensIn)) : t("{0}'te aç ↗", musicProviderLabel(opensIn)),
                         action: { if playing { preview.toggle(block) }; openMusicBlock(block) }) {
                 if spotifyCodeId != nil {
                     Button { flipped = true } label: { MusicSourceLogo(provider: opensIn, size: 22).frame(width: 38, height: 38) }
-                        .buttonStyle(.plain).accessibilityLabel("Spotify kodunu göster")
+                        .buttonStyle(.plain).accessibilityLabel(t("Spotify kodunu göster"))
                 } else {
                     MusicSourceLogo(provider: opensIn, size: 22).padding(8)
                 }
@@ -625,6 +625,6 @@ struct MusicBlockView: View {
         .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
         .contentShape(Rectangle())
         .onTapGesture { flipped = false }
-        .accessibilityLabel("Spotify kodu. Geri dönmek için dokun.")
+        .accessibilityLabel(t("Spotify kodu. Geri dönmek için dokun."))
     }
 }

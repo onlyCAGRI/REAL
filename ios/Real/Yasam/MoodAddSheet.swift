@@ -3,10 +3,19 @@ import UIKit
 
 /// Mood V2 (MoodV2Selector.kt): five families from Kötü to Çok iyi, each with a tint and a drawn face.
 struct MoodFamily {
-    let title: String
+    let trTitle: String
     let tint: Color
     let defaultMood: JournalMood
     let moods: [JournalMood]
+
+    init(title: String, tint: Color, defaultMood: JournalMood, moods: [JournalMood]) {
+        self.trTitle = title
+        self.tint = tint
+        self.defaultMood = defaultMood
+        self.moods = moods
+    }
+
+    var title: String { t(trTitle) }
 }
 
 enum MoodV2 {
@@ -51,7 +60,8 @@ enum MoodV2 {
     static func tint(_ m: JournalMood) -> Color { families[familyIndex(m)].tint }
 
     static func descriptorLabel(_ key: String) -> String {
-        descriptors.flatMap { $0 }.first { $0.0 == key }?.1 ?? key
+        guard let raw = descriptors.flatMap({ $0 }).first(where: { $0.0 == key })?.1 else { return key }
+        return raw == "F*ck off" ? raw : t(raw)
     }
 
     static func lerpColor(_ progress: Double) -> Color {
@@ -256,7 +266,7 @@ struct MoodAddSheet: View {
                 Button { if details { withAnimation(.easeOut(duration: 0.25)) { details = false } } else { dismiss() } } label: {
                     Text(details ? "‹" : "×").font(.system(size: 30)).foregroundStyle(tone.ink).frame(width: 44, height: 44)
                 }
-                .accessibilityLabel(details ? "Geri" : "Kapat")
+                .accessibilityLabel(details ? t("Geri") : t("Kapat"))
                 Spacer()
                 if !reminderFlow {
                     HStack(spacing: 0) {
@@ -266,7 +276,7 @@ struct MoodAddSheet: View {
                                 scope = value
                                 UISelectionFeedbackGenerator().selectionChanged()
                             } label: {
-                                Text(label).font(RealFont.inter(13, .medium)).foregroundStyle(on ? tone.paper : tone.ink.opacity(0.75))
+                                Text(t(label)).font(RealFont.inter(13, .medium)).foregroundStyle(on ? tone.paper : tone.ink.opacity(0.75))
                                     .padding(.horizontal, 14).padding(.vertical, 7)
                                     .background(Capsule().fill(on ? tone.ink : .clear))
                             }
@@ -290,7 +300,7 @@ struct MoodAddSheet: View {
                 if !details {
                     let count = descriptorKeys.count + factorKeys.count
                     Button { withAnimation(.easeOut(duration: 0.3)) { details = true } } label: {
-                        Text(count > 0 ? "Ayrıntılar · \(count)" : "Ayrıntı ekle").font(RealFont.inter(15, .medium)).foregroundStyle(tone.ink)
+                        Text(count > 0 ? t("Ayrıntılar · {0}", count) : t("Ayrıntı ekle")).font(RealFont.inter(15, .medium)).foregroundStyle(tone.ink)
                             .frame(maxWidth: .infinity, minHeight: 52)
                             .overlay(Capsule().strokeBorder(tone.ink.opacity(0.5), lineWidth: 1.5))
                             .contentShape(Capsule())
@@ -298,7 +308,7 @@ struct MoodAddSheet: View {
                     .buttonStyle(.plain)
                 }
                 Button(action: save) {
-                    Text("Kaydet").font(RealFont.inter(15, .semibold)).foregroundStyle(tone.paper)
+                    Text(t("Kaydet")).font(RealFont.inter(15, .semibold)).foregroundStyle(tone.paper)
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .background(Capsule().fill(tone.ink))
                 }
@@ -317,7 +327,7 @@ struct MoodAddSheet: View {
     private func faceStep(_ tone: (paper: Color, ink: Color)) -> some View {
         let showHand = family == 0 && descriptorKeys.contains("fuck_off")
         return VStack(spacing: 0) {
-            Text(reminderFlow ? "Bu REAL nasıl hissettirdi?" : scope == .moment ? "Şu an nasılsın?" : "Bugün genel olarak nasıldı?")
+            Text(reminderFlow ? t("Bu REAL nasıl hissettirdi?") : scope == .moment ? t("Şu an nasılsın?") : t("Bugün genel olarak nasıldı?"))
                 .font(RealFont.inter(20, .medium)).foregroundStyle(tone.ink).multilineTextAlignment(.center)
                 .padding(.top, 18)
             Spacer(minLength: 8)
@@ -326,11 +336,11 @@ struct MoodAddSheet: View {
                 else { MoodV3Face(params: MoodFaceParams.at(progress, mood: dragging ? nil : mood), ink: tone.ink) }
             }
             .frame(width: 300, height: 300)
-            .accessibilityLabel("\(MoodV2.families[family].title) mood yüzü")
+                .accessibilityLabel(t("{0} mood yüzü", MoodV2.families[family].title))
             Spacer(minLength: 8)
             // The feeling in big letters; a new word slides in from the side the mood moved to.
             ZStack {
-                Text(MoodV2.families[shownFamily].title.uppercased(with: Locale(identifier: "tr_TR")))
+                    Text(MoodV2.families[shownFamily].title.uppercased(with: I18n.locale))
                     .font(RealFont.inter(64, .black)).foregroundStyle(tone.ink.opacity(0.82))
                     .lineLimit(1).minimumScaleFactor(0.6)
                     .id(shownFamily)
@@ -382,7 +392,7 @@ struct MoodAddSheet: View {
             }
             .frame(height: 44)
             HStack {
-                Text("Kötü"); Spacer(); Text("Normal"); Spacer(); Text("Çok iyi")
+                Text(t("Kötü")); Spacer(); Text(t("Normal")); Spacer(); Text(t("Çok iyi"))
             }
             .font(RealFont.inter(12)).foregroundStyle(tone.ink.opacity(0.6))
         }
@@ -458,23 +468,23 @@ struct MoodAddSheet: View {
                     Text(MoodV2.families[family].title).font(RealFont.inter(30, .black)).foregroundStyle(tone.ink)
                 }
                 .padding(.top, 8)
-                Text("Bunu en iyi ne anlatır?").font(RealFont.inter(20, .semibold)).foregroundStyle(tone.ink).padding(.top, 26)
-                Text("En fazla 3 tane").font(RealFont.inter(12)).foregroundStyle(tone.ink.opacity(0.6)).padding(.top, 4).padding(.bottom, 12)
+                Text(t("Bunu en iyi ne anlatır?")).font(RealFont.inter(20, .semibold)).foregroundStyle(tone.ink).padding(.top, 26)
+                Text(t("En fazla 3 tane")).font(RealFont.inter(12)).foregroundStyle(tone.ink.opacity(0.6)).padding(.top, 4).padding(.bottom, 12)
                 ChipFlow(spacing: 8, lineSpacing: 8) {
                     ForEach(MoodV2.descriptors[family], id: \.0) { option in
-                        chip(option.1, selected: descriptorKeys.contains(option.0), tone) {
+                        chip(t(option.1), selected: descriptorKeys.contains(option.0), tone) {
                             if descriptorKeys.contains(option.0) { descriptorKeys.remove(option.0) }
                             else if descriptorKeys.count < 3 { descriptorKeys.insert(option.0) }
                         }
                     }
                 }
-                Text("Ne etkiledi?").font(RealFont.inter(20, .semibold)).foregroundStyle(tone.ink).padding(.top, 30)
-                Text("Hissin kaynağı; birden fazla olabilir").font(RealFont.inter(12)).foregroundStyle(tone.ink.opacity(0.6)).padding(.top, 4)
+                Text(t("Ne etkiledi?")).font(RealFont.inter(20, .semibold)).foregroundStyle(tone.ink).padding(.top, 30)
+                Text(t("Hissin kaynağı; birden fazla olabilir")).font(RealFont.inter(12)).foregroundStyle(tone.ink.opacity(0.6)).padding(.top, 4)
                 ForEach(Array(MoodV2.factorGroups.enumerated()), id: \.offset) { _, group in
-                    Text(group.0).font(RealFont.inter(12, .medium)).foregroundStyle(tone.ink.opacity(0.55)).padding(.top, 16).padding(.bottom, 8)
+                    Text(t(group.0)).font(RealFont.inter(12, .medium)).foregroundStyle(tone.ink.opacity(0.55)).padding(.top, 16).padding(.bottom, 8)
                     ChipFlow(spacing: 8, lineSpacing: 8) {
                         ForEach(group.1, id: \.0) { option in
-                            chip(option.1, selected: factorKeys.contains(option.0), tone) {
+                            chip(t(option.1), selected: factorKeys.contains(option.0), tone) {
                                 if factorKeys.contains(option.0) { factorKeys.remove(option.0) } else { factorKeys.insert(option.0) }
                             }
                         }

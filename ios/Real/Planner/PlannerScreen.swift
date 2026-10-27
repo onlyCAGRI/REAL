@@ -147,7 +147,7 @@ struct PlannerScreen: View {
                                          onAdd: { hour in addRequest = PlannerAddRequest(day: selectedDay, hour: hour) })
                     .intro(introVisible, delay: 0.38, y: 0)
                 if events.isEmpty {
-                    Text("Bu gün için plan yok. Saatlere ya da + düğmesine dokunarak ekle.")
+                    Text(t("Bu gün için plan yok. Saatlere ya da + düğmesine dokunarak ekle."))
                         .font(RealFont.inter(14))
                         .foregroundStyle(Color(argb: 0xFF6F6F78))
                         .padding(.horizontal, 8)
@@ -186,7 +186,7 @@ struct PlannerScreen: View {
                 }
                 .padding(.horizontal, 6).padding(.vertical, 8)
                 if items.isEmpty {
-                    Text("Önündeki 24 saatte etkinlik yok.")
+                    Text(t("Önündeki 24 saatte etkinlik yok."))
                         .font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF8E8E93))
                         .frame(maxWidth: .infinity).padding(.vertical, 32)
                 } else {
@@ -231,8 +231,8 @@ struct PlannerScreen: View {
                 RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                     .frame(width: 44, height: 44).liquidGlass(Circle())
             }
-            .accessibilityLabel("Önceki görünüme dön")
-            LiquidSegmentedControl(labels: ["24 hour", "Takvim"], selected: Binding(
+            .accessibilityLabel(t("Önceki görünüme dön"))
+            LiquidSegmentedControl(labels: ["24 hour", t("Takvim")], selected: Binding(
                 get: { isCalendar ? 1 : 0 },
                 set: { modeRaw = $0 == 1 ? "monthly" : "hours_24" }))
                 .frame(height: 44)
@@ -244,7 +244,7 @@ struct PlannerScreen: View {
                     .frame(width: 44, height: 44).liquidGlass(Circle())
             }
             .padding(.leading, 2)
-            .accessibilityLabel("Yeni etkinlik ekle")
+            .accessibilityLabel(t("Yeni etkinlik ekle"))
         }
         .padding(.horizontal, 14)
         .padding(.top, 10).padding(.bottom, 6)
@@ -791,7 +791,7 @@ struct PlannerTodayHeader: View {
     var body: some View {
         let cal = Calendar.real
         let c = cal.dateComponents([.day, .month], from: now)
-        let months = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"]
+        let months = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"].map { t($0) }
         HStack(alignment: .center, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(cal.isoWeekday(of: now).full).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF8C8C95)).padding(.bottom, 8)
@@ -802,8 +802,8 @@ struct PlannerTodayHeader: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Rectangle().fill(Color(argb: 0xFF3A3A42)).frame(width: 1, height: 98)
             VStack(alignment: .leading, spacing: 18) {
-                clock("Europe/Istanbul", "Türkiye")
-                clock("Europe/Berlin", "Almanya")
+                clock("Europe/Istanbul", t("Türkiye"))
+                clock("Europe/Berlin", t("Almanya"))
             }
             .frame(width: 118, alignment: .leading)
             .padding(.leading, 18)
@@ -860,7 +860,7 @@ struct PlannerNext24Card: View {
                     Text("Start").font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.55))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text(event.isDateOnly ? "24h" : (event.reminder.durationMinutes.map { "\($0) min" } ?? "Süre ekle"))
+                Text(event.isDateOnly ? "24h" : (event.reminder.durationMinutes.map { t("{0} min", $0) } ?? t("Süre ekle")))
                     .font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.78))
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(RoundedRectangle(cornerRadius: 16).fill(ink.opacity(0.10)))
@@ -876,7 +876,7 @@ struct PlannerNext24Card: View {
                 }()
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(endTime).font(RealFont.inter(22)).kerning(-0.6).foregroundStyle(ink).lineLimit(1)
-                    Text(lastDay.map { "Son gün \(Calendar.real.component(.day, from: $0)) " + $0.formatted(.dateTime.month(.abbreviated).locale(Locale(identifier: "tr_TR"))) } ?? "End")
+                    Text(lastDay.map { t("Son gün {0} ", Calendar.real.component(.day, from: $0)) + $0.formatted(.dateTime.month(.abbreviated).locale(I18n.locale)) } ?? t("Bitiş"))
                         .font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.55)).lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -909,11 +909,11 @@ struct PlannerInlineEventEditor: View {
         let item = store.reminder(reminderId)
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                tile("Başlangıç", item?.alertAt.map { RealDates.time($0.date) } ?? "Saat ekle") {
+                tile(t("Başlangıç"), item?.alertAt.map { RealDates.time($0.date) } ?? t("Saat ekle")) {
                     if let item { startDraft = ScheduleDraft(from: item) }
                     withoutAnimation { showStart = true }
                 }
-                tile("Bitiş", item?.endAt.map { RealDates.reminder($0) } ?? (item?.durationMinutes.flatMap { d in item?.alertAt.map { RealDates.time(($0 + EpochMillis(d) * 60_000).date) } } ?? "Bitiş ekle")) {
+                tile(t("Bitiş"), item?.endAt.map { RealDates.reminder($0) } ?? (item?.durationMinutes.flatMap { d in item?.alertAt.map { RealDates.time(($0 + EpochMillis(d) * 60_000).date) } } ?? t("Bitiş ekle"))) {
                     var d = ScheduleDraft()
                     d.date = (item?.endAt ?? item?.alertAt.map { $0 + EpochMillis((item?.durationMinutes ?? 60)) * 60_000 })?.date
                     d.hasTime = true

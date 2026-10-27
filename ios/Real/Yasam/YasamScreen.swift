@@ -157,31 +157,30 @@ struct YasamScreen: View {
         return (YasamText.whenLabel(j.createdAt), first)
     }
 
-    private var mediaPrompt: String { hour < 17 ? "Bugün ne izleyelim?" : "Bu akşam ne izleyelim?" }
-
     private var heroSentence: String {
         let w = water
         let progress = Double(w.today) / Double(max(w.goal, 1))
         switch heroTopic {
         case 0:
-            if progress <= 0 { return "Bugün bir bardak suyla başlamaya ne dersin?" }
-            if progress >= 1 { return "Su hedefini tamamladın, harika gidiyorsun." }
-            return "Bugün \(YasamText.litres(w.today)) L su içtin, hedefe \(YasamText.litres(w.goal - w.today)) L kaldı."
-        case 1: return YasamText.yesterday(ml: w.yesterday, mood: yesterdayMood) ?? "Dün nasıl geçti? Bugün nasıl gidiyor?"
-        case 2: return lastMood.map { "En son ruh halin \($0.label) idi. Şimdi nasılsın?" } ?? "Bugün ruh halin nasıl?"
+            if progress <= 0 { return t("Bugün bir bardak suyla başlamaya ne dersin?") }
+            if progress >= 1 { return t("Su hedefini tamamladın, harika gidiyorsun.") }
+            return t("Bugün {0} L su içtin, hedefe {1} L kaldı.", YasamText.litres(w.today), YasamText.litres(w.goal - w.today))
+        case 1: return YasamText.yesterday(ml: w.yesterday, mood: yesterdayMood) ?? t("Dün nasıl geçti? Bugün nasıl gidiyor?")
+        case 2: return lastMood.map { t("En son ruh halin {0} idi. Şimdi nasılsın?", $0.label) } ?? t("Bugün ruh halin nasıl?")
         case 3:
             if let last = books.lastRead {
-                if let p = last.percent { return "Kitabın %\(p)'de. Bu akşam birkaç sayfa okumaya ne dersin?" }
-                return "\(last.book.title) seni bekliyor."
+                if let p = last.percent { return t("Kitabın %{0}'de. Bu akşam birkaç sayfa okumaya ne dersin?", p) }
+                return t("{0} seni bekliyor.", last.book.title)
             }
-            return "Rafında yeni bir kitap için zaman var mı?"
-        case 4: return "\(mediaPrompt) Sana bir film, dizi ya da oyun önerelim."
+            return t("Rafında yeni bir kitap için zaman var mı?")
+        case 4: return hour < 17 ? t("Bugün ne izleyelim? Sana bir film, dizi ya da oyun önerelim.")
+                                 : t("Bu akşam ne izleyelim? Sana bir film, dizi ya da oyun önerelim.")
         default:
             if let p = journalPreview {
                 let short = p.line.count <= 38 ? p.line : String(p.line.prefix(37)).trimmingCharacters(in: .whitespaces) + "…"
-                return "En son \"\(short)\" yazmıştın. Bugün neler var?"
+                return t("En son \"{0}\" yazmıştın. Bugün neler var?", short)
             }
-            return "Bugünü iki satırla kayda geçirmek ister misin?"
+            return t("Bugünü iki satırla kayda geçirmek ister misin?")
         }
     }
 
@@ -190,7 +189,7 @@ struct YasamScreen: View {
     private var heroCard: some View {
         let journalsMode = section == .journals
         return ZStack(alignment: .topLeading) {
-            YasamHeroSentence(greeting: journalsMode ? "\(journals.count) GİRİŞ" : YasamText.greeting(hour),
+            YasamHeroSentence(greeting: journalsMode ? t("{0} GİRİŞ", journals.count) : YasamText.greeting(hour),
                               sentence: journalsMode ? "Journal" : heroSentence,
                               tone: YasamTone.mood(lastMood), hour: hour, revealed: revealed)
             Button(action: close) {
@@ -198,7 +197,7 @@ struct YasamScreen: View {
                     .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
             }
             .padding(.leading, 22).padding(.top, 8)
-            .accessibilityLabel(journalsMode ? "Yaşam'a dön" : "Geri")
+            .accessibilityLabel(journalsMode ? t("Yaşam'a dön") : t("Geri"))
         }
         .scaleEffect(revealed ? 1 : 0.96)
         .opacity(revealed ? 1 : 0)
@@ -213,32 +212,32 @@ struct YasamScreen: View {
         return VStack(alignment: .leading, spacing: 0) {
             if tab != 2 {
                 YasamWaterHero(todayMl: w.today, progress: progress, revealed: revealed)
-                YasamRow(label: "SU", value: "/ \(YasamText.litres(w.goal)) L", expanded: open == "water", index: 0, revealed: revealed,
+                YasamRow(label: t("SU"), value: "/ \(YasamText.litres(w.goal)) L", expanded: open == "water", index: 0, revealed: revealed,
                          toggle: { toggle("water") }) {
-                    Text(progress >= 1 ? "Günlük hedefi tamamladın" : "Hedefe \(YasamText.litres(max(w.goal - w.today, 0))) L kaldı")
+                    Text(progress >= 1 ? t("Günlük hedefi tamamladın") : t("Hedefe {0} L kaldı", YasamText.litres(max(w.goal - w.today, 0))))
                         .font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
                 } content: {
-                    Text("BUGÜN \(Int((progress * 100).rounded()))% · 250 ML").font(.system(size: 11, design: .monospaced)).kerning(1).foregroundStyle(YasamTone.muted)
+                    Text(t("BUGÜN {0}% · 250 ML", Int((progress * 100).rounded()))).font(.system(size: 11, design: .monospaced)).kerning(1).foregroundStyle(YasamTone.muted)
                     Color.clear.frame(height: 12)
-                    YasamSlideToAdd(label: "Kaydır · 250 ml su ekle") { life.addDrink(250) }
-                    YasamTextAction(text: "SU EKRANINI AÇ  ›", tone: YasamTone.water) { showWater = true }
-                    YasamTextAction(text: waterHistoryOpen ? "GEÇMİŞİ GİZLE  ‹" : "GEÇMİŞİ AÇ  ›", tone: YasamTone.muted) {
+                    YasamSlideToAdd(label: t("Kaydır · 250 ml su ekle")) { life.addDrink(250) }
+                    YasamTextAction(text: t("SU EKRANINI AÇ  ›"), tone: YasamTone.water) { showWater = true }
+                    YasamTextAction(text: waterHistoryOpen ? t("GEÇMİŞİ GİZLE  ‹") : t("GEÇMİŞİ AÇ  ›"), tone: YasamTone.muted) {
                         withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { waterHistoryOpen.toggle() }
                     }
                     if waterHistoryOpen { YasamWaterHistory().transition(.opacity.combined(with: .move(edge: .top))) }
                 }
-                YasamRow(label: "MOOD", value: lastMood?.label ?? "Henüz yok", expanded: open == "mood", index: 1, revealed: revealed,
+                YasamRow(label: "MOOD", value: lastMood?.label ?? t("Henüz yok"), expanded: open == "mood", index: 1, revealed: revealed,
                          toggle: { toggle("mood") }) {
                     YasamSpark(points: life.moods.sorted { $0.details.loggedAt < $1.details.loggedAt }.suffix(7).map { YasamText.moodScore($0.mood) },
                                tone: YasamTone.moodDefault)
                 } content: {
-                    YasamTextAction(text: "MOOD EKLE  +", tone: YasamTone.moodDefault) { showMoodAdd = true }
-                    YasamTextAction(text: moodHistoryOpen ? "GEÇMİŞİ GİZLE  ‹" : "GEÇMİŞİ AÇ  ›", tone: YasamTone.muted) {
+                    YasamTextAction(text: t("MOOD EKLE  +"), tone: YasamTone.moodDefault) { showMoodAdd = true }
+                    YasamTextAction(text: moodHistoryOpen ? t("GEÇMİŞİ GİZLE  ‹") : t("GEÇMİŞİ AÇ  ›"), tone: YasamTone.muted) {
                         withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { moodHistoryOpen.toggle() }
                     }
                     if moodHistoryOpen { YasamMoodHistory(onAdd: { showMoodAdd = true }, onMore: { showMoodHistory = true }).transition(.opacity.combined(with: .move(edge: .top))) }
                 }
-                YasamRow(label: "GÜNLÜKLERİM", value: "Bugün yaz", expanded: open == "journal", index: 2, revealed: revealed,
+                YasamRow(label: t("GÜNLÜKLERİM"), value: t("Bugün yaz"), expanded: open == "journal", index: 2, revealed: revealed,
                          toggle: { toggle("journal") }) {
                     if let p = journalPreview {
                         VStack(alignment: .leading, spacing: 4) {
@@ -246,25 +245,25 @@ struct YasamScreen: View {
                             Text(p.line).font(.system(size: 14, weight: .light)).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
                         }
                     } else {
-                        Text("Bugün ne düşünüyorsun?").font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
+                        Text(t("Bugün ne düşünüyorsun?")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
                     }
                 } content: {
-                    YasamTextAction(text: "BUGÜN YAZ  +", tone: YasamTone.journal, action: newJournal)
-                    YasamTextAction(text: "GÜNLÜKLERİ AÇ  ›", tone: YasamTone.muted) { switchSection(.journals) }
+                    YasamTextAction(text: t("BUGÜN YAZ  +"), tone: YasamTone.journal, action: newJournal)
+                    YasamTextAction(text: t("GÜNLÜKLERİ AÇ  ›"), tone: YasamTone.muted) { switchSection(.journals) }
                 }
             }
             if tab != 1 {
                 let last = books.lastRead
-                YasamRow(label: "KİTAP", value: last?.percent.map { "%\($0)" } ?? last?.book.title ?? "Rafını aç",
+                YasamRow(label: t("KİTAP"), value: last?.percent.map { "%\($0)" } ?? last?.book.title ?? t("Rafını aç"),
                          expanded: open == "book", index: 3, revealed: revealed, toggle: { toggle("book") }) {
                     if let last { YasamBookPreview(book: last.book, percent: last.percent) }
-                    else { Text("Rafını aç").font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7)) }
+                    else { Text(t("Rafını aç")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7)) }
                 } content: {
                     if let last {
-                        YasamTextAction(text: "OKUMAYA DEVAM ET  ›", tone: YasamTone.book) { resumeBook = last.book.id; showBooks = true }
-                        YasamTextAction(text: "RAFI AÇ  ›", tone: YasamTone.muted) { resumeBook = nil; showBooks = true }
+                        YasamTextAction(text: t("OKUMAYA DEVAM ET  ›"), tone: YasamTone.book) { resumeBook = last.book.id; showBooks = true }
+                        YasamTextAction(text: t("RAFI AÇ  ›"), tone: YasamTone.muted) { resumeBook = nil; showBooks = true }
                     } else {
-                        YasamTextAction(text: "RAFINI AÇ  ›", tone: YasamTone.book) { resumeBook = nil; showBooks = true }
+                        YasamTextAction(text: t("RAFINI AÇ  ›"), tone: YasamTone.book) { resumeBook = nil; showBooks = true }
                     }
                 }
                 Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
@@ -321,9 +320,9 @@ struct YasamScreen: View {
 
     private var journalList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            YasamTextAction(text: "BUGÜN YAZ  +", tone: YasamTone.journal, action: newJournal).yasamEnter(revealed, delay: 0.3, y: 14)
+            YasamTextAction(text: t("BUGÜN YAZ  +"), tone: YasamTone.journal, action: newJournal).yasamEnter(revealed, delay: 0.3, y: 14)
             if journals.isEmpty {
-                Text("Henüz günlük yok").font(.system(size: 19, weight: .light)).foregroundStyle(.white.opacity(0.85)).padding(.vertical, 12)
+                Text(t("Henüz günlük yok")).font(.system(size: 19, weight: .light)).foregroundStyle(.white.opacity(0.85)).padding(.vertical, 12)
             }
             ForEach(Array(journals.prefix(60).enumerated()), id: \.element.id) { index, r in
                 if let j = r.journal {
@@ -364,7 +363,7 @@ struct YasamScreen: View {
                 .frame(width: 64, height: 64).liquidGlass(Circle())
         }
         .padding(.top, 8).padding(.bottom, 34)
-        .accessibilityLabel("Sesli komut")
+        .accessibilityLabel(t("Sesli komut"))
     }
 }
 
@@ -398,40 +397,41 @@ enum YasamTone {
 /// YasamSentence: greeting, litres, yesterday summary, mood scores.
 enum YasamText {
     static func greeting(_ hour: Int) -> String {
-        switch hour { case 5...10: return "Günaydın"; case 11...17: return "İyi günler"; default: return "İyi akşamlar" }
+        switch hour { case 5...10: return t("Günaydın"); case 11...17: return t("İyi günler"); default: return t("İyi akşamlar") }
     }
 
     static func litres(_ ml: Int) -> String {
-        let text = String(format: "%.1f", Double(ml) / 1000).replacingOccurrences(of: ".", with: ",")
-        return text.hasSuffix(",0") ? String(text.dropLast(2)) : text
+        let raw = String(format: "%.1f", Double(ml) / 1000)
+        let text = I18n.isEnglish ? raw : raw.replacingOccurrences(of: ".", with: ",")
+        return text.hasSuffix(I18n.isEnglish ? ".0" : ",0") ? String(text.dropLast(2)) : text
     }
 
     static func moodPhrase(_ m: JournalMood) -> String {
         switch m {
-        case .veryGood: return "çok iyiydi"
-        case .good: return "iyiydi"
-        case .neutral: return "normaldi"
-        case .hard, .fuckOff: return "zordu"
-        case .bad: return "kötüydü"
-        case .happy: return "mutluydu"
-        case .excited: return "heyecanlıydı"
-        case .calm: return "sakindi"
-        case .tired: return "yorgundu"
-        case .bored: return "sıkkındı"
-        case .stressed: return "stresliydi"
-        case .angry: return "sinirliydi"
-        case .sad: return "üzgündü"
-        case .low: return "keyifsizdi"
+        case .veryGood: return t("çok iyiydi")
+        case .good: return t("iyiydi")
+        case .neutral: return t("normaldi")
+        case .hard, .fuckOff: return t("zordu")
+        case .bad: return t("kötüydü")
+        case .happy: return t("mutluydu")
+        case .excited: return t("heyecanlıydı")
+        case .calm: return t("sakindi")
+        case .tired: return t("yorgundu")
+        case .bored: return t("sıkkındı")
+        case .stressed: return t("stresliydi")
+        case .angry: return t("sinirliydi")
+        case .sad: return t("üzgündü")
+        case .low: return t("keyifsizdi")
         }
     }
 
     static func yesterday(ml: Int, mood: JournalMood?) -> String? {
-        let water: String? = ml > 0 ? (ml < 1000 ? "Dün \(ml) ml su içtin" : "Dün \(litres(ml)) L su içtin") : nil
-        let moodText = mood.map { "ruh halin \(moodPhrase($0))" }
+        let water: String? = ml > 0 ? (ml < 1000 ? t("Dün {0} ml su içtin", ml) : t("Dün {0} L su içtin", litres(ml))) : nil
+        let moodText = mood.map { t("ruh halin {0}", moodPhrase($0)) }
         switch (water, moodText) {
         case let (w?, m?): return "\(w),\n\(m)."
         case let (w?, nil): return "\(w)."
-        case let (nil, m?): return "Dün \(m)."
+        case let (nil, m?): return t("Dün {0}.", m)
         default: return nil
         }
     }
@@ -456,10 +456,10 @@ enum YasamText {
         let d = millis.date
         let days = cal.dateComponents([.day], from: cal.startOfDay(for: d), to: cal.startOfDay(for: Date())).day ?? 0
         switch days {
-        case 0: return "BUGÜN · \(RealDates.time(d))"
-        case 1: return "DÜN · \(RealDates.time(d))"
+        case 0: return t("BUGÜN · {0}", RealDates.time(d))
+        case 1: return t("DÜN · {0}", RealDates.time(d))
         default:
-            let months = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"]
+            let months = [t("OCA"), t("ŞUB"), t("MAR"), t("NİS"), t("MAY"), t("HAZ"), t("TEM"), t("AĞU"), t("EYL"), t("EKİ"), t("KAS"), t("ARA")]
             let c = cal.dateComponents([.day, .month], from: d)
             return "\(c.day ?? 1) \(months[(c.month ?? 1) - 1])"
         }
@@ -496,7 +496,7 @@ struct YasamHeroSentence: View {
         }
         VStack(spacing: 0) {
             if !compact {
-                Text(greeting.uppercased(with: Locale(identifier: "tr_TR")))
+                Text(greeting.uppercased(with: I18n.locale))
                     .font(.system(size: 11, design: .monospaced)).kerning(1.6).foregroundStyle(.white.opacity(0.6))
                     .multilineTextAlignment(.center)
                 Color.clear.frame(height: 18)
@@ -596,7 +596,7 @@ struct YasamIconTabs: View {
                         Button { tab = i } label: {
                             glyph(i).opacity(i == tab ? 1 : 0.4).frame(maxWidth: .infinity, minHeight: 48)
                         }
-                        .accessibilityLabel(["Hepsi", "Kayıtlar", "Keşfet"][i])
+                        .accessibilityLabel([t("Hepsi"), t("Kayıtlar"), t("Keşfet")][i])
                         .accessibilityAddTraits(i == tab ? .isSelected : [])
                     }
                 }
@@ -641,7 +641,7 @@ struct YasamWaterHero: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("SU · BUGÜN").font(.system(size: 11, design: .monospaced)).kerning(1.6).foregroundStyle(YasamTone.muted)
+            Text(t("SU · BUGÜN")).font(.system(size: 11, design: .monospaced)).kerning(1.6).foregroundStyle(YasamTone.muted)
             HStack(alignment: .lastTextBaseline, spacing: 0) {
                 Text(String(format: "%.1f", shown / 1000).replacingOccurrences(of: ".", with: ","))
                     .font(.system(size: 48, weight: .light)).foregroundStyle(.white)
@@ -742,7 +742,7 @@ struct YasamRow<Preview: View, Content: View>: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityValue(expanded ? "Açık" : "Kapalı")
+            .accessibilityValue(expanded ? t("Açık") : t("Kapalı"))
             preview.padding(.bottom, 16)
             if expanded {
                 VStack(alignment: .leading, spacing: 0) { content }
@@ -855,8 +855,8 @@ struct YasamMoodHistory: View {
         let points = Array(life.moods.sorted { $0.details.loggedAt > $1.details.loggedAt }.prefix(20).reversed())
         VStack(alignment: .leading, spacing: 0) {
             if points.isEmpty {
-                Text("Henüz mood yok").font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7)).padding(.vertical, 8)
-                YasamTextAction(text: "MOOD EKLE  +", tone: YasamTone.moodDefault, action: onAdd)
+                Text(t("Henüz mood yok")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7)).padding(.vertical, 8)
+                YasamTextAction(text: t("MOOD EKLE  +"), tone: YasamTone.moodDefault, action: onAdd)
             } else {
                 GeometryReader { geo in
                     let width = geo.size.width * CGFloat(max(points.count, 5)) / 5
@@ -880,7 +880,7 @@ struct YasamMoodHistory: View {
                     .defaultScrollAnchor(.trailing)
                 }
                 .frame(height: 100)
-                YasamTextAction(text: "DAHA FAZLA  ›", tone: YasamTone.muted, action: onMore)
+                YasamTextAction(text: t("DAHA FAZLA  ›"), tone: YasamTone.muted, action: onMore)
             }
         }
         .padding(.top, 4)
@@ -944,9 +944,9 @@ struct YasamWaterHistory: View {
             }
             .frame(height: 60)
             HStack {
-                Text("20 GÜN ÖNCE").font(.system(size: 10, design: .monospaced)).foregroundStyle(YasamTone.muted)
+                Text(t("20 GÜN ÖNCE")).font(.system(size: 10, design: .monospaced)).foregroundStyle(YasamTone.muted)
                 Spacer()
-                Text("BUGÜN").font(.system(size: 10, design: .monospaced)).foregroundStyle(YasamTone.muted)
+                Text(t("BUGÜN")).font(.system(size: 10, design: .monospaced)).foregroundStyle(YasamTone.muted)
             }
         }
         .padding(.vertical, 8)

@@ -128,12 +128,12 @@ final class MediaRatingStore {
             show = json
         } catch {
             if let cached { return cached.list }
-            throw BookError.message("Bölümler alınamadı. Bağlantını kontrol edip tekrar dene.")
+            throw BookError.message(t("Bölümler alınamadı. Bağlantını kontrol edip tekrar dene."))
         }
         var seen = Set<String>()
         var list: [SeriesEpisode] = (((show["_embedded"] as? [String: Any])?["episodes"] as? [[String: Any]]) ?? []).compactMap { o in
             guard let s = o["season"] as? Int, s > 0, let n = o["number"] as? Int, n > 0 else { return nil } // Specials have no number.
-            let ep = SeriesEpisode(season: s, number: n, name: (o["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Bölüm \(n)",
+            let ep = SeriesEpisode(season: s, number: n, name: (o["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? t("Bölüm {0}", n),
                                    summary: Self.plain(o["summary"] as? String))
             return seen.insert(ep.key).inserted ? ep : nil
         }.sorted { ($0.season, $0.number) < ($1.season, $1.number) }

@@ -117,7 +117,7 @@ final class MusicDiscoveryStore {
             personal = Self.workerCards(await AppleMusicAccount.shared.personalSongs(genreIds: list.map(\.itunesId)), list[0].key)
                 .filter { !known.contains($0.id) && MusicSources.inEra($0, era) }
         }
-        if perGenre.allSatisfy(\.isEmpty) && personal.isEmpty { throw BookError.message("Müzik listeleri alınamadı. Bağlantını kontrol edip yeniden dene.") }
+        if perGenre.allSatisfy(\.isEmpty) && personal.isEmpty { throw BookError.message(t("Müzik listeleri alınamadı. Bağlantını kontrol edip yeniden dene.")) }
         var queues: [[MusicCard]] = ([personal] + perGenre).map { $0.filter { !known.contains($0.id) } }
         var fresh: [MusicCard] = []
         var seen = Set<String>()
@@ -128,8 +128,8 @@ final class MusicDiscoveryStore {
             }
         }
         guard !fresh.isEmpty else {
-            throw BookError.message(era != nil ? "Bu dönemde yeni şarkı bulunamadı. Biraz sonra tekrar dene ya da başka bir tür seç."
-                                    : "Bu seçimlerde yeni şarkı kalmadı. Başka bir tür dene.")
+            throw BookError.message(era != nil ? t("Bu dönemde yeni şarkı bulunamadı. Biraz sonra tekrar dene ya da başka bir tür seç.")
+                                    : t("Bu seçimlerde yeni şarkı kalmadı. Başka bir tür dene."))
         }
         var s = snapshot
         let same = Set(s.selection) == selection
@@ -289,10 +289,10 @@ struct MusicDiscoveryScreen: View {
     private var filterPage: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
-                YasamHeroSentence(greeting: "", sentence: "Ne dinlesek", tone: musicTone,
+                YasamHeroSentence(greeting: "", sentence: t("Ne dinlesek"), tone: musicTone,
                                   hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
                     .padding(.top, 4)
-                BackCircle(action: back).padding(.leading, 22).padding(.top, 12).accessibilityLabel("Yaşam'a dön")
+                BackCircle(action: back).padding(.leading, 22).padding(.top, 12).accessibilityLabel(t("Yaşam'a dön"))
             }
             if let error { errorLine(error) }
             // One question at a time: 2 genres at most, then (optional) one era; "Hepsi" = every era; then, with Apple
@@ -300,12 +300,12 @@ struct MusicDiscoveryScreen: View {
             let allEras = "era_all", noPersonal = "personal_none"
             let linked = AppleMusicAccount.shared.isConnected
             DiscoveryStepper(steps: [
-                DiscoveryStep(title: "Hangi türde müzik?", subtitle: "En fazla 2 tür", max: 2, optional: false,
-                              groups: [(nil, MusicGenre.all.map { StepOption(key: $0.key, label: $0.label) })]),
-                DiscoveryStep(title: "Hangi dönemden?", subtitle: "İstersen bir dönem · Apple Music \(MusicStorefront.name) listeleri", max: 1, optional: true,
-                              groups: [(nil, [StepOption(key: allEras, label: "Hepsi")] + MusicEra.allCases.map { StepOption(key: $0.rawValue, label: $0.label) })]),
+                DiscoveryStep(title: t("Hangi türde müzik?"), subtitle: t("En fazla 2 tür"), max: 2, optional: false,
+                              groups: [(nil, MusicGenre.all.map { StepOption(key: $0.key, label: t($0.label)) })]),
+                DiscoveryStep(title: t("Hangi dönemden?"), subtitle: t("İstersen bir dönem · Apple Music {0} listeleri", MusicStorefront.name), max: 1, optional: true,
+                              groups: [(nil, [StepOption(key: allEras, label: t("Hepsi"))] + MusicEra.allCases.map { StepOption(key: $0.rawValue, label: $0.label) })]),
             ] + (linked ? [
-                DiscoveryStep(title: "Sana özel de olsun mu?", subtitle: "Apple Music'te dinlediklerine göre seçilenler karışır", max: 1, optional: true,
+                DiscoveryStep(title: t("Sana özel de olsun mu?"), subtitle: t("Apple Music'te dinlediklerine göre seçilenler karışır"), max: 1, optional: true,
                               groups: [(nil, [StepOption(key: noPersonal, label: "Hayır"), StepOption(key: MusicPersonalKey, label: "Evet, sana özel")])]),
             ] : []), selection: Binding(
                 get: {
@@ -313,7 +313,7 @@ struct MusicDiscoveryScreen: View {
                     return linked && !s.contains(MusicPersonalKey) ? s.union([noPersonal]) : s
                 },
                 set: { selection = $0.subtracting([allEras, noPersonal]) }),
-                accent: musicTone, loading: loading, enabled: true, doneLabel: "şarkıları getir", step: $pickerStep,
+                accent: musicTone, loading: loading, enabled: true, doneLabel: t("şarkıları getir"), step: $pickerStep,
                 rare: { chosen, key in DiscoveryRarePairs.rare(DiscoveryRarePairs.music, chosen, key) },
                 onDone: fetch)
         }
@@ -348,16 +348,16 @@ struct MusicDiscoveryScreen: View {
             SwipeEdgeGlow(offset: dragOffset, listMode: list, upColor: musicTone).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack { BackCircle(action: back); Spacer() }.padding(.horizontal, 20).padding(.vertical, 10)
-                DiscoveryHeadline(text: list ? "MÜZİK LİSTEM" : "SANA GÖRE", small: list).padding(.top, 2).padding(.bottom, 6)
+                DiscoveryHeadline(text: list ? t("MÜZİK LİSTEM") : t("SANA GÖRE"), small: list).padding(.top, 2).padding(.bottom, 6)
                 if !cards.isEmpty {
                     MusicDeck(cards: cards, list: list, offset: $dragOffset, onDecision: { music.act($0, $1) },
                               onAdd: addToReal)
                         .padding(.horizontal, 14)
                 } else {
                     VStack(spacing: 16) {
-                        Text(list ? "Müzik listen henüz boş. Sağa kaydırdığın şarkılar buraya gelir." : (loading ? "Şarkılar hazırlanıyor…" : "Bu destenin sonuna geldin."))
+                        Text(list ? t("Müzik listen henüz boş. Sağa kaydırdığın şarkılar buraya gelir.") : (loading ? t("Şarkılar hazırlanıyor…") : t("Bu destenin sonuna geldin.")))
                             .font(RealFont.inter(15)).foregroundStyle(.white).multilineTextAlignment(.center)
-                        if !list && !loading { DiscoveryChip(label: "Daha fazla getir", selected: false, enabled: true, accent: musicTone) { fetch() } }
+                        if !list && !loading { DiscoveryChip(label: t("Daha fazla getir"), selected: false, enabled: true, accent: musicTone) { fetch() } }
                     }
                     .padding(.top, 36).padding(.horizontal, 24)
                     Spacer()
@@ -365,8 +365,8 @@ struct MusicDiscoveryScreen: View {
                 if let error { errorLine(error) }
             }
             if !cards.isEmpty {
-                if list { SwipeTutorial(kind: "music_list", rightLabel: "Kaldır", leftLabel: "Sona at", upLabel: "Uygulamada aç") }
-                else { SwipeTutorial(kind: "music", rightLabel: "Kaydet", leftLabel: "Geç", upLabel: "Uygulamada aç") }
+                if list { SwipeTutorial(kind: "music_list", rightLabel: t("Kaldır"), leftLabel: t("Sona at"), upLabel: t("Uygulamada aç")) }
+                else { SwipeTutorial(kind: "music", rightLabel: t("Kaydet"), leftLabel: t("Geç"), upLabel: t("Uygulamada aç")) }
             }
         }
         .onChange(of: cards.count, initial: true) { _, count in
@@ -375,9 +375,9 @@ struct MusicDiscoveryScreen: View {
     }
 
     private func addToReal(_ m: MusicBlock) {
-        if store.reminders.contains(where: { $0.musicBlocks.contains { $0.providerUrl == m.providerUrl } }) { RealToast.shared.show("Bu şarkı zaten bir kartta"); return }
+        if store.reminders.contains(where: { $0.musicBlocks.contains { $0.providerUrl == m.providerUrl } }) { RealToast.shared.show(t("Bu şarkı zaten bir kartta")); return }
         _ = store.addReminder(text: [m.title, m.artist].filter { !$0.isEmpty }.joined(separator: " – ")) { r in r.musicBlocks = [m] }
-        RealToast.shared.show("REAL'e eklendi")
+        RealToast.shared.show(t("REAL'e eklendi"))
     }
 }
 
@@ -480,7 +480,7 @@ private struct MusicDeck: View {
         .overlay(alignment: .topTrailing) { if front { MusicSourceLogo(provider: musicOpensIn(item.music), size: 20).padding(14) } }
         .overlay(alignment: .topLeading) {
             if front && item.music.previewUrl == nil {
-                Text("Önizleme yok").font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.7))
+                Text(t("Önizleme yok")).font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.7))
                     .padding(.horizontal, 9).padding(.vertical, 4).background(Capsule().fill(.black.opacity(0.7))).padding(14)
             }
         }

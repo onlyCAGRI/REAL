@@ -52,13 +52,13 @@ final class SharedCategorySync {
     static func message(_ error: Error) -> String {
         guard let f = error as? RealBackend.Failure else { return RealBackend.message(for: error) }
         switch (f.status, f.code ?? "") {
-        case (_, "CATEGORY_MEMBER_LIMIT"): return "Bir kategoride en fazla 10 kişi olabilir."
-        case (_, "CATEGORY_READ_ONLY"): return "Bu kategoride sadece görüntüleme iznin var."
-        case (_, "CATEGORY_SYNC_REQUIRED"): return "Bu kategori henüz buluta eşitlenmedi. Android'de oluşturulan kategoriler paylaşılabilir."
-        case (401, _), (403, _): return "Bu işlem için iznin yok."
-        case (404, _): return "Kategoriye artık erişimin yok."
-        case (429, _): return "Çok fazla işlem. Biraz sonra tekrar dene."
-        default: return "Ortak kategori güncellenemedi. İnternet bağlantını kontrol et."
+        case (_, "CATEGORY_MEMBER_LIMIT"): return t("Bir kategoride en fazla 10 kişi olabilir.")
+        case (_, "CATEGORY_READ_ONLY"): return t("Bu kategoride sadece görüntüleme iznin var.")
+        case (_, "CATEGORY_SYNC_REQUIRED"): return t("Bu kategori henüz buluta eşitlenmedi. Android'de oluşturulan kategoriler paylaşılabilir.")
+        case (401, _), (403, _): return t("Bu işlem için iznin yok.")
+        case (404, _): return t("Kategoriye artık erişimin yok.")
+        case (429, _): return t("Çok fazla işlem. Biraz sonra tekrar dene.")
+        default: return t("Ortak kategori güncellenemedi. İnternet bağlantını kontrol et.")
         }
     }
 

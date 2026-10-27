@@ -21,8 +21,8 @@ enum NotificationScheduler {
     static var categories: [CustomCategory] = []
 
     static func registerCategories() {
-        let complete = UNNotificationAction(identifier: completeAction, title: "Tamamla", options: [])
-        let snooze = UNNotificationAction(identifier: snoozeAction, title: "10 dk ertele", options: [])
+        let complete = UNNotificationAction(identifier: completeAction, title: t("Tamamla"), options: [])
+        let snooze = UNNotificationAction(identifier: snoozeAction, title: t("10 dk ertele"), options: [])
         let due = UNNotificationCategory(identifier: dueCategory, actions: [complete, snooze], intentIdentifiers: [], options: [])
         let immediate = UNNotificationCategory(identifier: immediateCategory, actions: [complete], intentIdentifiers: [], options: [])
         UNUserNotificationCenter.current().setNotificationCategories([due, immediate])
@@ -39,11 +39,11 @@ enum NotificationScheduler {
         content.title = category?.name ?? "REAL"
         if item.isChecklist {
             let open = item.checklistItems.filter { !$0.isCompleted }.count
-            content.body = item.text.isEmpty ? "\(open) madde kaldı" : item.text + " · \(open) madde kaldı"
+            content.body = item.text.isEmpty ? t("{0} madde kaldı", open) : t("{0} · {1} madde kaldı", item.text, open)
         } else {
             content.body = item.text
         }
-        if item.isImportant { content.subtitle = "Önemli" }
+        if item.isImportant { content.subtitle = t("Önemli") }
         else if item.hasRepeat { content.subtitle = item.repeatRule.displayName }
         content.sound = alerting ? .default : nil
         content.userInfo = ["reminderId": item.id]
@@ -96,7 +96,7 @@ enum NotificationScheduler {
                 guard early > now else { continue }
                 let heads = self.content(for: item, alerting: false)
                 heads.body = earlyLead(minutes) + " · " + heads.body
-                heads.subtitle = "Erken uyarı"
+                heads.subtitle = t("Erken uyarı")
                 heads.sound = .default
                 let c = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: early.date)
                 UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: earlyIdentifier(item.id, i), content: heads,
@@ -107,9 +107,9 @@ enum NotificationScheduler {
 
     /// "15 dk sonra", "1 saat sonra", "2 gün sonra".
     static func earlyLead(_ minutes: Int) -> String {
-        if minutes >= 1440 && minutes % 1440 == 0 { return "\(minutes / 1440) gün sonra" }
-        if minutes >= 60 && minutes % 60 == 0 { return "\(minutes / 60) saat sonra" }
-        return "\(minutes) dk sonra"
+        if minutes >= 1440 && minutes % 1440 == 0 { return t("{0} gün sonra", minutes / 1440) }
+        if minutes >= 60 && minutes % 60 == 0 { return t("{0} saat sonra", minutes / 60) }
+        return t("{0} dk sonra", minutes)
     }
     private static func earlyIdentifier(_ id: Int64, _ index: Int) -> String { "reminder-\(id)-early-\(index)" }
 
@@ -121,7 +121,7 @@ enum NotificationScheduler {
         region.notifyOnEntry = !place.onExit
         region.notifyOnExit = place.onExit
         let content = content(for: item, alerting: true)
-        content.subtitle = (place.onExit ? "Ayrıldın · " : "Vardın · ") + place.placeName
+        content.subtitle = (place.onExit ? t("Ayrıldın · ") : t("Vardın · ")) + place.placeName
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: placeIdentifier(item.id), content: content,
             trigger: UNLocationNotificationTrigger(region: region, repeats: false)))
     }

@@ -32,7 +32,7 @@ struct GameMediaSection: View {
             Button(action: toggle) {
                 HStack(spacing: 8) {
                     Text(open ? "▾" : "▶").font(RealFont.inter(13)).foregroundStyle(accent)
-                    Text(open ? "Oynanışı gizle" : "Oynanışı gör").font(RealFont.inter(14, .medium)).foregroundStyle(.white)
+                    Text(open ? t("Oynanışı gizle") : t("Oynanışı gör")).font(RealFont.inter(14, .medium)).foregroundStyle(.white)
                 }
                 .padding(.horizontal, 18).padding(.vertical, 11)
                 .overlay(Capsule().strokeBorder(accent.opacity(0.7), lineWidth: 1))
@@ -51,7 +51,7 @@ struct GameMediaSection: View {
         guard open, shots == nil, !loading else { return }
         loading = true; error = nil
         Task {
-            do { shots = try await GameMediaCache.load(providerId) } catch { self.error = "Görseller şu anda alınamadı." }
+            do { shots = try await GameMediaCache.load(providerId) } catch { self.error = t("Görseller şu anda alınamadı.") }
             loading = false
         }
     }
@@ -93,7 +93,7 @@ struct GameMediaSection: View {
                 }
             }
         } else {
-            Text("Bu oyun için görsel yok.").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF85858E))
+            Text(t("Bu oyun için görsel yok.")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF85858E))
         }
     }
 

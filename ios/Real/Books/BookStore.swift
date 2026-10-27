@@ -28,7 +28,7 @@ struct Shelf: Identifiable {
 enum ReaderTheme: String, CaseIterable, Codable {
     case LIGHT, DARK, AMOLED
 
-    var label: String { switch self { case .LIGHT: "Açık"; case .DARK: "Koyu"; case .AMOLED: "AMOLED" } }
+    var label: String { switch self { case .LIGHT: t("Açık"); case .DARK: t("Koyu"); case .AMOLED: "AMOLED" } }
     var background: Color { switch self { case .LIGHT: Color(argb: 0xFFEDEDEB); case .DARK: Color(argb: 0xFF1C1C1E); case .AMOLED: .black } }
     var text: Color { switch self { case .LIGHT: Color(argb: 0xFF111111); case .DARK: Color(argb: 0xFFDADADC); case .AMOLED: Color(argb: 0xFFCFCFCF) } }
     var muted: Color { switch self { case .AMOLED: Color(argb: 0xFF6E6E73); default: Color(argb: 0xFF8E8E93) } }
@@ -172,7 +172,7 @@ final class BookStore {
     func add(_ book: Book) throws {
         guard AppUpdateGate.writable() else { throw BookError.message(AppUpdateGate.blockedMessage) }
         guard !books.contains(where: { $0.id == book.id }) else { return }
-        guard books.count < 200 else { throw BookError.message("Kitaplık sınırına ulaşıldı (200 kitap).") }
+        guard books.count < 200 else { throw BookError.message(t("Kitaplık sınırına ulaşıldı (200 kitap).")) }
         books.append(book)
         save()
     }

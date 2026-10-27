@@ -221,7 +221,7 @@ final class DiscoveryStore {
         }
         // Nothing new also ends an automatic refill, so it can never loop the request.
         guard !fresh.isEmpty else {
-            throw lastError ?? BookError.message("Bu seçimlerle yeni afiş kalmadı. Bir iki seçimi kaldırıp tekrar dene.")
+            throw lastError ?? BookError.message(t("Bu seçimlerle yeni afiş kalmadı. Bir iki seçimi kaldırıp tekrar dene."))
         }
         var s = snapshot(kind)
         let ranked = fresh.sorted { DiscoveryRanking.match($0, filters, kind: kind).count > DiscoveryRanking.match($1, filters, kind: kind).count }
@@ -261,7 +261,7 @@ final class DiscoveryStore {
             for t in card.seenTitles where !s.excluded.contains(t) { s.excluded.append(t) }
         case .addToList:
             guard s.later.count < 40 || s.later.contains(where: { $0.id == card.id }) else {
-                throw BookError.message(kind == .film ? "İzlenecek listen dolu. Önce bir afiş çıkar." : "Oynanacak listen dolu. Önce bir oyun çıkar.")
+                throw BookError.message(kind == .film ? t("İzlenecek listen dolu. Önce bir afiş çıkar.") : t("Oynanacak listen dolu. Önce bir oyun çıkar."))
             }
             s.cards = remainder
             if !s.later.contains(where: { $0.id == card.id }) { s.later.append(card) }
@@ -329,7 +329,8 @@ enum DiscoveryRanking {
     static func displayGenre(_ genre: String?) -> String? {
         guard let first = genre?.split(whereSeparator: { ",/|".contains($0) }).map({ $0.trimmingCharacters(in: .whitespaces) }).first(where: { !$0.isEmpty }) else { return nil }
         let n = normalized(first)
-        return DiscoveryFilter.film.first { $0.genre && $0.aliases.contains { normalized($0) == n } }?.label ?? first
+        guard let label = DiscoveryFilter.film.first(where: { $0.genre && $0.aliases.contains { normalized($0) == n } })?.label else { return first }
+        return label == "Tarih" || label == "Spor" ? tIn("genre", label) : t(label)
     }
 }
 
@@ -371,7 +372,7 @@ struct BackendDiscoveryService: DiscoveryService {
             json = try await RealBackend.post("/api/media-recommendations",
                                               ["type": type, "filters": Array(filters.subtracting(["anime"])), "exclude": Array(exclude.suffix(40))], timeout: 25)
         }
-        guard let list = json["candidates"] as? [[String: Any]] else { throw BookError.message("Öneri yanıtı geçersiz.") }
+        guard let list = json["candidates"] as? [[String: Any]] else { throw BookError.message(t("Öneri yanıtı geçersiz.")) }
         let valid = Set(DiscoveryFilter.film.map(\.key))
         // Verify the candidates against the catalogs (skipping titles already seen), a few at a time, keeping the AI's order.
         let skip = Set(exclude.map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
@@ -415,9 +416,9 @@ struct BackendDiscoveryService: DiscoveryService {
                                                    "exclude": Array(exclude.suffix(40))], timeout: 40)
             }
         } catch let failure as RealBackend.Failure where failure.status == 503 {
-            throw BookError.message("Oyun kataloğu şu anda hazır değil.")
+            throw BookError.message(t("Oyun kataloğu şu anda hazır değil."))
         }
-        guard let list = json["games"] as? [[String: Any]] else { throw BookError.message("Öneri yanıtı geçersiz.") }
+        guard let list = json["games"] as? [[String: Any]] else { throw BookError.message(t("Öneri yanıtı geçersiz.")) }
         let valid = Set(DiscoveryFilter.game.map(\.key))
         let cards: [DiscoveryCard] = list.compactMap { item in
             guard let title = (item["title"] as? String)?.trimmingCharacters(in: .whitespaces), !title.isEmpty else { return nil }
@@ -432,7 +433,7 @@ struct BackendDiscoveryService: DiscoveryService {
             return DiscoveryCard(media: media, tags: ((item["tags"] as? [String]) ?? []).filter { valid.contains($0) },
                                  reason: String(((item["reason"] as? String) ?? "").prefix(220)), platforms: shorts)
         }
-        if cards.isEmpty { throw BookError.message("IGDB'de doğrulanmış bir oyun bulunamadı. Tekrar deneyebilirsin.") }
+        if cards.isEmpty { throw BookError.message(t("IGDB'de doğrulanmış bir oyun bulunamadı. Tekrar deneyebilirsin.")) }
         return cards
     }
 }
@@ -473,13 +474,13 @@ enum MediaDetailRepository {
         guard media.type == .TV, media.provider.lowercased() == "tvmaze", let id = media.providerId,
               id.range(of: "^[1-9]\\d{0,9}$", options: .regularExpression) != nil,
               let url = URL(string: "https://api.tvmaze.com/shows/\(id)?embed=cast") else {
-            throw BookError.message("Bu kaynağın oyuncu bilgisi desteklenmiyor.")
+            throw BookError.message(t("Bu kaynağın oyuncu bilgisi desteklenmiyor."))
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, _) = try await URLSession.shared.data(for: request)
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw BookError.message("Oyuncular şu anda alınamadı.") }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw BookError.message(t("Oyuncular şu anda alınamadı.")) }
         let rows = ((json["_embedded"] as? [String: Any])?["cast"] as? [[String: Any]]) ?? []
         var seen = Set<String>()
         let cast: [MediaCastMember] = rows.prefix(100).compactMap { row in
@@ -499,7 +500,7 @@ enum MediaDetailRepository {
     private static func movie(_ id: String) async throws -> MediaDetail {
         let json = try await RealBackend.post("/api/media-details", ["provider": "TheTVDB", "type": "MOVIE", "providerId": id], timeout: 18)
         guard json["ok"] as? Bool == true, let d = json["details"] as? [String: Any],
-              d["provider"] as? String == "TheTVDB", d["providerId"] as? String == id else { throw BookError.message("Oyuncular şu anda alınamadı.") }
+              d["provider"] as? String == "TheTVDB", d["providerId"] as? String == id else { throw BookError.message(t("Oyuncular şu anda alınamadı.")) }
         var seen = Set<String>()
         let cast: [MediaCastMember] = ((d["cast"] as? [[String: Any]]) ?? []).prefix(24).compactMap { row in
             guard let name = (row["name"] as? String).map({ String($0.prefix(120)) }), !name.isEmpty else { return nil }
@@ -520,6 +521,8 @@ enum MediaDetailRepository {
 func mediaDurationLabel(_ millis: Int64?, series: Bool) -> String? {
     guard let v = millis, (60_000...86_400_000).contains(v) else { return nil }
     let minutes = Int(v / 60_000)
-    let text = minutes >= 60 ? "\(minutes / 60) sa\(minutes % 60 > 0 ? " \(minutes % 60) dk" : "")" : "\(minutes) dk"
-    return series ? "\(text) / bölüm" : text
+    let text = minutes >= 60
+        ? (minutes % 60 > 0 ? t("{0} sa {1} dk", minutes / 60, minutes % 60) : t("{0} sa", minutes / 60))
+        : t("{0} dk", minutes)
+    return series ? t("{0} / bölüm", text) : text
 }

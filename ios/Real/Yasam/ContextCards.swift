@@ -51,7 +51,7 @@ struct ContextCard: Equatable {
     var title: String
     var message: String
     var primaryLabel: String
-    var secondaryLabel = "Şimdi değil"
+    var secondaryLabel = t("Şimdi değil")
     var progress: Double?
 }
 
@@ -235,40 +235,40 @@ enum ContextCardEngine {
         case .water:
             let ml = s.waterTodayMl ?? 0
             let goal = max(s.waterGoalMl, 1)
-            return ContextCard(type: type, eyebrow: "Bugün",
-                               title: ml == 0 ? "Bugün su tarafı sessiz" : "Su hedefinin biraz gerisindesin",
-                               message: ml == 0 ? "Henüz hiç su içmedin. Bir bardakla başlayalım." : "\(ml) / \(goal) ml. Bir bardak iyi gelir.",
+            return ContextCard(type: type, eyebrow: t("Bugün"),
+                               title: ml == 0 ? t("Bugün su tarafı sessiz") : t("Su hedefinin biraz gerisindesin"),
+                               message: ml == 0 ? t("Henüz hiç su içmedin. Bir bardakla başlayalım.") : t("{0} / {1} ml. Bir bardak iyi gelir.", ml, goal),
                                primaryLabel: "+250 ml", progress: min(max(Double(ml) / Double(goal), 0), 1))
         case .mood:
-            return ContextCard(type: type, eyebrow: "Bugün", title: "Bugün nasıl hissediyorsun?",
-                               message: "Günün havasını tek dokunuşla kaydet.", primaryLabel: "Kaydet")
+            return ContextCard(type: type, eyebrow: t("Bugün"), title: t("Bugün nasıl hissediyorsun?"),
+                               message: t("Günün havasını tek dokunuşla kaydet."), primaryLabel: t("Kaydet"))
         case .book:
             let parts = [s.unfinishedBookTitle, s.unfinishedBookAuthor].compactMap { $0 }.filter { !$0.isEmpty }
-            return ContextCard(type: type, eyebrow: "Akşam", title: "Kaldığın yerden devam",
-                               message: (parts.isEmpty ? "Kitaplığındaki kitap" : parts.joined(separator: " · ")) + " seni bekliyor.",
-                               primaryLabel: "Oku")
+            return ContextCard(type: type, eyebrow: t("Akşam"), title: t("Kaldığın yerden devam"),
+                               message: t("{0} seni bekliyor.", parts.isEmpty ? t("Kitaplığındaki kitap") : parts.joined(separator: " · ")),
+                               primaryLabel: t("Oku"))
         case .media:
-            return ContextCard(type: type, eyebrow: "Akşam", title: "Bu akşam ne izlesek?",
-                               message: isLowMood(s) ? "Yorucu bir gün gibi. Hafif bir şey bulalım." : "Türünü seç, afişleri keşfet.",
-                               primaryLabel: "Keşfet")
+            return ContextCard(type: type, eyebrow: t("Akşam"), title: t("Bu akşam ne izlesek?"),
+                               message: isLowMood(s) ? t("Yorucu bir gün gibi. Hafif bir şey bulalım.") : t("Türünü seç, afişleri keşfet."),
+                               primaryLabel: t("Keşfet"))
         case .watch:
             let message: String
             if let series = s.seriesInProgress, let ep = s.lastEpisode {
-                message = "\(series) · \(ep.season). sezon \(ep.number + 1). bölüm seni bekliyor."
+                message = t("{0} · {1}. sezon {2}. bölüm seni bekliyor.", series, ep.season, ep.number + 1)
             } else if let series = s.seriesInProgress {
-                message = "\(series) seni bekliyor."
-            } else { message = "Yarım kalan dizin seni bekliyor." }
-            return ContextCard(type: type, eyebrow: "Akşam", title: "Sıradaki bölüm", message: message, primaryLabel: "Puanlarım")
+                message = t("{0} seni bekliyor.", series)
+            } else { message = t("Yarım kalan dizin seni bekliyor.") }
+            return ContextCard(type: type, eyebrow: t("Akşam"), title: t("Sıradaki bölüm"), message: message, primaryLabel: t("Puanlarım"))
         case .listen:
-            return ContextCard(type: type, eyebrow: minutes(s) < 12 * 60 ? "Sabah" : "Yolda", title: "Ne dinlesek?",
-                               message: "Türünü seç, kartları kaydır.", primaryLabel: "Keşfet")
+            return ContextCard(type: type, eyebrow: minutes(s) < 12 * 60 ? t("Sabah") : t("Yolda"), title: t("Ne dinlesek?"),
+                               message: t("Türünü seç, kartları kaydır."), primaryLabel: t("Keşfet"))
         case .play:
-            return ContextCard(type: type, eyebrow: isWeekend(s) ? "Hafta sonu" : "Akşam", title: "Ne oynasak?",
-                               message: isLowMood(s) ? "Kafa dağıtacak hafif bir oyun bulalım." : "Bir tür seç, sana uyanları bulalım.",
-                               primaryLabel: "Keşfet")
+            return ContextCard(type: type, eyebrow: isWeekend(s) ? t("Hafta sonu") : t("Akşam"), title: t("Ne oynasak?"),
+                               message: isLowMood(s) ? t("Kafa dağıtacak hafif bir oyun bulalım.") : t("Bir tür seç, sana uyanları bulalım."),
+                               primaryLabel: t("Keşfet"))
         case .journal:
-            return ContextCard(type: type, eyebrow: "Gece", title: "Bugünü iki satırla yaz",
-                               message: "Kısa bir not, yarına güzel bir iz bırakır.", primaryLabel: "Yaz")
+            return ContextCard(type: type, eyebrow: t("Gece"), title: t("Bugünü iki satırla yaz"),
+                               message: t("Kısa bir not, yarına güzel bir iz bırakır."), primaryLabel: t("Yaz"))
         }
     }
 }
@@ -382,7 +382,7 @@ struct HomeContextCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(c.title).font(RealFont.inter(15)).foregroundStyle(Color(white: 0.95)).lineLimit(1)
                 Text(c.message).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
-                Text("REAL önerisi · \(c.eyebrow.lowercased())").font(RealFont.inter(11))
+                Text(t("REAL önerisi · {0}", c.eyebrow.lowercased())).font(RealFont.inter(11))
                     .foregroundStyle(c.type.accent.opacity(0.8)).padding(.top, 1)
                 if c.progress != nil {
                     GeometryReader { g in

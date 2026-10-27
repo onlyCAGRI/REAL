@@ -35,11 +35,11 @@ enum DepartureReminder {
             guard leave.timeIntervalSinceNow > 60 else { return }
             let minutes = Int((eta.expectedTravelTime / 60).rounded())
             let clock = DateFormatter()
-            clock.locale = Locale(identifier: "tr_TR"); clock.dateFormat = "HH:mm"
+            clock.locale = I18n.locale; clock.dateFormat = "HH:mm"
             let content = UNMutableNotificationContent()
-            content.title = "Çıkma vakti"
+            content.title = t("Çıkma vakti")
             let what = name.isEmpty ? title.split(separator: "\n").first.map(String.init) ?? "" : name
-            content.body = "\(what.isEmpty ? "Yol" : what) · trafikle yaklaşık \(minutes) dk. \(clock.string(from: arrival))'da orada olmak için şimdi çık."
+            content.body = t("{0} · trafikle yaklaşık {1} dk. {2}'da orada olmak için şimdi çık.", what.isEmpty ? t("Yol") : what, minutes, clock.string(from: arrival))
             content.sound = .default
             content.threadIdentifier = "departure"
             content.userInfo = ["reminderId": id]

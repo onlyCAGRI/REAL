@@ -43,7 +43,7 @@ struct PanoBoardScreen: View {
                         .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
                 }
                 .padding(12)
-                .accessibilityLabel("Panolara dön")
+                .accessibilityLabel(t("Panolara dön"))
             }
             .overlay(alignment: .bottom) { if editing { editDock(size: geo.size).padding(.bottom, 14).transition(.move(edge: .bottom).combined(with: .opacity)) } }
             .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22), value: editing)
@@ -384,7 +384,7 @@ struct PanoAddSheet: View {
                     }
                     ForEach(store.cards.sorted { $0.createdAt > $1.createdAt }.prefix(40)) { r in
                         Button { onAdd(.card, r.id) } label: {
-                            Text(r.text.isEmpty ? "Boş not" : r.text).foregroundStyle(.white).lineLimit(1)
+                            Text(r.text.isEmpty ? t("Boş not") : r.text).foregroundStyle(.white).lineLimit(1)
                         }
                     }
                 }
@@ -393,14 +393,14 @@ struct PanoAddSheet: View {
                         HStack {
                             Text(name).foregroundStyle(.secondary)
                             Spacer()
-                            Text("Yakında").font(.caption).foregroundStyle(.secondary)
+                            Text(t("Yakında")).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
             }
             .navigationTitle("Add to Pano")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Kapat") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(t("Kapat")) { dismiss() } } }
         }
         .presentationDetents([.medium, .large])
         .presentationBackground(.ultraThinMaterial)
@@ -441,8 +441,8 @@ struct PanoTextEditor: View {
             .navigationTitle(item.type == .checklist ? "Checklist" : "Text")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Kaydet") { pano.update(item); dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(t("Vazgeç")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(t("Kaydet")) { pano.update(item); dismiss() } }
             }
         }
         .presentationDetents([.medium])

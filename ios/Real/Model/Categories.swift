@@ -42,12 +42,12 @@ enum ReminderCategory: String, CaseIterable, Codable, Identifiable {
     }
     var emptyMessage: String {
         switch self {
-        case .today: return "Önündeki 24 saatte bir REAL yok"
-        case .planned: return "Henüz planlanan hatırlatıcı yok"
-        case .important: return "Yıldız eklediğin hatırlatıcılar burada görünür"
-        case .noAlert: return "Henüz hatırlatıcı yok"
-        case .completed: return "Tamamladığın hatırlatıcılar burada görünür"
-        case .journalEntries: return "Henüz günlük eklenmemiş"
+        case .today: return t("Önündeki 24 saatte bir REAL yok")
+        case .planned: return t("Henüz planlanan hatırlatıcı yok")
+        case .important: return t("Yıldız eklediğin hatırlatıcılar burada görünür")
+        case .noAlert: return t("Henüz hatırlatıcı yok")
+        case .completed: return t("Tamamladığın hatırlatıcılar burada görünür")
+        case .journalEntries: return t("Henüz günlük eklenmemiş")
         }
     }
     var symbol: String {
@@ -94,40 +94,40 @@ enum CategoryIcon: String, CaseIterable, Codable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .work: return "İş"
-        case .home: return "Ev"
-        case .shopping: return "Alışveriş"
-        case .health: return "Sağlık"
-        case .sport: return "Spor"
-        case .money: return "Finans"
-        case .school: return "Eğitim"
-        case .travel: return "Seyahat"
-        case .family: return "Aile"
-        case .pet: return "Evcil hayvan"
-        case .food: return "Yemek"
-        case .idea: return "Fikir"
-        case .heart: return "Favori"
-        case .star: return "Yıldız"
-        case .file: return "Belge"
-        case .location: return "Konum"
-        case .bookmark: return "Kaydedilen"
-        case .gift: return "Hediye"
-        case .birthday: return "Doğum günü"
-        case .racing: return "Formula"
-        case .racingSide: return "Formula yandan"
-        case .vehicle: return "Araba"
-        case .ball: return "Maç"
-        case .music: return "Müzik"
-        case .movie: return "Film ve dizi"
-        case .gaming: return "Oyun"
-        case .book: return "Kitap"
-        case .medicine: return "İlaç"
-        case .plant: return "Bitki"
-        case .code: return "Yazılım"
-        case .camera: return "Fotoğraf"
-        case .event: return "Etkinlik"
-        case .friends: return "Arkadaşlar"
-        case .noIcon: return "İkon yok"
+        case .work: return t("İş")
+        case .home: return t("Ev")
+        case .shopping: return t("Alışveriş")
+        case .health: return t("Sağlık")
+        case .sport: return t("Spor")
+        case .money: return t("Finans")
+        case .school: return t("Eğitim")
+        case .travel: return t("Seyahat")
+        case .family: return t("Aile")
+        case .pet: return t("Evcil hayvan")
+        case .food: return t("Yemek")
+        case .idea: return t("Fikir")
+        case .heart: return t("Favori")
+        case .star: return t("Yıldız")
+        case .file: return t("Belge")
+        case .location: return t("Konum")
+        case .bookmark: return t("Kaydedilen")
+        case .gift: return t("Hediye")
+        case .birthday: return t("Doğum günü")
+        case .racing: return t("Formula")
+        case .racingSide: return t("Formula yandan")
+        case .vehicle: return t("Araba")
+        case .ball: return t("Maç")
+        case .music: return t("Müzik")
+        case .movie: return t("Film ve dizi")
+        case .gaming: return t("Oyun")
+        case .book: return t("Kitap")
+        case .medicine: return t("İlaç")
+        case .plant: return t("Bitki")
+        case .code: return t("Yazılım")
+        case .camera: return t("Fotoğraf")
+        case .event: return t("Etkinlik")
+        case .friends: return t("Arkadaşlar")
+        case .noIcon: return t("İkon yok")
         }
     }
     /// RealSymbol key: draws the Android CategoryIcon glyph.

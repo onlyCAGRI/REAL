@@ -24,9 +24,9 @@ struct BookReaderScreen: View {
     private var pageCount: Int { max(1, book.pageCount ?? 1) }
     private var horizontal: Bool { isPaged && store.readMode == .HORIZONTAL }
     private var label: String {
-        if book.format == "epub" { return "\(pageCount) bölüm" }
-        if let c = book.pageCount { return "\(c) sayfa" }
-        return "Okuma"
+        if book.format == "epub" { return t("{0} bölüm", pageCount) }
+        if let c = book.pageCount { return t("{0} sayfa", c) }
+        return t("Okuma")
     }
 
     var body: some View {
@@ -53,9 +53,9 @@ struct BookReaderScreen: View {
             if scanned, !store.scanNoticeShown(book) { showScanNotice = true }
         }
         .realOverlay(isPresented: $showScanNotice) {
-            PermissionSheet(title: "Taranmış sayfalar",
-                            description: "Bu kitabın bazı sayfalarında seçilebilir metin yok, sayfa yalnız görüntü olarak kayıtlı. REAL bu sayfaları cihazında yazı tanıma (OCR) ile okuyor; bazı kelimeler yanlış ya da eksik çıkabilir. Emin olmadığın yerde asıl sayfaya bakabilirsin.",
-                            primaryLabel: "Anladım", secondaryLabel: "Asıl sayfayı göster", glyph: .file,
+            PermissionSheet(title: t("Taranmış sayfalar"),
+                            description: t("Bu kitabın bazı sayfalarında seçilebilir metin yok, sayfa yalnız görüntü olarak kayıtlı. REAL bu sayfaları cihazında yazı tanıma (OCR) ile okuyor; bazı kelimeler yanlış ya da eksik çıkabilir. Emin olmadığın yerde asıl sayfaya bakabilirsin."),
+                            primaryLabel: t("Anladım"), secondaryLabel: t("Asıl sayfayı göster"), glyph: .file,
                             onPrimary: { closeScanNotice(original: false) },
                             onSecondary: { closeScanNotice(original: true) },
                             onDismiss: { closeScanNotice(original: false) })
@@ -79,7 +79,7 @@ struct BookReaderScreen: View {
                         ReaderPageItem(book: book, index: i, count: pageCount, documents: documents, showOriginal: showOriginal).id(i)
                     }
                 } else {
-                    if loading { Text("Sayfa hazırlanıyor…").font(RealFont.inter(15)).foregroundStyle(store.theme.muted) }
+                    if loading { Text(t("Sayfa hazırlanıyor…")).font(RealFont.inter(15)).foregroundStyle(store.theme.muted) }
                     let initials = sectionInitials(paragraphs)
                     ForEach(Array(paragraphs.enumerated()), id: \.offset) { i, p in
                         ReaderParagraph(paragraph: p, first: initials.contains(i)).id(i)
@@ -159,7 +159,7 @@ struct BookReaderScreen: View {
                 ReaderCircleButton(theme: theme, glass: theme != .LIGHT, action: onBack) {
                     RealSymbol("chevron.left", size: 20.7)
                 }
-                .accessibilityLabel("Geri")
+                .accessibilityLabel(t("Geri"))
                 Spacer()
             }
             .padding(.horizontal, 16).padding(.top, 8)
@@ -168,7 +168,7 @@ struct BookReaderScreen: View {
             VStack(spacing: 8) {
                 if hasOriginal {
                     Button { showOriginal.toggle() } label: {
-                        Text(showOriginal ? "Metni oku" : "Orijinal sayfa").font(RealFont.inter(13)).foregroundStyle(theme.muted).padding(6)
+                        Text(showOriginal ? t("Metni oku") : t("Orijinal sayfa")).font(RealFont.inter(13)).foregroundStyle(theme.muted).padding(6)
                     }
                     .buttonStyle(.plain)
                 }
@@ -193,7 +193,7 @@ struct BookReaderScreen: View {
                         Text("\(store.fontSize)").font(RealFont.inter(13)).foregroundStyle(theme.muted).padding(.horizontal, 14)
                         ReaderPill(text: "A+", theme: theme) { store.fontSize = min(ReaderDefaults.maxSize, store.fontSize + 1) }
                         if isPaged {
-                            ReaderPill(text: store.readMode == .VERTICAL ? "↓ Dikey" : "→ Yatay", theme: theme) {
+                            ReaderPill(text: store.readMode == .VERTICAL ? t("↓ Dikey") : t("→ Yatay"), theme: theme) {
                                 store.readMode = store.readMode == .VERTICAL ? .HORIZONTAL : .VERTICAL
                             }
                             .padding(.leading, 14)
@@ -203,11 +203,11 @@ struct BookReaderScreen: View {
                 }
                 HStack(spacing: 10) {
                     ReaderCircleButton(theme: theme, size: 38, action: { store.theme = theme.next }) { SunGlyph(color: theme.chromeText) }
-                        .accessibilityLabel("Tema: \(theme.label)")
+                        .accessibilityLabel(t("Tema: {0}", theme.label))
                     ReaderCircleButton(theme: theme, size: 38, action: { withAnimation(.easeOut(duration: 0.14)) { showTextTools.toggle() } }) {
                         Text("Tт").font(.system(size: 15, design: .serif))
                     }
-                    .accessibilityLabel("Yazı ayarları")
+                    .accessibilityLabel(t("Yazı ayarları"))
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
@@ -336,13 +336,13 @@ private struct ReaderPageItem: View {
             if showOriginal {
                 if let image {
                     Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: .infinity)
-                        .accessibilityLabel("Orijinal sayfa \(index + 1)")
+                        .accessibilityLabel(t("Orijinal sayfa {0}", index + 1))
                 } else {
-                    Text("Sayfa hazırlanıyor…").font(RealFont.inter(15)).foregroundStyle(theme.muted).frame(minHeight: 460, alignment: .top)
+                    Text(t("Sayfa hazırlanıyor…")).font(RealFont.inter(15)).foregroundStyle(theme.muted).frame(minHeight: 460, alignment: .top)
                 }
             } else if let paragraphs {
                 if paragraphs.isEmpty {
-                    Text(book.format == "epub" ? "Bu bölümde metin yok." : "Bu sayfada metin kalmadı. Orijinal sayfayı görüntüleyebilirsin.")
+                    Text(book.format == "epub" ? t("Bu bölümde metin yok.") : t("Bu sayfada metin kalmadı. Orijinal sayfayı görüntüleyebilirsin."))
                         .font(RealFont.inter(15)).foregroundStyle(theme.muted)
                 } else {
                     let initials = sectionInitials(paragraphs, followsHeading: index == 0 || book.format == "epub")
@@ -351,9 +351,9 @@ private struct ReaderPageItem: View {
                     }
                 }
             } else if failed {
-                Text("Sayfa şu an açılamadı. Biraz sonra tekrar deneyebilirsin.").font(RealFont.inter(12)).foregroundStyle(theme.muted)
+                Text(t("Sayfa şu an açılamadı. Biraz sonra tekrar deneyebilirsin.")).font(RealFont.inter(12)).foregroundStyle(theme.muted)
             } else {
-                Text("Sayfa hazırlanıyor…").font(RealFont.inter(15)).foregroundStyle(theme.muted).frame(minHeight: 460, alignment: .top)
+                Text(t("Sayfa hazırlanıyor…")).font(RealFont.inter(15)).foregroundStyle(theme.muted).frame(minHeight: 460, alignment: .top)
             }
             Color.clear.frame(height: 28)
         }

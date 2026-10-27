@@ -18,6 +18,8 @@ struct ReminderCardView: View {
     var onSwipeTo24Hour: (() -> Void)?
     /// Swipe left: delete (the caller offers "Geri al").
     var onSwipeDelete: (() -> Void)?
+    /// The left swipe only hides the card ("Gizle"): an ended phone-calendar event.
+    var swipeLeftHides = false
     var swipeRightLabel = "Move 24 hour"
     /// True when the card stays in the list after the right swipe, so it slides back into place.
     var swipeRightKeepsCard = true
@@ -77,10 +79,10 @@ struct ReminderCardView: View {
             if swipeEnabled && swipeLeftOn {
                 let p = min(max(-dragX / 82, 0), 1)
                 HStack(spacing: 6) {
-                    Image(systemName: "trash").font(.system(size: 13, weight: .semibold))
-                    Text(t("Sil")).font(RealFont.inter(12, .semibold))
+                    Image(systemName: swipeLeftHides ? "xmark" : "trash").font(.system(size: 13, weight: .semibold))
+                    Text(swipeLeftHides ? t("Gizle") : t("Sil")).font(RealFont.inter(12, .semibold))
                 }
-                .foregroundStyle(Color(argb: 0xFFFF8A80))
+                .foregroundStyle(swipeLeftHides ? RealColors.subtext : Color(argb: 0xFFFF8A80))
                 .scaleEffect(0.85 + 0.15 * p, anchor: .trailing)
                 .padding(.trailing, 18)
                 .frame(maxWidth: .infinity, alignment: .trailing)

@@ -8,7 +8,7 @@ import UIKit
 @Observable
 final class AppUpdateGate {
     static let shared = AppUpdateGate()
-    static let blockedMessage = "Bu sürümde ekleme yapılamaz. Önce REAL'i güncelle."
+    static var blockedMessage: String { t("Bu sürümde ekleme yapılamaz. Önce REAL'i güncelle.") }
     /// "ios/12": CFBundleVersion (CURRENT_PROJECT_VERSION) as the version code the admin compares.
     nonisolated static let clientTag: String = {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
@@ -60,9 +60,9 @@ struct RequiredUpdateHost: View {
     var body: some View {
         ZStack {
             if gate.required && gate.sheetOpen {
-                PermissionSheet(title: "Güncelleme gerekli",
-                                description: "Bu REAL sürümü artık desteklenmiyor. Güncelleyince her şey kaldığı yerden devam eder; kartların telefonunda güvende.",
-                                primaryLabel: "Güncelle", secondaryLabel: "Şimdilik sadece görüntüle", glyph: .star,
+                PermissionSheet(title: t("Güncelleme gerekli"),
+                                description: t("Bu REAL sürümü artık desteklenmiyor. Güncelleyince her şey kaldığı yerden devam eder; kartların telefonunda güvende."),
+                                primaryLabel: t("Güncelle"), secondaryLabel: t("Şimdilik sadece görüntüle"), glyph: .star,
                                 onPrimary: openStore, onSecondary: { gate.sheetOpen = false })
                     .transition(.opacity)
             }

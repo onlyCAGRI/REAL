@@ -17,17 +17,18 @@ private let faded = Color(argb: 0xFF5C5C5C)
 private let screenBg = Color(argb: 0xFF0C0C0C)
 
 func scoreText(_ v: Double) -> String {
-    v.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(v)) : String(format: "%.1f", v).replacingOccurrences(of: ".", with: ",")
+    let s = v.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(v)) : String(format: "%.1f", v)
+    return I18n.isEnglish ? s : s.replacingOccurrences(of: ".", with: ",")
 }
 private func round1(_ v: Double) -> Double { (v * 10).rounded() / 10 }
-private func verdict(_ v: Double) -> String { v >= 9 ? "Efsane" : v >= 7 ? "İyi" : v >= 5 ? "İdare eder" : "Beğenmedim" }
+private func verdict(_ v: Double) -> String { v >= 9 ? t("Efsane") : v >= 7 ? t("İyi") : v >= 5 ? t("İdare eder") : t("Beğenmedim") }
 
 private struct Period { let short: String; let long: String; let days: Int? }
-private let periods = [Period(short: "7", long: "Son 7 gün", days: 7), Period(short: "30", long: "Son 30 gün", days: 30),
-                       Period(short: "3 ay", long: "Son 3 ay", days: 90), Period(short: "6 ay", long: "Son 6 ay", days: 180),
-                       Period(short: "1 yıl", long: "Son 1 yıl", days: 365), Period(short: "Tümü", long: "Tümü", days: nil)]
+private var periods: [Period] { [Period(short: "7", long: t("Son 7 gün"), days: 7), Period(short: "30", long: t("Son 30 gün"), days: 30),
+                                 Period(short: t("3 ay"), long: t("Son 3 ay"), days: 90), Period(short: t("6 ay"), long: t("Son 6 ay"), days: 180),
+                                 Period(short: t("1 yıl"), long: t("Son 1 yıl"), days: 365), Period(short: t("Tümü"), long: t("Tümü"), days: nil)] }
 
-private let periodLabels = periods.map { p in p.days.map { $0 <= 30 ? "\(p.short) gün" : p.short } ?? p.short }
+private var periodLabels: [String] { periods.map { p in p.days.map { $0 <= 30 ? t("{0} gün", p.short) : p.short } ?? p.short } }
 /// Picker order: "Tümü" at the edge, then 7 gün, 30 gün, 3 ay… as they come in from the right (nearest first).
 private let periodOrder = Array(periods.indices.filter { periods[$0].days != nil }.reversed()) + [periods.count - 1]
 
@@ -85,9 +86,9 @@ struct RatingsScreen: View {
                     Color.clear.frame(height: 54)
                     Text(avg.map { scoreText(round1($0)) } ?? "–").font(RealFont.inter(56, .medium)).foregroundStyle(.white)
                         .contentTransition(.numericText()).frame(maxWidth: .infinity).padding(.top, 6)
-                    Text("ortalaman").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF888888)).frame(maxWidth: .infinity).padding(.top, 2)
+                    Text(t("ortalaman")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF888888)).frame(maxWidth: .infinity).padding(.top, 2)
                     // One row: genres pull in from the left of "Hepsi", periods from the right of "Tümü".
-                    let genreLabels = genres.reversed() + ["Hepsi"]
+                    let genreLabels = genres.reversed() + [t("Hepsi")]
                     HStack(spacing: 0) {
                         AnchoredPicker(labels: genreLabels, selected: Binding(
                             get: { genre.flatMap { genreLabels.firstIndex(of: $0) } ?? genreLabels.count - 1 },
@@ -99,11 +100,11 @@ struct RatingsScreen: View {
                     }
                     .padding(.top, 14).padding(.bottom, 16)
                     if !shown.isEmpty {
-                        HStack { ForEach(["altında", "ortalama", "üstünde"], id: \.self) { Text($0); if $0 != "üstünde" { Spacer() } } }
+                        HStack { ForEach([t("altında"), t("ortalama"), t("üstünde")], id: \.self) { Text($0); if $0 != t("üstünde") { Spacer() } } }
                             .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF555555)).padding(.leading, 46).padding(.bottom, 2)
                     } else {
-                        Text(days == nil ? "Keşifte İzledim dediğin film ve diziler burada puanlanır. İzlediklerini aşağıdan da ekleyebilirsin."
-                             : "Bu aralıkta eklenen yok.")
+                        Text(days == nil ? t("Keşifte İzledim dediğin film ve diziler burada puanlanır. İzlediklerini aşağıdan da ekleyebilirsin.")
+                             : t("Bu aralıkta eklenen yok."))
                             .font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF777777)).padding(.vertical, 20)
                     }
                     ForEach(shown) { e in
@@ -117,7 +118,7 @@ struct RatingsScreen: View {
                     }
                     // "Ekle": watched now (today's date); "Geçmişten ekle": no date ("eskiden").
                     HStack(spacing: 10) {
-                        ForEach([(false, "Ekle"), (true, "Geçmişten ekle")], id: \.1) { past, label in
+                        ForEach([(false, t("Ekle")), (true, t("Geçmişten ekle"))], id: \.1) { past, label in
                             Button { addPast = past; searching = true } label: {
                                 HStack(spacing: 8) { RealSymbol("plus", size: 15); Text(label).font(RealFont.inter(14)) }
                                     .foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 48)
@@ -158,14 +159,14 @@ struct RatingsScreen: View {
     @ViewBuilder private func sheet(for t: RateTarget) -> some View {
         switch t {
         case let .film(media, initial, past, inList):
-            FilmRatingSheet(media: media, meta: [media.year.map(String.init), "Film"].compactMap { $0 }.joined(separator: " · "), initial: initial,
-                            onRemove: inList ? { ratings.remove(ratingKey(media)) } : nil, removeLabel: "Listeden çıkar") { ratings.rate(media, $0, past: past) }
+            FilmRatingSheet(media: media, meta: [media.year.map(String.init), t("Film")].compactMap { $0 }.joined(separator: " · "), initial: initial,
+                            onRemove: inList ? { ratings.remove(ratingKey(media)) } : nil, removeLabel: t("Listeden çıkar")) { ratings.rate(media, $0, past: past) }
         case let .episode(media, ep, initial):
             EpisodeRatingSheet(media: media, episode: ep, initial: initial,
                                onRemove: initial != nil ? { ratings.rateEpisodes(media, [ep.key: nil]) } : nil) { ratings.rateEpisodes(media, [ep.key: $0]) }
         case let .season(media, season, eps):
-            RatingSheet(title: "\(season). sezonun tamamı", meta: media.title,
-                        reminder: "Bütün bölümlere aynı puan verilir. Sonra istediğin bölümü tek tek değiştirebilirsin.", initial: nil) { v in
+            RatingSheet(title: t("{0}. sezonun tamamı", season), meta: media.title,
+                        reminder: t("Bütün bölümlere aynı puan verilir. Sonra istediğin bölümü tek tek değiştirebilirsin."), initial: nil) { v in
                 ratings.rateEpisodes(media, Dictionary(uniqueKeysWithValues: eps.map { ($0.key, Optional(v)) }))
             }
         }
@@ -177,7 +178,7 @@ struct RatingsScreen: View {
         for e in list { if let v = e.value { for g in genresOf(e) { byGenre[g, default: []].append(v) } } }
         let avgs = byGenre.filter { $0.value.count >= 2 }.mapValues { $0.reduce(0, +) / Double($0.count) }
         guard avgs.count >= 2, let best = avgs.max(by: { $0.value < $1.value }), let worst = avgs.min(by: { $0.value < $1.value }) else { return nil }
-        return "En sevdiğin tür \(best.key) (\(scoreText(round1(best.value)))), en az sevdiğin \(worst.key) (\(scoreText(round1(worst.value))))."
+        return t("En sevdiğin tür {0} ({1}), en az sevdiğin {2} ({3}).", best.key, scoreText(round1(best.value)), worst.key, scoreText(round1(worst.value)))
     }
 }
 
@@ -246,11 +247,11 @@ private struct RatingRow: View {
                     HStack(spacing: 6) {
                         Text(entry.media.title).font(RealFont.inter(14)).foregroundStyle(.white).lineLimit(1)
                         if entry.series {
-                            Text("dizi").font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF9A9A9A)).padding(.horizontal, 5).padding(.vertical, 1)
+                            Text(t("dizi")).font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF9A9A9A)).padding(.horizontal, 5).padding(.vertical, 1)
                                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(argb: 0xFF333333), lineWidth: 1))
                         }
                         Spacer(minLength: 4)
-                        Text(v.map(scoreText) ?? (entry.series ? "Bölümleri puanla" : "Puan ver"))
+                        Text(v.map(scoreText) ?? (entry.series ? t("Bölümleri puanla") : t("Puan ver")))
                             .font(RealFont.inter(v != nil ? 15 : 12, .medium)).foregroundStyle(v != nil ? tone : Color(argb: 0xFF9A9A9A))
                     }
                     GeometryReader { geo in
@@ -268,7 +269,7 @@ private struct RatingRow: View {
                     let when: String = entry.addedAt.map { at in
                         let f = DateFormatter(); f.dateFormat = "dd.MM"
                         return f.string(from: Date(timeIntervalSince1970: Double(at) / 1000))
-                    } ?? "eskiden"
+                    } ?? t("eskiden")
                     Text([diff.map { ($0 >= 0 ? "+" : "−") + scoreText(round1(abs($0))) }, when].compactMap { $0 }.joined(separator: " · "))
                         .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF666666)).padding(.top, 3)
                 }
@@ -304,13 +305,13 @@ private struct SeriesGrid: View {
                     PosterArtwork(media: entry.media, titleSize: 12).frame(width: 132, height: 192)
                         .clipShape(RoundedRectangle(cornerRadius: 14)).padding(.top, 58)
                     Text(entry.media.title).font(RealFont.inter(24)).foregroundStyle(.white).multilineTextAlignment(.center).lineLimit(2).padding(.top, 16)
-                    Text([entry.media.year.map(String.init), episodes.map { "\(Set($0.map(\.season)).count) sezon · \($0.count) bölüm" } ?? "Bölümler yükleniyor…"]
+                    Text([entry.media.year.map(String.init), episodes.map { t("{0} sezon · {1} bölüm", Set($0.map(\.season)).count, $0.count) } ?? t("Bölümler yükleniyor…")]
                         .compactMap { $0 }.joined(separator: " · "))
                         .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF999999)).padding(.top, 4)
                     HStack(alignment: .lastTextBaseline, spacing: 0) {
                         Text(entry.value.map(scoreText) ?? "–").font(RealFont.inter(44, .medium))
                             .foregroundStyle(entry.value != nil ? ratingColors(entry.value).bg : Color(argb: 0xFF555555))
-                        Text(entry.value != nil ? "  bölüm ortalaman" : "  henüz bölüm puanı yok").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF888888))
+                        Text(entry.value != nil ? t("  bölüm ortalaman") : t("  henüz bölüm puanı yok")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF888888))
                     }
                     .padding(.top, 14).padding(.bottom, 22)
                     if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)).padding(.bottom, 12) }
@@ -340,12 +341,12 @@ private struct SeriesGrid: View {
                     }
                     if !(episodes ?? []).isEmpty {
                         HStack(spacing: 8) {
-                            Text("Kötü"); Capsule().fill(LinearGradient(colors: ratingScale, startPoint: .leading, endPoint: .trailing)).frame(height: 6); Text("Efsane")
+                            Text(t("Kötü")); Capsule().fill(LinearGradient(colors: ratingScale, startPoint: .leading, endPoint: .trailing)).frame(height: 6); Text(t("Efsane"))
                         }
                         .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF777777)).padding(.top, 10)
                     }
                     Button { confirmRemove = true } label: {
-                        Text("Listeden çıkar").font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFF8A80)).padding(.vertical, 8)
+                        Text(t("Listeden çıkar")).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFF8A80)).padding(.vertical, 8)
                     }
                     .buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 28).padding(.bottom, 40)
                 }
@@ -354,10 +355,10 @@ private struct SeriesGrid: View {
             .scrollIndicators(.hidden)
             BackCircle(action: onBack).padding(.leading, 20).padding(.top, 10)
         }
-        .alert("Diziyi listeden çıkarmak istediğine emin misin?", isPresented: $confirmRemove) {
-            Button("Çıkar", role: .destructive, action: onRemove)
-            Button("Vazgeç", role: .cancel) {}
-        } message: { Text("\(entry.media.title) ve bölüm puanları Puanlarım'dan silinir.") }
+        .alert(t("Diziyi listeden çıkarmak istediğine emin misin?"), isPresented: $confirmRemove) {
+            Button(t("Çıkar"), role: .destructive, action: onRemove)
+            Button(t("Vazgeç"), role: .cancel) {}
+        } message: { Text(t("{0} ve bölüm puanları Puanlarım'dan silinir.", entry.media.title)) }
         .task(id: entry.key) {
             do { episodes = try await MediaRatingStore.shared.episodes(entry.media) } catch { self.error = error.localizedDescription; episodes = [] }
         }
@@ -372,7 +373,7 @@ struct FilmRatingSheet: View {
     let meta: String
     let initial: Double?
     var onRemove: (() -> Void)?
-    var removeLabel = "Puanı kaldır"
+    var removeLabel = t("Puanı kaldır")
     let onSave: (Double) -> Void
     @State private var text: String?
     @State private var loading = true
@@ -434,7 +435,7 @@ struct RatingSheet: View {
     let reminder: String?
     let initial: Double?
     var onRemove: (() -> Void)?
-    var removeLabel = "Puanı kaldır"
+    var removeLabel = t("Puanı kaldır")
     var reminderLoading = false
     var titleLoading = false
     var onSkipLoading: (() -> Void)?
@@ -469,7 +470,7 @@ struct RatingSheet: View {
                             })
                     }
                     if overflows || expanded {
-                        Text(expanded ? "Daha az" : "Devamı").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF6A6A6A))
+                        Text(expanded ? t("Daha az") : t("Devamı")).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF6A6A6A))
                     }
                 }
                 .padding(.top, 8).contentShape(Rectangle())
@@ -497,15 +498,15 @@ struct RatingSheet: View {
                 })
             }
             .frame(height: 72).padding(.top, 16)
-            Text("Sürükle veya bas").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF666666)).padding(.top, 8)
+            Text(t("Sürükle veya bas")).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF666666)).padding(.top, 8)
             HStack(spacing: 10) {
                 Button { onRemove?(); dismiss() } label: {
-                    Text(onRemove != nil ? removeLabel : "Vazgeç").font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFBBBBBB))
+                    Text(onRemove != nil ? removeLabel : t("Vazgeç")).font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFBBBBBB))
                         .frame(maxWidth: .infinity, minHeight: 48).overlay(Capsule().stroke(Color(argb: 0xFF3A3A3A), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 Button { onSave(value); dismiss() } label: {
-                    Text("Kaydet").font(RealFont.inter(15, .medium)).foregroundStyle(.black)
+                    Text(t("Kaydet")).font(RealFont.inter(15, .medium)).foregroundStyle(.black)
                         .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white))
                 }
                 .buttonStyle(.plain).layoutPriority(1)

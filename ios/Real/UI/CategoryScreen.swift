@@ -137,9 +137,14 @@ struct CategoryScreen: View {
                         }
                         ForEach(slots[lists.active.count] ?? []) { dividerRow($0) }
                         ForEach(calendarItems.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }) { o in
-                            // A phone-calendar event: opens the event window; no completing, swiping or selecting.
+                            // A phone-calendar event: opens the event window; no completing or selecting. Once it
+                            // ended today it is faded, and a left swipe hides it.
+                            let past = CalendarCards.isPast(o)
                             ReminderCardView(reminder: CalendarCards.card(o), category: custom, showCategoryStripes: false,
-                                             onOpen: { if !keyboard.consumeTap() { externalDetail = o } })
+                                             onOpen: { if !keyboard.consumeTap() { externalDetail = o } },
+                                             onSwipeDelete: past ? { CalendarPastDismissals.shared.dismiss(o) } : nil,
+                                             swipeLeftHides: past)
+                                .opacity(past ? 0.45 : 1)
                                 .padding(.horizontal, 16).padding(.bottom, 8)
                         }
                     }

@@ -57,7 +57,7 @@ final class RealAuth {
     /// Google → Firebase credential. Returns the signed-in account, or nil when cancelled / failed (see lastError).
     func signInWithGoogle() async -> Account? {
         guard isAvailable else {
-            lastError = "Google ile giriş bu sürümde henüz kullanılamıyor."
+            lastError = t("Google ile giriş bu sürümde henüz kullanılamıyor.")
             return nil
         }
         guard let presenter = Self.topViewController() else { return nil }
@@ -67,7 +67,7 @@ final class RealAuth {
         do {
             let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presenter)
             guard let idToken = result.user.idToken?.tokenString else {
-                lastError = "Google girişi tamamlanamadı."
+                lastError = t("Google girişi tamamlanamadı.")
                 return nil
             }
             let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: result.user.accessToken.tokenString)
@@ -77,7 +77,7 @@ final class RealAuth {
         } catch {
             let nsError = error as NSError
             if nsError.domain == kGIDSignInErrorDomain && nsError.code == GIDSignInError.canceled.rawValue { return nil }
-            lastError = "Google ile giriş yapılamadı."
+            lastError = t("Google ile giriş yapılamadı.")
             return nil
         }
     }
@@ -87,7 +87,7 @@ final class RealAuth {
     /// Apple → Firebase credential (with a one-time nonce). The name comes only on the first sign-in; it is kept then.
     func signInWithApple() async -> Account? {
         guard isAvailable else {
-            lastError = "Apple ile giriş bu sürümde henüz kullanılamıyor."
+            lastError = t("Apple ile giriş bu sürümde henüz kullanılamıyor.")
             return nil
         }
         busy = true
@@ -97,7 +97,7 @@ final class RealAuth {
         do {
             let apple = try await AppleSignInRequest.run(nonce: nonce)
             guard let data = apple.identityToken, let idToken = String(data: data, encoding: .utf8) else {
-                lastError = "Apple girişi tamamlanamadı."
+                lastError = t("Apple girişi tamamlanamadı.")
                 return nil
             }
             let credential = OAuthProvider.appleCredential(withIDToken: idToken, rawNonce: nonce, fullName: apple.fullName)
@@ -113,7 +113,7 @@ final class RealAuth {
             return account
         } catch {
             if (error as? ASAuthorizationError)?.code == .canceled { return nil }
-            lastError = "Apple ile giriş yapılamadı."
+            lastError = t("Apple ile giriş yapılamadı.")
             return nil
         }
     }
@@ -142,7 +142,7 @@ final class RealAuth {
     var usesPassword: Bool { Auth.auth().currentUser?.providerData.contains { $0.providerID == EmailAuthProviderID } ?? false }
 
     func signInWithEmail(_ email: String, password: String) async throws -> Account? {
-        guard isAvailable else { throw Self.failure("Giriş bu sürümde henüz kullanılamıyor.") }
+        guard isAvailable else { throw Self.failure(t("Giriş bu sürümde henüz kullanılamıyor.")) }
         do {
             _ = try await Auth.auth().signIn(withEmail: email.trimmingCharacters(in: .whitespaces), password: password)
             refreshAccount()
@@ -152,7 +152,7 @@ final class RealAuth {
 
     /// New account with the name others see (Ad zorunlu, Soyad isteğe bağlı); the name is saved before returning.
     func createAccount(email: String, password: String, firstName: String, lastName: String) async throws -> Account? {
-        guard isAvailable else { throw Self.failure("Giriş bu sürümde henüz kullanılamıyor.") }
+        guard isAvailable else { throw Self.failure(t("Giriş bu sürümde henüz kullanılamıyor.")) }
         let name = [firstName, lastName].map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
         do {
             let result = try await Auth.auth().createUser(withEmail: email.trimmingCharacters(in: .whitespaces), password: password)
@@ -187,12 +187,12 @@ final class RealAuth {
         let code = AuthErrorCode(rawValue: (error as NSError).code)
         let text: String
         switch code {
-        case .weakPassword: text = "Şifre çok zayıf. En az 6 karakter kullanın."
-        case .emailAlreadyInUse: text = "Bu e-posta adresi zaten başka bir hesapta kullanılıyor."
-        case .wrongPassword, .invalidCredential, .userNotFound, .invalidEmail: text = "E-posta veya şifre geçersiz."
-        case .tooManyRequests: text = "Çok fazla deneme yapıldı. Biraz sonra tekrar deneyin."
-        case .networkError: text = "İnternet bağlantısını kontrol edin."
-        default: text = "Kimlik doğrulama başarısız."
+        case .weakPassword: text = t("Şifre çok zayıf. En az 6 karakter kullanın.")
+        case .emailAlreadyInUse: text = t("Bu e-posta adresi zaten başka bir hesapta kullanılıyor.")
+        case .wrongPassword, .invalidCredential, .userNotFound, .invalidEmail: text = t("E-posta veya şifre geçersiz.")
+        case .tooManyRequests: text = t("Çok fazla deneme yapıldı. Biraz sonra tekrar deneyin.")
+        case .networkError: text = t("İnternet bağlantısını kontrol edin.")
+        default: text = t("Kimlik doğrulama başarısız.")
         }
         return failure(text)
     }
@@ -246,9 +246,9 @@ final class RealAuth {
     /// Saves the Firebase display name; the worker reads it from a fresh ID token.
     func updateDisplayName(_ name: String) async throws {
         let clean = name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        guard !clean.isEmpty else { throw CalendarCardPublisher.Failure(errorDescription: "Adını yaz.") }
+        guard !clean.isEmpty else { throw CalendarCardPublisher.Failure(errorDescription: t("Adını yaz.")) }
         guard clean.count <= 80, !clean.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-            throw CalendarCardPublisher.Failure(errorDescription: "Ad en fazla 80 karakter olmalı.")
+            throw CalendarCardPublisher.Failure(errorDescription: t("Ad en fazla 80 karakter olmalı."))
         }
         guard let user = Auth.auth().currentUser, user.uid == account?.uid else { throw URLError(.userAuthenticationRequired) }
         let change = user.createProfileChangeRequest()
@@ -368,7 +368,7 @@ final class RealDebugAppCheckProvider: NSObject, AppCheckProvider {
                   let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let token = body["token"] as? String else {
                 handler(nil, NSError(domain: "RealAppCheck", code: status,
-                                     userInfo: [NSLocalizedDescriptionKey: "App Check jeton değişimi başarısız (\(status))"]))
+                                     userInfo: [NSLocalizedDescriptionKey: t("App Check jeton değişimi başarısız ({0})", status)]))
                 return
             }
             let ttl = Double((body["ttl"] as? String)?.replacingOccurrences(of: "s", with: "") ?? "") ?? 3600

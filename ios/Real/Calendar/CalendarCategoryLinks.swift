@@ -36,6 +36,27 @@ final class CalendarCategoryLinks {
     }
 }
 
+/// Calendar events swiped off once they ended ("Gizle"), by occurrence. Only today's can be swiped, so keys of
+/// earlier days are dropped on the next write.
+@Observable
+final class CalendarPastDismissals {
+    static let shared = CalendarPastDismissals()
+    private(set) var revision = 0
+    @ObservationIgnored private let key = "calendar_past_dismissed"
+
+    func isDismissed(_ o: CalendarOccurrence) -> Bool {
+        (UserDefaults.standard.dictionary(forKey: key) as? [String: Double])?[o.id] != nil
+    }
+
+    func dismiss(_ o: CalendarOccurrence) {
+        let yesterday = Calendar.real.startOfDay(for: Date()).timeIntervalSince1970 - 86_400
+        var kept = ((UserDefaults.standard.dictionary(forKey: key) as? [String: Double]) ?? [:]).filter { $0.value >= yesterday }
+        kept[o.id] = o.start.timeIntervalSince1970
+        UserDefaults.standard.set(kept, forKey: key)
+        revision += 1
+    }
+}
+
 /// Phone-calendar events as read-only cards: inside their category (the coming year) and, with Ayarlar → "Ana ekranda
 /// takvim", on Home for the next 7 / 14 days. A card's id is negative; it opens the same event window as the calendar.
 @MainActor
@@ -43,21 +64,26 @@ enum CalendarCards {
     static let homeDaysKey = "calendar_home_days"
     private static var cache: (stamp: String, items: [CalendarOccurrence])?
 
-    /// The nearest occurrence of every upcoming event in the next [days] days.
+    /// The nearest occurrence of every upcoming event in the next [days] days, plus today's events that already
+    /// ended: those stay, faded ([isPast]), until midnight or a "Gizle" swipe.
     static func upcoming(days: Int) -> [CalendarOccurrence] {
         let connection = CalendarConnection.shared
         let links = CalendarCategoryLinks.shared
+        let dismissals = CalendarPastDismissals.shared
         let today = Calendar.real.startOfDay(for: Date())
-        let stamp = "\(connection.revision)/\(links.revision)/\(today.timeIntervalSince1970)/\(days)"
+        let stamp = "\(connection.revision)/\(links.revision)/\(dismissals.revision)/\(today.timeIntervalSince1970)/\(days)"
         if let cache, cache.stamp == stamp { return cache.items }
         let end = Calendar.real.date(byAdding: .day, value: days, to: today)!
         var seen = Set<String>()
         let items = connection.occurrences(from: today, to: end)
-            .filter { $0.end > Date() }
+            .filter { $0.end > today && ($0.end > Date() || !dismissals.isDismissed($0)) }
             .filter { seen.insert(CalendarCategoryLinks.eventKey($0)).inserted }
         cache = (stamp, items)
         return items
     }
+
+    /// Ended today: shown faded; a left swipe hides it.
+    static func isPast(_ o: CalendarOccurrence) -> Bool { o.end <= Date() }
 
     static func card(_ o: CalendarOccurrence) -> ReminderItem { PlannerScreen.externalCard(o) }
 

@@ -353,7 +353,7 @@ final class PanoStore {
                     // Changed on another device: the server copy wins.
                     queue.removeAll { $0.itemId == itemId }
                     if let server = Self.item(raw, boardId: op.boardId) { replace(server) }
-                    RealToast.shared.show("Bir pano bloğu başka cihazda değişmişti; son hali alındı")
+                    RealToast.shared.show(t("Bir pano bloğu başka cihazda değişmişti; son hali alındı"))
                 } else if status == 410 || (status == 404 && error == "ITEM_NOT_FOUND"), let itemId = op.itemId {
                     queue.removeAll { $0.itemId == itemId }
                     items[op.boardId]?.removeAll { $0.id == itemId }

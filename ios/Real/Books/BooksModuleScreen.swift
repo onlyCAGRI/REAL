@@ -5,8 +5,8 @@ struct BooksWidgetCard: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Kitaplar").font(.system(size: 26, weight: .medium, design: .serif)).foregroundStyle(.white)
-                Text("Kendi rafın, kendi okuma alanın").font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.6))
+                Text(t("Kitaplar")).font(.system(size: 26, weight: .medium, design: .serif)).foregroundStyle(.white)
+                Text(t("Kendi rafın, kendi okuma alanın")).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.6))
             }
             Spacer()
             HStack(spacing: 4) {
@@ -80,7 +80,7 @@ struct BooksModuleScreen: View {
                 if let f = flight { flightLayer(f, target: target, geo: geo) }
                 if let error { errorToast(error) }
                 if busy {
-                    Text("Hazırlanıyor…").font(RealFont.inter(15)).foregroundStyle(store.theme.text)
+                    Text(t("Hazırlanıyor…")).font(RealFont.inter(15)).foregroundStyle(store.theme.text)
                         .padding(28).background(store.theme.chrome, in: RoundedRectangle(cornerRadius: 24))
                 }
                 if editingTitle, let book = selected { renameDialog(book) }
@@ -93,16 +93,16 @@ struct BooksModuleScreen: View {
             if documents == nil { documents = BookDocuments(store: store) }
             resumeIfNeeded()
         }
-        .alert(sectionEditing == "" ? "Yeni bölüm" : "Bölümün adı", isPresented: Binding(
+        .alert(sectionEditing == "" ? t("Yeni bölüm") : t("Bölümün adı"), isPresented: Binding(
             get: { sectionEditing != nil }, set: { if !$0 { sectionEditing = nil } })) {
-            TextField("Bölüm adı", text: $sectionDraft)
-            Button("Vazgeç", role: .cancel) { sectionEditing = nil }
-            Button(sectionEditing == "" ? "Ekle" : "Kaydet") {
+            TextField(t("Bölüm adı"), text: $sectionDraft)
+            Button(t("Vazgeç"), role: .cancel) { sectionEditing = nil }
+            Button(sectionEditing == "" ? t("Ekle") : t("Kaydet")) {
                 guard let old = sectionEditing else { return }
                 withAnimation(.easeOut(duration: 0.2)) {
                     if old.isEmpty {
                         if !sectionDraft.trimmingCharacters(in: .whitespaces).isEmpty, store.addSection(sectionDraft) == nil {
-                            error = "Bu adla bir bölüm zaten var."
+                            error = t("Bu adla bir bölüm zaten var.")
                         }
                     } else { store.renameSection(old, to: sectionDraft) }
                 }
@@ -217,7 +217,7 @@ struct BooksModuleScreen: View {
                         ReaderCircleButton(theme: theme, glass: true, action: back) {
                             RealSymbol("chevron.left", size: 20.7)
                         }
-                        Text("Kitap").font(.system(size: 26, weight: .medium, design: .serif)).foregroundStyle(theme.text)
+                        Text(t("Kitap")).font(.system(size: 26, weight: .medium, design: .serif)).foregroundStyle(theme.text)
                         Spacer()
                     }
                     .padding(.horizontal, 24).padding(.top, 8)
@@ -236,13 +236,13 @@ struct BooksModuleScreen: View {
                                 Text(book.author).font(RealFont.inter(14)).foregroundStyle(theme.chromeText.opacity(0.6)).lineLimit(1).padding(.top, 8)
                             }
                             Button { draftTitle = book.title; editingTitle = true } label: {
-                                Text("Adı düzenle").font(RealFont.inter(13)).foregroundStyle(theme.chromeText.opacity(0.55))
+                                Text(t("Adı düzenle")).font(RealFont.inter(13)).foregroundStyle(theme.chromeText.opacity(0.55))
                                     .padding(.horizontal, 12).padding(.vertical, 4)
                             }
                             .buttonStyle(.plain).padding(.top, 10)
                             HStack(spacing: 10) {
-                                PanelButton(text: canRead ? "Oku" : "Dosyadan ekle", primary: true, theme: theme) { read(book) }
-                                PanelButton(text: "Kaldır", primary: false, theme: theme) {
+                                PanelButton(text: canRead ? t("Oku") : t("Dosyadan ekle"), primary: true, theme: theme) { read(book) }
+                                PanelButton(text: t("Kaldır"), primary: false, theme: theme) {
                                     store.remove(book.id)
                                     selected = nil
                                     page = .shelf
@@ -264,7 +264,7 @@ struct BooksModuleScreen: View {
                     if let r = book.rights, !r.isEmpty { Text(r).font(RealFont.inter(12)).foregroundStyle(theme.muted) }
                     if let d = book.description, !d.isEmpty { Text(d).font(RealFont.inter(15)).foregroundStyle(theme.text) }
                     if !canRead {
-                        Text("Bu kitap için cihazda tam dosya bulunamadı. Kendi PDF, EPUB veya TXT dosyanı ekleyebilirsin. Mevcut kitap bilgileri korunuyor.")
+                        Text(t("Bu kitap için cihazda tam dosya bulunamadı. Kendi PDF, EPUB veya TXT dosyanı ekleyebilirsin. Mevcut kitap bilgileri korunuyor."))
                             .font(RealFont.inter(13)).foregroundStyle(theme.muted)
                     }
                 }
@@ -296,7 +296,7 @@ struct BooksModuleScreen: View {
         return ZStack {
             Color.black.opacity(0.45).ignoresSafeArea().onTapGesture { editingTitle = false }
             VStack(alignment: .leading, spacing: 0) {
-                Text("Kitap adı").font(RealFont.inter(13)).foregroundStyle(theme.chromeText.opacity(0.6))
+                Text(t("Kitap adı")).font(RealFont.inter(13)).foregroundStyle(theme.chromeText.opacity(0.6))
                 TextField("", text: $draftTitle, axis: .vertical)
                     .font(.system(size: 18, design: .serif)).foregroundStyle(theme.chromeText).lineLimit(1...3)
                     .submitLabel(.done)
@@ -305,8 +305,8 @@ struct BooksModuleScreen: View {
                     .background(theme.chromeText.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
                     .padding(.top, 10)
                 HStack(spacing: 10) {
-                    PanelButton(text: "Vazgeç", primary: false, theme: theme) { editingTitle = false }
-                    PanelButton(text: "Kaydet", primary: true, theme: theme) { saveTitle(book) }
+                    PanelButton(text: t("Vazgeç"), primary: false, theme: theme) { editingTitle = false }
+                    PanelButton(text: t("Kaydet"), primary: true, theme: theme) { saveTitle(book) }
                 }
                 .padding(.top, 16)
             }
@@ -327,7 +327,7 @@ struct BooksModuleScreen: View {
             Spacer()
             VStack(alignment: .leading, spacing: 0) {
                 Text(message).font(RealFont.inter(12)).foregroundStyle(store.theme.chromeText)
-                Button("Kapat") { error = nil }.font(RealFont.inter(12)).foregroundStyle(store.theme.chromeText).padding(.vertical, 12)
+                Button(t("Kapat")) { error = nil }.font(RealFont.inter(12)).foregroundStyle(store.theme.chromeText).padding(.vertical, 12)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
             .background(store.theme.chrome, in: RoundedRectangle(cornerRadius: 18))

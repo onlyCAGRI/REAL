@@ -57,11 +57,11 @@ struct DiscoveryScreen: View {
             withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.5).delay(0.3)) { entered = true }
         }
         .edgeSwipeBack { back() }
-        .alert("Öneriyi bildir", isPresented: $reportNotice) { Button("Tamam", role: .cancel) {} } message: {
-            Text("Bildirim göndermek için REAL'e giriş yapman gerekiyor.")
+        .alert(t("Öneriyi bildir"), isPresented: $reportNotice) { Button(t("Tamam"), role: .cancel) {} } message: {
+            Text(t("Bildirim göndermek için REAL'e giriş yapman gerekiyor."))
         }
         .sheet(item: $rateWatched) { media in
-            FilmRatingSheet(media: media, meta: [media.year.map(String.init), "İzledim"].compactMap { $0 }.joined(separator: " · "), initial: nil) {
+            FilmRatingSheet(media: media, meta: [media.year.map(String.init), t("İzledim")].compactMap { $0 }.joined(separator: " · "), initial: nil) {
                 MediaRatingStore.shared.rate(media, $0, past: true)
             }
         }
@@ -80,11 +80,11 @@ struct DiscoveryScreen: View {
     private var filterPage: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
-                YasamHeroSentence(greeting: "", sentence: kind == .film ? "Ne izlesek" : "Ne oynasak", tone: accent,
+                YasamHeroSentence(greeting: "", sentence: kind == .film ? t("Ne izlesek") : t("Ne oynasak"), tone: accent,
                                   hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
                     .padding(.top, 4)
                 BackCircle(action: back).padding(.leading, 22).padding(.top, 12)
-                    .accessibilityLabel("Yaşam'a dön")
+                    .accessibilityLabel(t("Yaşam'a dön"))
             }
             if let error { errorLine(error) }
             // One question at a time (DiscoveryStepper): 2 genres at most, then optional extras.
@@ -95,7 +95,7 @@ struct DiscoveryScreen: View {
                     filters = all.subtracting(platformKeys); platforms = all.intersection(platformKeys)
                 }),
                 accent: accent, loading: loading, enabled: discovery.service.available,
-                doneLabel: kind == .film ? "afişleri getir" : "oyunları getir", step: $pickerStep,
+                doneLabel: kind == .film ? t("afişleri getir") : t("oyunları getir"), step: $pickerStep,
                 rare: { chosen, key in DiscoveryRarePairs.rare(kind == .film ? DiscoveryRarePairs.film : DiscoveryRarePairs.game, chosen, key) },
                 onDone: fetch)
                 .opacity(entered ? 1 : 0).offset(y: entered ? 0 : 16)
@@ -108,29 +108,34 @@ struct DiscoveryScreen: View {
         for f in film where f.themeGroup != nil { if !themeOrder.contains(f.themeGroup!) { themeOrder.append(f.themeGroup!) } }
         let typeRow = AnyView(ChipFlow(spacing: 8) {
             ForEach([("BOTH", "Film + Dizi"), ("MOVIE", "Film"), ("TV", "Dizi")], id: \.0) { key, label in
-                DiscoveryChip(label: label, selected: type == key, enabled: !loading, accent: accent) { type = key }
+                DiscoveryChip(label: t(label), selected: type == key, enabled: !loading, accent: accent) { type = key }
             }
         })
         return [
-            DiscoveryStep(title: "Hangi türde bir şey olsun?", subtitle: "En fazla 2 tür", max: 2, optional: false,
-                          groups: [(nil, film.filter(\.genre).map { StepOption(key: $0.key, label: $0.label) })], top: typeRow),
-            DiscoveryStep(title: "Konusu ne olsun?", subtitle: "İstersen bir tane", max: 1, optional: true,
-                          groups: themeOrder.map { g in (g, film.filter { $0.themeGroup == g }.map { StepOption(key: $0.key, label: $0.label) }) }),
-            DiscoveryStep(title: "Nasıl hissettirsin?", subtitle: "İstersen bir tane", max: 1, optional: true,
-                          groups: [(nil, film.filter { !$0.genre && $0.themeGroup == nil }.map { StepOption(key: $0.key, label: $0.label) })]),
+            DiscoveryStep(title: t("Hangi türde bir şey olsun?"), subtitle: t("En fazla 2 tür"), max: 2, optional: false,
+                          groups: [(nil, film.filter(\.genre).map { StepOption(key: $0.key, label: filterLabel($0.label)) })], top: typeRow),
+            DiscoveryStep(title: t("Konusu ne olsun?"), subtitle: t("İstersen bir tane"), max: 1, optional: true,
+                          groups: themeOrder.map { g in (t(g), film.filter { $0.themeGroup == g }.map { StepOption(key: $0.key, label: filterLabel($0.label)) }) }),
+            DiscoveryStep(title: t("Nasıl hissettirsin?"), subtitle: t("İstersen bir tane"), max: 1, optional: true,
+                          groups: [(nil, film.filter { !$0.genre && $0.themeGroup == nil }.map { StepOption(key: $0.key, label: filterLabel($0.label)) })]),
         ]
     }
 
     private var gameSteps: [DiscoveryStep] {
         let game = DiscoveryFilter.game
         return [
-            DiscoveryStep(title: "Hangi türde bir oyun?", subtitle: "En fazla 2 tür", max: 2, optional: false,
-                          groups: [(nil, game.filter(\.genre).map { StepOption(key: $0.key, label: $0.label) })]),
-            DiscoveryStep(title: "Nasıl hissettirsin?", subtitle: "İstersen bir tane", max: 1, optional: true,
-                          groups: [(nil, game.filter { !$0.genre }.map { StepOption(key: $0.key, label: $0.label) })]),
-            DiscoveryStep(title: "Nerede oynayacaksın?", subtitle: "İstersen bir platform", max: 1, optional: true,
-                          groups: [(nil, GamePlatformGroup.all.map { StepOption(key: $0.key, label: $0.label) })]),
+            DiscoveryStep(title: t("Hangi türde bir oyun?"), subtitle: t("En fazla 2 tür"), max: 2, optional: false,
+                          groups: [(nil, game.filter(\.genre).map { StepOption(key: $0.key, label: filterLabel($0.label)) })]),
+            DiscoveryStep(title: t("Nasıl hissettirsin?"), subtitle: t("İstersen bir tane"), max: 1, optional: true,
+                          groups: [(nil, game.filter { !$0.genre }.map { StepOption(key: $0.key, label: filterLabel($0.label)) })]),
+            DiscoveryStep(title: t("Nerede oynayacaksın?"), subtitle: t("İstersen bir platform"), max: 1, optional: true,
+                          groups: [(nil, GamePlatformGroup.all.map { StepOption(key: $0.key, label: t($0.label)) })]),
         ]
+    }
+
+    /// "Tarih" and "Spor" mean a genre here, not a date or exercise.
+    private func filterLabel(_ label: String) -> String {
+        label == "Tarih" || label == "Spor" ? tIn("genre", label) : t(label)
     }
 
     private func fetch() {
@@ -181,11 +186,11 @@ struct DiscoveryScreen: View {
             SwipeEdgeGlow(offset: dragOffset, listMode: isList).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack { BackCircle(action: back); Spacer() }.padding(.horizontal, 20).padding(.vertical, 10)
-                DiscoveryHeadline(text: isList ? (kind == .film ? "İZLENECEK LİSTEM" : "OYNANACAK LİSTEM") : "SANA GÖRE", small: isList)
+                DiscoveryHeadline(text: isList ? (kind == .film ? t("İZLENECEK LİSTEM") : t("OYNANACAK LİSTEM")) : t("SANA GÖRE"), small: isList)
                     .padding(.top, 2).padding(.bottom, 6)
                 if let first = cards.first {
                     Button { reportNotice = true } label: {
-                        Text("Öneriyi bildir").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7)).padding(6)
+                        Text(t("Öneriyi bildir")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7)).padding(6)
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint(first.media.title)
@@ -196,10 +201,10 @@ struct DiscoveryScreen: View {
                         .padding(.horizontal, 14)
                 } else {
                     VStack(spacing: 16) {
-                        Text(isList ? (kind == .film ? "İzlenecek listen henüz boş." : "Oynanacak listen henüz boş.") : "Bu destenin sonuna geldin.")
+                        Text(isList ? (kind == .film ? t("İzlenecek listen henüz boş.") : t("Oynanacak listen henüz boş.")) : t("Bu destenin sonuna geldin."))
                             .font(RealFont.inter(15)).foregroundStyle(.white)
                         if !isList {
-                            DiscoveryChip(label: loading ? "Hazırlanıyor…" : "Daha fazla öner", selected: false, enabled: !loading, accent: accent) {
+                            DiscoveryChip(label: loading ? t("Hazırlanıyor…") : t("Daha fazla öner"), selected: false, enabled: !loading, accent: accent) {
                                 let s = discovery.snapshot(kind)
                                 type = s.type; filters = Set(s.filters)
                                 fetch()
@@ -212,8 +217,8 @@ struct DiscoveryScreen: View {
                 if let error { errorLine(error) }
             }
             if !cards.isEmpty {
-                if isList { SwipeTutorial(kind: kind == .film ? "film_list" : "game_list", rightLabel: "Kaldır", leftLabel: "Sona at") }
-                else { SwipeTutorial(kind: kind == .film ? "film" : "game", rightLabel: "Kaydet", leftLabel: "Geç") }
+                if isList { SwipeTutorial(kind: kind == .film ? "film_list" : "game_list", rightLabel: t("Kaldır"), leftLabel: t("Sona at")) }
+                else { SwipeTutorial(kind: kind == .film ? "film" : "game", rightLabel: t("Kaydet"), leftLabel: t("Geç")) }
             }
         }
         // Keep the deck stocked: with a couple of posters left the next ones load in the background.
@@ -249,12 +254,12 @@ struct DiscoveryScreen: View {
         if kind == .game {
             let m = card.media
             let id = m.providerId ?? m.providerUrl
-            guard !store.reminders.contains(where: { r in r.gameBlocks.contains { $0.providerId == id } }) else { RealToast.shared.show("Bu oyun zaten bir kartta"); return }
+            guard !store.reminders.contains(where: { r in r.gameBlocks.contains { $0.providerId == id } }) else { RealToast.shared.show(t("Bu oyun zaten bir kartta")); return }
             let block = CardGameBlock(providerId: id, title: m.title, year: m.year,
                                       genres: (m.genre ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
                                       platforms: card.platforms, artworkUrl: m.artworkUrl, description: m.description, providerUrl: m.providerUrl)
             _ = store.addReminder(text: m.title) { r in r.gameBlocks = [block] }
-            RealToast.shared.show("REAL'e eklendi")
+            RealToast.shared.show(t("REAL'e eklendi"))
             return
         }
         addToReal(card.media)
@@ -361,7 +366,7 @@ struct DiscoverySelectionPager<Page: View>: View {
                                 .frame(width: 32, height: 32)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(titles[i]), \(i + 1). sayfa, \(count) seçili")
+                        .accessibilityLabel(t("{0}, {1}. sayfa, {2} seçili", titles[i], i + 1, count))
                     }
                 }
             }
@@ -399,7 +404,7 @@ struct DiscoveryLoadingButton: View {
             .init(color: .white, location: 0.9), .init(color: accent.opacity(0.45), location: 0.94),
             .init(color: .clear, location: 1)], center: .center, angle: .degrees(spin ? 360 : 0))
         Button(action: action) {
-            Text(loading ? "Hazırlanıyor…" : label).font(RealFont.inter(16, .semibold)).foregroundStyle(.white).lineLimit(1)
+            Text(loading ? t("Hazırlanıyor…") : label).font(RealFont.inter(16, .semibold)).foregroundStyle(.white).lineLimit(1)
                 .frame(maxWidth: .infinity).frame(height: 56)
                 .background(Color.black, in: Capsule())
                 .overlay {
@@ -684,7 +689,7 @@ private struct PosterDeck: View {
     private func leftLabels(_ item: DiscoveryCard) -> some View {
         let series = item.media.type == .TV
         return VStack(alignment: .leading, spacing: 6) {
-            PosterLabel(text: mediaDurationLabel(item.media.durationMillis, series: series) ?? item.media.year.map(String.init) ?? (series ? "Dizi" : "Film"))
+            PosterLabel(text: mediaDurationLabel(item.media.durationMillis, series: series) ?? item.media.year.map(String.init) ?? (series ? t("Dizi") : t("Film")))
             if let g = DiscoveryRanking.displayGenre(item.media.genre) { PosterLabel(text: g) }
         }
         .padding(14)
@@ -693,7 +698,7 @@ private struct PosterDeck: View {
     private func rightLabels(_ item: DiscoveryCard) -> some View {
         let m = DiscoveryRanking.match(item, filters, kind: kind)
         return VStack(alignment: .trailing, spacing: 6) {
-            PosterLabel(text: kind == .game ? "Oyun" : (item.media.type == .TV ? "Dizi" : "Film"))
+            PosterLabel(text: kind == .game ? t("Oyun") : (item.media.type == .TV ? t("Dizi") : t("Film")))
             if !filters.isEmpty { PosterLabel(text: "\(m.count)/\(filters.count)\(m.inferred ? " · AI" : "")") }
         }
         .padding(14)
@@ -739,7 +744,7 @@ private struct PosterDeck: View {
                 Button { decide(first, .watched, fly: CGSize(width: 0, height: -threshold * 9)) } label: {
                     HStack(spacing: 7) {
                         RealSymbol("checkmark", size: 17)
-                        Text(kind == .game ? "Oynadım" : "İzledim").font(RealFont.inter(13, .medium)).lineLimit(1)
+                        Text(kind == .game ? t("Oynadım") : t("İzledim")).font(RealFont.inter(13, .medium)).lineLimit(1)
                     }
                     .foregroundStyle(busy ? Color(argb: 0xFF66666C) : .white)
                     .padding(.horizontal, 16).frame(minHeight: 48)
@@ -797,12 +802,12 @@ struct MediaDiscoveryDetail: View {
                                     Button { UIApplication.shared.open(trailer) } label: {
                                         HStack(spacing: 6) {
                                             RealSymbol("play.fill", size: 11)
-                                            Text("Fragman").font(RealFont.inter(13, .semibold))
+                                            Text(t("Fragman")).font(RealFont.inter(13, .semibold))
                                         }
                                         .foregroundStyle(.white).padding(.horizontal, 14).frame(height: 36)
                                         .liquidGlass(Capsule(), role: .chrome)
                                     }
-                                    .buttonStyle(.plain).padding(12).accessibilityLabel("Fragmanı aç")
+                                    .buttonStyle(.plain).padding(12).accessibilityLabel(t("Fragmanı aç"))
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -831,9 +836,9 @@ struct MediaDiscoveryDetail: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            BackCircle(action: close).accessibilityLabel("Afişlere dön")
+            BackCircle(action: close).accessibilityLabel(t("Afişlere dön"))
             Spacer()
-            capsule(kind == .game ? "Oyun" : (card.media.type == .TV ? "Dizi" : "Film"))
+            capsule(kind == .game ? t("Oyun") : (card.media.type == .TV ? t("Dizi") : t("Film")))
             capsule(mediaDurationLabel(detail?.durationMillis ?? card.media.durationMillis, series: card.media.type == .TV))
             capsule(nil, rating: true)
         }
@@ -844,14 +849,14 @@ struct MediaDiscoveryDetail: View {
         Text(label ?? " ").font(RealFont.inter(11)).foregroundStyle(.white).lineLimit(1)
             .padding(.horizontal, 10).frame(minWidth: rating ? 54 : 48, minHeight: 30)
             .liquidGlass(Capsule(), role: .chrome)
-            .accessibilityLabel(label ?? (rating ? "Puan henüz mevcut değil" : "Süre bilgisi mevcut değil"))
+            .accessibilityLabel(label ?? (rating ? t("Puan henüz mevcut değil") : t("Süre bilgisi mevcut değil")))
     }
 
     private var content: some View {
         let description = detail?.description.flatMap { $0.isEmpty ? nil : $0 } ?? card.media.description
         return VStack(alignment: .leading, spacing: 0) {
             Text(card.media.title).font(RealFont.inter(26, .medium)).foregroundStyle(.white).padding(.horizontal, 20).padding(.top, 20)
-            Text(description ?? "Bu yapımın konusu henüz bulunamadı.")
+            Text(description ?? t("Bu yapımın konusu henüz bulunamadı."))
                 .font(RealFont.inter(14)).lineSpacing(7).foregroundStyle(.white.opacity(0.72))
                 .lineLimit(readMore ? nil : 4)
                 .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: readMore ? 1 : 0.75),
@@ -859,7 +864,7 @@ struct MediaDiscoveryDetail: View {
                 .padding(.horizontal, 20).padding(.top, 12)
                 .animation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.38), value: readMore)
             if description?.isEmpty == false {
-                Button(readMore ? "Daha az" : "Devamını oku") { readMore.toggle() }
+                Button(readMore ? t("Daha az") : t("Devamını oku")) { readMore.toggle() }
                     .font(RealFont.inter(12, .semibold)).foregroundStyle(.white).padding(8).padding(.horizontal, 12)
             }
             if kind == .game, let id = card.media.providerId {
@@ -867,7 +872,7 @@ struct MediaDiscoveryDetail: View {
             }
             Text("Cast").font(RealFont.inter(19, .medium)).foregroundStyle(.white).padding(.leading, 20).padding(.top, 22).padding(.bottom, 12)
             castRow
-            Link("\(card.media.provider) · Kaynak", destination: sourceUrl)
+            Link(t("{0} · Kaynak", card.media.provider), destination: sourceUrl)
                 .font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.4)).padding(8).padding(.leading, 12).padding(.top, 18)
             Color.clear.frame(height: 24)
         }
@@ -883,11 +888,11 @@ struct MediaDiscoveryDetail: View {
         if loading {
             HStack(spacing: 10) {
                 ProgressView().tint(.white.opacity(0.65)).scaleEffect(0.8)
-                Text("Oyuncular yükleniyor…").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.55))
+                Text(t("Oyuncular yükleniyor…")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.55))
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
         } else if failed || detail?.cast.isEmpty != false {
-            Text(failed ? "Oyuncular şu anda alınamadı." : "Oyuncu bilgisi bulunamadı.")
+            Text(failed ? t("Oyuncular şu anda alınamadı.") : t("Oyuncu bilgisi bulunamadı."))
                 .font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.55)).padding(.horizontal, 20)
         } else if let detail {
             ScrollView(.horizontal) {
@@ -928,7 +933,7 @@ struct MediaBlockView: View {
     var body: some View {
         if heroInset > 0 && !editing {
             CatalogHeroCover(imageURL: block.artworkUrl.flatMap(URL.init(string:)), posterAspect: 2.0 / 3.0, title: block.title,
-                             subtitle: [block.year.map(String.init), block.type == .MOVIE ? "Film" : "Dizi", block.genre].compactMap { $0 }.joined(separator: " • "),
+                             subtitle: [block.year.map(String.init), block.type == .MOVIE ? t("Film") : t("Dizi"), block.genre].compactMap { $0 }.joined(separator: " • "),
                              description: block.description, placeholderSymbol: "film", inset: heroInset) {
                 if let url = URL(string: block.providerUrl), ["http", "https"].contains(url.scheme ?? "") {
                     HeroOpenRow(label: openLabel, action: { UIApplication.shared.open(url) }) {
@@ -953,18 +958,18 @@ struct MediaBlockView: View {
     private var compact: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(block.type == .MOVIE ? "Film" : "Dizi").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
+                Text(block.type == .MOVIE ? t("Film") : t("Dizi")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
                 Spacer()
                 if editing {
                     Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 40, height: 40) }
-                        .accessibilityLabel("İçeriği kaldır")
+                        .accessibilityLabel(t("İçeriği kaldır"))
                 }
             }
             HStack(alignment: .top, spacing: 12) {
                 PosterArtwork(media: block, titleSize: 11).frame(width: 96, height: 150).clipShape(RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(block.title).font(RealFont.inter(18, .medium)).foregroundStyle(Color(argb: 0xFFF1F1F4)).lineLimit(2)
-                    Text([block.year.map(String.init), block.type == .MOVIE ? "Film" : "Dizi", block.genre].compactMap { $0 }.joined(separator: " • "))
+                    Text([block.year.map(String.init), block.type == .MOVIE ? t("Film") : t("Dizi"), block.genre].compactMap { $0 }.joined(separator: " • "))
                         .font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFB1B1BC)).lineLimit(1)
                     if let d = block.description, !d.isEmpty {
                         Text(d).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF868690)).lineLimit(5)
@@ -986,10 +991,10 @@ struct MediaBlockView: View {
 
     private var openLabel: String {
         switch block.provider.trimmingCharacters(in: .whitespaces).lowercased() {
-        case "tvmaze": return "TVmaze'de aç ↗"
-        case "thetvdb": return "TheTVDB'de aç ↗"
-        case "apple": return "Apple TV'de aç ↗"
-        default: return "\(block.provider)'de aç ↗"
+        case "tvmaze": return t("TVmaze'de aç ↗")
+        case "thetvdb": return t("TheTVDB'de aç ↗")
+        case "apple": return t("Apple TV'de aç ↗")
+        default: return t("{0}'de aç ↗", block.provider)
         }
     }
 }

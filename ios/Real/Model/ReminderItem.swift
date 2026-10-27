@@ -29,20 +29,20 @@ enum JournalMood: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .veryGood: return "Çok iyi"
-        case .good: return "İyi"
-        case .neutral: return "Normal"
-        case .hard: return "Zor"
-        case .bad: return "Kötü"
-        case .happy: return "Mutlu"
-        case .excited: return "Heyecanlı"
-        case .calm: return "Sakin"
-        case .tired: return "Yorgun"
-        case .bored: return "Sıkılmış"
-        case .stressed: return "Stresli"
-        case .angry: return "Sinirli"
-        case .sad: return "Üzgün"
-        case .low: return "Keyifsiz"
+        case .veryGood: return t("Çok iyi")
+        case .good: return t("İyi")
+        case .neutral: return t("Normal")
+        case .hard: return t("Zor")
+        case .bad: return t("Kötü")
+        case .happy: return t("Mutlu")
+        case .excited: return t("Heyecanlı")
+        case .calm: return t("Sakin")
+        case .tired: return t("Yorgun")
+        case .bored: return t("Sıkılmış")
+        case .stressed: return t("Stresli")
+        case .angry: return t("Sinirli")
+        case .sad: return t("Üzgün")
+        case .low: return t("Keyifsiz")
         case .fuckOff: return "F*ck off"
         }
     }
@@ -109,7 +109,7 @@ struct LocationTrigger: Codable, Hashable {
     static let preciseRadius = 100
     static let radiusChoices = [100, 200, 500]
 
-    var label: String { (onExit ? "Ayrılınca · " : "Varınca · ") + placeName }
+    var label: String { (onExit ? t("Ayrılınca · ") : t("Varınca · ")) + placeName }
 }
 
 /// One card inside a Card Stack (CardStackBlock.kt).
@@ -398,10 +398,10 @@ enum ReminderSortOrder: String, CaseIterable, Codable {
 
     var label: String {
         switch self {
-        case .recentlyAdded: return "Son eklenen"
-        case .reminderTime: return "Hatırlatma saati"
-        case .oldestFirst: return "İlk eklenen"
-        case .nearestDate: return "En yakın tarih"
+        case .recentlyAdded: return t("Son eklenen")
+        case .reminderTime: return t("Hatırlatma saati")
+        case .oldestFirst: return t("İlk eklenen")
+        case .nearestDate: return t("En yakın tarih")
         }
     }
 }

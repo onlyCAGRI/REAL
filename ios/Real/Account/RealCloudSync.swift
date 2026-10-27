@@ -148,23 +148,23 @@ final class RealCloudSync {
 
     /// A few lines of a version for comparing (SyncManagementPanel's syncBranchPreview).
     private static func preview(_ raw: String) -> String {
-        guard let o = object(raw) else { return "İçerik önizlenemedi." }
+        guard let o = object(raw) else { return t("İçerik önizlenemedi.") }
         var lines: [String] = []
         for key in ["text", "name"] { if let t = o[key] as? String, !t.isEmpty { lines.append(String(t.prefix(300))); break } }
         if let items = o["checklistItems"] as? [[String: Any]] {
             lines += items.prefix(6).compactMap { ($0["text"] as? String).map { "• " + $0.prefix(100) } }
-            if items.count > 6 { lines.append("… \(items.count) madde") }
+            if items.count > 6 { lines.append(t("… {0} madde", items.count)) }
         }
-        for (key, label) in [("attachments", "ek"), ("voiceRecordings", "ses kaydı"), ("musicBlocks", "müzik"), ("mediaBlocks", "film/dizi")] {
+        for (key, label) in [("attachments", t("ek")), ("voiceRecordings", t("ses kaydı")), ("musicBlocks", t("müzik")), ("mediaBlocks", t("film/dizi"))] {
             if let list = o[key] as? [Any], !list.isEmpty { lines.append("\(list.count) \(label)") }
         }
         if let ms = (o["alertAt"] as? NSNumber)?.int64Value, ms > 0 {
-            lines.append("Saat: " + Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .shortened))
+            lines.append(t("Saat: ") + Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .shortened))
         }
         if let ms = (o["updatedAt"] as? NSNumber)?.int64Value, ms > 0 {
-            lines.append("Düzenleme: " + Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .shortened))
+            lines.append(t("Düzenleme: ") + Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .shortened))
         }
-        return lines.isEmpty ? "İçerik kaydı" : lines.joined(separator: "\n")
+        return lines.isEmpty ? t("İçerik kaydı") : lines.joined(separator: "\n")
     }
 
     // MARK: Choices (Hesapları yönet → Eşitleme)
@@ -238,22 +238,22 @@ final class RealCloudSync {
     static func describe(_ error: Error) -> String {
         if let u = error as? URLError {
             switch u.code {
-            case .notConnectedToInternet, .networkConnectionLost: return "İnternet bağlantısı yok."
-            case .timedOut: return "Bağlantı zaman aşımına uğradı. Biraz sonra tekrar dene."
-            case .userAuthenticationRequired: return "Bunun için REAL'e giriş yap."
-            default: return "Sunucuya ulaşılamadı (\(u.code.rawValue))."
+            case .notConnectedToInternet, .networkConnectionLost: return t("İnternet bağlantısı yok.")
+            case .timedOut: return t("Bağlantı zaman aşımına uğradı. Biraz sonra tekrar dene.")
+            case .userAuthenticationRequired: return t("Bunun için REAL'e giriş yap.")
+            default: return t("Sunucuya ulaşılamadı ({0}).", u.code.rawValue)
             }
         }
-        if error is AppCheckUnavailable { return "Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene." }
-        guard let f = error as? RealBackend.Failure else { return "Şu anda yapılamadı (\(String(describing: type(of: error))))." }
-        let code = f.code ?? (f.status > 0 ? "HTTP \(f.status)" : "yanıt okunamadı")
+        if error is AppCheckUnavailable { return t("Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene.") }
+        guard let f = error as? RealBackend.Failure else { return t("Şu anda yapılamadı ({0}).", String(describing: type(of: error))) }
+        let code = f.code ?? (f.status > 0 ? "HTTP \(f.status)" : t("yanıt okunamadı"))
         switch f.status {
-        case 401: return "Oturumun yenilenmeli. Hesaptan çıkıp tekrar gir."
-        case 403 where f.code == "APP_CHECK_REQUIRED": return "Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene."
-        case 423: return "Hesabın şu anda bir işlem nedeniyle kilitli. Biraz sonra tekrar dene."
-        case 429: return "Çok sık eşitlendi. Biraz sonra tekrar dene."
-        case 503: return "Bulut eşitlemesi şu anda kapalı (\(code))."
-        default: return "Şu anda yapılamadı (\(code)). Biraz sonra tekrar dene."
+        case 401: return t("Oturumun yenilenmeli. Hesaptan çıkıp tekrar gir.")
+        case 403 where f.code == "APP_CHECK_REQUIRED": return t("Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene.")
+        case 423: return t("Hesabın şu anda bir işlem nedeniyle kilitli. Biraz sonra tekrar dene.")
+        case 429: return t("Çok sık eşitlendi. Biraz sonra tekrar dene.")
+        case 503: return t("Bulut eşitlemesi şu anda kapalı ({0}).", code)
+        default: return t("Şu anda yapılamadı ({0}). Biraz sonra tekrar dene.", code)
         }
     }
 
@@ -264,16 +264,16 @@ final class RealCloudSync {
     }
 
     private static func reason(_ error: Error) -> String {
-        guard let f = error as? RealBackend.Failure else { return "Gönderilemedi." }
-        let code = f.code ?? (f.status > 0 ? "HTTP \(f.status)" : "yanıt okunamadı")
+        guard let f = error as? RealBackend.Failure else { return t("Gönderilemedi.") }
+        let code = f.code ?? (f.status > 0 ? "HTTP \(f.status)" : t("yanıt okunamadı"))
         switch f.code ?? "" {
         case "INVALID_CARD", "INVALID_SYNC_PAYLOAD", "LOCAL_ONLY_FIELD", "LOCAL_IMAGE_URI", "INVALID_ID", "INVALID_LOCAL_ID",
              "INVALID_RELATION", "INVALID_SHARE_PROVENANCE", "INVALID_CARD_LAYOUT":
-            return "Kaydın bir alanı hesabın kurallarına uymadı (\(code))."
+            return t("Kaydın bir alanı hesabın kurallarına uymadı ({0}).", code)
         case "SYNC_ARRAY_LIMIT", "ATTACHMENT_COUNT_LIMIT", "PAYLOAD_TOO_LARGE":
-            return "Kayıt eşitleme sınırını aşıyor (\(code))."
+            return t("Kayıt eşitleme sınırını aşıyor ({0}).", code)
         default:
-            return f.status == 413 ? "Kayıt eşitleme sınırını aşıyor (\(code))." : "Hesap bu kaydı kabul etmedi (\(code))."
+            return f.status == 413 ? t("Kayıt eşitleme sınırını aşıyor ({0}).", code) : t("Hesap bu kaydı kabul etmedi ({0}).", code)
         }
     }
 
@@ -287,16 +287,16 @@ final class RealCloudSync {
         switch parts[0] {
         case "CARD", "PLANNER":
             if let id = Int64(parts[1]), let card = store.reminder(id) {
-                let t = card.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                return t.isEmpty ? (card.isDivider ? "Ayraç" : "Başlıksız kart") : String(t.prefix(60))
+                let text = card.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return text.isEmpty ? (card.isDivider ? t("Ayraç") : t("Başlıksız kart")) : String(text.prefix(60))
             }
-            return "Silinen kart"
+            return t("Silinen kart")
         case "CATEGORY":
-            if let id = Int64(parts[1]), let c = store.category(id) { return "Kategori: \(c.name)" }
-            return "Silinen kategori"
-        case "MOOD": return "Mood kaydı"
-        case "DRINK": return "Su kaydı"
-        default: return "Ayar"
+            if let id = Int64(parts[1]), let c = store.category(id) { return t("Kategori: {0}", c.name) }
+            return t("Silinen kategori")
+        case "MOOD": return t("Mood kaydı")
+        case "DRINK": return t("Su kaydı")
+        default: return t("Ayar")
         }
     }
 
@@ -407,7 +407,7 @@ final class RealCloudSync {
             // The account takes no untitled card (only an Ayraç may be empty): it stays here and is listed.
             if kind == "CARD", let p = payload, ((p["text"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                p["isDivider"] as? Bool != true {
-                found.append(issue(docKey, store, st, reason: "Kartın metni boş; hesaba gönderilmesi için bir başlık yaz."))
+                found.append(issue(docKey, store, st, reason: t("Kartın metni boş; hesaba gönderilmesi için bir başlık yaz.")))
                 continue
             }
             if kind == "CARD" {
@@ -422,14 +422,14 @@ final class RealCloudSync {
                 } catch {
                     if (error as? RealBackend.Failure)?.status == 507 {
                         // Bulut alanı dolu: the card waits on this iPhone and goes up on a later sync once there is room.
-                        found.append(issue(docKey, store, st, reason: "Bulut alanın doldu; ek bu telefonda duruyor. Yer açınca kendiliğinden yüklenir."))
+                        found.append(issue(docKey, store, st, reason: t("Bulut alanın doldu; ek bu telefonda duruyor. Yer açınca kendiliğinden yüklenir.")))
                         Task { @MainActor in await CloudSpace.shared.check(force: true) }
                         continue
                     }
                     let network = (error as? URLError).map { [.notConnectedToInternet, .networkConnectionLost, .cancelled].contains($0.code) } ?? false
                     if network || error is CancellationError || !(Self.recordOnly(error) || error is URLError) { throw error }
                     found.append(issue(docKey, store, st,
-                                       reason: "Bu kartın bir eki buluta gönderilemedi. Yerel içerik kaldırılmadı. (\((error as? RealBackend.Failure)?.code ?? "ek"))"))
+                                       reason: t("Bu kartın bir eki buluta gönderilemedi. Yerel içerik kaldırılmadı. ({0})", (error as? RealBackend.Failure)?.code ?? t("ek"))))
                     continue
                 }
             }

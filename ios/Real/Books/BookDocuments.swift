@@ -34,7 +34,7 @@ final class BookDocuments {
         case "epub": format = "epub"
         case "txt", "text", "md": format = "txt"
         case "jpg", "jpeg", "png", "heic", "webp", "gif", "tif", "tiff": format = "image"
-        default: throw BookError.message("Bu dosya türü desteklenmiyor. PDF, EPUB, TXT veya görsel ekleyebilirsin.")
+        default: throw BookError.message(t("Bu dosya türü desteklenmiyor. PDF, EPUB, TXT veya görsel ekleyebilirsin."))
         }
         let id = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         let fileName = "\(id).\(ext.isEmpty ? format : ext)"
@@ -47,7 +47,7 @@ final class BookDocuments {
         do {
             switch format {
             case "pdf":
-                guard let doc = PDFDocument(url: dest) else { throw BookError.message("PDF açılamadı.") }
+                guard let doc = PDFDocument(url: dest) else { throw BookError.message(t("PDF açılamadı.")) }
                 book.pageCount = doc.pageCount
                 let attrs = doc.documentAttributes ?? [:]
                 if let t = attrs[PDFDocumentAttribute.titleAttribute] as? String, !t.trimmingCharacters(in: .whitespaces).isEmpty { book.title = t }
@@ -240,7 +240,7 @@ struct EpubBook {
         zip = try ZipArchive(url: url)
         guard let container = zip.string("META-INF/container.xml"),
               let opfPath = Self.firstMatch(container, "full-path=\"([^\"]+)\""),
-              let opf = zip.string(opfPath) else { throw BookError.message("EPUB okunamadı.") }
+              let opf = zip.string(opfPath) else { throw BookError.message(t("EPUB okunamadı.")) }
         let base = (opfPath as NSString).deletingLastPathComponent
         func resolve(_ href: String) -> String {
             let clean = href.removingPercentEncoding ?? href

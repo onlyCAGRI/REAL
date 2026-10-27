@@ -89,7 +89,7 @@ struct BooksShelfScreen: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 0) {
-                        Text("KİTAPLAR")
+                        Text(t("KİTAPLAR"))
                             .font(.system(size: 52, weight: .medium, design: .serif)).kerning(-1)
                             .foregroundStyle(theme.text)
                             .padding(.top, 26).padding(.bottom, 34)
@@ -117,15 +117,15 @@ struct BooksShelfScreen: View {
                 ReaderCircleButton(theme: theme, glass: true, action: onBack) {
                     RealSymbol("chevron.left", size: 20.7)
                 }
-                .accessibilityLabel("Geri")
+                .accessibilityLabel(t("Geri"))
                 Spacer()
                 ReaderCircleButton(theme: theme, glass: true, action: onTheme) { ThemeGlyph() }
-                    .accessibilityLabel("Tema değiştir: \(theme.label)")
+                    .accessibilityLabel(t("Tema değiştir: {0}", theme.label))
             }
             .padding(.horizontal, 16).padding(.top, 8)
 
             if shelves.isEmpty {
-                Text("Kitap ekleyerek kitaplığını oluştur.")
+                Text(t("Kitap ekleyerek kitaplığını oluştur."))
                     .font(RealFont.inter(15)).foregroundStyle(theme.text.opacity(0.55))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -133,13 +133,13 @@ struct BooksShelfScreen: View {
         .overlay(alignment: .bottom) {
             HStack(spacing: 10) {
                 Button(action: onAdd) {
-                    Text("Kitap Ekle").font(RealFont.inter(17, .medium)).foregroundStyle(theme.chromeText)
+                    Text(t("Kitap Ekle")).font(RealFont.inter(17, .medium)).foregroundStyle(theme.chromeText)
                         .frame(width: 172, height: 56)
                         .background(theme.chrome, in: Capsule())
                         .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.8))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Kitap ekle")
+                .accessibilityLabel(t("Kitap ekle"))
                 // "+": yeni bölüm (raf) açar; kitaplar basılı tutup sürüklenerek oraya taşınır.
                 Button(action: onAddSection) {
                     ActionIcon(.add, color: theme.chromeText, size: 22)
@@ -148,7 +148,7 @@ struct BooksShelfScreen: View {
                         .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 0.8))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Bölüm ekle")
+                .accessibilityLabel(t("Bölüm ekle"))
             }
             .padding(.bottom, 18)
         }
@@ -195,7 +195,7 @@ private struct ShelfSection: View {
             // Bölüm başlığı: basılı tutunca menü; üstüne kitap sürüklenince çizgiler parlar.
             HStack(spacing: 14) {
                 Rectangle().fill(theme.text.opacity(dropHere ? 0.8 : 0.28)).frame(height: 0.7)
-                Text(shelf.name.uppercased(with: Locale(identifier: "tr_TR")))
+                Text(shelf.name.uppercased(with: Locale(identifier: "tr_TR"))) // user-named shelf: Turkish casing (i → İ)
                     .font(.system(size: 12, design: .serif)).kerning(1.2)
                     .foregroundStyle(theme.text.opacity(0.85)).lineLimit(1).fixedSize()
                 Rectangle().fill(theme.text.opacity(dropHere ? 0.8 : 0.28)).frame(height: 0.7)
@@ -205,15 +205,15 @@ private struct ShelfSection: View {
             .padding(.vertical, 6)
             .contentShape(Rectangle())
             .contextMenu {
-                Button("Yeniden adlandır", action: onRename)
+                Button(t("Yeniden adlandır"), action: onRename)
                 if shelf.name != BookStore.defaultSection {
-                    Button("Bölümü sil", role: .destructive, action: onDelete)
+                    Button(t("Bölümü sil"), role: .destructive, action: onDelete)
                 }
             }
             .padding(.bottom, 16)
 
             if shelf.books.isEmpty {
-                Text("Kitapları buraya sürükle")
+                Text(t("Kitapları buraya sürükle"))
                     .font(RealFont.inter(14)).foregroundStyle(theme.text.opacity(0.45))
                     .frame(maxWidth: .infinity).frame(height: BookShelfMetrics.coverH * 0.6)
                     .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(theme.text.opacity(dropHere ? 0.6 : 0.18),

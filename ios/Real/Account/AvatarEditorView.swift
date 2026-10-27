@@ -19,12 +19,12 @@ struct AvatarEditorView: View {
                     .frame(width: 44, height: 44)
             }
             .liquidGlass(Circle(), role: .chrome)
-            .accessibilityLabel("Geri")
+            .accessibilityLabel(t("Geri"))
             .padding(.leading, 14).padding(.top, 6)
         }
         // Dark status-bar icons over the (usually light) avatar stage.
         .preferredColorScheme(.light)
-        .alert("Avatar kaydedilemedi", isPresented: $failed) { Button("Tamam", role: .cancel) {} }
+        .alert(t("Avatar kaydedilemedi"), isPresented: $failed) { Button(t("Tamam"), role: .cancel) {} }
     }
 }
 

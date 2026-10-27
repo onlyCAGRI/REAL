@@ -6,11 +6,11 @@ enum RecurrenceRule: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var displayName: String {
         switch self {
-        case .none: return "Tekrarlama"
-        case .daily: return "Her gün"
-        case .weekly: return "Her hafta"
-        case .monthly: return "Her ay"
-        case .yearly: return "Her yıl"
+        case .none: return t("Tekrarlama")
+        case .daily: return t("Her gün")
+        case .weekly: return t("Her hafta")
+        case .monthly: return t("Her ay")
+        case .yearly: return t("Her yıl")
         }
     }
 
@@ -25,16 +25,17 @@ enum Weekday: Int, CaseIterable, Identifiable {
     case monday = 1, tuesday, wednesday, thursday, friday, saturday, sunday
     var id: Int { rawValue }
     var bit: Int { 1 << (rawValue - 1) }
-    var short: String { ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"][rawValue - 1] }
-    var full: String { ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"][rawValue - 1] }
+    var short: String { [t("Pzt"), t("Sal"), t("Çar"), t("Per"), t("Cum"), t("Cmt"), t("Paz")][rawValue - 1] }
+    var full: String { [t("Pazartesi"), t("Salı"), t("Çarşamba"), t("Perşembe"), t("Cuma"), t("Cumartesi"), t("Pazar")][rawValue - 1] }
     var english2: String { ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"][rawValue - 1] }
 
     /// Foundation weekday (1 = Sunday) -> ISO.
     init(foundation value: Int) { self = Weekday(rawValue: value == 1 ? 7 : value - 1)! }
 }
 
-let turkishMonths = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
-                     "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+/// Computed so the month names follow a runtime language change.
+var turkishMonths: [String] { [t("Ocak"), t("Şubat"), t("Mart"), t("Nisan"), t("Mayıs"), t("Haziran"),
+                               t("Temmuz"), t("Ağustos"), t("Eylül"), t("Ekim"), t("Kasım"), t("Aralık")] }
 
 extension Calendar {
     /// Gregorian, device time zone, Monday-first: the same assumptions java.time makes on Android.
@@ -155,15 +156,15 @@ enum Recurrence {
     }
 
     static func description(_ rule: RecurrenceRule, alert: EpochMillis?, calendar: Calendar = .real) -> String {
-        guard let alert else { return "Yok" }
+        guard let alert else { return t("Yok") }
         let date = alert.date
         switch rule {
-        case .none: return "Yok"
-        case .daily: return "Her gün"
-        case .weekly: return "Her \(calendar.isoWeekday(of: date).full)"
-        case .monthly: return "Her ayın \(calendar.component(.day, from: date))'i"
+        case .none: return t("Yok")
+        case .daily: return t("Her gün")
+        case .weekly: return t("Her {0}", calendar.isoWeekday(of: date).full)
+        case .monthly: return t("Her ayın {0}'i", calendar.component(.day, from: date))
         case .yearly:
-            return "Her yıl \(calendar.component(.day, from: date)) \(turkishMonths[calendar.component(.month, from: date) - 1])"
+            return t("Her yıl {0} {1}", calendar.component(.day, from: date), turkishMonths[calendar.component(.month, from: date) - 1])
         }
     }
 
@@ -173,12 +174,12 @@ enum Recurrence {
         let hasDays = item.repeatWeekdaysMask & 0x7F != 0
         guard hasDays || item.repeatUntilEpochDay != nil else { return nil }
         let days = hasDays
-            ? "Her " + Weekday.allCases.filter { item.repeatWeekdaysMask & $0.bit != 0 }.map(\.short).joined(separator: ", ")
+            ? t("Her {0}", Weekday.allCases.filter { item.repeatWeekdaysMask & $0.bit != 0 }.map(\.short).joined(separator: ", "))
             : description(item.repeatRule, alert: item.anchorAlertAt ?? item.alertAt, calendar: calendar)
         var until = ""
         if let end = item.repeatUntilEpochDay {
             let d = calendar.startOfDay(epochDay: end)
-            until = " · \(calendar.component(.day, from: d)) \(turkishMonths[calendar.component(.month, from: d) - 1])'e kadar"
+            until = t(" · {0} {1}'e kadar", calendar.component(.day, from: d), turkishMonths[calendar.component(.month, from: d) - 1])
         }
         return days + until
     }

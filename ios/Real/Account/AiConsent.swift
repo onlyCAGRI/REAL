@@ -9,22 +9,22 @@ enum AiConsent {
 
         var title: String {
             switch self {
-            case .voice: return "Sesli komutları AI ile işle"
-            case .mood: return "AI ile öneriler al"
-            case .discovery: return "AI ile keşfet"
+            case .voice: return t("Sesli komutları AI ile işle")
+            case .mood: return t("AI ile öneriler al")
+            case .discovery: return t("AI ile keşfet")
             }
         }
         var disclosure: String {
             switch self {
-            case .voice: return "Komut cihazında çözülemediğinde konuşma metnin ve gerekli kart bilgileri harici AI hizmeti Groq’a gönderilir. AI işlemleri hata yapabilir."
-            case .mood: return "Seçtiğin duygu ve öneri tercihleri harici AI hizmeti Groq’a gönderilir. AI önerileri hata içerebilir."
-            case .discovery: return "Seçtiğin filtreler ve önceki öneri başlıkları harici AI hizmetleri Google Gemini veya Groq’a gönderilir. AI önerileri hata içerebilir."
+            case .voice: return t("Komut cihazında çözülemediğinde konuşma metnin ve gerekli kart bilgileri harici AI hizmeti Groq’a gönderilir. AI işlemleri hata yapabilir.")
+            case .mood: return t("Seçtiğin duygu ve öneri tercihleri harici AI hizmeti Groq’a gönderilir. AI önerileri hata içerebilir.")
+            case .discovery: return t("Seçtiğin filtreler ve önceki öneri başlıkları harici AI hizmetleri Google Gemini veya Groq’a gönderilir. AI önerileri hata içerebilir.")
             }
         }
     }
 
     struct Declined: LocalizedError {
-        var errorDescription: String? { "AI için veri gönderilmedi. İstersen daha sonra yeniden deneyebilirsin." }
+        var errorDescription: String? { t("AI için veri gönderilmedi. İstersen daha sonra yeniden deneyebilirsin.") }
     }
 
     /// Same disclosure version as Android (AI_DISCLOSURE_VERSION): a new text asks again.
@@ -56,10 +56,10 @@ enum AiConsent {
         return await withCheckedContinuation { continuation in
             let alert = UIAlertController(
                 title: feature.title,
-                message: feature.disclosure + "\n\nİsteğe bağlıdır. İstediğin zaman Ayarlar’dan kapatabilirsin.",
+                message: feature.disclosure + t("\n\nİsteğe bağlıdır. İstediğin zaman Ayarlar’dan kapatabilirsin."),
                 preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "Şimdi değil", style: .cancel) { _ in continuation.resume(returning: false) })
-            alert.addAction(UIAlertAction(title: "İzin ver", style: .default) { _ in continuation.resume(returning: true) })
+            alert.addAction(UIAlertAction(title: t("Şimdi değil"), style: .cancel) { _ in continuation.resume(returning: false) })
+            alert.addAction(UIAlertAction(title: t("İzin ver"), style: .default) { _ in continuation.resume(returning: true) })
             presenter.present(alert, animated: true)
         }
     }

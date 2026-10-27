@@ -74,15 +74,15 @@ final class CalendarCardPublisher {
 
     /// Publishes [card] and writes its link into every linked event. Returns the status line.
     func publish(_ card: ReminderItem, store: ReminderStore, life: LifeStore) async throws -> String {
-        guard RealAuth.shared.account != nil else { throw Failure(errorDescription: "Bağlantı eklemek için REAL hesabınla giriş yap.") }
+        guard RealAuth.shared.account != nil else { throw Failure(errorDescription: t("Bağlantı eklemek için REAL hesabınla giriş yap.")) }
         let calendar = CalendarConnection.shared
-        guard calendar.writable else { throw Failure(errorDescription: "Takvim yazma izni gerekli. İçeriğin REAL'de duruyor.") }
+        guard calendar.writable else { throw Failure(errorDescription: t("Takvim yazma izni gerekli. İçeriğin REAL'de duruyor.")) }
         let linked = associations.filter { $0.cardId == card.id }
-        guard !linked.isEmpty else { throw Failure(errorDescription: "Bu kartın bağlı bir takvim etkinliği yok.") }
+        guard !linked.isEmpty else { throw Failure(errorDescription: t("Bu kartın bağlı bir takvim etkinliği yok.")) }
         for a in linked {
             guard let ev = calendar.store.event(withIdentifier: a.eventId), ev.calendar.calendarIdentifier == a.calendarId,
                   ev.calendar.allowsContentModifications else {
-                throw Failure(errorDescription: "Bağlı takvim etkinliği bulunamadı veya düzenleme yetkisi yok. REAL içeriğin korunuyor.")
+                throw Failure(errorDescription: t("Bağlı takvim etkinliği bulunamadı veya düzenleme yetkisi yok. REAL içeriğin korunuyor."))
             }
         }
         let url = try await shareURL(card, store: store, life: life)
@@ -94,7 +94,7 @@ final class CalendarCardPublisher {
                 ev.notes = notes
                 // A repeating event keeps one description for the whole series.
                 do { try calendar.store.save(ev, span: ev.hasRecurrenceRules ? .futureEvents : .thisEvent, commit: true) }
-                catch { throw Failure(errorDescription: "Takvim etkinliği güncellenemedi. REAL kartın kaydedildi; yeniden dene.") }
+                catch { throw Failure(errorDescription: t("Takvim etkinliği güncellenemedi. REAL kartın kaydedildi; yeniden dene.")) }
             }
             if let i = items.firstIndex(where: { $0.marker == a.marker }) { items[i].publicBlock = Self.block(a.marker, url) }
         }
@@ -102,7 +102,7 @@ final class CalendarCardPublisher {
         var all = receipts
         all[String(card.id)]?.applied = true
         receipts = all
-        return "Web bağlantısı takvime eklendi."
+        return t("Web bağlantısı takvime eklendi.")
     }
 
     /// The same request id is reused while it is valid, so a retry refreshes the same link instead of making another.
@@ -123,10 +123,10 @@ final class CalendarCardPublisher {
                 "options": ["includeAttachments": true, "includeLocation": false, "includeVoice": false, "includeJournal": false]
             ])
         } catch let f as RealBackend.Failure where f.code == "SYNC_CARD_FIRST" {
-            throw Failure(errorDescription: "Kart henüz buluta ulaşmadı. Birkaç saniye sonra yeniden dene.")
+            throw Failure(errorDescription: t("Kart henüz buluta ulaşmadı. Birkaç saniye sonra yeniden dene."))
         }
         guard r["id"] as? String == requestId, let url = r["url"] as? String, url.hasPrefix("https://"), url.hasSuffix("/s/\(requestId)") else {
-            throw Failure(errorDescription: "Paylaşım linki doğrulanamadı. Lütfen tekrar dene.")
+            throw Failure(errorDescription: t("Paylaşım linki doğrulanamadı. Lütfen tekrar dene."))
         }
         all = receipts
         all[key] = Receipt(requestId: requestId, cardVersion: latest.updatedAt, url: url, applied: false, expiresAt: now + 86_400_000)
@@ -141,7 +141,7 @@ final class CalendarCardPublisher {
         let original = notes ?? ""
         let next = block(a.marker, url)
         if let previous = a.publicBlock, let range = original.range(of: previous) {
-            guard original.ranges(of: previous).count == 1 else { throw Failure(errorDescription: "Takvim bağlantısı birden fazla kez bulunuyor.") }
+            guard original.ranges(of: previous).count == 1 else { throw Failure(errorDescription: t("Takvim bağlantısı birden fazla kez bulunuyor.")) }
             return original.replacingCharacters(in: range, with: next)
         }
         let marker = "[REAL-CALENDAR:\(a.marker)]"
@@ -149,7 +149,7 @@ final class CalendarCardPublisher {
             var lines = original.components(separatedBy: "\n")
             guard let index = lines.firstIndex(of: marker), index > 0, lines.filter({ $0 == marker }).count == 1,
                   lines[index - 1].hasPrefix("REAL kartı: ") else {
-                throw Failure(errorDescription: "Takvimdeki bağlantı dışarıda değiştirildi; açıklamayı kontrol et.")
+                throw Failure(errorDescription: t("Takvimdeki bağlantı dışarıda değiştirildi; açıklamayı kontrol et."))
             }
             lines[index - 1] = "REAL kartı: \(url)"
             return lines.joined(separator: "\n")
@@ -170,16 +170,16 @@ struct CalendarPublicationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3).frame(maxWidth: .infinity)
-            Text("Takvime web bağlantısı eklensin mi?").font(RealFont.inter(22, .semibold)).foregroundStyle(.white)
+            Text(t("Takvime web bağlantısı eklensin mi?")).font(RealFont.inter(22, .semibold)).foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
             if let message { Text(message).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)) }
             Button { publish() } label: {
-                Text(busy ? "Ekleniyor…" : "Evet, bağlantı ekle").font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                Text(busy ? t("Ekleniyor…") : t("Evet, bağlantı ekle")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                     .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white))
             }
             .buttonStyle(.plain).disabled(busy)
             Button { dismiss() } label: {
-                Text("Hayır, REAL'de kalsın").font(RealFont.inter(15)).foregroundStyle(.white)
+                Text(t("Hayır, REAL'de kalsın")).font(RealFont.inter(15)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white.opacity(0.08)))
             }
             .buttonStyle(.plain).disabled(busy)

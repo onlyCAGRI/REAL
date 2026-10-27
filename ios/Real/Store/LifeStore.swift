@@ -4,7 +4,7 @@ import Observation
 enum BeverageType: String, Codable, CaseIterable, Identifiable {
     case water, coffee, beer
     var id: String { rawValue }
-    var label: String { self == .water ? "Su" : (self == .coffee ? "Coffee" : "Beer") }
+    var label: String { self == .water ? t("Su") : (self == .coffee ? "Coffee" : "Beer") }
     var quickAmounts: [Int] { self == .water ? [150, 250] : (self == .coffee ? [100, 200] : [330, 500]) }
 }
 
@@ -16,11 +16,11 @@ struct WaterIntakeEntry: Codable, Identifiable, Hashable {
 }
 
 enum MoodScope: String, Codable { case moment, daily
-    var label: String { self == .moment ? "Anlık his" : "Günün havası" }
+    var label: String { self == .moment ? t("Anlık his") : t("Günün havası") }
 }
 
 enum MoodEnergy: String, Codable, CaseIterable { case low, balanced, high
-    var label: String { self == .low ? "Düşük" : (self == .balanced ? "Dengeli" : "Yüksek") }
+    var label: String { self == .low ? t("Düşük") : (self == .balanced ? t("Dengeli") : t("Yüksek")) }
 }
 
 struct MoodDetails: Codable, Hashable {

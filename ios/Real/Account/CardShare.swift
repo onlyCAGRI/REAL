@@ -13,21 +13,21 @@ enum CardShareClient {
     private static func message(_ error: Error, path: String) -> Failure {
         guard let f = error as? RealBackend.Failure else { return Failure(errorDescription: RealBackend.message(for: error)) }
         switch (f.status, f.code ?? "") {
-        case (423, _): return Failure(errorDescription: "Bulut verileri silindi veya siliniyor; bu hesabın paylaşımı kapalı.")
-        case (401, _): return Failure(errorDescription: "Kartı paylaşmak için yeniden giriş yap.")
+        case (423, _): return Failure(errorDescription: t("Bulut verileri silindi veya siliniyor; bu hesabın paylaşımı kapalı."))
+        case (401, _): return Failure(errorDescription: t("Kartı paylaşmak için yeniden giriş yap."))
         case (404, _) where path.hasSuffix("/shares") || path.hasSuffix("/inbox") || path.hasSuffix("/profile"):
-            return Failure(errorDescription: "Paylaşım şu an kullanılamıyor. Lütfen daha sonra tekrar dene.")
-        case (404, _): return Failure(errorDescription: "Bu paylaşılan kart artık mevcut değil.")
-        case (_, "SYNC_CARD_FIRST"): return Failure(errorDescription: "Bu kartın eşitlemesi henüz bitmedi. Lütfen tekrar dene.")
-        case (_, let c) where c.contains("STORAGE_LIMIT"): return Failure(errorDescription: "Bu kartı kopyalamak için bulut alanı yetersiz.")
-        case (429, _): return Failure(errorDescription: "Günlük paylaşım sınırına ulaşıldı. Lütfen yarın tekrar dene.")
-        case (503, _), (_, "SHARING_NOT_ENABLED"): return Failure(errorDescription: "Paylaşım şu an kullanılamıyor. Lütfen daha sonra tekrar dene.")
-        default: return Failure(errorDescription: "Paylaşım tamamlanamadı. Lütfen tekrar dene.")
+            return Failure(errorDescription: t("Paylaşım şu an kullanılamıyor. Lütfen daha sonra tekrar dene."))
+        case (404, _): return Failure(errorDescription: t("Bu paylaşılan kart artık mevcut değil."))
+        case (_, "SYNC_CARD_FIRST"): return Failure(errorDescription: t("Bu kartın eşitlemesi henüz bitmedi. Lütfen tekrar dene."))
+        case (_, let c) where c.contains("STORAGE_LIMIT"): return Failure(errorDescription: t("Bu kartı kopyalamak için bulut alanı yetersiz."))
+        case (429, _): return Failure(errorDescription: t("Günlük paylaşım sınırına ulaşıldı. Lütfen yarın tekrar dene."))
+        case (503, _), (_, "SHARING_NOT_ENABLED"): return Failure(errorDescription: t("Paylaşım şu an kullanılamıyor. Lütfen daha sonra tekrar dene."))
+        default: return Failure(errorDescription: t("Paylaşım tamamlanamadı. Lütfen tekrar dene."))
         }
     }
 
     private static func post(_ path: String, _ body: [String: Any]) async throws -> [String: Any] {
-        guard RealAuth.shared.account != nil else { throw Failure(errorDescription: "Kartı paylaşmak için REAL hesabınla giriş yap.") }
+        guard RealAuth.shared.account != nil else { throw Failure(errorDescription: t("Kartı paylaşmak için REAL hesabınla giriş yap.")) }
         do { return try await RealBackend.post(path, body, timeout: 60) } catch { throw message(error, path: path) }
     }
 
@@ -42,7 +42,7 @@ enum CardShareClient {
                         "includeVoice": options.voice, "includeJournal": options.journal]
         ])
         guard r["id"] as? String == requestId, let s = r["url"] as? String, s.hasPrefix("https://"), s.hasSuffix("/s/\(requestId)"),
-              let url = URL(string: s) else { throw Failure(errorDescription: "Paylaşım linki doğrulanamadı. Lütfen tekrar dene.") }
+              let url = URL(string: s) else { throw Failure(errorDescription: t("Paylaşım linki doğrulanamadı. Lütfen tekrar dene.")) }
         return Link(id: requestId, url: url)
     }
 
@@ -73,7 +73,7 @@ enum CardShareClient {
         guard let r = try? await RealBackend.post("/api/share/v1/inbox", [:], timeout: 30),
               let delivered = (r["delivered"] as? NSNumber)?.intValue, delivered > 0 else { return }
         await RealCloudSync.shared.runFully(store, life)
-        RealToast.shared.show(delivered == 1 ? "Sana bir kart gönderildi" : "Sana \(delivered) kart gönderildi")
+        RealToast.shared.show(delivered == 1 ? t("Sana bir kart gönderildi") : t("Sana {0} kart gönderildi", delivered))
     }
 }
 
@@ -93,45 +93,45 @@ struct CardShareSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Kartı paylaş").font(RealFont.inter(26, .semibold)).foregroundStyle(.white)
+                Text(t("Kartı paylaş")).font(RealFont.inter(26, .semibold)).foregroundStyle(.white)
                 Spacer()
-                Button("Bitti") { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(.white)
+                Button(t("Bitti")) { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(.white)
             }
             if RealAuth.shared.account == nil {
                 SignInRequiredPrompt(reason: .share)
                 ShareLink(item: card.shareText) {
-                    Text("Metin olarak paylaş").font(RealFont.inter(15)).foregroundStyle(.white)
+                    Text(t("Metin olarak paylaş")).font(RealFont.inter(15)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 46).background(Capsule().fill(.white.opacity(0.08)))
                 }
             } else {
-                Text("Dahil edilecek içerik").font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6))
+                Text(t("Dahil edilecek içerik")).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6))
                 VStack(spacing: 0) {
-                    toggle("Fotoğraf ve dosyalar", $options.attachments, show: !card.attachments.isEmpty)
-                    toggle("Konum", $options.location, show: card.location != nil)
-                    toggle("Ses kayıtları", $options.voice, show: !card.voiceRecordings.isEmpty)
-                    toggle("Günlük", $options.journal, show: card.journal != nil)
+                    toggle(t("Fotoğraf ve dosyalar"), $options.attachments, show: !card.attachments.isEmpty)
+                    toggle(t("Konum"), $options.location, show: card.location != nil)
+                    toggle(t("Ses kayıtları"), $options.voice, show: !card.voiceRecordings.isEmpty)
+                    toggle(t("Günlük"), $options.journal, show: card.journal != nil)
                 }
                 .disabled(link != nil)
                 if let link {
-                    Text("Bağlantıya sahip olan herkes seçilen içeriği görüntüleyebilir. Bağlantı 24 saat geçerli.")
+                    Text(t("Bağlantıya sahip olan herkes seçilen içeriği görüntüleyebilir. Bağlantı 24 saat geçerli."))
                         .font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.5))
                     HStack(spacing: 10) {
                         ShareLink(item: link.url) {
-                            Text("Linki paylaş").font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                            Text(t("Linki paylaş")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                                 .frame(maxWidth: .infinity, minHeight: 46).background(Capsule().fill(.white))
                         }
-                        Button { UIPasteboard.general.url = link.url; RealToast.shared.show("Link kopyalandı") } label: {
-                            Text("Kopyala").font(RealFont.inter(15)).foregroundStyle(.white)
+                        Button { UIPasteboard.general.url = link.url; RealToast.shared.show(t("Link kopyalandı")) } label: {
+                            Text(t("Kopyala")).font(RealFont.inter(15)).foregroundStyle(.white)
                                 .frame(width: 100, height: 46).background(Capsule().fill(.white.opacity(0.08)))
                         }
                         .buttonStyle(.plain)
                     }
-                    Button("Bu linki kapat") {
+                    Button(t("Bu linki kapat")) {
                         Task { try? await CardShareClient.revoke(link.id); self.link = nil; sent = [] }
                     }
                     .font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.6))
                     if !people.people.isEmpty {
-                        Text("Kişilerim'e gönder").font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6)).padding(.top, 4)
+                        Text(t("Kişilerim'e gönder")).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6)).padding(.top, 4)
                         ScrollView {
                             VStack(spacing: 6) {
                                 ForEach(people.people) { p in
@@ -139,7 +139,7 @@ struct CardShareSheet: View {
                                         ConnectionAvatar(name: p.name, key: p.uid, size: 34, pictureVersion: p.pictureVersion)
                                         Text(p.name).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
                                         Spacer()
-                                        Button(sent.contains(p.uid) ? "Gönderildi" : "Gönder") { send(to: p.uid, shareId: link.id) }
+                                        Button(sent.contains(p.uid) ? t("Gönderildi") : t("Gönder")) { send(to: p.uid, shareId: link.id) }
                                             .font(RealFont.inter(13, .semibold)).foregroundStyle(sent.contains(p.uid) ? .white.opacity(0.5) : .black)
                                             .padding(.horizontal, 14).padding(.vertical, 7)
                                             .background(Capsule().fill(sent.contains(p.uid) ? Color.white.opacity(0.08) : Color.white))
@@ -153,7 +153,7 @@ struct CardShareSheet: View {
                     }
                 } else {
                     Button { create() } label: {
-                        Text(busy ? "Hazırlanıyor…" : "Paylaşım linki oluştur").font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                        Text(busy ? t("Hazırlanıyor…") : t("Paylaşım linki oluştur")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
                             .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white))
                     }
                     .buttonStyle(.plain).disabled(busy)

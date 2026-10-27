@@ -26,8 +26,8 @@ struct MoodHistoryScreen: View {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         addCard(accent)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Geçmiş izlerin").font(RealFont.inter(22, .semibold)).foregroundStyle(Color(argb: 0xFFF3F3F5))
-                            Text(sorted.isEmpty ? "Henüz bir mood kaydın yok." : "Moodların günlere göre birlikte gösteriliyor.")
+                            Text(t("Geçmiş izlerin")).font(RealFont.inter(22, .semibold)).foregroundStyle(Color(argb: 0xFFF3F3F5))
+                            Text(sorted.isEmpty ? t("Henüz bir mood kaydın yok.") : t("Moodların günlere göre birlikte gösteriliyor."))
                                 .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF85858E))
                         }
                         .padding(.top, 10).padding(.bottom, 2)
@@ -35,7 +35,7 @@ struct MoodHistoryScreen: View {
                             HStack {
                                 Text(Self.dayTitle(day)).font(RealFont.inter(17, .semibold)).foregroundStyle(Color(argb: 0xFFF0F0F3))
                                 Spacer()
-                                Text("\(entries.count) iz").font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF777780))
+                                Text(t("{0} iz", entries.count)).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF777780))
                             }
                             .padding(.top, 12).padding(.bottom, 1)
                             ForEach(entries) { entryCard($0) }
@@ -62,10 +62,10 @@ struct MoodHistoryScreen: View {
 
     private static func dayTitle(_ day: Date) -> String {
         let cal = Calendar.real
-        if cal.isDateInToday(day) { return "Bugün" }
-        if cal.isDateInYesterday(day) { return "Dün" }
+        if cal.isDateInToday(day) { return t("Bugün") }
+        if cal.isDateInYesterday(day) { return t("Dün") }
         let f = DateFormatter()
-        f.locale = Locale(identifier: "tr_TR")
+        f.locale = I18n.locale
         f.dateFormat = "d MMMM · EEEE"
         return f.string(from: day)
     }
@@ -74,8 +74,8 @@ struct MoodHistoryScreen: View {
         Button(action: onAdd) {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Yeni bir iz bırak").font(RealFont.inter(24, .medium)).foregroundStyle(.white)
-                    Text("Şu an nasıl hissediyorsun ya da bugünün havası nasıldı?").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFC2C2C9))
+                    Text(t("Yeni bir iz bırak")).font(RealFont.inter(24, .medium)).foregroundStyle(.white)
+                    Text(t("Şu an nasıl hissediyorsun ya da bugünün havası nasıldı?")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFC2C2C9))
                         .multilineTextAlignment(.leading).lineSpacing(3)
                 }
                 Spacer()
@@ -99,7 +99,7 @@ struct MoodHistoryScreen: View {
             MoodFace(mood: entry.mood, tint: accent).frame(width: 58, height: 58)
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text(entry.details.scope == .moment ? "Anlık his" : "Günün havası").font(RealFont.inter(11, .medium)).foregroundStyle(accent.opacity(0.94))
+                    Text(entry.details.scope == .moment ? t("Anlık his") : t("Günün havası")).font(RealFont.inter(11, .medium)).foregroundStyle(accent.opacity(0.94))
                     Spacer()
                     Text(time).font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF74747D))
                 }
@@ -120,6 +120,6 @@ struct MoodHistoryScreen: View {
     }
 
     private static func factorLabel(_ key: String) -> String {
-        MoodV2.factorGroups.flatMap(\.1).first { $0.0 == key }?.1 ?? key
+        MoodV2.factorGroups.flatMap(\.1).first { $0.0 == key }.map { t($0.1) } ?? key
     }
 }

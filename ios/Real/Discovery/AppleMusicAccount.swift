@@ -37,9 +37,9 @@ final class AppleMusicAccount {
             defaults.set(token, forKey: "real_apple_music_token")
             defaults.removeObject(forKey: "real_apple_music_state")
             isConnected = true
-            RealToast.shared.show("Apple Music bağlandı")
+            RealToast.shared.show(t("Apple Music bağlandı"))
         } else {
-            RealToast.shared.show("Apple Music bağlantısı tamamlanmadı")
+            RealToast.shared.show(t("Apple Music bağlantısı tamamlanmadı"))
         }
         return true
     }

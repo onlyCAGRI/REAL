@@ -6,7 +6,7 @@ enum MusicEra: String, CaseIterable, Identifiable, Sendable {
     case now = "era_2020", tens = "era_2010", noughties = "era_2000", before = "era_old"
     var id: String { rawValue }
     var label: String {
-        switch self { case .now: return "2020+"; case .tens: return "2010–2020"; case .noughties: return "2000–2010"; case .before: return "2000 öncesi" }
+        switch self { case .now: return "2020+"; case .tens: return "2010–2020"; case .noughties: return "2000–2010"; case .before: return t("2000 öncesi") }
     }
     var years: ClosedRange<Int> {
         switch self { case .now: return 2020...9999; case .tens: return 2010...2019; case .noughties: return 2000...2009; case .before: return 0...1999 }

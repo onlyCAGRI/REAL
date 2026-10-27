@@ -12,13 +12,16 @@ struct CardRouteMap: View {
     @State private var route: MKRoute?
     @State private var origin: CLLocationCoordinate2D?
     @State private var position: MapCameraPosition?
+    /// How much of the line is drawn (0…1): it grows from the phone to the place once per entry.
+    @State private var progress: Double = 0
+    @AppStorage("reduce_animations") private var reduceAnimations = false
 
     var body: some View {
         Map(position: Binding(get: { position ?? .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 900, longitudinalMeters: 900)) },
                               set: { position = $0 }),
             interactionModes: []) {
             if let route {
-                MapPolyline(route.polyline).stroke(Color(argb: 0xFF5B8DEF), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                MapPolyline(coordinates: Self.prefix(of: route.polyline, progress)).stroke(Color(argb: 0xFF5B8DEF), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
             }
             if let origin {
                 Annotation("", coordinate: origin) {
@@ -59,5 +62,40 @@ struct CardRouteMap: View {
         origin = here.coordinate
         route = found
         position = .rect(rect.insetBy(dx: -pad, dy: -pad))
+        await draw()
+    }
+
+    /// Grows the line start → destination (ease-out, ~1.4 s); with reduced animations it is whole at once.
+    private func draw() async {
+        guard !reduceAnimations else { progress = 1; return }
+        progress = 0
+        try? await Task.sleep(for: .milliseconds(150))
+        let steps = 70
+        for step in 1...steps {
+            guard !Task.isCancelled else { progress = 1; return }
+            let x = Double(step) / Double(steps)
+            progress = 1 - pow(1 - x, 3)
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        progress = 1
+    }
+
+    /// The first [fraction] of the polyline by length, ending on an interpolated point.
+    private static func prefix(of line: MKPolyline, _ fraction: Double) -> [CLLocationCoordinate2D] {
+        let points = UnsafeBufferPointer(start: line.points(), count: line.pointCount).map { $0 }
+        guard points.count > 1, fraction < 1 else { return points.map(\.coordinate) }
+        var lengths: [Double] = []
+        for i in 1..<points.count { lengths.append(points[i - 1].distance(to: points[i])) }
+        var left = lengths.reduce(0, +) * max(0, fraction)
+        var out = [points[0].coordinate]
+        for i in 1..<points.count {
+            let seg = lengths[i - 1]
+            if left >= seg { out.append(points[i].coordinate); left -= seg; continue }
+            let t = seg > 0 ? left / seg : 0
+            out.append(MKMapPoint(x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
+                                  y: points[i - 1].y + (points[i].y - points[i - 1].y) * t).coordinate)
+            break
+        }
+        return out
     }
 }

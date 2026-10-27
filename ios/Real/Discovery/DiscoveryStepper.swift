@@ -54,9 +54,9 @@ struct DiscoveryStepper: View {
             let chosenHere = selection.intersection(s.keys).count
             let last = step == steps.count - 1
             let label: String = {
-                if !last && chosenHere == 0 && s.optional { return "Atla" }
-                if !last { return "Devam" }
-                if chosenHere == 0 && s.optional { return "Atla ve \(doneLabel)" }
+                if !last && chosenHere == 0 && s.optional { return t("Atla") }
+                if !last { return t("Devam") }
+                if chosenHere == 0 && s.optional { return t("Atla ve {0}", doneLabel) }
                 return doneLabel.prefix(1).uppercased() + doneLabel.dropFirst()
             }()
             DiscoveryLoadingButton(label: label, loading: loading && last, enabled: enabled && (s.optional || chosenHere > 0), accent: accent) {
@@ -75,19 +75,19 @@ struct DiscoveryStepper: View {
     private func page(_ s: DiscoveryStep) -> some View {
         let chosen = selection.intersection(s.keys)
         return VStack(alignment: .leading, spacing: 0) {
-            Text(s.title).font(RealFont.inter(28, .bold)).foregroundStyle(.white).padding(.top, 10)
-            Text(s.subtitle).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8A8A92)).padding(.top, 6).padding(.bottom, 16)
+            Text(t(s.title)).font(RealFont.inter(28, .bold)).foregroundStyle(.white).padding(.top, 10)
+            Text(t(s.subtitle)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8A8A92)).padding(.top, 6).padding(.bottom, 16)
             if let top = s.top { top.padding(.bottom, 18) }
             ForEach(Array(s.groups.enumerated()), id: \.offset) { _, group in
                 if let heading = group.0 {
-                    Text(heading).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A92)).padding(.top, 14).padding(.bottom, 8)
+                    Text(t(heading)).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A92)).padding(.top, 14).padding(.bottom, 8)
                 }
                 ChipFlow(spacing: 8) {
                     ForEach(group.1) { o in
                         let on = chosen.contains(o.key)
                         let full = !on && chosen.count >= s.max && s.max > 1
                         let isRare = !on && rare(selection, o.key)
-                        DiscoveryChip(label: o.label, selected: on, enabled: !loading, accent: accent) { tap(o, s, on: on, full: full, isRare: isRare) }
+                        DiscoveryChip(label: t(o.label), selected: on, enabled: !loading, accent: accent) { tap(o, s, on: on, full: full, isRare: isRare) }
                             .opacity(full || isRare ? 0.32 : 1)
                             .animation(.easeOut(duration: 0.2), value: full || isRare)
                     }
@@ -103,13 +103,13 @@ struct DiscoveryStepper: View {
         if on { selection.remove(o.key); hint = nil; return }
         if full {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
-            hint = s.max == 2 ? "En iyi sonuçlar için 2 seçim yeterli" : "En fazla \(s.max) seçim"
+            hint = s.max == 2 ? t("En iyi sonuçlar için 2 seçim yeterli") : t("En fazla {0} seçim", s.max)
             return
         }
         if isRare {
             let all = steps.flatMap { $0.groups.flatMap(\.1) }
             let other = all.first { selection.contains($0.key) && rare([$0.key], o.key) }?.label
-            hint = other.map { "\(o.label) ile \($0) birlikte nadir" }
+            hint = other.map { t("{0} ile {1} birlikte nadir", t(o.label), t($0)) }
         } else { hint = nil }
         // A single-choice step swaps its choice.
         if s.max == 1 { selection.subtract(s.keys) }

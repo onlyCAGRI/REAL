@@ -59,8 +59,8 @@ enum GameSearch {
     static func search(_ query: String) async throws -> [CardGameBlock] {
         let json: [String: Any]
         do { json = try await RealBackend.post("/api/game-search", ["query": String(query.prefix(120))], timeout: 20) }
-        catch let f as RealBackend.Failure where f.status == 404 { throw CalendarCardPublisher.Failure(errorDescription: "Oyun araması için sunucunun güncellenmesi gerekiyor.") }
-        catch let f as RealBackend.Failure where f.status == 503 { throw CalendarCardPublisher.Failure(errorDescription: "Oyun kataloğu şu anda hazır değil.") }
+        catch let f as RealBackend.Failure where f.status == 404 { throw CalendarCardPublisher.Failure(errorDescription: t("Oyun araması için sunucunun güncellenmesi gerekiyor.")) }
+        catch let f as RealBackend.Failure where f.status == 503 { throw CalendarCardPublisher.Failure(errorDescription: t("Oyun kataloğu şu anda hazır değil.")) }
         return ((json["games"] as? [[String: Any]]) ?? []).compactMap(CardGameBlock.fromWorker)
     }
 }
@@ -80,7 +80,7 @@ struct GameBlockView: View {
                              subtitle: [block.year.map(String.init), block.genres.prefix(2).joined(separator: " · ").nilIfEmpty].compactMap { $0 }.joined(separator: " · "),
                              description: block.platforms.prefix(6).joined(separator: " · "), placeholderSymbol: "play.rectangle", inset: heroInset) {
                 if let url = URL(string: block.providerUrl), url.scheme == "https" {
-                    HeroOpenRow(label: "Oyun sayfasını aç ↗", action: { UIApplication.shared.open(url) }) {
+                    HeroOpenRow(label: t("Oyun sayfasını aç ↗"), action: { UIApplication.shared.open(url) }) {
                         Text(block.provider).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
                     }
                 }
@@ -96,7 +96,7 @@ struct GameBlockView: View {
                 HStack {
                     Spacer()
                     Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 40, height: 40) }
-                        .accessibilityLabel("Oyunu kaldır")
+                        .accessibilityLabel(t("Oyunu kaldır"))
                 }
             }
             HStack(alignment: .top, spacing: 14) {
@@ -112,11 +112,11 @@ struct GameBlockView: View {
             }
             if let url = URL(string: block.providerUrl), url.scheme == "https" {
                 Link(destination: url) {
-                    Text("Oyun sayfasını aç ↗").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD0D0D8))
+                    Text(t("Oyun sayfasını aç ↗")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD0D0D8))
                         .frame(maxWidth: .infinity).frame(height: 40)
                         .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 24))
                 }
-                Text("Kaynak: \(block.provider)").font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF6E6E78))
+                Text(t("Kaynak: {0}", block.provider)).font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF6E6E78))
             }
         }
         .padding(16)

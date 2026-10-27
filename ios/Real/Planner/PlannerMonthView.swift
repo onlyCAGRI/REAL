@@ -12,7 +12,7 @@ struct PlannerMonthView: View {
     @State private var month: Date = Calendar.real.startOfMonth(for: Date())
     @State private var direction: CGFloat = 1
     private let calendar = Calendar.real
-    private let weekdays = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
+    private let weekdays = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map { t($0) }
 
     var body: some View {
         let days = monthDays(month)
@@ -40,7 +40,7 @@ struct PlannerMonthView: View {
                                         removal: .move(edge: direction > 0 ? .leading : .trailing).combined(with: .opacity)))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(RealDates.longDay(selectedDay)).font(RealType.editorialItem).kerning(-1).foregroundStyle(Color(argb: 0xFFF3F1F4))
-                    Text(picked.isEmpty ? "Bu gün için plan yok" : "\(picked.count) plan").font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8C8C95))
+                    Text(picked.isEmpty ? t("Bu gün için plan yok") : t("{0} plan", picked.count)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8C8C95))
                 }
                 .padding(.top, 14).padding(.horizontal, 4)
                 VStack(spacing: 12) {
@@ -78,14 +78,14 @@ struct PlannerMonthView: View {
     private var monthBar: some View {
         HStack {
             Button { changeMonth(-1) } label: { RealSymbol("chevron.left", size: 16).foregroundStyle(Color(argb: 0xFFB0B0B8)).frame(width: 40, height: 40) }
-                .accessibilityLabel("Önceki ay")
+                .accessibilityLabel(t("Önceki ay"))
             Spacer()
-            Text(month.formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "tr_TR"))).capitalized(with: Locale(identifier: "tr_TR")))
+            Text(month.formatted(.dateTime.month(.wide).year().locale(I18n.locale)).capitalized(with: I18n.locale))
                 .font(RealFont.inter(19, .semibold)).foregroundStyle(.white)
                 .contentTransition(.opacity)
             Spacer()
             Button { changeMonth(1) } label: { RealSymbol("chevron.right", size: 16).foregroundStyle(Color(argb: 0xFFB0B0B8)).frame(width: 40, height: 40) }
-                .accessibilityLabel("Sonraki ay")
+                .accessibilityLabel(t("Sonraki ay"))
         }
         .padding(.horizontal, 6)
         .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -212,7 +212,7 @@ struct PlannerMonthView: View {
         }
         .buttonStyle(PressScaleStyle(scale: 0.95))
         .frame(maxWidth: .infinity)
-        .accessibilityLabel("\(RealDates.longDay(day)), \(events.count) etkinlik\(isToday ? ", bugün" : "")")
+        .accessibilityLabel(t("{0}, {1} etkinlik", RealDates.longDay(day), events.count) + (isToday ? t(", bugün") : ""))
     }
 
     /// The card's category colour; without a category the colour the person picked (planner or card colour);

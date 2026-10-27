@@ -51,14 +51,14 @@ struct WaterTrackerScreen: View {
                             RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                                 .frame(width: 44, height: 44).liquidGlass(Circle(), role: .chrome).contentShape(Circle())
                         }
-                        .accessibilityLabel("İçecek ekranını kapat")
+                        .accessibilityLabel(t("İçecek ekranını kapat"))
                         Text(beverage.label).font(RealFont.inter(34, .medium)).foregroundStyle(.white).padding(.top, 16)
                         Button {
                             guard beverage == .water else { return }
                             goalText = "\(life.goalMl)"
                             goalDialog = true
                         } label: {
-                            Text(beverage == .water ? "Bugün: \(total) / \(target) ml" : "Bugün: \(amountText(total))")
+                            Text(beverage == .water ? t("Bugün: {0} / {1} ml", total, target) : t("Bugün: {0}", amountText(total)))
                                 .font(RealFont.inter(20)).foregroundStyle(.white)
                                 .padding(.vertical, 9)
                         }
@@ -106,10 +106,10 @@ struct WaterTrackerScreen: View {
         .onDisappear { engine.stopMotion() }
         .onChange(of: progress) { _, p in engine.target = min(p, 1.15) }
         .onChange(of: beverage) { _, _ in engine.target = min(progress, 1.15); engine.disturb(at: 0.5, strength: 0.6) }
-        .alert("Günlük su hedefi", isPresented: $goalDialog) {
-            TextField("Hedef (ml)", text: $goalText).keyboardType(.numberPad)
-            Button("Kaydet") { if let v = Int(goalText) { life.setGoal(v) } }
-            Button("Vazgeç", role: .cancel) {}
+        .alert(t("Günlük su hedefi"), isPresented: $goalDialog) {
+            TextField(t("Hedef (ml)"), text: $goalText).keyboardType(.numberPad)
+            Button(t("Kaydet")) { if let v = Int(goalText) { life.setGoal(v) } }
+            Button(t("Vazgeç"), role: .cancel) {}
         }
     }
 
@@ -224,7 +224,7 @@ struct WaterTrackerScreen: View {
         let entries = life.entries(on: Date(), beverage: beverage)
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Bugün").font(RealFont.inter(26)).foregroundStyle(.white)
+                Text(t("Bugün")).font(RealFont.inter(26)).foregroundStyle(.white)
                 Spacer()
                 Text(beverage == .water || progress >= 1 ? "\(Int((progress * 100).rounded()))%" : amountText(total))
                     .font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.78))
@@ -244,7 +244,7 @@ struct WaterTrackerScreen: View {
                                 Button { life.removeDrink(e.id) } label: {
                                     Text("−").font(RealFont.inter(20)).foregroundStyle(Color(argb: 0xFFB9BEC0)).frame(width: 44, height: 44)
                                 }
-                                .accessibilityLabel("\(e.amountMl) mililitre kaydını geri al")
+                                .accessibilityLabel(t("{0} mililitre kaydını geri al", e.amountMl))
                             }
                             .padding(.leading, 24).padding(.trailing, 10)
                         }

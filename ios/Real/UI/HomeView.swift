@@ -184,9 +184,14 @@ struct HomeView: View {
                     card(reminder, swipe: true, label: searching)
                 }
                 ForEach(calendarItems) { o in
-                    // A phone-calendar event: opens the event window; no completing, swiping or selecting.
+                    // A phone-calendar event: opens the event window; no completing or selecting. Once it ended
+                    // today it is faded, and a left swipe hides it.
+                    let past = CalendarCards.isPast(o)
                     ReminderCardView(reminder: CalendarCards.card(o), category: store.category(CalendarCategoryLinks.shared.categoryFor(o)),
-                                     onOpen: { if !keyboard.consumeTap() { externalDetail = o } })
+                                     onOpen: { if !keyboard.consumeTap() { externalDetail = o } },
+                                     onSwipeDelete: past ? { CalendarPastDismissals.shared.dismiss(o) } : nil,
+                                     swipeLeftHides: past)
+                        .opacity(past ? 0.45 : 1)
                         .padding(.horizontal, 16).padding(.bottom, 8)
                 }
                 if !completed.isEmpty {

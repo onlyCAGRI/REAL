@@ -34,17 +34,17 @@ enum RealBackend {
 
     /// aiServiceFailureMessage (Android): a short Turkish line for an AI / catalog request that failed.
     static func message(for error: Error) -> String {
-        if error is AppCheckUnavailable { return "Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene." }
-        if (error as? URLError)?.code == .userAuthenticationRequired { return "Bunun için REAL'e giriş yap." }
-        if let urlError = error as? URLError, urlError.code == .notConnectedToInternet { return "İnternet bağlantısı yok." }
-        guard let failure = error as? Failure else { return "Şu anda yapılamadı. Biraz sonra tekrar dene." }
+        if error is AppCheckUnavailable { return t("Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene.") }
+        if (error as? URLError)?.code == .userAuthenticationRequired { return t("Bunun için REAL'e giriş yap.") }
+        if let urlError = error as? URLError, urlError.code == .notConnectedToInternet { return t("İnternet bağlantısı yok.") }
+        guard let failure = error as? Failure else { return t("Şu anda yapılamadı. Biraz sonra tekrar dene.") }
         switch (failure.status, failure.code ?? "") {
-        case (401, _): return "Bunun için REAL'e giriş yap."
-        case (403, "PRO_REQUIRED"): return "Bu özellik REAL Pro ile açılıyor."
-        case (403, "APP_CHECK_REQUIRED"): return "Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene."
-        case (429, _): return "Bugünkü AI kullanım hakkın doldu. Yarın tekrar dene."
-        case (503, _): return "Katalog şu anda hazır değil. Biraz sonra tekrar dene."
-        default: return "Şu anda yapılamadı. Biraz sonra tekrar dene."
+        case (401, _): return t("Bunun için REAL'e giriş yap.")
+        case (403, "PRO_REQUIRED"): return t("Bu özellik REAL Pro ile açılıyor.")
+        case (403, "APP_CHECK_REQUIRED"): return t("Cihaz doğrulaması yapılamadı. Biraz sonra tekrar dene.")
+        case (429, _): return t("Bugünkü AI kullanım hakkın doldu. Yarın tekrar dene.")
+        case (503, _): return t("Katalog şu anda hazır değil. Biraz sonra tekrar dene.")
+        default: return t("Şu anda yapılamadı. Biraz sonra tekrar dene.")
         }
     }
 }

@@ -122,8 +122,8 @@ enum RealAlarmKit {
     private static func add(_ alarm: RingingAlarm, index: Int) {
         let id = uuid(alarm.id, index)
         remember(alarm, for: id)
-        let stop = AlarmButton(text: "Kapat", textColor: .white, systemImageName: "stop.fill")
-        let open = AlarmButton(text: "Aç", textColor: .white, systemImageName: "arrow.up.forward.app")
+        let stop = AlarmButton(text: t("Kapat"), textColor: .white, systemImageName: "stop.fill")
+        let open = AlarmButton(text: t("Aç"), textColor: .white, systemImageName: "arrow.up.forward.app")
         let alert = AlarmPresentation.Alert(title: "\(alarm.title)", stopButton: stop, secondaryButton: open, secondaryButtonBehavior: .custom)
         let attributes = AlarmAttributes<RealAlarmMetadata>(presentation: AlarmPresentation(alert: alert),
                                                             metadata: RealAlarmMetadata(reminderId: alarm.id), tintColor: alarm.color)

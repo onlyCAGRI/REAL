@@ -16,11 +16,11 @@ struct YasamJournalSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Bugün yaz").font(RealFont.inter(28, .semibold)).foregroundStyle(.white).padding(.top, 8)
-                Text("Nasıl geçti? Aklında kalanı yaz.").font(RealFont.inter(14)).foregroundStyle(muted)
+                Text(t("Bugün yaz")).font(RealFont.inter(28, .semibold)).foregroundStyle(.white).padding(.top, 8)
+                Text(t("Nasıl geçti? Aklında kalanı yaz.")).font(RealFont.inter(14)).foregroundStyle(muted)
                 Color.clear.frame(height: 4)
                 ZStack(alignment: .topLeading) {
-                    if text.isEmpty { Text("Günlüğün…").font(RealFont.inter(16)).foregroundStyle(muted) }
+                    if text.isEmpty { Text(t("Günlüğün…")).font(RealFont.inter(16)).foregroundStyle(muted) }
                     TextField("", text: $text, axis: .vertical)
                         .font(RealFont.inter(16)).lineSpacing(8).foregroundStyle(.white).tint(.white)
                         .focused($focused)
@@ -35,15 +35,15 @@ struct YasamJournalSheet: View {
                 if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFF8A80)) }
                 let canSave = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 Button {
-                    if onSave(text.trimmingCharacters(in: .whitespacesAndNewlines)) { dismiss() } else { error = "Günlük kaydedilemedi." }
+                    if onSave(text.trimmingCharacters(in: .whitespacesAndNewlines)) { dismiss() } else { error = t("Günlük kaydedilemedi.") }
                 } label: {
-                    Text("Kaydet").font(RealFont.inter(16, .semibold)).foregroundStyle(.black)
+                    Text(t("Kaydet")).font(RealFont.inter(16, .semibold)).foregroundStyle(.black)
                         .frame(maxWidth: .infinity).frame(height: 52)
                         .background(Capsule().fill(.white.opacity(canSave ? 1 : 0.35)))
                 }
                 .buttonStyle(.plain).disabled(!canSave)
                 Button { dismiss() } label: {
-                    Text("Vazgeç").font(RealFont.inter(16, .semibold)).foregroundStyle(.white)
+                    Text(t("Vazgeç")).font(RealFont.inter(16, .semibold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).frame(height: 52)
                         .background(Capsule().fill(glass))
                         .overlay(Capsule().strokeBorder(.white.opacity(0.10), lineWidth: 1))
@@ -60,7 +60,8 @@ struct YasamJournalSheet: View {
         .onAppear { focused = true }
     }
 
-    /// STANDALONE_JOURNAL_PREFIX + "d MMMM" (tr).
+    /// STANDALONE_JOURNAL_PREFIX + "d MMMM" (tr). Stored card text: Android finds journal cards by this
+    /// Turkish prefix, so it is never translated.
     static func title(_ date: Date = Date()) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "tr_TR")
