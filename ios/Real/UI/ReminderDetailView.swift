@@ -1351,7 +1351,9 @@ struct CardStackEditor: View {
                                        open: $formatOpen, foreground: .primary, onDark: scheme == .dark)
                 }
                 .padding(.vertical, 4)
+                // A tap outside the text (settings, colours, picture) puts the keyboard down; the control still acts.
                 Section(t("Kart yığını")) { CardBodyFormatSettings(format: $card.bodyFormat) }
+                    .simultaneousGesture(TapGesture().onEnded { _ = KeyboardWatcher.shared.consumeTap() })
                 Section(t("Renk")) {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 10) {
                         ForEach(pickerColorChoices) { choice in
@@ -1361,15 +1363,20 @@ struct CardStackEditor: View {
                                 .onTapGesture { card.colorArgb = card.colorArgb == argb ? nil : argb }
                         }
                     }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
                 }
+                .simultaneousGesture(TapGesture().onEnded { _ = KeyboardWatcher.shared.consumeTap() })
                 Section(t("Görsel")) {
                     PhotosPicker(selection: $photo, matching: .images) { Label(card.imageUri == nil ? t("Görsel ekle") : t("Görseli değiştir"), systemImage: "photo") }
                     if card.imageUri != nil { Button(t("Görseli kaldır"), role: .destructive) { card.imageUri = nil } }
                 }
+                .simultaneousGesture(TapGesture().onEnded { _ = KeyboardWatcher.shared.consumeTap() })
                 if !isNew {
                     Button(t("Kartı sil"), role: .destructive) { onSave(nil); dismiss() }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(isNew ? t("Yeni kart") : t("Kart"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

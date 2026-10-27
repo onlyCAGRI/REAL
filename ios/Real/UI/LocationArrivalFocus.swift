@@ -53,6 +53,8 @@ struct LocationArrivalFocusScreen: View {
     @State private var armed = false
     @State private var initiallyDone: Set<Int64>?
     @State private var map: ArrivalMapSnapshot?
+    /// The arrived place from close above: the strip once the list is up.
+    @State private var closeUp: ArrivalMapSnapshot?
     @State private var mapResolved = false
     @State private var mapDrawn = false
     @State private var introText = false
@@ -127,6 +129,7 @@ struct LocationArrivalFocusScreen: View {
         let intro = phase == .intro
         let destY = map?.destination.y ?? size.height / 2
         let shift = intro ? 0 : min(0, max(Self.stripH - size.height, Self.stripH / 2 - destY))
+        let showCloseUp = !intro && closeUp != nil
         ZStack(alignment: .top) {
             Self.background
             if let categoryColor {
@@ -139,6 +142,12 @@ struct LocationArrivalFocusScreen: View {
                 ArrivalMapLayer(map: map, accent: accent, drawn: mapDrawn, size: size)
                     .frame(width: size.width, height: size.height)
                     .offset(y: shift)
+                    .opacity(showCloseUp ? 0 : 1)
+                if let closeUp {
+                    ArrivalCloseUpLayer(map: closeUp, accent: accent, size: CGSize(width: size.width, height: Self.stripH))
+                        .frame(width: size.width, height: Self.stripH)
+                        .opacity(showCloseUp ? 1 : 0)
+                }
                 LinearGradient(stops: [.init(color: Self.background.opacity(0.55), location: 0), .init(color: .clear, location: 0.26),
                                        .init(color: .clear, location: 0.55), .init(color: Self.background, location: 1)],
                                startPoint: .top, endPoint: .bottom)
@@ -146,6 +155,7 @@ struct LocationArrivalFocusScreen: View {
             .frame(width: size.width, height: intro ? size.height : Self.stripH, alignment: .top)
             .clipped()
             .animation(.timingCurve(0.65, 0, 0.25, 1, duration: 0.75), value: intro)
+            .animation(.easeInOut(duration: 0.52).delay(showCloseUp ? 0.45 : 0), value: showCloseUp)
 
             // Intro words over the full map.
             VStack(alignment: .leading, spacing: 8) {
@@ -423,9 +433,11 @@ struct LocationArrivalFocusScreen: View {
         let loaded = await ArrivalMapLoader.load(context, size: size)
         map = loaded
         mapResolved = true
-        guard loaded != nil else { return }
-        try? await Task.sleep(for: .milliseconds(60))
-        mapDrawn = true
+        if loaded != nil {
+            try? await Task.sleep(for: .milliseconds(60))
+            mapDrawn = true
+        }
+        closeUp = await ArrivalMapLoader.loadCloseUp(context, size: CGSize(width: size.width, height: Self.stripH))
     }
 
     /// Waits up to 1.2 s for the map, then gives it time to draw; without one the moment is short.
@@ -569,10 +581,17 @@ enum ArrivalMapLoader {
     static func load(_ context: ArrivalFocusContext, size: CGSize) async -> ArrivalMapSnapshot? {
         let place = CLLocationCoordinate2D(latitude: context.latitude, longitude: context.longitude)
         var polyline: MKPolyline?
-        if !context.onExit, let here = await CurrentLocation.fix(),
-           here.distance(from: CLLocation(latitude: place.latitude, longitude: place.longitude)) > 1500 {
+        var from: CLLocationCoordinate2D?
+        if !context.onExit {
+            // Where the phone came from: live when still far (the developer test), else the point kept when the
+            // reminder was set.
+            let target = CLLocation(latitude: place.latitude, longitude: place.longitude)
+            if let here = await CurrentLocation.fix(), here.distance(from: target) > 1500 { from = here.coordinate }
+            else { from = ArrivalOrigins.origin(context.id, placeLat: place.latitude, placeLng: place.longitude) }
+        }
+        if let from {
             let request = MKDirections.Request()
-            request.source = MKMapItem(placemark: MKPlacemark(coordinate: here.coordinate))
+            request.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
             request.destination = MKMapItem(placemark: MKPlacemark(coordinate: place))
             request.transportType = .automobile
             polyline = try? await MKDirections(request: request).calculate().routes.first?.polyline
@@ -597,6 +616,77 @@ enum ArrivalMapLoader {
             route = coords.map { snap.point(for: $0) }
         }
         return ArrivalMapSnapshot(image: snap.image, route: route, destination: snap.point(for: place))
+    }
+
+    /// The arrived place from close above, centred: what the strip shows once the list is up.
+    @MainActor
+    static func loadCloseUp(_ context: ArrivalFocusContext, size: CGSize) async -> ArrivalMapSnapshot? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        let place = CLLocationCoordinate2D(latitude: context.latitude, longitude: context.longitude)
+        let options = MKMapSnapshotter.Options()
+        options.size = size
+        options.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
+        options.pointOfInterestFilter = .excludingAll
+        options.region = MKCoordinateRegion(center: place, latitudinalMeters: 260, longitudinalMeters: 260)
+        guard let snap = try? await MKMapSnapshotter(options: options).start() else { return nil }
+        return ArrivalMapSnapshot(image: snap.image, route: [], destination: snap.point(for: place))
+    }
+}
+
+/// Where the phone was when a card's Varınca reminder was set: the "came from" point of the arrival route
+/// (LocationReminders.rememberOrigins). One cached or fresh fix, kept per card with the place it was taken for.
+enum ArrivalOrigins {
+    private static let key = "arrival_origins"
+    private static let maxAge: TimeInterval = 6 * 3600
+
+    private static func all() -> [String: [Double]] {
+        UserDefaults.standard.dictionary(forKey: key) as? [String: [Double]] ?? [:]
+    }
+
+    /// Takes a new point unless one for this place is still fresh.
+    static func remember(_ id: Int64, placeLat: Double, placeLng: Double) {
+        let now = Date().timeIntervalSince1970
+        if let o = all()[String(id)], o.count == 5, o[2] == placeLat, o[3] == placeLng, now - o[4] < maxAge { return }
+        Task { @MainActor in
+            guard let fix = await CurrentLocation.fix() else { return }
+            var kept = all().filter { now - ($0.value.last ?? 0) < 7 * 86_400 }
+            kept[String(id)] = [fix.coordinate.latitude, fix.coordinate.longitude, placeLat, placeLng, Date().timeIntervalSince1970]
+            UserDefaults.standard.set(kept, forKey: key)
+        }
+    }
+
+    /// The kept point for this card and place, when it is far enough from the place to draw a route.
+    static func origin(_ id: Int64, placeLat: Double, placeLng: Double) -> CLLocationCoordinate2D? {
+        guard let o = all()[String(id)], o.count == 5, o[2] == placeLat, o[3] == placeLng else { return nil }
+        let from = CLLocation(latitude: o[0], longitude: o[1])
+        guard from.distance(from: CLLocation(latitude: placeLat, longitude: placeLng)) > 400 else { return nil }
+        return from.coordinate
+    }
+}
+
+/// The close-up in the strip: the monochrome map with the place pin and a calm, looping pulse.
+private struct ArrivalCloseUpLayer: View {
+    let map: ArrivalMapSnapshot
+    let accent: Color
+    let size: CGSize
+    @State private var pulse = false
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Image(uiImage: map.image).resizable().frame(width: size.width, height: size.height)
+                .saturation(0).brightness(0.03)
+            ZStack {
+                Circle().fill(accent.opacity(0.45)).frame(width: 18, height: 18)
+                    .scaleEffect(pulse ? 4 : 1).opacity(pulse ? 0 : 1)
+                    .animation(.easeOut(duration: 1.9).repeatForever(autoreverses: false), value: pulse)
+                Circle().fill(.white).frame(width: 18, height: 18)
+                    .overlay(Circle().fill(accent).frame(width: 8, height: 8))
+                    .shadow(color: .black.opacity(0.55), radius: 5)
+            }
+            .position(map.destination)
+        }
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .onAppear { pulse = true }
     }
 }
 
