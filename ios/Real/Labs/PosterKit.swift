@@ -77,7 +77,8 @@ enum PosterKit {
     @MainActor static func save(title: String, render: @escaping () async -> UIImage?, onDone: @escaping () -> Void) {
         Task { @MainActor in
             let image = await render()
-            let ok = await image.map { await saveToPhotos($0) } ?? false
+            var ok = false
+            if let image { ok = await saveToPhotos(image) }
             onDone()
             if openScreens > 0 {
                 RealToast.shared.show(ok ? t("Galeriye kaydedildi") : t("Poster kaydedilemedi"))
