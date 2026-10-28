@@ -3,4 +3,5 @@
     <files-path name="attachments" path="reminder_attachments/" />
     <files-path name="pano_assets" path="pano_assets/" />
     <cache-path name="shared_category_assets" path="shared_categories/" />
+    <cache-path name="map_posters" path="map_posters/" />
 </paths>

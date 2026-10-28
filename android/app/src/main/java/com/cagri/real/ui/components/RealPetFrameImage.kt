@@ -13,33 +13,34 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 
 /**
- * Full-frame pet pose renderer for user-provided PNG poses with transparent backgrounds.
- * The image is bottom-aligned inside the same 114dp interaction envelope used by the pet.
+ * Every real_pet_* frame shares one 640x560 canvas: same cat scale, facing left, ground shadow
+ * removed, feet on row 540. So each pose draws the whole canvas at one fixed size.
  */
 @Composable
 internal fun RealPetFrameImage(
     resource: Int,
     modifier: Modifier = Modifier,
-    sizeScale: Float = 1f,
     breath: Float = 0f
 ) {
     BoxWithConstraints(modifier) {
-        val bodyWidth = maxWidth * 0.92f
-        val bodyHeight = maxHeight * 0.82f
-        val footPadding = maxHeight * (8f / 256f)
+        // 640px canvas -> 90dp in the 114dp envelope keeps the old idle cat size.
+        val canvasWidth = maxWidth * (90f / 114f)
+        val canvasHeight = canvasWidth * (560f / 640f)
+        // Old sprites stood ~6dp above the envelope bottom; the canvas already has 20px under the feet.
+        val footPadding = maxHeight * (3f / 114f)
         Image(
             painter = painterResource(resource),
             contentDescription = null,
-            contentScale = ContentScale.Fit,
-            alignment = Alignment.BottomCenter,
+            contentScale = ContentScale.FillBounds,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = footPadding)
-                .size(bodyWidth, bodyHeight)
+                .size(canvasWidth, canvasHeight)
                 .graphicsLayer {
-                    transformOrigin = TransformOrigin(0.5f, 1f)
-                    scaleY = sizeScale * (1f + breath * 0.045f)
-                    scaleX = sizeScale * (1f + breath * 0.008f)
+                    // Breathing grows from the feet line (row 540 of 560).
+                    transformOrigin = TransformOrigin(0.5f, 540f / 560f)
+                    scaleY = 1f + breath * 0.045f
+                    scaleX = 1f + breath * 0.008f
                 }
         )
     }

@@ -7,8 +7,8 @@ import com.cagri.real.network.MoodSuggestionRequest
 import com.cagri.real.platform.android.network.toJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Calendar
 
 object MusicCandidateMatcher {
     fun normalize(input: String): String {
@@ -102,7 +102,10 @@ object MoodSuggestionClient {
         details: MoodDetails,
         endpoint: String = ENDPOINT,
         transport: HttpTransport = AndroidBackend.workerTransport,
-        excludeMusic: List<String> = emptyList()
+        excludeMusic: List<String> = emptyList(),
+        excludeMedia: List<String> = emptyList(),
+        excludeIdeas: List<String> = emptyList(),
+        language: String = if (com.cagri.real.i18n.I18n.isEnglish) "en" else "tr"
     ): Result<List<MoodSuggestion>> = requestSuggestions(
         mood = mood,
         details = details,
@@ -110,7 +113,10 @@ object MoodSuggestionClient {
         transport = transport,
         replaceKind = null,
         exclude = emptyList(),
-        excludeMusic = excludeMusic
+        excludeMusic = excludeMusic,
+        excludeMedia = excludeMedia,
+        excludeIdeas = excludeIdeas,
+        language = language
     ).mapCatching { suggestions ->
         if (suggestions.size != 4) {
             throw Exception("Expected exactly 4 suggestions, received ${suggestions.size}")
@@ -125,7 +131,10 @@ object MoodSuggestionClient {
         exclude: List<String>,
         endpoint: String = ENDPOINT,
         transport: HttpTransport = AndroidBackend.workerTransport,
-        excludeMusic: List<String> = emptyList()
+        excludeMusic: List<String> = emptyList(),
+        excludeMedia: List<String> = emptyList(),
+        excludeIdeas: List<String> = emptyList(),
+        language: String = if (com.cagri.real.i18n.I18n.isEnglish) "en" else "tr"
     ): Result<MoodSuggestion> = requestSuggestions(
         mood = mood,
         details = details,
@@ -133,7 +142,10 @@ object MoodSuggestionClient {
         transport = transport,
         replaceKind = kind,
         exclude = exclude,
-        excludeMusic = excludeMusic
+        excludeMusic = excludeMusic,
+        excludeMedia = excludeMedia,
+        excludeIdeas = excludeIdeas,
+        language = language
     ).mapCatching { suggestions ->
         val replacement = suggestions.singleOrNull()
             ?: throw Exception("Expected exactly 1 replacement suggestion, received ${suggestions.size}")
@@ -150,12 +162,25 @@ object MoodSuggestionClient {
         replaceKind: MoodSuggestionKind?,
         exclude: List<String>,
         transport: HttpTransport,
-        excludeMusic: List<String>
+        excludeMusic: List<String>,
+        excludeMedia: List<String>,
+        excludeIdeas: List<String>,
+        language: String
     ): Result<List<MoodSuggestion>> = withContext(Dispatchers.IO) {
-
         try {
+            val localHour = runCatching { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }.getOrNull()
             val payload = MoodSuggestionRequest(
-                mood.name, details.descriptors, details.factors, replaceKind, exclude, excludeMusic
+                mood = mood.name,
+                descriptors = details.descriptors,
+                factors = details.factors,
+                replaceKind = replaceKind,
+                exclude = exclude,
+                excludeMusic = excludeMusic,
+                excludeMedia = excludeMedia,
+                excludeIdeas = excludeIdeas,
+                scope = details.scope.persistKey,
+                localHour = localHour,
+                language = language
             ).toJson()
             val response = WorkerClient(transport).postJson(endpoint, payload, 15000, 18000)
             val responseCode = response.statusCode

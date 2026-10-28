@@ -16,7 +16,9 @@ import java.time.ZoneId
 internal data class CategorizedCalendarCards(
     /** Every upcoming event in the coming year as a card; customCategoryId is set when it is filed under a category. */
     val all: List<ReminderItem> = emptyList(),
-    val occurrences: Map<Long, CalendarOccurrence> = emptyMap()
+    val occurrences: Map<Long, CalendarOccurrence> = emptyMap(),
+    /** Card ids of today's events that already ended: shown faded until the day is over, or swiped away. */
+    val past: Set<Long> = emptySet()
 ) {
     /** Only the events filed under a category. */
     val items: List<ReminderItem> get() = all.filter { it.customCategoryId != null }
@@ -46,23 +48,59 @@ internal object CalendarHomeDays {
     fun label(days: Int) = if (days <= 0) t("Kapalı") else t("Önümüzdeki {0} gün", days)
 }
 
-/** Upcoming events of the coming year (a yearly birthday shows once), the nearest occurrence of each. */
+/**
+ * Calendar events swiped off once they ended ("Gizle"), by event and start. Only today's can be swiped, so keys of
+ * earlier days are dropped on the next write.
+ */
+internal object CalendarPastDismissals {
+    val revision = mutableIntStateOf(0)
+    private fun prefs(context: android.content.Context) = com.cagri.real.platform.android.sync.SyncLocal.preferences(
+        context.applicationContext, "real_calendar_home", android.content.Context.MODE_PRIVATE)
+    fun key(o: CalendarOccurrence) = "${o.eventId}:${o.start}"
+    fun all(context: android.content.Context): Set<String> = prefs(context).getStringSet("dismissed", null).orEmpty()
+    fun dismiss(context: android.content.Context, o: CalendarOccurrence, dayStart: Long) {
+        val kept = all(context).filter { k -> (k.substringAfter(':').toLongOrNull() ?: 0L) >= dayStart - 86_400_000L }
+        prefs(context).edit().putStringSet("dismissed", (kept + key(o)).toSet()).apply()
+        revision.intValue++
+    }
+}
+
+/**
+ * Upcoming events of the coming year (a yearly birthday shows once), the nearest occurrence of each, plus today's
+ * events that already ended: those stay, faded ([CategorizedCalendarCards.past]), until midnight or a swipe.
+ */
 @Composable
 internal fun rememberCategorizedCalendarCards(reminders: List<ReminderItem>): CategorizedCalendarCards {
     val context = LocalContext.current.applicationContext
     val zone = remember { ZoneId.systemDefault() }
-    val today = remember { LocalDate.now(zone) }
+    // Moves on when the next event ends and at midnight, so a card fades / leaves while the screen stays open.
+    var clock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val lifecycle by androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    LaunchedEffect(lifecycle) {
+        if (lifecycle.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) clock = System.currentTimeMillis()
+    }
+    val today = remember(clock) { Instant.ofEpochMilli(clock).atZone(zone).toLocalDate() }
     val start = remember(today) { today.atStartOfDay(zone).toInstant().toEpochMilli() }
     val end = remember(today) { today.plusYears(1).atStartOfDay(zone).toInstant().toEpochMilli() }
     val read = rememberExternalCalendarEvents(start, end, reminders)
     val links = remember(context) { CalendarCategoryLinks(context) }
     val revision = CalendarCategoryLinks.revision.intValue
-    return remember(read.events, revision) {
+    val dismissedRevision = CalendarPastDismissals.revision.intValue
+    fun localAllDay(value: Long) = Instant.ofEpochMilli(value).atZone(ZoneId.of("UTC"))
+        .toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+    fun endOf(o: CalendarOccurrence) = if (o.allDay) localAllDay(o.end) else o.end
+    LaunchedEffect(read.events, clock) {
         val now = System.currentTimeMillis()
-        fun localAllDay(value: Long) = Instant.ofEpochMilli(value).atZone(ZoneId.of("UTC"))
-            .toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+        val midnight = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val next = read.events.asSequence().map(::endOf).filter { it > now }.minOrNull()?.coerceAtMost(midnight) ?: midnight
+        kotlinx.coroutines.delay((next - now).coerceAtLeast(1_000L))
+        clock = System.currentTimeMillis()
+    }
+    return remember(read.events, revision, dismissedRevision, clock) {
+        val now = clock
+        val dismissed = CalendarPastDismissals.all(context)
         val upcoming = read.events
-            .filter { o -> (if (o.allDay) localAllDay(o.end) else o.end) > now }
+            .filter { o -> endOf(o) > start && (endOf(o) > now || CalendarPastDismissals.key(o) !in dismissed) }
             .sortedBy { if (it.allDay) localAllDay(it.start) else it.start }
             .distinctBy { it.eventId }
         val items = upcoming.map { o ->
@@ -75,7 +113,8 @@ internal fun rememberCategorizedCalendarCards(reminders: List<ReminderItem>): Ca
                 sendImmediateNotification = false, customCategoryId = links.categoryFor(o.eventId, o.calendarId)
             )
         }
-        CategorizedCalendarCards(items, upcoming.associateBy { -it.eventId })
+        CategorizedCalendarCards(items, upcoming.associateBy { -it.eventId },
+            upcoming.filter { endOf(it) <= now }.mapTo(HashSet()) { -it.eventId })
     }
 }
 

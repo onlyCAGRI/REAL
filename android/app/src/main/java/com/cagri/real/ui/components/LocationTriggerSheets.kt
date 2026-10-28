@@ -105,6 +105,9 @@ fun LocationTriggerSheet(
     val lng = place.longitude
     var onExit by remember(place) { mutableStateOf(initial?.onExit ?: false) }
     var radius by remember(place) { mutableIntStateOf(initial?.radiusMeters ?: LocationTrigger.DEFAULT_RADIUS) }
+    // "Ayrılınca" leaves out the circles small enough for GPS drift to cross while the phone lies still.
+    val radii = if (onExit) LocationTrigger.RADIUS_CHOICES.filter { it >= LocationTrigger.EXIT_MIN_RADIUS } else LocationTrigger.RADIUS_CHOICES
+    if (onExit && radius < LocationTrigger.EXIT_MIN_RADIUS) radius = LocationTrigger.EXIT_MIN_RADIUS
     BottomPanel(onCancel) {
         Text(place.placeName, color = Color(0xFFF4F4F6), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
         Text(t("Bir kere hatırlatır, sonra konum takibi biter."), color = Muted, fontSize = 13.sp)
@@ -113,8 +116,12 @@ fun LocationTriggerSheet(
         Spacer(Modifier.height(14.dp))
         Text(t("Mesafe"), color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(6.dp))
-        Segmented(LocationTrigger.RADIUS_CHOICES.map { "$it m" }, LocationTrigger.RADIUS_CHOICES.indexOf(radius).coerceAtLeast(0)) {
-            radius = LocationTrigger.RADIUS_CHOICES[it]
+        Segmented(radii.map { "$it m" }, radii.indexOf(radius).coerceAtLeast(0)) {
+            radius = radii[it]
+        }
+        if (onExit) {
+            Spacer(Modifier.height(10.dp))
+            ExitOutsideNote(lat, lng, radius, Muted)
         }
         Spacer(Modifier.height(20.dp))
         val ready = lat != null && lng != null
@@ -152,6 +159,24 @@ private fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> U
             }
         }
     }
+}
+
+/**
+ * "Ayrılınca" set while the phone is already outside the place: it only fires after coming in and leaving again,
+ * so say so. Uses the cached position only; nothing is shown without one.
+ */
+@Composable
+internal fun ExitOutsideNote(lat: Double?, lng: Double?, radiusMeters: Int, color: Color) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var outside by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(lat, lng, radiusMeters) {
+        if (lat == null || lng == null) { outside = false; return@LaunchedEffect }
+        val here = com.cagri.real.notifications.LocationReminders.lastKnown(context) ?: run { outside = false; return@LaunchedEffect }
+        val distance = FloatArray(1)
+        android.location.Location.distanceBetween(here.first, here.second, lat, lng, distance)
+        outside = distance[0] > maxOf(radiusMeters, LocationTrigger.EXIT_MIN_RADIUS)
+    }
+    if (outside) Text(t("Şu an bu yerin dışındasın: önce gelip sonra ayrıldığında hatırlatır."), color = color, fontSize = 12.sp)
 }
 
 /** Composer chip text: "Market · varınca". */

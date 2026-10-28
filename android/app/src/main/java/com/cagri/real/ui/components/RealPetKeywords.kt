@@ -33,7 +33,7 @@ object RealPetKeywords {
      * Called on each keystroke/change in the Add to REAL composer.
      */
     fun onComposerDraftChanged(newText: String, isKeywordsEnabled: Boolean) {
-        if (!isKeywordsEnabled) {
+        if (!isKeywordsEnabled || !REAL_PET_AVAILABLE) {
             kediActiveInDraft = false
             return
         }
@@ -65,7 +65,7 @@ object RealPetKeywords {
      * Called AFTER a reminder is successfully persisted to the database.
      */
     fun onReminderSaved(savedText: String, isKeywordsEnabled: Boolean) {
-        if (!isKeywordsEnabled) return
+        if (!isKeywordsEnabled || !REAL_PET_AVAILABLE) return
         if (containsStandaloneWord(savedText, "mama")) {
             RealPetRuntime.requestMamaFeeding(savedText.lineSequence().firstOrNull()?.trim().orEmpty().ifBlank { "Mama" })
         }

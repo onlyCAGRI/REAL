@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.Dp
 
-enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Music, AudioWave, Play, Pause, Video, Cards, Close, Note, Category, Photo, Camera, File, Person, Cat, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, DragHandle, Sort, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry, MoodFuckOff, Board, Paste }
+enum class ActionGlyph { Pin, Calendar, Back, Check, Undo, Edit, Share, Delete, Star, NowBar, Mic, Music, AudioWave, Play, Pause, Video, Cards, Close, Note, Category, Photo, Camera, File, Person, Cat, Add, Settings, Manage, Theme, BlurOff, MotionOff, ChevronRight, Repeat, Bell, BellOff, Minus, Checklist, DragHandle, Sort, LiquidGlass, WhatsApp, MoodVeryGood, MoodGood, MoodNeutral, MoodHard, MoodBad, MoodExcited, MoodCalm, MoodTired, MoodAngry, MoodFuckOff, Board, Paste, Phone, Compass, Binoculars, Poster, Sky }
 
 fun journalMoodLabel(mood: JournalMood): String = mood.label
 
@@ -75,6 +75,41 @@ fun ActionIcon(glyph: ActionGlyph, modifier: Modifier, color: Color = Color.Whit
                 ActionGlyph.Back -> { line(15f, 4f, 7f, 12f); line(7f, 12f, 15f, 20f) }
                 ActionGlyph.Check -> { line(4f, 12f, 9f, 17f); line(9f, 17f, 20f, 6f) }
                 ActionGlyph.Close -> { line(6f, 6f, 18f, 18f); line(18f, 6f, 6f, 18f) }
+                ActionGlyph.Phone -> drawPath(Path().apply {
+                    moveTo(6.6f, 3f); lineTo(9.3f, 3f); lineTo(10.6f, 7.4f); lineTo(8.6f, 9.2f)
+                    cubicTo(9.7f, 11.6f, 12.4f, 14.3f, 14.8f, 15.4f); lineTo(16.6f, 13.4f); lineTo(21f, 14.7f)
+                    lineTo(21f, 17.4f); cubicTo(21f, 19.4f, 19.4f, 21f, 17.4f, 21f)
+                    cubicTo(9.5f, 20.4f, 3.6f, 14.5f, 3f, 6.6f); cubicTo(3f, 4.6f, 4.6f, 3f, 6.6f, 3f); close()
+                }, color, style = if (filled) Fill else stroke)
+                ActionGlyph.Poster -> {
+                    // A framed map: a winding road over a grid street, the title line underneath.
+                    drawRoundRect(color, Offset(4.5f, 2.5f), Size(15f, 19f), CornerRadius(2.5f, 2.5f), style = stroke)
+                    drawPath(Path().apply { moveTo(4.5f, 9f); cubicTo(9f, 6f, 11f, 13f, 15f, 9.5f); cubicTo(17f, 8f, 18.5f, 8.5f, 19.5f, 9f) }, color, style = stroke)
+                    line(11f, 2.5f, 13f, 15f)
+                    line(9f, 18f, 15f, 18f)
+                }
+                ActionGlyph.Sky -> {
+                    // A star chart: the sky ring, a four-point star, two small stars.
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    drawPath(Path().apply {
+                        moveTo(12f, 6.5f); quadraticBezierTo(12.6f, 11.4f, 17.5f, 12f); quadraticBezierTo(12.6f, 12.6f, 12f, 17.5f)
+                        quadraticBezierTo(11.4f, 12.6f, 6.5f, 12f); quadraticBezierTo(11.4f, 11.4f, 12f, 6.5f); close()
+                    }, color)
+                    drawCircle(color, 0.9f, Offset(16.5f, 7.5f))
+                    drawCircle(color, 0.7f, Offset(7.5f, 16.5f))
+                }
+                ActionGlyph.Compass -> {
+                    drawCircle(color, 9f, Offset(12f, 12f), style = stroke)
+                    drawPath(Path().apply { moveTo(15.8f, 8.2f); lineTo(13.4f, 13.4f); lineTo(10.6f, 10.6f); close() }, color)
+                    drawPath(Path().apply { moveTo(8.2f, 15.8f); lineTo(10.6f, 10.6f); lineTo(13.4f, 13.4f); close() }, color, style = Stroke(1.2f))
+                }
+                ActionGlyph.Binoculars -> {
+                    drawCircle(color, 3.6f, Offset(6.6f, 15.6f), style = if (filled) Fill else stroke)
+                    drawCircle(color, 3.6f, Offset(17.4f, 15.6f), style = if (filled) Fill else stroke)
+                    drawPath(Path().apply { moveTo(3.2f, 14.6f); lineTo(5f, 6f); lineTo(9.4f, 6f); lineTo(10.2f, 14f) }, color, style = stroke)
+                    drawPath(Path().apply { moveTo(20.8f, 14.6f); lineTo(19f, 6f); lineTo(14.6f, 6f); lineTo(13.8f, 14f) }, color, style = stroke)
+                    line(10.2f, 11.5f, 13.8f, 11.5f)
+                }
                 ActionGlyph.Undo -> {
                     line(3f, 5f, 3f, 11f); line(3f, 11f, 9f, 11f)
                     drawPath(Path().apply { moveTo(3f, 11f); cubicTo(7f, 2f, 20f, 4f, 20f, 13f); cubicTo(20f, 18f, 15f, 21f, 10f, 19f) }, color, style = stroke)

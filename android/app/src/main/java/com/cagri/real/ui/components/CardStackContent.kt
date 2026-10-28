@@ -41,6 +41,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.platform.LocalDensity
@@ -64,6 +65,8 @@ import com.cagri.real.ui.cardPhotoZoomInput
 import com.cagri.real.ui.cardPhotoPixels
 import com.cagri.real.ui.LocalCardBlockDragging
 import com.cagri.real.data.AttachmentStorage
+import com.cagri.real.data.BodyMark
+import com.cagri.real.data.BodySpans
 import com.cagri.real.data.CardStackBlock
 import com.cagri.real.data.CardStackCard
 import com.cagri.real.data.cardStackFrontHeightDp
@@ -132,11 +135,6 @@ fun CardStackContentSection(
     var sectionHeightPx by remember(block.id) { mutableIntStateOf(0) }
     var deckHeightPx by remember(block.id) { mutableIntStateOf(0) }
     val chromeHeightDp = with(density) { (sectionHeightPx - deckHeightPx).coerceAtLeast(0).toDp() }
-    val bodyTextStyle = TextStyle(
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        fontWeight = FontWeight.Normal
-    )
     val maxBodyHeightPx = with(density) { (demoStackCardMaxHeight - demoStackReservedVerticalSpace - demoStackWritingAreaReduction).toPx() }
     val approxTextWidthPx = with(density) { 320.dp.toPx().toInt() }
 
@@ -148,7 +146,6 @@ fun CardStackContentSection(
                 textWidthPx = approxTextWidthPx,
                 maxBodyHeightPx = maxBodyHeightPx,
                 textMeasurer = textMeasurer,
-                bodyTextStyle = bodyTextStyle,
                 density = density
             )
             if (reflowed != null) {
@@ -165,7 +162,6 @@ fun CardStackContentSection(
             textWidthPx = approxTextWidthPx,
             maxBodyHeightPx = maxBodyHeightPx,
             textMeasurer = textMeasurer,
-            bodyTextStyle = bodyTextStyle,
             density = density
         ) ?: rawCards
     }
@@ -451,7 +447,7 @@ fun CardStackContentSection(
                                 .border(0.8.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(50))
                                 .clickable(role = Role.Button) {
                                     val nextColorArgb = CardStackDefaultColor.toArgb()
-                                    val newCard = CardStackCard(colorArgb = nextColorArgb)
+                                    val newCard = CardStackCard(colorArgb = nextColorArgb, bodyFormat = activeCard.bodyFormat)
                                     val newCards = cards + newCard
                                     activeCardIndex = newCards.size - 1
                                     onUpdate(block.copy(cards = newCards))
@@ -497,6 +493,11 @@ fun CardStackContentSection(
                                     }
                             )
                         }
+                    }
+
+                    // Writing settings of the whole stack: every card gets them, new cards copy them.
+                    CardBodyFormatSettings(activeCard.bodyFormat) { format ->
+                        onUpdate(block.copy(cards = cards.map { it.copy(bodyFormat = format) }))
                     }
                 }
             }
@@ -571,14 +572,15 @@ private fun ProductionCardStackDeck(
     }
     val heightTextWidthPx = with(density) { 320.dp.toPx().toInt() }
     val activeCardForHeight = cards.getOrNull(activeCard)
-    val activeBodyHeight = remember(activeCardForHeight?.id, activeCardForHeight?.body, heightTextWidthPx) {
+    val activeBodyHeight = remember(activeCardForHeight?.id, activeCardForHeight?.body, activeCardForHeight?.bodyStyles,
+        activeCardForHeight?.bodyFormat, heightTextWidthPx) {
         val body = activeCardForHeight?.body.orEmpty()
-        if (body.isBlank()) {
+        if (body.isBlank() || activeCardForHeight == null) {
             0.dp
         } else {
             val px = heightTextMeasurer.measure(
-                text = AnnotatedString(body),
-                style = heightBodyStyle,
+                text = CardBodyLayout(body, activeCardForHeight.bodyStyles, activeCardForHeight.bodyFormat, onDark = true).annotated,
+                style = activeCardForHeight.bodyFormat.textStyle(),
                 constraints = Constraints(maxWidth = heightTextWidthPx)
             ).size.height
             with(density) { px.toDp() }
@@ -830,6 +832,10 @@ private fun SingleStackCard(
     var bodyTextFieldValue by remember(card.id) {
         mutableStateOf(TextFieldValue(text = card.body))
     }
+    var formatOpen by remember(card.id) { mutableStateOf(false) }
+    var bodyFocused by remember(card.id) { mutableStateOf(false) }
+    // Marks for the next typed letters after K/İ/A/Ü was tapped with no selection; null = follow the caret.
+    var pendingMarks by remember(card.id) { mutableStateOf<Set<BodyMark>?>(null) }
     androidx.compose.runtime.LaunchedEffect(card.id, card.body) {
         if (card.body != bodyTextFieldValue.text) {
             bodyTextFieldValue = bodyTextFieldValue.copy(
@@ -839,11 +845,8 @@ private fun SingleStackCard(
         }
     }
 
-    val bodyTextStyle = TextStyle(
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        fontWeight = FontWeight.Normal
-    )
+    val bodyTextStyle = card.bodyFormat.textStyle()
+    val onDarkCard = foreground.luminance() > 0.5f
 
     val detailComposition = com.cagri.real.ui.LocalCardContentComposition.current
     BoxWithConstraints(
@@ -1103,44 +1106,60 @@ private fun SingleStackCard(
                             value = bodyTextFieldValue,
                             onValueChange = { tfv ->
                                 val newText = tfv.text
+                                val textChanged = newText != bodyTextFieldValue.text
+                                val newStyles = if (textChanged) BodySpans.applyEdit(card.bodyStyles, bodyTextFieldValue.text, newText, pendingMarks)
+                                    else card.bodyStyles
+                                if (!textChanged && tfv.selection != bodyTextFieldValue.selection) pendingMarks = null
 
                                 val didAutoFlow = handleBodyAutoFlow(
                                     newBody = newText,
+                                    newStyles = newStyles,
                                     currentCard = card,
                                     safeActiveIndex = index,
                                     cards = cards,
                                     textWidthPx = effectiveTextWidthPx,
                                     maxBodyHeightPx = maxBodyHeightPx,
                                     textMeasurer = textMeasurer,
-                                    bodyTextStyle = bodyTextStyle,
                                     density = density,
                                     onUpdate = onRequestNewCardFromAutoFlow
                                 )
 
                                 if (!didAutoFlow) {
                                     bodyTextFieldValue = tfv
-                                    onUpdateCard(card.copy(body = newText))
+                                    onUpdateCard(card.copy(body = newText, bodyStyles = newStyles))
                                 }
                             },
                             textStyle = bodyTextStyle.copy(color = foreground.copy(alpha = 0.88f)),
+                            visualTransformation = cardBodyTransformation(card.bodyStyles, card.bodyFormat, onDarkCard),
                             cursorBrush = SolidColor(foreground),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = if (detailComposition) 40.dp else 48.dp, max = if (detailComposition)
                                     (viewportHeight - (if (minimal) 16.dp else if (shallow) 56.dp else 130.dp)).coerceIn(40.dp, maxBodyHeight)
                                     else maxBodyHeight)
-                                .focusRequester(bodyFocusRequester),
+                                .focusRequester(bodyFocusRequester)
+                                .onFocusChanged { bodyFocused = it.isFocused },
                             decorationBox = { innerTextField ->
                                 if (bodyTextFieldValue.text.isBlank()) {
                                     Text(
                                         if (hasImage) t("Fotoğraf açıklaması ekle…") else t("Buraya yaz…"),
                                         color = foreground.copy(alpha = 0.40f),
-                                        fontSize = 14.sp,
-                                        lineHeight = 20.sp
+                                        style = bodyTextStyle
                                     )
                                 }
                                 innerTextField()
                             }
+                        )
+                    }
+                    // Style row: shown while the body is being written in, never on the title.
+                    if (bodyFocused && !minimal) {
+                        BodyFormatControls(
+                            text = card.body, selection = bodyTextFieldValue.selection, styles = card.bodyStyles,
+                            pending = pendingMarks, open = formatOpen, foreground = foreground, onDark = onDarkCard,
+                            onOpenChange = { formatOpen = it },
+                            onPending = { pendingMarks = it },
+                            onStyles = { onUpdateCard(card.copy(bodyStyles = it)) },
+                            modifier = Modifier.padding(top = 8.dp)
                         )
                     }
                 } else {
@@ -1166,10 +1185,10 @@ private fun SingleStackCard(
                     }
                     if (bodyDisplay.isNotBlank() && !(shallow && hasImage)) {
                         Text(
-                            text = bodyDisplay,
+                            text = if (card.body.isBlank()) AnnotatedString(bodyDisplay)
+                                else CardBodyLayout(card.body, card.bodyStyles, card.bodyFormat, onDarkCard).annotated,
                             color = foreground.copy(alpha = 0.88f),
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
+                            style = bodyTextStyle,
                             maxLines = bodyLines,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
@@ -1198,19 +1217,22 @@ private fun SingleStackCard(
 
 private fun handleBodyAutoFlow(
     newBody: String,
+    newStyles: List<com.cagri.real.data.BodySpan>,
     currentCard: CardStackCard,
     safeActiveIndex: Int,
     cards: List<CardStackCard>,
     textWidthPx: Int,
     maxBodyHeightPx: Float,
     textMeasurer: androidx.compose.ui.text.TextMeasurer,
-    bodyTextStyle: TextStyle,
     density: androidx.compose.ui.unit.Density,
     onUpdate: (List<CardStackCard>, Int) -> Unit
 ): Boolean {
+    // Measured as drawn (styles, sizes, paragraph gaps), so the split lands where the card really fills up.
+    val format = currentCard.bodyFormat
+    val layout = CardBodyLayout(newBody, newStyles, format, onDark = true)
     val measureResult = textMeasurer.measure(
-        text = AnnotatedString(newBody),
-        style = bodyTextStyle,
+        text = layout.annotated,
+        style = format.textStyle(),
         constraints = Constraints(maxWidth = textWidthPx.coerceAtLeast(100))
     )
 
@@ -1220,7 +1242,7 @@ private fun handleBodyAutoFlow(
 
     val safetyMarginPx = with(density) { 14.dp.toPx() }
     val fittingLine = measureResult.getLineForVerticalPosition(maxBodyHeightPx - safetyMarginPx)
-    val rawSplit = measureResult.getLineEnd(fittingLine.coerceAtLeast(0), visibleEnd = true).coerceIn(0, newBody.length)
+    val rawSplit = layout.toOriginal(measureResult.getLineEnd(fittingLine.coerceAtLeast(0), visibleEnd = true)).coerceIn(0, newBody.length)
 
     var splitIndex = rawSplit
     if (splitIndex < newBody.length && splitIndex > 0) {
@@ -1234,23 +1256,26 @@ private fun handleBodyAutoFlow(
 
     val currentCardText = newBody.substring(0, splitIndex)
     var leftover = newBody.substring(splitIndex)
+    var leftoverStart = splitIndex
 
     val updatedCards = cards.toMutableList()
-    updatedCards[safeActiveIndex] = currentCard.copy(body = currentCardText)
+    updatedCards[safeActiveIndex] = currentCard.copy(body = currentCardText,
+        bodyStyles = BodySpans.slice(newStyles, 0, splitIndex))
 
     var insertIdx = safeActiveIndex + 1
 
     // Consume all overflow. There is no arbitrary card/loop cap: every character must survive auto-flow.
     while (leftover.isNotEmpty()) {
+        val nextLayout = CardBodyLayout(leftover, BodySpans.slice(newStyles, leftoverStart, newBody.length), format, onDark = true)
         val nextMeasure = textMeasurer.measure(
-            text = AnnotatedString(leftover),
-            style = bodyTextStyle,
+            text = nextLayout.annotated,
+            style = format.textStyle(),
             constraints = Constraints(maxWidth = textWidthPx.coerceAtLeast(100))
         )
         val chunkText: String
         if (nextMeasure.size.height > maxBodyHeightPx) {
             val nextLine = nextMeasure.getLineForVerticalPosition(maxBodyHeightPx - safetyMarginPx)
-            var nextSplit = nextMeasure.getLineEnd(nextLine.coerceAtLeast(0), visibleEnd = true).coerceIn(0, leftover.length)
+            var nextSplit = nextLayout.toOriginal(nextMeasure.getLineEnd(nextLine.coerceAtLeast(0), visibleEnd = true)).coerceIn(0, leftover.length)
             if (nextSplit < leftover.length && nextSplit > 0) {
                 val sStart = (nextSplit - 40).coerceAtLeast(0)
                 val lWs = leftover.substring(sStart, nextSplit).lastIndexOfAny(charArrayOf(' ', '\n', '\t'))
@@ -1270,8 +1295,11 @@ private fun handleBodyAutoFlow(
         val newCard = CardStackCard(
             title = "",
             body = chunkText,
-            colorArgb = nextColorArgb
+            colorArgb = nextColorArgb,
+            bodyStyles = BodySpans.slice(newStyles, leftoverStart, leftoverStart + chunkText.length),
+            bodyFormat = format
         )
+        leftoverStart += chunkText.length
         updatedCards.add(insertIdx, newCard)
         insertIdx++
     }
@@ -1290,15 +1318,14 @@ fun reflowOversizedCardsIfNeeded(
     textWidthPx: Int,
     maxBodyHeightPx: Float,
     textMeasurer: androidx.compose.ui.text.TextMeasurer,
-    bodyTextStyle: TextStyle,
     density: androidx.compose.ui.unit.Density
 ): List<CardStackCard>? {
     var hasOverflow = false
     for (card in cards) {
         if (card.body.isBlank()) continue
         val measure = textMeasurer.measure(
-            text = AnnotatedString(card.body),
-            style = bodyTextStyle,
+            text = CardBodyLayout(card.body, card.bodyStyles, card.bodyFormat, onDark = true).annotated,
+            style = card.bodyFormat.textStyle(),
             constraints = Constraints(maxWidth = textWidthPx.coerceAtLeast(100))
         )
         if (measure.size.height > maxBodyHeightPx) {
@@ -1317,8 +1344,8 @@ fun reflowOversizedCardsIfNeeded(
             continue
         }
         val measure = textMeasurer.measure(
-            text = AnnotatedString(card.body),
-            style = bodyTextStyle,
+            text = CardBodyLayout(card.body, card.bodyStyles, card.bodyFormat, onDark = true).annotated,
+            style = card.bodyFormat.textStyle(),
             constraints = Constraints(maxWidth = textWidthPx.coerceAtLeast(100))
         )
         if (measure.size.height <= maxBodyHeightPx) {
@@ -1328,18 +1355,21 @@ fun reflowOversizedCardsIfNeeded(
 
         // Split oversized card content without losing a single character
         var leftover = card.body
+        var leftoverStart = 0
         var isFirstChunk = true
 
         while (leftover.isNotEmpty()) {
+            val chunkLayout = CardBodyLayout(leftover, BodySpans.slice(card.bodyStyles, leftoverStart, card.body.length),
+                card.bodyFormat, onDark = true)
             val chunkMeasure = textMeasurer.measure(
-                text = AnnotatedString(leftover),
-                style = bodyTextStyle,
+                text = chunkLayout.annotated,
+                style = card.bodyFormat.textStyle(),
                 constraints = Constraints(maxWidth = textWidthPx.coerceAtLeast(100))
             )
             val chunkText: String
             if (chunkMeasure.size.height > maxBodyHeightPx) {
                 val nextLine = chunkMeasure.getLineForVerticalPosition(maxBodyHeightPx - safetyMarginPx)
-                var nextSplit = chunkMeasure.getLineEnd(nextLine.coerceAtLeast(0), visibleEnd = true).coerceIn(0, leftover.length)
+                var nextSplit = chunkLayout.toOriginal(chunkMeasure.getLineEnd(nextLine.coerceAtLeast(0), visibleEnd = true)).coerceIn(0, leftover.length)
                 if (nextSplit < leftover.length && nextSplit > 0) {
                     val sStart = (nextSplit - 40).coerceAtLeast(0)
                     val lWs = leftover.substring(sStart, nextSplit).lastIndexOfAny(charArrayOf(' ', '\n', '\t'))
@@ -1355,9 +1385,11 @@ fun reflowOversizedCardsIfNeeded(
                 leftover = ""
             }
 
+            val chunkStyles = BodySpans.slice(card.bodyStyles, leftoverStart, leftoverStart + chunkText.length)
+            leftoverStart += chunkText.length
             if (isFirstChunk) {
                 // First card retains original id, title, colorArgb, imageUri
-                result.add(card.copy(body = chunkText))
+                result.add(card.copy(body = chunkText, bodyStyles = chunkStyles))
                 isFirstChunk = false
             } else {
                 val nextColorArgb = CardStackDefaultColor.toArgb()
@@ -1366,7 +1398,10 @@ fun reflowOversizedCardsIfNeeded(
                         title = "",
                         body = chunkText,
                         colorArgb = nextColorArgb,
-                        imageUri = null
+                        imageUri = null,
+                        stackGroupId = card.stackGroupId,
+                        bodyStyles = chunkStyles,
+                        bodyFormat = card.bodyFormat
                     )
                 )
             }

@@ -27,6 +27,8 @@ data class LocationTrigger(
         /** "Normal"; "Hassas" is [PRECISE_RADIUS]. */
         const val DEFAULT_RADIUS = 250
         const val PRECISE_RADIUS = 100
+        /** "Ayrılınca": GPS drift crosses a smaller circle while the phone lies still. */
+        const val EXIT_MIN_RADIUS = 200
         val RADIUS_CHOICES = listOf(100, 200, 500)
     }
 }

@@ -21,20 +21,19 @@ class CardTitleFormatTest {
         assertTrue(ReminderJson.decode(ReminderJson.encode(listOf(card))).single().contentBlockLayout.isEmpty())
         assertEquals("start", CardBlockPlacement(textAlignment = "unexpected").normalized().textAlignment)
     }
-    @Test fun independentTextBoxesKeepSeparateContentAndFormatting() {
+    @Test fun legacyTextBoxesBecomeOneCardStacksInTheirSlot() {
         val card = ReminderItem(id = 8, text = "Asıl başlık", createdAt = 1,
             attachments = listOf(
                 ReminderAttachment("one", type = AttachmentType.TEXT_SNIPPET, text = "Birinci metin", sourceTitle = "REAL_TEXT_BLOCK"),
-                ReminderAttachment("two", type = AttachmentType.TEXT_SNIPPET, text = "İkinci metin", sourceTitle = "REAL_TEXT_BLOCK")),
-            contentBlockLayout = mapOf("files:one" to CardBlockPlacement(textAlignment = "center", textBold = true),
-                "files:two" to CardBlockPlacement(minHeight = 80, textItalic = true)))
+                ReminderAttachment("two", type = AttachmentType.TEXT_SNIPPET, text = "  ", sourceTitle = "REAL_TEXT_BLOCK")),
+            contentBlockOrder = listOf("text", "files:one", "files:two"),
+            contentBlockLayout = mapOf("files:one" to CardBlockPlacement(minHeight = 80), "files:two" to CardBlockPlacement()))
         val restored = ReminderJson.decode(ReminderJson.encode(listOf(card))).single()
         assertEquals("Asıl başlık", restored.text)
-        assertEquals(listOf("Birinci metin", "İkinci metin"), restored.attachments.map { it.text })
-        assertEquals("center", restored.contentBlockLayout.getValue("files:one").textAlignment)
-        assertTrue(restored.contentBlockLayout.getValue("files:one").textBold)
-        assertTrue(restored.contentBlockLayout.getValue("files:two").textItalic)
-        assertEquals(80, restored.contentBlockLayout.getValue("files:two").minHeight)
-        assertTrue(restored.cardContentKeys().containsAll(listOf("text", "files:one", "files:two")))
+        assertTrue(restored.attachments.isEmpty())
+        assertEquals(listOf("Birinci metin"), restored.cardStack?.cards?.map { it.body })
+        assertEquals(listOf("text", "card_stack:tbone"), restored.contentBlockOrder)
+        assertEquals(80, restored.contentBlockLayout.getValue("card_stack:tbone").minHeight)
+        assertFalse(restored.contentBlockLayout.containsKey("files:two"))
     }
 }

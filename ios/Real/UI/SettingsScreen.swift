@@ -197,6 +197,12 @@ struct SettingsScreen: View {
     @State private var language = LanguageSettings.shared
     @State private var showLanguage = false
     @State private var alarmSnooze = RealAlarmSettings.snoozeMinutes
+    /// The bottom sheet open over Settings (ChoiceSheet / ConfirmSheet), nil = none.
+    @State private var sheet: SettingsSheet?
+    @AppStorage(MapAppearance.darkKey) private var mapDark = false
+    @AppStorage(MapAppearance.plainKey) private var mapPlain = false
+
+    private enum SettingsSheet { case language, map, calendar, music, snooze, suggestionReset, ratingReset }
     /// Set after asking; nil = read AlarmKit's state.
     @State private var alarmAllowed: Bool?
 
@@ -216,21 +222,7 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
         .sheet(isPresented: $showAiPrivacy) { AiPrivacySheet() }
         .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false }.liftedTopSafeArea() }
-        .alert(t("Önerileri sıfırlamak istediğine emin misin?"), isPresented: $showSuggestionReset) {
-            Button(t("Sıfırla"), role: .destructive) {
-                MusicDiscoveryStore.shared.resetSeen()
-                discovery.resetSeen()
-                RealToast.shared.show(t("Öneriler sıfırlandı"))
-            }
-            Button(t("Vazgeç"), role: .cancel) {}
-        } message: { Text(t("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır.")) }
-        .alert(t("Puanları sıfırlamak istediğine emin misin?"), isPresented: $showRatingReset) {
-            Button(t("Sıfırla"), role: .destructive) {
-                MediaRatingStore.shared.reset(watched: discovery.film.watched)
-                RealToast.shared.show(t("Puanlar sıfırlandı"))
-            }
-            Button(t("Vazgeç"), role: .cancel) {}
-        } message: { Text(t("Puanlarım listesi boşalır. Bu geri alınamaz.")) }
+        .overlay { sheetOverlay }
         .alert(t("Tüm mood kayıtlarını sil?"), isPresented: $showClearMoods) {
             Button(t("Sil"), role: .destructive) {
                 life.clearAllMoods()
@@ -241,11 +233,53 @@ struct SettingsScreen: View {
         .alert("REAL", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button(t("Tamam"), role: .cancel) {}
         } message: { Text(notice ?? "") }
-        .confirmationDialog(t("Uygulama dilini seç"), isPresented: $showLanguage, titleVisibility: .visible) {
-            Button(t("Sistem")) { language.set(.system) }
-            Button(t("Türkçe")) { language.set(.turkish) }
-            Button("English") { language.set(.english) }
-            Button(t("Kapat"), role: .cancel) {}
+    }
+
+    @ViewBuilder
+    private var sheetOverlay: some View {
+        let close = { sheet = nil }
+        switch sheet {
+        case .language:
+            ChoiceSheet(title: t("Uygulama dilini seç"),
+                        choices: [SheetChoice(value: AppLanguage.system, label: t("Sistem")),
+                                  SheetChoice(value: AppLanguage.turkish, label: t("Türkçe")),
+                                  SheetChoice(value: AppLanguage.english, label: "English")],
+                        selected: language.choice, onSelect: { language.set($0) }, onDismiss: close)
+        case .map:
+            ChoiceSheet(title: t("Harita görünümü"),
+                        choices: [SheetChoice(value: false, label: t("Açık"), detail: t("Renkli: yeşil alanlar, mavi deniz")),
+                                  SheetChoice(value: true, label: t("Koyu"), detail: t("Siyah zemin, belirgin deniz"))],
+                        selected: mapDark, onSelect: { mapDark = $0 }, onDismiss: close,
+                        toggle: SheetToggle(label: t("Sade harita"), detail: t("Haritada mekan adlarını gizler"), isOn: $mapPlain))
+        case .calendar:
+            ChoiceSheet(title: t("Ana ekranda takvim"),
+                        choices: [0, 7, 14].map { SheetChoice(value: $0, label: $0 > 0 ? t("Önümüzdeki {0} gün", $0) : t("Kapalı")) },
+                        selected: calendarHomeDays, onSelect: { calendarHomeDays = $0 }, onDismiss: close)
+        case .music:
+            ChoiceSheet(title: t("Müzik uygulaması"),
+                        choices: MusicSource.allCases.map { SheetChoice(value: $0, label: $0.label, detail: t("Şarkılar burada açılır")) },
+                        selected: musicSource, onSelect: { musicSource = $0; MusicSource.saved = $0 }, onDismiss: close)
+        case .snooze:
+            ChoiceSheet(title: t("Alarm erteleme"),
+                        choices: RealAlarmSettings.snoozeChoices.map { SheetChoice(value: $0, label: t("{0} dakika", $0)) },
+                        selected: alarmSnooze, onSelect: { alarmSnooze = $0; RealAlarmSettings.snoozeMinutes = $0 }, onDismiss: close)
+        case .suggestionReset:
+            ConfirmSheet(title: t("Önerileri sıfırlamak istediğine emin misin?"),
+                         message: t("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır."),
+                         confirmLabel: t("Sıfırla"), onDismiss: close) {
+                MusicDiscoveryStore.shared.resetSeen()
+                discovery.resetSeen()
+                RealToast.shared.show(t("Öneriler sıfırlandı"))
+            }
+        case .ratingReset:
+            ConfirmSheet(title: t("Puanları sıfırlamak istediğine emin misin?"),
+                         message: t("Puanlarım listesi boşalır. Bu geri alınamaz."),
+                         confirmLabel: t("Sıfırla"), onDismiss: close) {
+                MediaRatingStore.shared.reset(watched: discovery.film.watched)
+                RealToast.shared.show(t("Puanlar sıfırlandı"))
+            }
+        case nil:
+            EmptyView()
         }
     }
 
@@ -257,9 +291,10 @@ struct SettingsScreen: View {
     private var mainPage: some View {
         SettingsSectionHeader(title: t("GÖRÜNÜM"))
         SettingsGlassGroup {
-            SettingsActionRow(icon: .theme, title: t("Dil"), subtitle: language.currentLabel) {
-                showLanguage = true
-            }
+            SettingsChoiceRow(icon: .theme, title: t("Dil"), value: language.currentLabel) { sheet = .language }
+            SettingsDivider()
+            SettingsChoiceRow(icon: .pin, title: t("Harita görünümü"),
+                              value: (mapDark ? t("Koyu") : t("Açık")) + (mapPlain ? " · " + t("Sade") : "")) { sheet = .map }
             SettingsDivider()
             SettingsToggleRow(icon: .motionOff, title: t("Animasyonu azalt"), subtitle: t("Arayüz hareketlerini ve geçiş efektlerini sakinleştirir"), isOn: $reduceAnimations)
             SettingsDivider()
@@ -276,17 +311,12 @@ struct SettingsScreen: View {
             SettingsToggleRow(icon: .check, title: t("Sade kartlar (Deneysel)"),
                               subtitle: t("Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır."), isOn: $plainCards)
             SettingsDivider()
-            // Kapalı → 7 gün → 14 gün, one tap each.
-            SettingsActionRow(icon: .calendar, title: t("Ana ekranda takvim"),
-                              subtitle: calendarHomeDays > 0 ? t("Önümüzdeki {0} gün", calendarHomeDays) : t("Kapalı")) {
-                calendarHomeDays = calendarHomeDays == 0 ? 7 : (calendarHomeDays == 7 ? 14 : 0)
-            }
+            // Kapalı / 7 gün / 14 gün, picked in a sheet.
+            SettingsChoiceRow(icon: .calendar, title: t("Ana ekranda takvim"),
+                              value: calendarHomeDays > 0 ? t("Önümüzdeki {0} gün", calendarHomeDays) : t("Kapalı")) { sheet = .calendar }
             SettingsDivider()
             // Where songs open (music discovery's up-swipe, the music search's default).
-            SettingsActionRow(icon: .music, title: t("Müzik uygulaması"), subtitle: musicSource.label + t(" · şarkılar burada açılır")) {
-                musicSource = musicSource == .apple ? .spotify : .apple
-                MusicSource.saved = musicSource
-            }
+            SettingsChoiceRow(icon: .music, title: t("Müzik uygulaması"), value: musicSource.label) { sheet = .music }
             SettingsDivider()
             // Apple Music hesabı: "Sana özel" in Müzik keşfi, a right swipe also adds to the library.
             let appleMusic = AppleMusicAccount.shared
@@ -298,11 +328,11 @@ struct SettingsScreen: View {
             // Puanlarım: film / dizi / bölüm puanlarını siler (şimdilik test için).
             // Öneriler (müzik, film / dizi, oyun): geçilenler yeniden gelebilir; kayıtlı listeler ve İzledim / Oynadım kalır.
             SettingsActionRow(icon: .music, title: t("Önerileri sıfırla"), subtitle: t("Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez")) {
-                showSuggestionReset = true
+                sheet = .suggestionReset
             }
             SettingsDivider()
             SettingsActionRow(icon: .delete, title: t("Puanlarımı sıfırla"), subtitle: t("Film, dizi ve bölüm puanlarının hepsini siler")) {
-                showRatingReset = true
+                sheet = .ratingReset
             }
         }
         SettingsSectionHeader(title: t("BİLDİRİMLER VE DAVRANIŞ"))
@@ -343,11 +373,7 @@ struct SettingsScreen: View {
                 }
                 SettingsDivider()
             }
-            SettingsActionRow(icon: .repeat_, title: t("Alarm erteleme"), subtitle: t("{0} dakika · değiştirmek için dokun", alarmSnooze)) {
-                let choices = RealAlarmSettings.snoozeChoices
-                alarmSnooze = choices[((choices.firstIndex(of: alarmSnooze) ?? 0) + 1) % choices.count]
-                RealAlarmSettings.snoozeMinutes = alarmSnooze
-            }
+            SettingsChoiceRow(icon: .repeat_, title: t("Alarm erteleme"), value: t("{0} dakika", alarmSnooze)) { sheet = .snooze }
         }
         SettingsSectionHeader(title: "REAL PRO")
         SettingsGlassGroup {

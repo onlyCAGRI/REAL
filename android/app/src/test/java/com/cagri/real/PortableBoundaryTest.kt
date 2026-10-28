@@ -75,9 +75,10 @@ class PortableBoundaryTest {
         assertFalse(initial.has("replaceKind"))
         assertFalse(initial.has("exclude"))
         val replacement = JSONObject(MoodSuggestionRequest("GOOD", emptyList(), emptyList(), MoodSuggestionKind.MUSIC,
-            listOf(" ") + (1..20).map { " song$it " }).toJson())
+            listOf(" ") + (1..20).map { " song$it " }, language = "en").toJson())
         assertEquals(16, replacement.getJSONArray("exclude").length())
         assertEquals("song1", replacement.getJSONArray("exclude").getString(0))
+        assertEquals("en", replacement.getString("language"))
     }
 
     @Test fun voiceRequestOmitsLastCardUnlessGivenAndKeepsItsWireKeys() {

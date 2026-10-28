@@ -15,6 +15,8 @@ struct CardRouteMap: View {
     /// How much of the line is drawn (0…1): it grows from the phone to the place once per entry.
     @State private var progress: Double = 0
     @AppStorage("reduce_animations") private var reduceAnimations = false
+    @AppStorage(MapAppearance.darkKey) private var mapDark = false
+    @AppStorage(MapAppearance.plainKey) private var mapPlain = false
 
     var body: some View {
         Map(position: Binding(get: { position ?? .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 900, longitudinalMeters: 900)) },
@@ -31,7 +33,8 @@ struct CardRouteMap: View {
             }
             Marker(location.placeName, coordinate: coordinate).tint(.white)
         }
-        .environment(\.colorScheme, .dark)
+        .mapStyle(MapAppearance.style(plain: mapPlain))
+        .environment(\.colorScheme, MapAppearance.scheme(dark: mapDark))
         .frame(height: route == nil ? 150 : 280)
         .allowsHitTesting(false)
         .overlay(alignment: .topLeading) {

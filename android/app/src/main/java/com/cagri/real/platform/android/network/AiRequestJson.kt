@@ -11,6 +11,23 @@ internal fun MoodSuggestionRequest.toJson(): String = JSONObject().apply {
     put("descriptors", JSONArray().apply { descriptors.forEach { put(it) } })
     put("factors", JSONArray().apply { factors.forEach { put(it) } })
     put("excludeMusic", JSONArray().apply { normalizedMusicExclusions().forEach { put(it) } })
+    val mediaEx = normalizedMediaExclusions()
+    if (mediaEx.isNotEmpty()) {
+        put("excludeMedia", JSONArray().apply { mediaEx.forEach { put(it) } })
+    }
+    val ideaEx = normalizedIdeaExclusions()
+    if (ideaEx.isNotEmpty()) {
+        put("excludeIdeas", JSONArray().apply { ideaEx.forEach { put(it) } })
+    }
+    if (!scope.isNullOrBlank()) {
+        put("scope", scope)
+    }
+    if (localHour != null && localHour in 0..23) {
+        put("localHour", localHour)
+    }
+    if (!language.isNullOrBlank()) {
+        put("language", language.trim().lowercase())
+    }
     if (replaceKind != null) {
         put("replaceKind", replaceKind.name)
         put("exclude", JSONArray().apply { normalizedExclusions().forEach { put(it) } })

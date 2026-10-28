@@ -4,6 +4,11 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>tr</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>tr</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>REAL</string>
 	<key>CFBundleExecutable</key>
@@ -50,6 +55,8 @@
 		<key>PlaceReminder</key>
 		<string>Seçtiğin yere varınca (ya da oradan ayrılınca) hatırlatmak için tam konum gerekir.</string>
 	</dict>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Harita ve gökyüzü posterlerini galerine kaydetmek için gerekir.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Kartlarına fotoğraf eklemek için fotoğraflarına erişim gerekir.</string>
 	<key>UIApplicationSceneManifest</key>

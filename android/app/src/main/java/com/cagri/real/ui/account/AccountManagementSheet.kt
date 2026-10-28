@@ -114,7 +114,7 @@ fun AccountManagementSheet(onDismiss: () -> Unit, onAddAccount: () -> Unit, open
             .clip(CircleShape).background(Color.White.copy(alpha = .22f))) }) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
-            if (user == null || controller == null) {
+            if (user == null) {
                 AnimatedContent(page, transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) }, label = "accountPage") { p ->
                     if (p == AccountPage.Storage) SubPage(t("Bu cihazdaki alan"), { page = AccountPage.Main }) { LocalStoragePanel() }
                     else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {

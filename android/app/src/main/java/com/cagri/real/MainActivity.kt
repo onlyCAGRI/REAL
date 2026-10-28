@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.app.NotificationManagerCompat
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
     private var exactAllowed by mutableStateOf(false)
     private var notificationsAllowed by mutableStateOf(false)
     private var openedReminderId by mutableStateOf<Long?>(null)
+    private var openedLocationTrigger by mutableStateOf<com.cagri.real.ui.components.LocationTriggerNotificationContext?>(null)
     private var pendingShareDraft by mutableStateOf<SharedPayload?>(null)
     private var pendingPanoBoardId by mutableStateOf<String?>(null)
     private var pendingLocationShare by mutableStateOf<PendingReminderLocation?>(null)
@@ -137,6 +139,13 @@ class MainActivity : ComponentActivity() {
         notificationsAllowed = NotificationManagerCompat.from(this).areNotificationsEnabled()
         lifecycleScope.launch(Dispatchers.IO) { com.cagri.real.ui.components.prewarmRealWordmark(applicationContext) }
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
+        openedLocationTrigger = openedReminderId?.takeIf { intent.getBooleanExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_FIRED, false) }?.let { remId ->
+            com.cagri.real.ui.components.LocationTriggerNotificationContext(
+                reminderId = remId,
+                placeName = intent.getStringExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_PLACE).orEmpty(),
+                onExit = intent.getBooleanExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_ON_EXIT, false)
+            )
+        }
         // Pano push: tapping a board notification opens that board.
         intent.getStringExtra(com.cagri.real.platform.android.boards.PanoPush.EXTRA_BOARD)?.let { pendingPanoBoardId = it; intent.removeExtra(com.cagri.real.platform.android.boards.PanoPush.EXTRA_BOARD) }
         handleShareIntent(intent)
@@ -181,12 +190,13 @@ class MainActivity : ComponentActivity() {
                 val authUser by authController.user.collectAsState()
                 var reduceBlur by remember { mutableStateOf(preferences.getBoolean("reduce_dynamic_blur", false)) }
                 var reduceAnimations by remember { mutableStateOf(preferences.getBoolean("reduce_animations", false)) }
-                LaunchedEffect(Unit) {
-                    preferences.edit().putBoolean("real_pet_enabled", false).apply()
-                    getSharedPreferences("real_pet_prefs", android.content.Context.MODE_PRIVATE)
-                        .edit().putBoolean("pet_keywords_enabled", false).apply()
+                remember {
+                    com.cagri.real.ui.components.RealPetRuntime.bindPreferences(
+                        getSharedPreferences("real_pet_prefs", android.content.Context.MODE_PRIVATE)
+                    )
+                    true
                 }
-                var realPetEnabled by remember { mutableStateOf(false) }
+                val realPetEnabled = com.cagri.real.ui.components.RealPetRuntime.mode != com.cagri.real.ui.components.RealPetMode.Kapali
                 var realPetSurfaceActive by remember { mutableStateOf(false) }
                 val style = DesignStyle.LiquidGlass
                 var hasCompletedOnboarding by remember { mutableStateOf(preferences.getBoolean("onboarding_completed", false)) }
@@ -245,7 +255,8 @@ class MainActivity : ComponentActivity() {
                     com.cagri.real.ui.components.LocalSetReminderAlarm provides { id, on -> mutate { repository.setAlarm(id, on) } },
                     com.cagri.real.ui.components.LocalSetReminderLocationTrigger provides { id, trigger -> mutate { repository.setLocationTrigger(id, trigger) } }
                 ) {
-                Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
+                Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }
+                    .nestedScroll(com.cagri.real.ui.components.RealPetRuntime.contentScrollConnection)) {
                     Crossfade(
                     targetState = showWelcome,
                     animationSpec = if (reduceAnimations) snap() else tween(240),
@@ -464,8 +475,8 @@ class MainActivity : ComponentActivity() {
                                     runCatching { ReminderNotifications.refreshEdited(this@MainActivity, item) }
                                 }
                             } },
-                            onSetJournal = { id, mood, text -> mutate {
-                                repository.setJournal(id, mood, text)
+                            onSetJournal = { id, mood, text, styles -> mutate {
+                                repository.setJournal(id, mood, text, styles)
                             } },
                             onDeleteJournal = { id -> mutate {
                                 repository.deleteJournal(id)
@@ -531,14 +542,27 @@ class MainActivity : ComponentActivity() {
                                 repository.setCustomCategoryForReminders(ids, catId)
                             } },
                             requestedReminderId = openedReminderId,
-                            onRequestHandled = { openedReminderId = null; intent.removeExtra(ReminderNotifications.EXTRA_REMINDER_ID) },
+                            requestedLocationTrigger = openedLocationTrigger,
+                            onRequestHandled = {
+                                openedReminderId = null
+                                openedLocationTrigger = null
+                                intent.removeExtra(ReminderNotifications.EXTRA_REMINDER_ID)
+                                intent.removeExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_FIRED)
+                                intent.removeExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_PLACE)
+                                intent.removeExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_ON_EXIT)
+                            },
+
                             reduceDynamicBlur = reduceBlur,
                             onReduceDynamicBlurChange = { reduceBlur = it; preferences.edit().putBoolean("reduce_dynamic_blur", it).apply() },
                             reduceAnimations = reduceAnimations,
                             onReduceAnimationsChange = { reduceAnimations = it; preferences.edit().putBoolean("reduce_animations", it).apply() },
-                            realPetEnabled = false,
-                            onRealPetEnabledChange = {
-                                // Force disabled
+                            realPetEnabled = realPetEnabled,
+                            onRealPetEnabledChange = { enabled ->
+                                com.cagri.real.ui.components.RealPetRuntime.mode = if (enabled) {
+                                    com.cagri.real.ui.components.RealPetMode.Sakin
+                                } else {
+                                    com.cagri.real.ui.components.RealPetMode.Kapali
+                                }
                             },
                             onRealPetSurfaceActiveChange = { realPetSurfaceActive = it },
                             designStyle = style,
@@ -622,7 +646,7 @@ class MainActivity : ComponentActivity() {
                     com.cagri.real.ui.account.CloudSpaceNoticeHost(authUser?.id)
                     com.cagri.real.ui.auth.SignInRequiredHost()
 
-                    if (!showWelcome && !startupBlocksHome && ready && realPetEnabled) {
+                    if (!showWelcome && !startupBlocksHome && ready && com.cagri.real.ui.components.RealPetRuntime.mode != com.cagri.real.ui.components.RealPetMode.Kapali) {
                         com.cagri.real.ui.components.RealPetLayer(
                             reduceAnimations = reduceAnimations,
                             surfaceActive = realPetSurfaceActive,
@@ -726,8 +750,20 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
+        openedLocationTrigger = openedReminderId?.takeIf { intent.getBooleanExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_FIRED, false) }?.let { remId ->
+            com.cagri.real.ui.components.LocationTriggerNotificationContext(
+                reminderId = remId,
+                placeName = intent.getStringExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_PLACE).orEmpty(),
+                onExit = intent.getBooleanExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_ON_EXIT, false)
+            )
+        }
         // Pano push: tapping a board notification opens that board.
         intent.getStringExtra(com.cagri.real.platform.android.boards.PanoPush.EXTRA_BOARD)?.let { pendingPanoBoardId = it; intent.removeExtra(com.cagri.real.platform.android.boards.PanoPush.EXTRA_BOARD) }
+        // Pet testing from a PC: adb shell am start -n com.cagri.real/.MainActivity -f 0x20000000 --es real_pet_test walk
+        intent.getStringExtra("real_pet_test")?.let {
+            com.cagri.real.ui.components.RealPetRuntime.requestScenarioTestByName(it)
+            intent.removeExtra("real_pet_test")
+        }
         if (::repository.isInitialized) handleShareIntent(intent)
         // While storage starts, openRealContent consumes the latest Intent after awaiting it.
     }

@@ -9,8 +9,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import com.cagri.real.R
 
 /** A pose stays still throughout a nap; only its breathing transform is animated. */
@@ -44,11 +42,8 @@ internal fun RealPetSleepingImage(
         value
     }
 
-    RealPetSpriteImage(
-        resource = pose.resource,
-        sourceOffset = pose.offset,
-        sourceSize = pose.size,
-        sizeScale = 40f / 50f,
+    RealPetFrameImage(
+        resource = pose,
         breath = breath,
         modifier = modifier
     )
@@ -56,21 +51,14 @@ internal fun RealPetSleepingImage(
 
 internal const val REAL_PET_SLEEP_POSE_COUNT = 8
 
-private data class SleepPose(
-    val resource: Int,
-    val offset: IntOffset,
-    val size: IntSize
-)
-
 // Eight separate poses from white-kitten(1).zip, not sequential animation frames.
-// Bounds are the nontransparent region of each original PNG.
-private val SLEEP_POSES = listOf(
-    SleepPose(R.drawable.real_pet_sleep_1, IntOffset(25, 35), IntSize(508, 430)),
-    SleepPose(R.drawable.real_pet_sleep_2, IntOffset(29, 76), IntSize(708, 552)),
-    SleepPose(R.drawable.real_pet_sleep_3, IntOffset(12, 106), IntSize(685, 494)),
-    SleepPose(R.drawable.real_pet_sleep_4, IntOffset(19, 15), IntSize(955, 510)),
-    SleepPose(R.drawable.real_pet_sleep_5, IntOffset(4, 19), IntSize(805, 407)),
-    SleepPose(R.drawable.real_pet_sleep_6, IntOffset(7, 8), IntSize(654, 379)),
-    SleepPose(R.drawable.real_pet_sleep_7, IntOffset(28, 6), IntSize(623, 405)),
-    SleepPose(R.drawable.real_pet_sleep_8, IntOffset(25, 21), IntSize(647, 401))
+private val SLEEP_POSES = intArrayOf(
+    R.drawable.real_pet_sleep_1,
+    R.drawable.real_pet_sleep_2,
+    R.drawable.real_pet_sleep_3,
+    R.drawable.real_pet_sleep_4,
+    R.drawable.real_pet_sleep_5,
+    R.drawable.real_pet_sleep_6,
+    R.drawable.real_pet_sleep_7,
+    R.drawable.real_pet_sleep_8
 )

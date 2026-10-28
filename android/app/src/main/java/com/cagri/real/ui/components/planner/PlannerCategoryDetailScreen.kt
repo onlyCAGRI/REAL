@@ -550,7 +550,7 @@ fun PlannerCategoryDetailScreen(
         val previousLightStatus = controller?.isAppearanceLightStatusBars
         if (categoryColorBackground) controller?.isAppearanceLightStatusBars = accent.luminance() > 0.45f
         onDispose {
-            if (previousLightStatus != null) controller?.isAppearanceLightStatusBars = previousLightStatus
+            if (previousLightStatus != null) controller.isAppearanceLightStatusBars = previousLightStatus
         }
     }
     val haptic = LocalHapticFeedback.current

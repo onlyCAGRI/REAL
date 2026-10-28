@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,7 +26,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -68,6 +78,99 @@ fun reminderLocationLabel(place: ReminderLocation): String? {
     }
 }
 
+/**
+ * The look of the card map and the location picker, chosen in Settings. Açık is the coloured map (green parks,
+ * blue sea) as Apple Maps shows it, Koyu the dark one; both name the places (restaurants, shops…) unless Sade is on.
+ * The base style is fetched once and patched: Sade drops the place labels, Koyu gets its own (it has none).
+ */
+object MapAppearance {
+    private const val PREFS = "real_map_prefs"
+    private const val KEY_DARK = "map_dark"
+    private const val KEY_PLAIN = "map_plain"
+    private const val LIGHT = "https://tiles.openfreemap.org/styles/liberty"
+    private const val DARK = "https://tiles.openfreemap.org/styles/dark"
+    private var loaded = false
+    private val darkState = androidx.compose.runtime.mutableStateOf(false)
+    private val plainState = androidx.compose.runtime.mutableStateOf(false)
+    private val baseJson = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private fun prefs(context: android.content.Context) =
+        context.applicationContext.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+
+    private fun load(context: android.content.Context) {
+        if (loaded) return
+        val p = prefs(context)
+        darkState.value = p.getBoolean(KEY_DARK, false)
+        plainState.value = p.getBoolean(KEY_PLAIN, false)
+        loaded = true
+    }
+
+    fun isDark(context: android.content.Context): Boolean { load(context); return darkState.value }
+    fun isPlain(context: android.content.Context): Boolean { load(context); return plainState.value }
+
+    fun setDark(context: android.content.Context, dark: Boolean) {
+        load(context); prefs(context).edit().putBoolean(KEY_DARK, dark).apply(); darkState.value = dark
+    }
+
+    fun setPlain(context: android.content.Context, plain: Boolean) {
+        load(context); prefs(context).edit().putBoolean(KEY_PLAIN, plain).apply(); plainState.value = plain
+    }
+
+    /** Changes whenever the look does: a key for re-rendering snapshots. */
+    fun key(context: android.content.Context): String = "${isDark(context)}-${isPlain(context)}"
+
+    fun placeholder(context: android.content.Context): Color = if (isDark(context)) Color(0xFF131820) else Color(0xFFE8E4DC)
+
+    /** The style for the current look; the plain URL style when the base JSON cannot be fetched. */
+    suspend fun styleBuilder(context: android.content.Context): Style.Builder {
+        val dark = isDark(context)
+        val plain = isPlain(context)
+        val url = if (dark) DARK else LIGHT
+        if (dark && plain) return Style.Builder().fromUri(url)
+        val json = baseStyle(context, url) ?: return Style.Builder().fromUri(url)
+        val patched = runCatching {
+            val style = org.json.JSONObject(json)
+            val layers = style.getJSONArray("layers")
+            val kept = org.json.JSONArray()
+            for (i in 0 until layers.length()) {
+                val layer = layers.getJSONObject(i)
+                if (plain && layer.optString("source-layer") == "poi") continue
+                kept.put(layer)
+            }
+            if (dark) DARK_PLACE_LAYERS.forEach { kept.put(org.json.JSONObject(it)) }
+            style.put("layers", kept).toString()
+        }.getOrNull() ?: return Style.Builder().fromUri(url)
+        return Style.Builder().fromJson(patched)
+    }
+
+    private suspend fun baseStyle(context: android.content.Context, url: String): String? {
+        baseJson[url]?.let { return it }
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val file = java.io.File(context.cacheDir, "map_style_" + url.substringAfterLast('/') + ".json")
+            val fetched = runCatching {
+                (java.net.URL(url).openConnection() as java.net.HttpURLConnection).run {
+                    connectTimeout = 6_000; readTimeout = 8_000
+                    try { inputStream.bufferedReader().readText() } finally { disconnect() }
+                }
+            }.getOrNull()?.takeIf { it.trimStart().startsWith("{") }
+            if (fetched != null) runCatching { file.writeText(fetched) }
+            (fetched ?: runCatching { file.readText() }.getOrNull())?.also { baseJson[url] = it }
+        }
+    }
+
+    /** Place names for the dark map: a small teal dot and grey name, from zoom 14 so streets stay readable. */
+    private val DARK_PLACE_LAYERS = listOf(
+        """{"id":"real-poi-dot","type":"circle","source":"openmaptiles","source-layer":"poi","minzoom":14,
+            "filter":["all",["has","name"],["<=",["get","rank"],24]],
+            "paint":{"circle-radius":2.6,"circle-color":"#8ED7C4","circle-opacity":0.85}}""",
+        """{"id":"real-poi-name","type":"symbol","source":"openmaptiles","source-layer":"poi","minzoom":14,
+            "filter":["all",["has","name"],["<=",["get","rank"],24]],
+            "layout":{"text-field":["coalesce",["get","name:latin"],["get","name"]],"text-font":["Noto Sans Regular"],
+                "text-size":11,"text-anchor":"top","text-offset":[0,0.5],"text-max-width":8},
+            "paint":{"text-color":"#C9CED6","text-halo-color":"#101318","text-halo-width":1.2}}"""
+    )
+}
+
 @Composable
 fun ReminderLocationMap(place: ReminderLocation, modifier: Modifier = Modifier, onOpen: () -> Unit = {}) {
     ReminderLocationMap(place, modifier, cameraZoom = null, onOpen = onOpen)
@@ -79,6 +182,8 @@ fun ReminderLocationMap(
     place: ReminderLocation, modifier: Modifier, cameraZoom: Double?, onOpen: () -> Unit = {},
     /** Near the card's time: the driving route from the phone to the place, drawn on the map (both ends in view). */
     route: com.cagri.real.notifications.DepartureReminder.Route? = null,
+    /** The route line draws itself from the phone to the place once per entry; off → shown whole at once. */
+    animateRoute: Boolean = true,
     /** Live pinch preview: scales the current snapshot until the re-rendered one arrives. */
     previewScale: (() -> Float)? = null,
     /** Called each time a freshly rendered snapshot is on screen. */
@@ -89,25 +194,40 @@ fun ReminderLocationMap(
     val context = LocalContext.current
 
     var snapshotBitmap by remember(latitude, longitude) { mutableStateOf<Bitmap?>(null) }
+    var routeOverlay by remember(latitude, longitude) { mutableStateOf<RouteOverlay?>(null) }
+    val routeProgress = remember(latitude, longitude) { Animatable(0f) }
+    var routePlayed by remember(latitude, longitude) { mutableStateOf(false) }
+    LaunchedEffect(routeOverlay != null) {
+        if (routeOverlay == null) return@LaunchedEffect
+        if (!animateRoute || routePlayed) { routeProgress.snapTo(1f); return@LaunchedEffect }
+        routePlayed = true
+        routeProgress.snapTo(0f)
+        routeProgress.animateTo(1f, tween(1400, delayMillis = 150, easing = FastOutSlowInEasing))
+    }
     var width by remember { mutableIntStateOf(0) }
     var height by remember { mutableIntStateOf(0) }
 
     Box(
         modifier
-            .background(Color(0xFF131820))
+            .background(MapAppearance.placeholder(context))
             .clickable(onClick = onOpen)
             .onSizeChanged {
                 width = it.width
                 height = it.height
             }
     ) {
-        LaunchedEffect(width, height, latitude, longitude, cameraZoom, route) {
+        val mapLook = MapAppearance.key(context)
+        LaunchedEffect(width, height, latitude, longitude, cameraZoom, route, mapLook) {
             if (width <= 0 || height <= 0) return@LaunchedEffect
 
             MapLibre.getInstance(context.applicationContext)
 
-            val options = MapSnapshotter.Options(width, height)
-                .withStyleBuilder(Style.Builder().fromUri("https://tiles.openfreemap.org/styles/dark"))
+            // Rendered in dp at the screen's density (as Apple Maps), not 1:1 in pixels: the map reads as close
+            // as on iOS and its street and place names are legible instead of tiny.
+            val density = context.resources.displayMetrics.density.coerceAtLeast(1f)
+            val options = MapSnapshotter.Options((width / density).toInt().coerceAtLeast(1), (height / density).toInt().coerceAtLeast(1))
+                .withPixelRatio(density)
+                .withStyleBuilder(MapAppearance.styleBuilder(context))
                 .withLogo(false)
             if (route == null) options.withCameraPosition(
                     CameraPosition.Builder()
@@ -128,8 +248,8 @@ fun ReminderLocationMap(
             snapshotter.start(object : MapSnapshotter.SnapshotReadyCallback {
                 override fun onSnapshotReady(snapshot: MapSnapshot) {
                     if (!active) return
-                    snapshotBitmap = if (route == null) snapshot.bitmap
-                        else drawRoute(snapshot, route, latitude, longitude, context.resources.displayMetrics.density)
+                    snapshotBitmap = snapshot.bitmap
+                    routeOverlay = route?.let { routeOverlay(snapshot, it, latitude, longitude, context.resources.displayMetrics.density) }
                     onSnapshotShown?.invoke()
                 }
             })
@@ -147,6 +267,16 @@ fun ReminderLocationMap(
                 ),
                 contentScale = ContentScale.Crop
             )
+        }
+
+        // The route over the snapshot, in the bitmap's pixel space (same centre-crop as the Image above).
+        routeOverlay?.let { overlay ->
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                val s = maxOf(size.width / overlay.width, size.height / overlay.height)
+                translate((size.width - overlay.width * s) / 2, (size.height - overlay.height * s) / 2) {
+                    scale(s, s, pivot = Offset.Zero) { drawRouteOverlay(overlay, routeProgress.value) }
+                }
+            }
         }
 
         // The place: a small white Apple-style pin at the centre (the camera is centred on it; with a route the pin is
@@ -182,29 +312,33 @@ private fun routeBounds(route: com.cagri.real.notifications.DepartureReminder.Ro
     return org.maplibre.android.geometry.LatLngBounds.from(lats.max() + padLat * 1.6, lngs.max() + padLng, lats.min() - padLat, lngs.min() - padLng)
 }
 
-/** Apple Maps–style route on the snapshot: blue line with a dark edge, the phone as a blue dot, the place as the white pin. */
-private fun drawRoute(snapshot: MapSnapshot, route: com.cagri.real.notifications.DepartureReminder.Route, lat: Double, lng: Double, density: Float): Bitmap {
-    val bitmap = snapshot.bitmap.copy(Bitmap.Config.ARGB_8888, true)
-    val canvas = android.graphics.Canvas(bitmap)
-    val path = android.graphics.Path()
-    route.points.forEachIndexed { i, (a, b) ->
-        val p = snapshot.pixelForLatLng(LatLng(a, b))
-        if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+/** The route in snapshot pixels: line points, the phone and the place, plus the bitmap size they belong to. */
+private class RouteOverlay(val width: Float, val height: Float, val points: List<Offset>, val origin: Offset, val place: Offset, val density: Float)
+
+private fun routeOverlay(snapshot: MapSnapshot, route: com.cagri.real.notifications.DepartureReminder.Route, lat: Double, lng: Double, density: Float): RouteOverlay {
+    fun px(a: Double, b: Double) = snapshot.pixelForLatLng(LatLng(a, b)).let { Offset(it.x, it.y) }
+    return RouteOverlay(
+        snapshot.bitmap.width.toFloat(), snapshot.bitmap.height.toFloat(),
+        route.points.map { (a, b) -> px(a, b) }, px(route.origin.first, route.origin.second), px(lat, lng), density
+    )
+}
+
+/** Apple Maps–style route: blue line with a dark edge (drawn up to [progress] from the phone), the phone as a blue dot, the place as the white pin. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteOverlay(overlay: RouteOverlay, progress: Float) {
+    val d = overlay.density
+    val full = androidx.compose.ui.graphics.Path()
+    overlay.points.forEachIndexed { i, p -> if (i == 0) full.moveTo(p.x, p.y) else full.lineTo(p.x, p.y) }
+    val line = if (progress >= 1f) full else androidx.compose.ui.graphics.Path().also { part ->
+        val measure = PathMeasure().apply { setPath(full, false) }
+        if (progress > 0f) measure.getSegment(0f, measure.length * progress, part, true)
     }
-    val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        style = android.graphics.Paint.Style.STROKE; strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
-    }
-    canvas.drawPath(path, stroke.apply { color = 0xFF0B2A5C.toInt(); strokeWidth = 7.5f * density })
-    canvas.drawPath(path, stroke.apply { color = 0xFF5B8DEF.toInt(); strokeWidth = 5f * density })
-    val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-    val o = snapshot.pixelForLatLng(LatLng(route.origin.first, route.origin.second))
-    canvas.drawCircle(o.x, o.y, 8.5f * density, fill.apply { color = android.graphics.Color.WHITE })
-    canvas.drawCircle(o.x, o.y, 6f * density, fill.apply { color = 0xFF5B8DEF.toInt() })
-    val d = snapshot.pixelForLatLng(LatLng(lat, lng))
-    val head = d.y - 11f * density
-    canvas.drawLine(d.x, d.y, d.x, head, stroke.apply { color = android.graphics.Color.WHITE; strokeWidth = 1.5f * density })
-    canvas.drawCircle(d.x, head, 8.5f * density, fill.apply { color = 0x73000000 })
-    canvas.drawCircle(d.x, head, 7f * density, fill.apply { color = android.graphics.Color.WHITE })
-    canvas.drawCircle(d.x, head, 2f * density, fill.apply { color = 0xFF131820.toInt() })
-    return bitmap
+    drawPath(line, Color(0xFF0B2A5C), style = Stroke(7.5f * d, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(line, Color(0xFF5B8DEF), style = Stroke(5f * d, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawCircle(Color.White, 8.5f * d, overlay.origin)
+    drawCircle(Color(0xFF5B8DEF), 6f * d, overlay.origin)
+    val head = Offset(overlay.place.x, overlay.place.y - 11f * d)
+    drawLine(Color.White, overlay.place, head, 1.5f * d, cap = StrokeCap.Round)
+    drawCircle(Color(0x73000000), 8.5f * d, head)
+    drawCircle(Color.White, 7f * d, head)
+    drawCircle(Color(0xFF131820), 2f * d, head)
 }

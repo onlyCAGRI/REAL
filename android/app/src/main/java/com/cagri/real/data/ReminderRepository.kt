@@ -707,13 +707,20 @@ class ReminderRepository(private val preferences: SharedPreferences) {
             updated
         }
 
-    fun setJournal(id: Long, mood: JournalMood?, text: String): List<ReminderItem> = update(id) { reminder ->
+    /**
+     * [styles] null = an editor without formatting changed the text: the old styles follow the edit
+     * instead of being dropped.
+     */
+    fun setJournal(id: Long, mood: JournalMood?, text: String, styles: List<BodySpan>? = null): List<ReminderItem> = update(id) { reminder ->
         val now = System.currentTimeMillis()
+        val old = reminder.journal
         val journal = ReminderJournal(
             mood = mood,
             text = text,
-            createdAt = reminder.journal?.createdAt ?: now,
-            updatedAt = now
+            createdAt = old?.createdAt ?: now,
+            updatedAt = now,
+            styles = styles?.let { BodySpans.normalize(it, text.length) }
+                ?: old?.let { BodySpans.applyEdit(it.styles, it.text, text, typingMarks = emptySet()) }.orEmpty()
         )
         reminder.copy(journal = journal, updatedAt = now)
     }

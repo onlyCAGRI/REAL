@@ -90,9 +90,9 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** Moods V3: the whole screen takes the mood's colour; [ink] is the face, text and controls on it. */
-private class MoodV3Tone(val paper: Color, val ink: Color)
+internal class MoodV3Tone(val paper: Color, val ink: Color)
 
-private val MoodV3Tones = listOf(
+internal val MoodV3Tones = listOf(
     MoodV3Tone(Color(0xFFFF8A7A), Color(0xFF5A1712)),   // Kötü: salmon
     MoodV3Tone(Color(0xFFFFB45A), Color(0xFF5A2E05)),   // Zor: orange
     MoodV3Tone(Color(0xFFF2D96B), Color(0xFF4A3C08)),   // Normal: sand
@@ -333,7 +333,7 @@ fun MoodV3FullScreen(
 
 /** The V2 face drawn chunkier and in ink: bigger eyes, a heavier mouth. */
 @Composable
-private fun MoodV3Face(params: FaceV2Params, ink: Color, size: Dp, description: String) {
+internal fun MoodV3Face(params: FaceV2Params, ink: Color, size: Dp, description: String) {
     Canvas(Modifier.size(size).semantics { contentDescription = description }) {
         val w = this.size.width
         val h = this.size.height

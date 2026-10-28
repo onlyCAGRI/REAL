@@ -47,6 +47,8 @@ struct ReminderDetailView: View {
     @State private var showFileImporter = false
     @State private var showLocationEditor = false
     @State private var showLocationGuide = false
+    @State private var showMapPoster = false
+    @State private var showSkyPoster = false
     @State private var showLinkEditor = false
     @State private var editingStackCard: CardStackCard?
     @State private var showMoodPicker = false
@@ -125,6 +127,19 @@ struct ReminderDetailView: View {
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
         .onChange(of: photoItems) { _, items in importPhotos(items) }
         .fullScreenCover(isPresented: $showCamera) { CameraPicker { data in addAttachment(AttachmentStorage.save(data)) }.ignoresSafeArea() }
+        // Real Labs posters: the card's place as a styled map, or its sky at the card's moment; "Karta ekle" adds a photo.
+        .fullScreenCover(isPresented: $showMapPoster) {
+            if let l = draft?.location ?? shown?.location, let lat = l.latitude, let lng = l.longitude {
+                MapPosterScreen(latitude: lat, longitude: lng, placeName: l.placeName,
+                                onAttach: { image in addPoster(image) }, onClose: { showMapPoster = false })
+            }
+        }
+        .fullScreenCover(isPresented: $showSkyPoster) {
+            if let l = draft?.location ?? shown?.location, let lat = l.latitude, let lng = l.longitude {
+                SkyPosterScreen(latitude: lat, longitude: lng, placeName: l.placeName, momentMillis: posterMoment,
+                                onAttach: { image in addPoster(image) }, onClose: { showSkyPoster = false })
+            }
+        }
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { urls.forEach { addAttachment(AttachmentStorage.saveFile($0)) } }
         }
@@ -1051,6 +1066,11 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "doc", label: t("Dosya ekle"), active: false,
                                 count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
                     QuickAction(symbol: "face.smiling", label: t("Mood"), active: d?.mood != nil) { showMoodPicker = true }
+                    // Real Labs: experimental extras after a divider, as on Android.
+                    Rectangle().fill(.white.opacity(0.14)).frame(width: 1, height: 22).padding(.horizontal, 6)
+                    Text("Real Labs").font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.45)).fixedSize().padding(.trailing, 2)
+                    QuickAction(symbol: "map", label: t("Harita posteri"), active: false) { openPoster { showMapPoster = true } }
+                    QuickAction(symbol: "sparkles", label: t("Gökyüzü posteri"), active: false) { openPoster { showSkyPoster = true } }
                 }
                 .padding(.leading, 2).padding(.trailing, 12)
             }
@@ -1137,6 +1157,35 @@ struct ReminderDetailView: View {
     private func updateSnippet(_ id: String, _ text: String) {
         if editing, let i = draft?.attachments.firstIndex(where: { $0.id == id }) { draft?.attachments[i].text = text }
         else { store.mutate(reminderId) { r in if let i = r.attachments.firstIndex(where: { $0.id == id }) { r.attachments[i].text = text; r.updatedAt = .now } } }
+    }
+
+    /// The posters need the card's place; without one, the location guide opens first.
+    private func openPoster(_ open: () -> Void) {
+        if let l = draft?.location, l.latitude != nil, l.longitude != nil { open() }
+        else {
+            RealToast.shared.show(t("Poster için önce bir konum seç"))
+            withoutAnimation { showLocationGuide = true }
+        }
+    }
+
+    private func addPoster(_ image: UIImage) {
+        guard let data = image.jpegData(compressionQuality: 0.94) else { return }
+        addAttachment(AttachmentStorage.save(data))
+    }
+
+    /// The sky poster's moment: the card's alert, else its planned day at 21:00, else when it was made.
+    private var posterMoment: Int64 {
+        let d = draft ?? shown
+        if let at = d?.alertAt { return at }
+        if let day = d?.plannedDateEpochDay {
+            var utc = Calendar(identifier: .gregorian)
+            utc.timeZone = TimeZone(identifier: "UTC")!
+            let parts = utc.dateComponents([.year, .month, .day], from: Date(timeIntervalSince1970: Double(day) * 86_400))
+            var local = DateComponents(year: parts.year, month: parts.month, day: parts.day, hour: 21)
+            local.calendar = Calendar.current
+            if let date = local.date { return Int64(date.timeIntervalSince1970 * 1000) }
+        }
+        return d?.createdAt ?? Int64(Date().timeIntervalSince1970 * 1000)
     }
 
     private func addAttachment(_ a: ReminderAttachment?) {
@@ -1432,6 +1481,22 @@ struct LocationEditor: View {
 
     private static let ink = Color(argb: 0xFF0B0B0D)
     private static let muted = Color(argb: 0xFF9A9AA4)
+    @AppStorage(MapAppearance.darkKey) private var mapDark = false
+    @AppStorage(MapAppearance.plainKey) private var mapPlain = false
+
+    /// The nearest named point of interest within ~40 m of a tap, or nil.
+    private static func placeNear(_ c: CLLocationCoordinate2D) async -> (coordinate: CLLocationCoordinate2D, name: String, address: String)? {
+        let request = MKLocalPointsOfInterestRequest(center: c, radius: 40)
+        guard let items = try? await MKLocalSearch(request: request).start().mapItems else { return nil }
+        let here = CLLocation(latitude: c.latitude, longitude: c.longitude)
+        guard let best = items.filter({ !($0.name ?? "").isEmpty }).min(by: {
+            here.distance(from: CLLocation(latitude: $0.placemark.coordinate.latitude, longitude: $0.placemark.coordinate.longitude)) <
+            here.distance(from: CLLocation(latitude: $1.placemark.coordinate.latitude, longitude: $1.placemark.coordinate.longitude))
+        }) else { return nil }
+        let m = best.placemark
+        let address = [m.thoroughfare, m.subLocality, m.locality].compactMap { $0 }.joined(separator: ", ")
+        return (m.coordinate, best.name ?? "", address)
+    }
 
     var body: some View {
         ZStack {
@@ -1439,10 +1504,20 @@ struct LocationEditor: View {
                 Map(position: $camera) {
                     UserAnnotation()
                 }
-                .mapStyle(.standard(pointsOfInterest: .excludingAll))
+                .mapStyle(MapAppearance.style(plain: mapPlain))
+                .environment(\.colorScheme, MapAppearance.scheme(dark: mapDark))
                 .onTapGesture { point in
                     searchFocused = false
-                    if let c = proxy.convert(point, from: .local) { drop(c, name: "", address: "") }
+                    guard let c = proxy.convert(point, from: .local) else { return }
+                    // A tap on a named place (restaurant, shop…) takes its name, as on Android; elsewhere the geocoder names it.
+                    if mapPlain { drop(c, name: "", address: ""); return }
+                    Task {
+                        if let place = await Self.placeNear(c) {
+                            drop(place.coordinate, name: place.name, address: place.address)
+                        } else {
+                            drop(c, name: "", address: "")
+                        }
+                    }
                 }
                 .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { _ in userMoving = true })
                 .onMapCameraChange(frequency: .onEnd) { context in

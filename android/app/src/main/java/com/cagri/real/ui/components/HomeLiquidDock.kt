@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -64,10 +65,20 @@ fun HomeLiquidDock(
     reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean,
     modifier: Modifier = Modifier,
+    // The caller hides the whole dock while it swaps bar ↔ panel, so the chrome can jump instead of sliding.
+    chromeSnap: Boolean = false,
     composer: @Composable () -> Unit
 ) {
     var navigationExpanded by rememberSaveable { mutableStateOf(false) }
     val showChrome = enabled && !composerExpanded
+    // Composer opening: the side circles fade and the capsule widens over the same time the panel grows
+    // (composerHeight), instead of popping away in one frame. Read only in layout / layer blocks.
+    val chromeHide = animateFloatAsState(
+        if (composerExpanded) 1f else 0f,
+        if (reduceAnimations || chromeSnap) snap() else tween(360, easing = RealMotion.Emphasized),
+        label = "dockChromeHide"
+    )
+    val chromeVisible by remember(enabled) { derivedStateOf { enabled && chromeHide.value < 1f } }
 
     val openPlanner: () -> Unit = {
         navigationExpanded = false
@@ -143,14 +154,14 @@ fun HomeLiquidDock(
         modifier = modifier.then(dockGesture).testTag("home_dock"),
         content = {
             Box { composer() }
-            if (showChrome) {
+            if (chromeVisible) {
                 HomeDockGlass(backdrop, backdropPosition, designStyle, reduceDynamicBlur, reduceAnimations) {
                     if (progress < 0.5f) {
                         Box(
                             Modifier
                                 .fillMaxSize()
                                 .graphicsLayer { alpha = (1f - progress * 2f).coerceIn(0f, 1f) }
-                                .clickable(enabled = interactionEnabled, role = Role.Button, onClick = openPlanner)
+                                .clickable(enabled = interactionEnabled && showChrome, role = Role.Button, onClick = openPlanner)
                                 .semantics { contentDescription = t("Takvim") },
                             contentAlignment = Alignment.Center
                         ) {
@@ -172,7 +183,7 @@ fun HomeLiquidDock(
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .clickable(enabled = interactionEnabled && micEnabled, role = Role.Button, onClick = onMicClick)
+                        .clickable(enabled = interactionEnabled && micEnabled && showChrome, role = Role.Button, onClick = onMicClick)
                         .semantics { contentDescription = t("Sesle REAL oluştur") },
                     contentAlignment = Alignment.Center
                 ) {
@@ -192,24 +203,30 @@ fun HomeLiquidDock(
     ) { measurables, constraints ->
         val width = constraints.maxWidth
         val composerPx = composerHeight().roundToPx().coerceAtMost(constraints.maxHeight)
+        val chrome = measurables.size > 1
+        val hide = if (enabled) chromeHide.value else 1f
         val p = if (showChrome) progress.coerceIn(0f, 1f) else 0f
         val extra = (HomeDockExtraBottomSpace.toPx() * p).roundToInt()
         val height = constraints.constrainHeight(composerPx + extra)
-        val sideInset = if (showChrome) (56.dp.toPx() * (1f - p)).roundToInt() else 0
+        val sideInset = if (chrome) (56.dp.toPx() * (1f - p) * (1f - hide)).roundToInt() else 0
         val composerWidth = (width - sideInset * 2).coerceAtLeast(0)
         val input = measurables[0].measure(Constraints.fixed(composerWidth, composerPx))
         val navWidth = (44.dp.toPx() + (width - 56.dp.toPx() - 44.dp.toPx()) * p).roundToInt().coerceAtLeast(0)
         val navHeight = (44.dp.toPx() + 16.dp.toPx() * p).roundToInt()
-        val navigation = if (showChrome) measurables[1].measure(Constraints.fixed(navWidth, navHeight)) else null
+        val navigation = if (chrome) measurables[1].measure(Constraints.fixed(navWidth, navHeight)) else null
         val micSize = 48.dp.roundToPx()
-        val microphone = if (showChrome) measurables[2].measure(Constraints.fixed(micSize, micSize)) else null
+        val microphone = if (chrome) measurables[2].measure(Constraints.fixed(micSize, micSize)) else null
 
         layout(width, height) {
             input.placeRelative(sideInset, 0)
             val navBottomInset = (((composerPx - 44.dp.toPx()) / 2f) * (1f - p)).roundToInt()
             val navY = height - navHeight - navBottomInset
-            navigation?.placeRelative(0, navY)
-            microphone?.placeRelative(width - micSize, navY + (navHeight - micSize) / 2)
+            val fade: androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit = {
+                alpha = 1f - hide
+                scaleX = 1f - 0.3f * hide; scaleY = scaleX
+            }
+            navigation?.placeRelativeWithLayer(0, navY, layerBlock = fade)
+            microphone?.placeRelativeWithLayer(width - micSize, navY + (navHeight - micSize) / 2, layerBlock = fade)
         }
     }
 }

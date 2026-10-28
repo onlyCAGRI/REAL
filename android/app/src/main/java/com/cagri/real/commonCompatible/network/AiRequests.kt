@@ -10,11 +10,20 @@ data class MoodSuggestionRequest(
     val factors: List<String>,
     val replaceKind: MoodSuggestionKind? = null,
     val exclude: List<String> = emptyList(),
-    val excludeMusic: List<String> = emptyList()
+    val excludeMusic: List<String> = emptyList(),
+    val excludeMedia: List<String> = emptyList(),
+    val excludeIdeas: List<String> = emptyList(),
+    val scope: String? = null,
+    val localHour: Int? = null,
+    val language: String? = null
 ) {
     val source: String get() = "mood_tracker"
     fun normalizedMusicExclusions(): List<String> = excludeMusic.map { it.trim().take(320) }
         .filter { it.isNotBlank() }.distinct().takeLast(32)
+    fun normalizedMediaExclusions(): List<String> = excludeMedia.map { it.trim().take(320) }
+        .filter { it.isNotBlank() }.distinct().takeLast(32)
+    fun normalizedIdeaExclusions(): List<String> = excludeIdeas.map { it.trim().take(320) }
+        .filter { it.isNotBlank() }.distinct().takeLast(24)
     fun normalizedExclusions(): List<String> = exclude.map { it.trim() }.filter { it.isNotBlank() }.take(16)
 }
 

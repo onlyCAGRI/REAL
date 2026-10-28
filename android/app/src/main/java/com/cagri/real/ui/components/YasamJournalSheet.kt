@@ -28,6 +28,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
+import com.cagri.real.data.BodyFormat
+import com.cagri.real.data.BodyMark
+import com.cagri.real.data.BodySize
+import com.cagri.real.data.BodySpan
+import com.cagri.real.data.BodySpans
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
@@ -44,22 +50,30 @@ private val SheetMuted = Color(0xFF8E8E98)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun YasamJournalSheet(onDismiss: () -> Unit, onSave: suspend (String) -> Boolean) {
+fun YasamJournalSheet(onDismiss: () -> Unit, onSave: suspend (String, List<BodySpan>) -> Boolean) {
     val scope = rememberCoroutineScope()
-    var text by rememberSaveable { mutableStateOf("") }
+    var field by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
+    val text = field.text
+    var styles by remember { mutableStateOf(emptyList<BodySpan>()) }
+    // Marks for the next typed letters after a style was tapped with no selection; null = follow the caret.
+    var pending by remember { mutableStateOf<Set<BodyMark>?>(null) }
+    var formatOpen by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { !busy })
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val format = BodyFormat(size = BodySize.LARGE)
 
     fun save() {
         val value = text.trim()
         if (value.isEmpty() || busy) return
+        val from = text.indexOf(value)
+        val valueStyles = BodySpans.slice(styles, from, from + value.length)
         busy = true; error = null
         scope.launch {
             try {
-                if (onSave(value)) onDismiss() else error = t("Günlük kaydedilemedi.")
+                if (onSave(value, valueStyles)) onDismiss() else error = t("Günlük kaydedilemedi.")
             } catch (c: CancellationException) {
                 throw c
             } catch (_: Exception) {
@@ -101,14 +115,27 @@ fun YasamJournalSheet(onDismiss: () -> Unit, onSave: suspend (String) -> Boolean
             ) {
                 if (text.isEmpty()) Text(t("Günlüğün…"), color = SheetMuted, fontSize = 16.sp)
                 BasicTextField(
-                    value = text,
-                    onValueChange = { if (!busy) { text = it; error = null } },
+                    value = field,
+                    onValueChange = { next ->
+                        if (busy) return@BasicTextField
+                        if (next.text != field.text) styles = BodySpans.applyEdit(styles, field.text, next.text, pending)
+                        else if (next.selection != field.selection) pending = null
+                        field = next; error = null
+                    },
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
-                    textStyle = TextStyle(color = Color.White, fontSize = 16.sp, lineHeight = 24.sp),
+                    textStyle = format.textStyle().copy(color = Color.White),
+                    visualTransformation = cardBodyTransformation(styles, format, onDark = true),
                     cursorBrush = SolidColor(Color.White),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
                 )
             }
+            BodyFormatControls(
+                text = text, selection = field.selection, styles = styles, pending = pending,
+                open = formatOpen, foreground = Color.White, onDark = true,
+                onOpenChange = { formatOpen = it },
+                onPending = { pending = it },
+                onStyles = { styles = it }
+            )
             error?.let { Text(it, color = Color(0xFFFF8A80), fontSize = 13.sp) }
             val canSave = !busy && text.isNotBlank()
             SheetButton(if (busy) t("Kaydediliyor…") else t("Kaydet"), filled = true, enabled = canSave, onClick = ::save)

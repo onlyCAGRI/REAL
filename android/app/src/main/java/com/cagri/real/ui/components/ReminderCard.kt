@@ -139,6 +139,8 @@ fun ReminderCard(
     plainStyle: Boolean = false,
     /** Swipe left: delete (the caller shows "Geri al"). */
     onSwipeLeftDelete: (() -> Unit)? = null,
+    /** The left swipe only takes the card off this list (a phone-calendar event that ended): grey, "Gizle". */
+    swipeLeftHides: Boolean = false,
     /** Home search results: the card's category name in a small pill (like the category descriptions). */
     categoryLabel: CustomCategory? = null,
     modifier: Modifier = Modifier
@@ -287,6 +289,23 @@ fun ReminderCard(
     var swipeDragX by remember(reminder.id) { mutableFloatStateOf(0f) }
     var swipeDragging by remember(reminder.id) { mutableStateOf(false) }
     var swipeArmed by remember(reminder.id) { mutableStateOf(false) }
+    // The drag the finger made; past the threshold the card follows it with rubber-band resistance.
+    var swipeRawX by remember(reminder.id) { mutableFloatStateOf(0f) }
+    // Kept on while a committed card leaves, so its action icon keeps riding the card's edge out.
+    var swipeCommitting by remember(reminder.id) { mutableStateOf(false) }
+    val swipeArmedProgress = animateFloatAsState(
+        if (swipeArmed || swipeCommitting) 1f else 0f,
+        if (reduceAnimations) snap() else androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 700f),
+        label = "swipeArmed"
+    )
+    val swipeRubberPx = with(density) { 140.dp.toPx() }
+    fun rubberSwipe(raw: Float): Float {
+        val d = kotlin.math.abs(raw)
+        if (d <= swipeThresholdPx) return raw
+        val over = d - swipeThresholdPx
+        val eased = swipeThresholdPx + swipeRubberPx * (1f - 1f / (over / swipeRubberPx * 0.9f + 1f))
+        return if (raw < 0f) -eased else eased
+    }
     // Which way this drag may go: a card is swiped from its edge (delete from the right side, complete / 24 hour from
     // the left side); a drag starting in the middle does not move it, so a scroll or a tap cannot throw a card away.
     var swipeMayLeft by remember(reminder.id) { mutableStateOf(false) }
@@ -316,18 +335,23 @@ fun ReminderCard(
                     swipeMayRight = swipeRightOn && at <= 0.4f
                     swipeDragging = true
                     swipeDragX = swipeAnim.value
+                    swipeRawX = swipeAnim.value
                     swipeArmed = false
+                    swipeCommitting = false
                     swipeVelocityTracker.resetTracking()
                 },
                 onHorizontalDrag = { change, dragAmount ->
-                    val next = (swipeDragX + dragAmount)
+                    val raw = (swipeRawX + dragAmount)
                         .coerceIn(if (swipeMayLeft) -swipeExitPx else 0f, if (swipeMayRight) swipeExitPx else 0f)
+                    val next = rubberSwipe(raw)
                     if (next != swipeDragX || swipeDragX != 0f) {
                         change.consume()
+                        swipeRawX = raw
                         swipeDragX = next
                         swipeVelocityTracker.addPosition(change.uptimeMillis, Offset(swipeDragX, 0f))
                         val armed = kotlin.math.abs(swipeDragX) >= swipeThresholdPx
-                        if (armed && !swipeArmed) RealHaptics.tick(view)
+                        // A tick each way across the line, as iOS does: the action is on, then off again.
+                        if (armed != swipeArmed) RealHaptics.tick(view)
                         swipeArmed = armed
                     }
                 },
@@ -344,6 +368,7 @@ fun ReminderCard(
                         (kotlin.math.abs(vx) >= swipeFlingVelocityPx && (vx < 0f) == left &&
                             kotlin.math.abs(startX) >= swipeFlingMinDistancePx)
                     swipeArmed = false
+                    swipeCommitting = commit
                     if (commit && !left && swipeRightKeepsCard) {
                         // Move to 24 hour keeps the card here: act, then it slides back in (no bounce).
                         swipeScope.launch {
@@ -351,6 +376,7 @@ fun ReminderCard(
                             swipeDragging = false
                             swipeDragX = 0f
                             onSwipeRightTo24Hour?.invoke()
+                            swipeCommitting = false
                             if (reduceAnimations) swipeAnim.snapTo(0f)
                             else swipeAnim.animateTo(0f, tween(320, easing = RealMotion.Emphasized))
                         }
@@ -368,38 +394,30 @@ fun ReminderCard(
 
     Box(modifier.fillMaxWidth()) {
         if (swipeEnabled) {
-            // The light rising from the edge the card leaves (as on the posters), brighter once the swipe will act.
-            Box(Modifier.matchParentSize().drawBehind { drawCardSwipeGlow(renderedSwipeX(), swipeThresholdPx) })
-        }
-        if (swipeRightOn && swipeEnabled) {
-            Text(
-                text = swipeRightLabel,
-                color = Color(0xFF91B9FF),
-                style = RealType.cardSwipeAction,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 18.dp)
-                    .graphicsLayer {
-                        val p = (renderedSwipeX() / swipeThresholdPx).coerceIn(0f, 1f)
-                        alpha = p; scaleX = 0.85f + 0.15f * p; scaleY = scaleX
-                    }
+            // The action behind the card (iOS Mail / Reminders): a solid pill that grows out of the edge the card
+            // leaves, its icon riding along; past the line it deepens to full colour and the icon jumps to the card.
+            val rightColor = if (plainStyle && !reminder.isCompleted) SwipeCompleteColor else SwipeUndoColor
+            Box(Modifier.matchParentSize().drawBehind {
+                val x = renderedSwipeX()
+                drawSwipeAction(x, if (x < 0f) (if (swipeLeftHides) SwipeHideColor else SwipeDeleteColor) else rightColor, swipeArmedProgress.value,
+                    22.dp.toPx(), SwipeActionGap.toPx())
+            })
+            if (swipeRightOn) SwipeActionIcon(
+                glyph = if (reminder.isCompleted) ActionGlyph.Undo else if (plainStyle) ActionGlyph.Check else ActionGlyph.Calendar,
+                label = swipeRightLabel,
+                fromStart = true,
+                x = ::renderedSwipeX,
+                armed = { swipeArmedProgress.value },
+                modifier = Modifier.align(Alignment.CenterStart)
             )
-        }
-        if (swipeLeftOn && swipeEnabled) {
-            Row(
-                Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 18.dp)
-                    .graphicsLayer {
-                        val p = (-renderedSwipeX() / swipeThresholdPx).coerceIn(0f, 1f)
-                        alpha = p; scaleX = 0.85f + 0.15f * p; scaleY = scaleX
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                TrashGlyph(Color(0xFFFF8A80), Modifier.size(18.dp))
-                Text(text = t("Sil"), color = Color(0xFFFF8A80), style = RealType.cardSwipeAction)
-            }
+            if (swipeLeftOn) SwipeActionIcon(
+                glyph = if (swipeLeftHides) ActionGlyph.Close else ActionGlyph.Delete,
+                label = if (swipeLeftHides) t("Gizle") else t("Sil"),
+                fromStart = false,
+                x = ::renderedSwipeX,
+                armed = { swipeArmedProgress.value },
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
         }
         Box(
             Modifier
@@ -703,9 +721,14 @@ fun ReminderCard(
                         Text(reminderPlannedDate(epochDay), color = if (useDark) Color(0xFF1E3A8A) else Color(0xFF94B8F7),
                             style = RealType.cardMetaSecondary, maxLines = 1)
                     }
+                    // Location permission (or "Her zaman") taken back: the trigger can never fire, so the card says so.
+                    val triggerBlocked = trigger != null && androidx.compose.ui.platform.LocalContext.current.let {
+                        !com.cagri.real.notifications.LocationReminders.hasLocation(it) || !com.cagri.real.notifications.LocationReminders.hasBackground(it)
+                    }
                     if (trigger != null) {
-                        val tone = if (trigger.onExit) Color(0xFFFFB86F) else Color(0xFF5DCAA5)
+                        val tone = if (triggerBlocked) Color(0xFFF87171) else if (trigger.onExit) Color(0xFFFFB86F) else Color(0xFF5DCAA5)
                         PlaceTriggerGlyph(trigger.onExit, tone, Modifier.size(12.dp))
+                        if (triggerBlocked) Text(t("Konum izni yok"), color = tone, style = RealType.cardMetaSecondary, maxLines = 1)
                     } else if (plainPlace != null) {
                         ActionIcon(ActionGlyph.Pin, Modifier.size(12.dp), cardSubtextColor)
                     }
@@ -773,42 +796,60 @@ internal fun PlaceTriggerGlyph(onExit: Boolean, color: Color, modifier: Modifier
     }
 }
 
-/** Light from the edge a swiped card leaves: red on the right (Sil), blue on the left (complete / 24 hour). */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCardSwipeGlow(x: Float, threshold: Float) {
-    if (x == 0f) return
-    val p = (kotlin.math.abs(x) / threshold).coerceIn(0f, 1.4f)
-    val s = (p / 1.4f).let { it * it * (3f - 2f * it) }
-    if (s <= 0.01f) return
-    val color = if (x < 0f) Color(0xFFFF4D6D) else Color(0xFF4D8DFF)
-    val edge = if (x < 0f) size.width else 0f
-    val center = androidx.compose.ui.geometry.Offset(edge, size.height / 2f)
-    val radius = (kotlin.math.abs(x) * 1.15f).coerceAtLeast(size.height * 0.8f)
-    val armed = if (p >= 1f) 1.35f else 1f
-    drawCircle(androidx.compose.ui.graphics.Brush.radialGradient(
-        0f to color.copy(alpha = (0.42f * s * armed).coerceAtMost(0.6f)), 0.45f to color.copy(alpha = 0.16f * s * armed),
-        1f to Color.Transparent, center = center, radius = radius), radius = radius, center = center)
-    val line = 2.5.dp.toPx()
-    drawRect(androidx.compose.ui.graphics.Brush.verticalGradient(
-        0f to Color.Transparent, 0.3f to color.copy(alpha = 0.75f * s), 0.5f to Color.White.copy(alpha = 0.9f * s),
-        0.7f to color.copy(alpha = 0.75f * s), 1f to Color.Transparent),
-        topLeft = androidx.compose.ui.geometry.Offset(if (x < 0f) size.width - line else 0f, 0f),
-        size = androidx.compose.ui.geometry.Size(line, size.height))
+private val SwipeCompleteColor = Color(0xFF30D158)
+private val SwipeUndoColor = Color(0xFF0A84FF)
+private val SwipeDeleteColor = Color(0xFFFF453A)
+private val SwipeHideColor = Color(0xFF636366)
+/** Width of one action "button": the icon waits in its middle until the swipe passes the line. */
+private val SwipeActionWidth = 76.dp
+private val SwipeActionGap = 6.dp
+
+/**
+ * The revealed action behind a swiped card: a solid rounded pill from the card's edge up to a small gap before the
+ * card, a little deeper until the swipe will act ([armed] 0 to 1). No light, no glow.
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSwipeAction(
+    x: Float, color: Color, armed: Float, corner: Float, gap: Float
+) {
+    val w = kotlin.math.abs(x) - gap
+    if (w <= 0f) return
+    val fill = androidx.compose.ui.graphics.lerp(color, Color.Black, 0.22f * (1f - armed.coerceIn(0f, 1f)))
+    val r = kotlin.math.min(corner, w / 2f)
+    drawRoundRect(
+        fill,
+        topLeft = Offset(if (x < 0f) size.width - w else 0f, 0f),
+        size = androidx.compose.ui.geometry.Size(w, size.height),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(r, r)
+    )
 }
 
-/** A small bin drawn with lines (no icon font needed). */
+/**
+ * The white icon on the revealed pill: it fades and grows in over the first dp, waits in the middle of the first
+ * [SwipeActionWidth], and once the swipe will act springs over to ride right against the card's edge.
+ */
 @Composable
-private fun TrashGlyph(color: Color, modifier: Modifier) {
-    androidx.compose.foundation.Canvas(modifier) {
-        val w = size.width; val h = size.height; val st = 1.6.dp.toPx()
-        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(st, cap = androidx.compose.ui.graphics.StrokeCap.Round,
-            join = androidx.compose.ui.graphics.StrokeJoin.Round)
-        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.12f, h * 0.24f), androidx.compose.ui.geometry.Offset(w * 0.88f, h * 0.24f), st, androidx.compose.ui.graphics.StrokeCap.Round)
-        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.38f, h * 0.1f), androidx.compose.ui.geometry.Offset(w * 0.62f, h * 0.1f), st, androidx.compose.ui.graphics.StrokeCap.Round)
-        val body = androidx.compose.ui.graphics.Path().apply {
-            moveTo(w * 0.22f, h * 0.3f); lineTo(w * 0.28f, h * 0.9f); lineTo(w * 0.72f, h * 0.9f); lineTo(w * 0.78f, h * 0.3f)
-        }
-        drawPath(body, color, style = stroke)
-        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.42f, h * 0.42f), androidx.compose.ui.geometry.Offset(w * 0.43f, h * 0.78f), st, androidx.compose.ui.graphics.StrokeCap.Round)
-        drawLine(color, androidx.compose.ui.geometry.Offset(w * 0.58f, h * 0.42f), androidx.compose.ui.geometry.Offset(w * 0.57f, h * 0.78f), st, androidx.compose.ui.graphics.StrokeCap.Round)
+private fun SwipeActionIcon(
+    glyph: ActionGlyph, label: String, fromStart: Boolean, x: () -> Float, armed: () -> Float, modifier: Modifier
+) {
+    Box(
+        modifier
+            .size(SwipeActionWidth, 44.dp)
+            .graphicsLayer {
+                val buttonPx = SwipeActionWidth.toPx()
+                val shown = if (fromStart) x().coerceAtLeast(0f) else (-x()).coerceAtLeast(0f)
+                val w = (shown - SwipeActionGap.toPx()).coerceAtLeast(0f)
+                val a = armed()
+                val resting = kotlin.math.min(w, buttonPx) / 2f
+                val riding = w - buttonPx / 2f
+                val dx = resting + (riding - resting).coerceAtLeast(0f) * a - buttonPx / 2f
+                translationX = if (fromStart) dx else -dx
+                alpha = ((w - 8.dp.toPx()) / (buttonPx * 0.45f)).coerceIn(0f, 1f)
+                val s = (0.55f + 0.45f * (w / buttonPx).coerceIn(0f, 1f)) * (1f + 0.1f * a)
+                scaleX = s; scaleY = s
+            }
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center
+    ) {
+        ActionIcon(glyph, Modifier.size(22.dp), Color.White)
     }
 }

@@ -229,33 +229,7 @@ fun VoiceListeningWindow(
                 .matchParentSize()
                 .drawBehind {
                     if (processing) {
-                        val progress = if (reduceAnimations) 0.5f else thinkingSweep
-                        val centerX = size.width * (1.30f - progress * 1.60f)
-                        val bandWidth = size.width * 0.72f
-                        drawRect(
-                            brush = Brush.linearGradient(
-                                colorStops = arrayOf(
-                                    0.00f to Color.Transparent,
-                                    0.22f to VoiceBlueDeep.copy(alpha = 0.07f + processingAlpha * 0.04f),
-                                    0.46f to VoiceBlue.copy(alpha = 0.19f + processingAlpha * 0.08f),
-                                    0.62f to VoiceBlue.copy(alpha = 0.24f + processingAlpha * 0.09f),
-                                    0.82f to VoiceBlueDeep.copy(alpha = 0.07f + processingAlpha * 0.04f),
-                                    1.00f to Color.Transparent
-                                ),
-                                start = Offset(centerX + bandWidth, size.height * 0.12f),
-                                end = Offset(centerX - bandWidth, size.height * 0.88f)
-                            )
-                        )
-                        drawRect(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    VoiceBlue.copy(alpha = 0.09f + processingAlpha * 0.05f),
-                                    Color.Transparent
-                                ),
-                                center = Offset(centerX, size.height * 0.58f),
-                                radius = size.width * 0.72f
-                            )
-                        )
+                        drawRealThinkingSweep(if (reduceAnimations) 0.5f else thinkingSweep, processingAlpha)
                     } else {
                         val strength = 0.10f + smoothLevel * 0.34f
                         drawRect(

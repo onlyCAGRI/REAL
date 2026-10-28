@@ -151,16 +151,31 @@ private fun LocationPickerContent(
     fun remind(onExit: Boolean) {
         val place = pickedPlace()
         onRemind?.invoke(place, LocationTrigger(place.placeName, center.latitude, center.longitude,
-            LocationTrigger.PRECISE_RADIUS, onExit))
+            if (onExit) LocationTrigger.EXIT_MIN_RADIUS else LocationTrigger.PRECISE_RADIUS, onExit))
     }
 
+    var tappedPlaceName by remember { mutableStateOf<String?>(null) }
     fun lookUp(target: LatLng) {
         geocodeJob?.cancel()
         geocodeJob = scope.launch {
             delay(350)
             val (n, a) = reverseGeocode(context, target)
-            name = n; address = a
+            // A tapped map place keeps its own name; the geocoder only fills in the address.
+            name = tappedPlaceName ?: n; address = a
+            tappedPlaceName = null
         }
+    }
+    /** The name of a place label (restaurant, shop, park…) under the tap, and where it sits, or null. */
+    fun placeLabelAt(target: LatLng): Pair<String, LatLng>? {
+        val m = map ?: return null
+        val layers = m.style?.layers?.map { it.id }?.filter { it.startsWith("poi") || it.startsWith("real-poi") }?.toTypedArray() ?: return null
+        if (layers.isEmpty()) return null
+        val p = m.projection.toScreenLocation(target)
+        val r = 18f * context.resources.displayMetrics.density
+        val feature = m.queryRenderedFeatures(android.graphics.RectF(p.x - r, p.y - r, p.x + r, p.y + r), *layers)
+            .firstOrNull { !it.getStringProperty("name").isNullOrBlank() } ?: return null
+        val point = feature.geometry() as? org.maplibre.geojson.Point
+        return feature.getStringProperty("name") to (point?.let { LatLng(it.latitude(), it.longitude()) } ?: target)
     }
     fun moveTo(target: LatLng, zoom: Double = 16.0) {
         map?.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(target).zoom(zoom).build()), 450)
@@ -189,12 +204,18 @@ private fun LocationPickerContent(
             onReady = { map = it },
             onMoved = { target, byUser ->
                 center = target
-                if (byUser) picked = true
+                if (byUser) { picked = true; tappedPlaceName = null }
                 // A search result already named the place; only a move by hand asks the geocoder again.
                 if (skipLookUp && !byUser) skipLookUp = false
                 else if (picked) lookUp(target)
             },
-            onTap = { target -> picked = true; moveTo(target, map?.cameraPosition?.zoom?.coerceAtLeast(15.0) ?: 16.0) }
+            onTap = { target ->
+                picked = true
+                val label = placeLabelAt(target)
+                tappedPlaceName = label?.first
+                label?.let { name = it.first }
+                moveTo(label?.second ?: target, map?.cameraPosition?.zoom?.coerceAtLeast(15.0) ?: 16.0)
+            }
         )
         // The pin marks the map centre; the map moves under it.
         PinMark(Modifier.align(Alignment.Center).offset(y = (-18).dp), active = picked)
@@ -300,6 +321,7 @@ private fun LocationPickerContent(
             if (onRemind != null) {
                 // Adding the place comes first; reminding on arrival / departure is the second choice.
                 PickerPill(t("Konum ekle"), primary = true, enabled = picked, modifier = Modifier.fillMaxWidth()) { onSave(pickedPlace()) }
+                if (leaving && picked) ExitOutsideNote(center.latitude, center.longitude, LocationTrigger.EXIT_MIN_RADIUS, PickerMuted)
                 RemindPill(leaving = leaving, enabled = picked, onToggle = { leaving = !leaving }) { remind(onExit = leaving) }
             } else {
                 PickerPill(t("Bu konumu kaydet"), primary = true, enabled = picked, modifier = Modifier.fillMaxWidth()) { onSave(pickedPlace()) }
@@ -381,6 +403,7 @@ private fun LiveMap(
     onTap: (LatLng) -> Unit
 ) {
     val context = LocalContext.current
+    val styleScope = rememberCoroutineScope()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember {
         MapLibre.getInstance(context.applicationContext)
@@ -409,7 +432,7 @@ private fun LiveMap(
             map.uiSettings.isAttributionEnabled = true
             map.uiSettings.isRotateGesturesEnabled = false
             map.uiSettings.isTiltGesturesEnabled = false
-            map.setStyle("https://tiles.openfreemap.org/styles/dark")
+            styleScope.launch { map.setStyle(MapAppearance.styleBuilder(context)) }
             map.cameraPosition = CameraPosition.Builder().target(start).zoom(startZoom).build()
             var byUser = false
             map.addOnCameraMoveStartedListener { reason -> byUser = reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE }
@@ -476,7 +499,7 @@ private suspend fun currentLocation(context: Context): LatLng? {
     for (provider in providers) {
         val fix = kotlinx.coroutines.withTimeoutOrNull(12_000) {
             suspendCoroutine<android.location.Location?> { cont ->
-                LocationManagerCompat.getCurrentLocation(lm, provider, null as androidx.core.os.CancellationSignal?,
+                LocationManagerCompat.getCurrentLocation(lm, provider, null as android.os.CancellationSignal?,
                     ContextCompat.getMainExecutor(context)) { location: android.location.Location? -> cont.resume(location) }
             }
         }

@@ -8,225 +8,192 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Direct user touch interactions (drag, double tap, single tap, long-press purr) for REAL pet.
+ * Direct user touch interactions for REAL pet (PLAN.md Sections 7, 10, 11.1, 12.1):
+ * - Dokunma (Tap): Kalp, biraz daha kalır (uyurken -> uyanır ve oturur; koşarken -> durur, döner, oturur)
+ * - Art arda dokunma (RepeatedTap): Kalpler çoğalır, mırlar, sonra uzanır
+ * - Basılı tutma (LongPress): Oturur, mırlar (purr)
+ * - Sürükleme (Drag): Bıraktığın yere oturur; kartın üstüne bırakılırsa orada kalır
+ * - Ekrandan dışarı fırlatma (FlungOffscreen): Koşarak çıkar, bir süre gelmez
  */
 internal fun Modifier.realPetGestures(
-    scope: RealPetActionScope,
+    bodyState: RealPetBodyState,
     petVisible: Boolean
 ): Modifier = this
-    .pointerInput(scope.widthPx, scope.heightPx, scope.reduceAnimations, petVisible, RealPetRuntime.composerMicActive, scope.anchorId, scope.motionTargetPerchId) {
-        val micRecordingAtMic = (scope.anchorId == REAL_PET_PERCH_COMPOSER_MIC || scope.motionTargetPerchId == REAL_PET_PERCH_COMPOSER_MIC) && RealPetRuntime.composerMicActive
-        if (!petVisible || micRecordingAtMic) return@pointerInput
+    .pointerInput(
+        bodyState.widthPx,
+        bodyState.heightPx,
+        bodyState.reduceAnimations,
+        petVisible,
+        RealPetRuntime.composerMicActive
+    ) {
+        if (!petVisible || RealPetRuntime.composerMicActive) return@pointerInput
+
+        var totalDragDx = 0f
+        var lastStepDx = 0f
+
         detectDragGestures(
             onDragStart = {
+                totalDragDx = 0f
+                lastStepDx = 0f
                 RealPetRuntime.noteUserTouch()
-                scope.dragX = scope.latestRenderX.value
-                scope.dragY = scope.latestRenderY.value
-                scope.anchorId = null
-                // Mark dragging before cancelling motions so a cancelled leave animation cannot
-                // incorrectly finish by hiding the pet underneath the user's finger.
-                scope.isDragging = true
-                scope.requestScenarioResumeAfterInterruption(pauseMs = 2_000L)
-                val currentExclusive = scope.activeExclusiveJob
-                if (currentExclusive?.isActive == true) {
-                    currentExclusive.cancel()
-                }
-                scope.doubleTapSitActive = false
-                scope.sitUntilDeadline = 0L
-                scope.motion = RealPetMotion.None
-                // Dragging a sleeping pet preserves the original sleep deadline.
-                scope.state = if (scope.sleepUntil > SystemClock.elapsedRealtime()) {
-                    RealPetState.Sleeping
-                } else {
-                    RealPetState.Idle
-                }
+                bodyState.dragX = bodyState.renderX
+                bodyState.dragY = bodyState.renderY
+                bodyState.anchorId = null
+                bodyState.isDragging = true
+                bodyState.cancelActiveIntent()
+                bodyState.motion = RealPetMotion.None
                 RealPetRuntime.markArrived()
                 RealPetRuntime.extendVisit(15_000L)
             },
             onDrag = { change, dragAmount ->
                 change.consume()
-                scope.dragX = (scope.dragX + dragAmount.x).coerceIn(scope.sidePaddingPx, scope.maxX)
-                scope.dragY = (scope.dragY + dragAmount.y).coerceIn(-scope.petSizePx * 0.5f, scope.heightPx - scope.petSizePx * 0.25f)
+                totalDragDx += dragAmount.x
+                lastStepDx = dragAmount.x
+                bodyState.dragX = (bodyState.dragX + dragAmount.x)
+                    .coerceIn(-bodyState.petSizePx * 0.45f, bodyState.widthPx - bodyState.petSizePx * 0.55f)
+                bodyState.dragY = (bodyState.dragY + dragAmount.y)
+                    .coerceIn(-bodyState.petSizePx * 0.35f, bodyState.heightPx - bodyState.petSizePx * 0.25f)
             },
             onDragEnd = {
-                scope.isDragging = false
-                val footPoint = Offset(scope.dragX + scope.petSizePx / 2f, scope.dragY + scope.petSizePx - scope.perchSinkPx)
-                val nearest = RealPetRuntime.nearestPerch(footPoint, scope.snapDistancePx)
-                if (nearest != null) {
-                    val bounds = RealPetRuntime.perches[nearest]
-                    if (bounds != null) {
-                        val range = realPetPerchRange(bounds.left, bounds.right, scope.petSizePx, scope.sidePaddingPx, scope.maxX)
-                        val targetX = scope.dragX.coerceIn(range.start, range.endInclusive)
-                        val targetFraction = if (range.endInclusive > range.start) {
-                            (targetX - range.start) / (range.endInclusive - range.start)
-                        } else 0.5f
-                        val targetY = scope.perchY(nearest, bounds)
-                        scope.coroutineScope.launch {
-                            scope.withExclusivePetMotion("dragSettlePerch") {
-                                scope.motionStartX = scope.dragX
-                                scope.motionStartY = scope.dragY
-                                scope.motionTargetX = targetX
-                                scope.motionTargetY = targetY
-                                scope.motionTargetPerchId = nearest
-                                scope.motionHeightPx = with(scope.density) { 24.dp.toPx() }
-                                scope.jumpVisual = RealPetJumpVisual.LegacyHop
-                                scope.motion = if (scope.reduceAnimations) RealPetMotion.None else RealPetMotion.Jump
-                                scope.state = RealPetState.Jumping
-                                try {
-                                    if (!scope.reduceAnimations) {
-                                        scope.motionProgress.snapTo(0f)
-                                        scope.motionProgress.animateTo(1f, tween(300))
-                                        scope.motionProgress.snapTo(0f)
-                                    }
-                                    scope.motion = RealPetMotion.None
-                                    scope.x.snapTo(targetX)
-                                    scope.y.snapTo(targetY)
-                                    RealHaptics.tick(scope.view)
-                                } finally {
-                                    scope.motion = RealPetMotion.None
-                                    scope.motionProgress.snapTo(0f)
-                                    scope.lastAnchorX = targetX
-                                    scope.lastAnchorY = targetY
-                                    scope.perchProgress.snapTo(targetFraction)
-                                    scope.motionTargetPerchId = null
-                                    scope.anchorId = nearest
-                                    if (scope.sleepUntil > SystemClock.elapsedRealtime()) {
-                                        scope.sleepX = targetX
-                                        scope.sleepY = targetY
-                                        scope.sleepPerchFraction = targetFraction
-                                        scope.state = RealPetState.Sleeping
-                                    } else {
-                                        scope.state = RealPetState.Idle
-                                    }
-                                }
-                                scope.restAfterUserPlacement()
+                bodyState.isDragging = false
+                val flungLeft = bodyState.dragX <= bodyState.sidePaddingPx * 0.75f &&
+                    (lastStepDx < -12f || totalDragDx < -bodyState.petSizePx * 0.65f)
+                val flungRight = bodyState.dragX >= bodyState.maxX - bodyState.sidePaddingPx * 0.75f &&
+                    (lastStepDx > 12f || totalDragDx > bodyState.petSizePx * 0.65f)
+
+                if (flungLeft || flungRight) {
+                    bodyState.coroutineScope.launch {
+                        bodyState.x.snapTo(bodyState.dragX)
+                        bodyState.y.snapTo(bodyState.dragY.coerceIn(0f, bodyState.groundY))
+                        bodyState.dispatchEvent(RealPetEvent.FlungOffscreen)
+                    }
+                    return@detectDragGestures
+                }
+
+                val footPoint = Offset(
+                    x = bodyState.dragX + bodyState.petSizePx / 2f,
+                    y = bodyState.dragY + bodyState.petSizePx - bodyState.perchSinkPx
+                )
+                val nearest = RealPetRuntime.nearestPerch(footPoint, bodyState.snapDistancePx)
+                    ?.takeIf { !realPetPerchIsInteractiveButton(it) }
+                val bounds = nearest?.let { RealPetRuntime.perches[it] }
+
+                if (nearest != null && bounds != null) {
+                    val range = realPetPerchRange(
+                        bounds.left,
+                        bounds.right,
+                        bodyState.petSizePx,
+                        bodyState.sidePaddingPx,
+                        bodyState.maxX
+                    )
+                    val targetX = bodyState.dragX.coerceIn(range.start, range.endInclusive)
+                    val targetFraction = if (range.endInclusive > range.start) {
+                        (targetX - range.start) / (range.endInclusive - range.start)
+                    } else {
+                        0.5f
+                    }
+                    val targetY = bodyState.perchY(nearest, bounds)
+                    bodyState.coroutineScope.launch {
+                        bodyState.motionStartX = bodyState.dragX
+                        bodyState.motionStartY = bodyState.dragY
+                        bodyState.motionTargetX = targetX
+                        bodyState.motionTargetY = targetY
+                        bodyState.motionHeightPx = with(bodyState.density) { 20.dp.toPx() }
+                        bodyState.jumpVisual = RealPetJumpVisual.LegacyHop
+                        bodyState.motion = if (bodyState.reduceAnimations) RealPetMotion.None else RealPetMotion.Jump
+                        try {
+                            if (!bodyState.reduceAnimations) {
+                                bodyState.motionProgress.snapTo(0f)
+                                bodyState.motionProgress.animateTo(1f, tween(280))
                             }
+                        } finally {
+                            bodyState.motionProgress.snapTo(0f)
+                            bodyState.motion = RealPetMotion.None
+                            bodyState.x.snapTo(targetX)
+                            bodyState.y.snapTo(targetY)
+                            bodyState.lastAnchorX = targetX
+                            bodyState.lastAnchorY = targetY
+                            bodyState.perchProgress.snapTo(targetFraction)
+                            bodyState.anchorId = nearest
+                            RealHaptics.tick(bodyState.view)
                         }
+                        bodyState.dispatchEvent(RealPetEvent.Dragged(nearest))
                     }
                 } else {
-                    scope.coroutineScope.launch {
-                        scope.withExclusivePetMotion("dragSettleGround") {
-                            val targetX = scope.dragX.coerceIn(scope.sidePaddingPx, scope.maxX)
-                            scope.x.snapTo(targetX)
-                            try {
-                                if (scope.reduceAnimations) scope.y.snapTo(scope.groundY)
-                                else scope.y.animateTo(scope.groundY, tween(420))
-                            } finally {
-                                RealHaptics.tick(scope.view)
-                                scope.anchorId = null
-                                if (scope.sleepUntil > SystemClock.elapsedRealtime()) {
-                                    scope.sleepX = targetX
-                                    scope.sleepY = scope.groundY
-                                    scope.state = RealPetState.Sleeping
-                                } else {
-                                    scope.state = RealPetState.Idle
-                                }
+                    val targetX = bodyState.dragX.coerceIn(bodyState.sidePaddingPx, bodyState.maxX)
+                    bodyState.coroutineScope.launch {
+                        bodyState.anchorId = null
+                        bodyState.x.snapTo(targetX)
+                        bodyState.y.snapTo(bodyState.dragY)
+                        try {
+                            if (bodyState.reduceAnimations) {
+                                bodyState.y.snapTo(bodyState.groundY)
+                            } else {
+                                bodyState.y.animateTo(bodyState.groundY, tween(360))
                             }
-                            scope.restAfterUserPlacement()
+                        } finally {
+                            RealHaptics.tick(bodyState.view)
                         }
+                        bodyState.dispatchEvent(RealPetEvent.Dragged(null))
                     }
                 }
             },
             onDragCancel = {
-                scope.isDragging = false
-                scope.coroutineScope.launch {
-                    scope.withExclusivePetMotion("dragCancelGround") {
-                        val targetX = scope.dragX.coerceIn(scope.sidePaddingPx, scope.maxX)
-                        scope.x.snapTo(targetX)
-                        try {
-                            if (scope.reduceAnimations) scope.y.snapTo(scope.groundY)
-                            else scope.y.animateTo(scope.groundY, tween(420))
-                        } finally {
-                            scope.anchorId = null
-                            if (scope.sleepUntil > SystemClock.elapsedRealtime()) {
-                                scope.sleepX = targetX
-                                scope.sleepY = scope.groundY
-                                scope.state = RealPetState.Sleeping
-                            } else {
-                                scope.state = RealPetState.Idle
-                            }
-                        }
-                        scope.restAfterUserPlacement()
+                bodyState.isDragging = false
+                val targetX = bodyState.dragX.coerceIn(bodyState.sidePaddingPx, bodyState.maxX)
+                bodyState.coroutineScope.launch {
+                    bodyState.anchorId = null
+                    bodyState.x.snapTo(targetX)
+                    if (bodyState.reduceAnimations) {
+                        bodyState.y.snapTo(bodyState.groundY)
+                    } else {
+                        bodyState.y.animateTo(bodyState.groundY, tween(360))
                     }
+                    bodyState.dispatchEvent(RealPetEvent.Dragged(null))
                 }
             }
         )
     }
-    .pointerInput(scope.petSizePx, petVisible, RealPetRuntime.composerMicActive, scope.anchorId, scope.motionTargetPerchId) {
-        val micRecordingAtMic = (scope.anchorId == REAL_PET_PERCH_COMPOSER_MIC || scope.motionTargetPerchId == REAL_PET_PERCH_COMPOSER_MIC) && RealPetRuntime.composerMicActive
-        if (!petVisible || micRecordingAtMic) return@pointerInput
+    .pointerInput(bodyState.petSizePx, petVisible, RealPetRuntime.composerMicActive) {
+        if (!petVisible || RealPetRuntime.composerMicActive) return@pointerInput
 
-        var heldFor3Seconds = false
-        var lastHeartBurstTimestamp = 0L
+        var rapidTapCount = 0
+        var lastTapElapsedMs = 0L
 
-        fun spawnAffectionateHearts() {
+        fun handleTap() {
+            if (bodyState.isDragging) return
             val now = SystemClock.elapsedRealtime()
-            if (now - lastHeartBurstTimestamp < 140L) return
-            lastHeartBurstTimestamp = now
-
-            // Affectionate taps are overlays on top of the current scenario; they should
-            // not kill the scenario or reset its route.
-            RealPetRuntime.noteUserTouch()
-            RealHaptics.tick(scope.view)
-            RealPetRuntime.extendVisit(25_000L)
-
-            if (scope.peekActive) {
-                scope.peekFleeRequested = true
+            if (now - lastTapElapsedMs <= 1_400L) {
+                rapidTapCount += 1
             } else {
-                if (scope.attentionActive) {
-                    scope.attentionTapCount = (scope.attentionTapCount + 1).coerceAtMost(scope.attentionTapGoal)
-                    RealPetRuntime.extendVisit(4_000L)
-                }
-                if (scope.heartBursts.size >= 6) scope.heartBursts.removeAt(0)
-                scope.heartBursts.add(
-                    RealPetHeartBurst(
-                        id = scope.nextHeartId++,
-                        origin = Offset(
-                            scope.latestHeartOriginX.value,
-                            scope.latestHeartOriginY.value
-                        )
-                    )
-                )
+                rapidTapCount = 1
+            }
+            lastTapElapsedMs = now
+            RealPetRuntime.noteUserTouch()
+
+            if (rapidTapCount >= 3) {
+                rapidTapCount = 0
+                bodyState.dispatchEvent(RealPetEvent.RepeatedTap)
+            } else {
+                bodyState.dispatchEvent(RealPetEvent.Tap)
             }
         }
 
         detectTapGestures(
-            onPress = onPress@{
-                if (scope.isDragging) return@onPress
-                heldFor3Seconds = false
-                val holdTimerJob = scope.coroutineScope.launch {
-                    delay(3000L)
-                    heldFor3Seconds = true
-                    RealHaptics.success(scope.view)
-                    scope.coroutineScope.launch {
-                        scope.withExclusivePetMotion("holdSit") {
-                            scope.sleepUntil = 0L
-                            scope.sitAndObserve(4_000L, 6_000L)
-                        }
-                    }
-                }
-                try {
-                    tryAwaitRelease()
-                } finally {
-                    holdTimerJob.cancel()
-                }
+            onLongPress = {
+                if (bodyState.isDragging) return@detectTapGestures
+                rapidTapCount = 0
+                RealPetRuntime.noteUserTouch()
+                bodyState.dispatchEvent(RealPetEvent.LongPress)
             },
-            onDoubleTap = onDoubleTap@{
-                if (scope.isDragging) return@onDoubleTap
-                // Double tap must NOT sit; treat as affectionate tap producing hearts
-                spawnAffectionateHearts()
+            onDoubleTap = {
+                handleTap()
             },
-            onTap = onTap@{
-                if (scope.isDragging) return@onTap
-                if (heldFor3Seconds) {
-                    heldFor3Seconds = false
-                    return@onTap
-                }
-                spawnAffectionateHearts()
+            onTap = {
+                handleTap()
             }
         )
     }

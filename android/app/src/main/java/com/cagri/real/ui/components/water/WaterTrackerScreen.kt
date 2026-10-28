@@ -110,8 +110,8 @@ internal fun WaterTrackerScreen(
             window?.setDimAmount(0f)
             window?.setWindowAnimations(0)
             onDispose {
-                if (oldDim != null) window?.setDimAmount(oldDim)
-                if (oldAnimations != null) window?.setWindowAnimations(oldAnimations)
+                if (oldDim != null) window.setDimAmount(oldDim)
+                if (oldAnimations != null) window.setWindowAnimations(oldAnimations)
             }
         }
         BeverageSystemBars()

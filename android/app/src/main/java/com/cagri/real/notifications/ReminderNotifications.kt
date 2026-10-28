@@ -31,6 +31,9 @@ object ReminderNotifications {
     
     private const val PINNED_CHANNEL_ID = "important_reminders"
     const val EXTRA_REMINDER_ID = "reminder_id"
+    const val EXTRA_LOCATION_TRIGGER_FIRED = "location_trigger_fired"
+    const val EXTRA_LOCATION_TRIGGER_PLACE = "location_trigger_place"
+    const val EXTRA_LOCATION_TRIGGER_ON_EXIT = "location_trigger_on_exit"
 
     @Volatile private var channelsCreated = false
 
@@ -73,7 +76,13 @@ object ReminderNotifications {
             manager.getNotificationChannel(channelId)?.importance != NotificationManager.IMPORTANCE_NONE
     }
 
-    fun show(context: Context, reminder: ReminderItem, alerting: Boolean = false, categoryRepository: CategoryRepository? = null): Boolean {
+    fun show(
+        context: Context,
+        reminder: ReminderItem,
+        alerting: Boolean = false,
+        categoryRepository: CategoryRepository? = null,
+        locationTriggerFired: com.cagri.real.data.LocationTrigger? = null
+    ): Boolean {
         if (reminder.isCompleted) return false
         if (reminder.isChecklist && reminder.alertAt == null && !alerting) return false
         if (reminder.alertAt == null && !reminder.sendImmediateNotification && !alerting && !reminder.shouldPinNotification) return false
@@ -82,9 +91,21 @@ object ReminderNotifications {
         val channelId = if (pinned && !alerting) PINNED_CHANNEL_ID else CHANNEL_ID
         ensureChannel(context)
         if (!canNotify(context, channelId)) return false
+        // Only a real arrival / departure (or its snoozed repeat) says "Vardın"; a waiting trigger on a timed alert does not.
+        val firedTrigger = locationTriggerFired ?: com.cagri.real.notifications.LocationReminders.snoozedFire(context, reminder)?.takeIf { alerting }
+        // Its own id, so the card's timed alert and the arrival / departure notification do not replace each other.
+        val notificationId = if (firedTrigger != null) locationNotificationId(id) else id.hashCode()
+        val firedPlace = firedTrigger?.placeName?.takeIf { it.isNotBlank() }
+            ?: reminder.location?.placeName?.takeIf { it.isNotBlank() }
+            ?: t("Seçilen Konum")
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            data = Uri.parse("real://reminder/$id")
+            data = Uri.parse(if (firedTrigger != null) "real://reminder/$id/location?exit=${firedTrigger.onExit}" else "real://reminder/$id")
+            if (firedTrigger != null) {
+                putExtra(EXTRA_LOCATION_TRIGGER_FIRED, true)
+                putExtra(EXTRA_LOCATION_TRIGGER_PLACE, firedPlace)
+                putExtra(EXTRA_LOCATION_TRIGGER_ON_EXIT, firedTrigger.onExit)
+            }
             putExtra(EXTRA_REMINDER_ID, id)
         }
         val pendingIntent = PendingIntent.getActivity(
@@ -95,6 +116,7 @@ object ReminderNotifications {
         )
 
         val subText = when {
+            firedTrigger != null -> if (firedTrigger.onExit) t("Ayrıldın · {0}", firedPlace) else t("Vardın · {0}", firedPlace)
             pinned -> t("Önemli")
             reminder.hasRepeat -> reminder.repeatRule.displayName
             else -> null
@@ -118,7 +140,7 @@ object ReminderNotifications {
             .setAutoCancel(false)
             .setShowWhen(true)
             .setOnlyAlertOnce(!alerting)
-            .setWhen(if (alerting) reminder.alertAt ?: reminder.createdAt else reminder.createdAt)
+            .setWhen(if (firedTrigger != null) System.currentTimeMillis() else if (alerting) reminder.alertAt ?: reminder.createdAt else reminder.createdAt)
 
         val completeIntent = Intent(context, NotificationActionReceiver::class.java).apply {
             action = NotificationActionReceiver.ACTION_COMPLETE
@@ -134,8 +156,12 @@ object ReminderNotifications {
 
         val snoozeIntent = Intent(context, NotificationActionReceiver::class.java).apply {
             action = NotificationActionReceiver.ACTION_SNOOZE_10
-            data = Uri.parse("real://reminder/$id/snooze_10")
+            data = Uri.parse(if (firedTrigger != null) "real://reminder/$id/snooze_10?location=1" else "real://reminder/$id/snooze_10")
             putExtra(EXTRA_REMINDER_ID, id)
+            if (firedTrigger != null) {
+                putExtra(EXTRA_LOCATION_TRIGGER_PLACE, firedPlace)
+                putExtra(EXTRA_LOCATION_TRIGGER_ON_EXIT, firedTrigger.onExit)
+            }
         }
         val snoozePendingIntent = PendingIntent.getBroadcast(
             context,
@@ -180,11 +206,11 @@ object ReminderNotifications {
 
         return try {
             val manager = context.getSystemService(NotificationManager::class.java)
-            val previous = manager.activeNotifications.firstOrNull { it.id == id.hashCode() }
+            val previous = manager.activeNotifications.firstOrNull { it.id == notificationId }
             if (previous != null && previous.notification.channelId != channelId) {
-                manager.cancel(id.hashCode())
+                manager.cancel(notificationId)
             }
-            manager.notify(id.hashCode(), notification)
+            manager.notify(notificationId, notification)
             if (alerting) manager.cancel(earlyNotificationId(id))
             true
         } catch (_: SecurityException) {
@@ -196,9 +222,11 @@ object ReminderNotifications {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.cancel(id.hashCode())
         manager.cancel(earlyNotificationId(id))
+        manager.cancel(locationNotificationId(id))
     }
 
     private fun earlyNotificationId(id: Long) = id.hashCode() * 31 + 7
+    private fun locationNotificationId(id: Long) = id.hashCode() * 31 + 9
 
     /** "Erken uyarı": a heads-up before the alert ("15 dk sonra"); the alert itself replaces it. */
     fun showEarly(context: Context, reminder: ReminderItem): Boolean {

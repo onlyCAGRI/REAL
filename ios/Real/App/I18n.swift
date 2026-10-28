@@ -80,6 +80,7 @@ final class LanguageSettings {
     init() {
         let raw = UserDefaults.standard.string(forKey: I18n.defaultsKey)
         choice = AppLanguage(rawValue: raw ?? "") ?? .system
+        if choice != .system { Self.applyBundleLanguage(choice) }
     }
 
     var currentLabel: String {
@@ -93,6 +94,16 @@ final class LanguageSettings {
     func set(_ language: AppLanguage) {
         choice = language
         UserDefaults.standard.set(language.rawValue, forKey: I18n.defaultsKey)
+        Self.applyBundleLanguage(language)
         revision &+= 1
+    }
+
+    /// Apple's own UI (Look Around's badge, the Maps logo) follows the bundle language, read at the next launch.
+    private static func applyBundleLanguage(_ language: AppLanguage) {
+        switch language {
+        case .system: UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        case .turkish: UserDefaults.standard.set(["tr"], forKey: "AppleLanguages")
+        case .english: UserDefaults.standard.set(["en"], forKey: "AppleLanguages")
+        }
     }
 }

@@ -63,6 +63,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -100,6 +101,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.imeAnimationTarget
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -142,6 +146,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.composed
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -312,7 +318,8 @@ fun ReminderScreen(
     onVoiceSkipOccurrence: suspend (Long, Long?) -> SkipOccurrenceResult? = { _, _ -> null },
     onVoiceBulkShift: (List<VoiceBulkShift>) -> Unit = {},
     onVoiceAddChecklistItems: suspend (Long, List<String>) -> AddChecklistResult? = { _, _ -> null },
-    onSetJournal: (Long, JournalMood?, String) -> Unit,
+    /** Last argument: style ranges, or null when the editor has no formatting (old styles follow the text). */
+    onSetJournal: (Long, JournalMood?, String, List<com.cagri.real.data.BodySpan>?) -> Unit,
     onDeleteJournal: (Long) -> Unit,
     onSetMood: (Long, JournalMood?, MoodDetails?) -> Unit = { _, _, _ -> },
     homeMoodEntries: List<MoodTrackerEntry> = emptyList(),
@@ -324,6 +331,7 @@ fun ReminderScreen(
     exactAlarmsAllowed: Boolean = true,
     onRequestExactAlarms: () -> Unit = {},
     requestedReminderId: Long? = null,
+    requestedLocationTrigger: com.cagri.real.ui.components.LocationTriggerNotificationContext? = null,
     onRequestHandled: () -> Unit = {},
     reduceDynamicBlur: Boolean = false,
     onReduceDynamicBlurChange: (Boolean) -> Unit = {},
@@ -453,10 +461,21 @@ fun ReminderScreen(
         mutableStateMapOf<String, Int>()
     }
     val stateHolder = rememberSaveableStateHolder()
-    LaunchedEffect(requestedReminderId) {
+    var activeLocationFocusContext by remember { mutableStateOf<com.cagri.real.ui.components.LocationTriggerNotificationContext?>(null) }
+    LaunchedEffect(requestedReminderId, requestedLocationTrigger) {
         if (requestedReminderId != null) {
             ColdStartTracker.markExecuted()
-            if (reminders.any { it.id == requestedReminderId }) { detailId = requestedReminderId; showSettings = false }
+            val matchedCard = reminders.firstOrNull { it.id == requestedReminderId }
+            if (matchedCard != null) {
+                // Every Varınca / Ayrılınca card opens the focus screen; one without a checklist shows its text as one item.
+                if (requestedLocationTrigger != null) {
+                    activeLocationFocusContext = requestedLocationTrigger
+                    showSettings = false
+                } else {
+                    detailId = requestedReminderId
+                    showSettings = false
+                }
+            }
             onRequestHandled()
         }
     }
@@ -624,6 +643,7 @@ fun ReminderScreen(
                         }
                     },
                     onToggleWidgetReminder = onToggleCompleted,
+                    onOpenReminderDetail = { id -> detailId = id; showSettings = false },
                     onOpenCalendarConnection = { showCalendarConnection = true },
                     onBack = { showSettings = false }
                 )
@@ -740,7 +760,7 @@ fun ReminderScreen(
                                         if (saved) calendarConnection.offerPublication(reminder.id)
                                         saved
                                     },
-                                    onSaveJournal = { mood, text -> onSetJournal(reminder.id, mood, text) },
+                                    onSaveJournal = { mood, text -> onSetJournal(reminder.id, mood, text, null) },
                                     onDeleteJournal = { onDeleteJournal(reminder.id) },
                                     onAddMoodCard = { mood, details -> onSetMood(reminder.id, mood, details) },
                                     onDelete = { onDeleteReminder(reminder.id); detailId = null },
@@ -836,7 +856,7 @@ fun ReminderScreen(
                                                     if (saved) calendarConnection.offerPublication(plannerReminder.id)
                                                     saved
                                                 },
-                                                onSaveJournal = { mood, text -> onSetJournal(plannerReminder.id, mood, text) },
+                                                onSaveJournal = { mood, text -> onSetJournal(plannerReminder.id, mood, text, null) },
                                                 onDeleteJournal = { onDeleteJournal(plannerReminder.id) },
                                                 onAddMoodCard = { mood, details -> onSetMood(plannerReminder.id, mood, details) },
                                                 onDelete = {
@@ -890,11 +910,11 @@ fun ReminderScreen(
                                          customCategoryId = customCategoryItem.id
                                          onOpenCustomCategory(customCategoryItem)
                                      },
-                                     onCreateJournal = { journalTitle, journalText ->
+                                     onCreateJournal = { journalTitle, journalText, journalStyles ->
                                          // Ana ekrandaki yazı taslağına/kategoriye dokunmadan ham ekleme.
                                          val journalId = onAddReminder(journalTitle, null, RecurrenceRule.NONE, null, false,
                                              emptyList(), false, null, emptyList(), emptyList(), null, null, null, emptyList(), emptyList())
-                                         if (journalId != null) { onSetJournal(journalId, null, journalText); true } else false
+                                         if (journalId != null) { onSetJournal(journalId, null, journalText, journalStyles); true } else false
                                      },
                                      onAddSuggestedReal = onAddSuggestedReal,
                                      onAddGame = onAddGame,
@@ -945,6 +965,28 @@ fun ReminderScreen(
             }
         }
     }
+    val focusCtx = activeLocationFocusContext
+    val focusCard = focusCtx?.let { ctx -> reminders.firstOrNull { it.id == ctx.reminderId } }
+    if (focusCtx != null && focusCard != null) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { activeLocationFocusContext = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            com.cagri.real.ui.components.LocationArrivalFocusScreen(
+                reminder = focusCard,
+                triggerContext = focusCtx,
+                onToggleChecklistItem = onToggleChecklistItem,
+                onOpenFullCard = {
+                    activeLocationFocusContext = null
+                    detailId = focusCard.id
+                    showSettings = false
+                },
+                onDismiss = { activeLocationFocusContext = null },
+                categoryColor = customCategories.firstOrNull { it.id == focusCard.customCategoryId }
+                    ?.let { androidx.compose.ui.graphics.Color(it.customSolidColorArgb ?: it.accentStart) }
+            )
+        }
+    }
 }
 
 enum class PendingNotificationAction {
@@ -953,7 +995,7 @@ enum class PendingNotificationAction {
     OPEN_DATE_PICKER
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ReminderListScreen(
     pendingPanoBoardId: String? = null, onPanoLocationHandled: () -> Unit = {},
@@ -978,7 +1020,7 @@ private fun ReminderListScreen(
     onBulkSetCategory: (Set<Long>, Long?) -> Unit = { _, _ -> },
     homeMoodEntries: List<MoodTrackerEntry> = emptyList(),
     onAddHomeMood: (JournalMood, MoodDetails) -> Unit = { _, _ -> },
-    onCreateJournal: suspend (String, String) -> Boolean = { _, _ -> false },
+    onCreateJournal: suspend (String, String, List<com.cagri.real.data.BodySpan>) -> Boolean = { _, _, _ -> false },
     reduceDynamicBlur: Boolean,
     reduceAnimations: Boolean, designStyle: DesignStyle,
     onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>, List<ReminderVoiceRecording>, ReminderLocation?, Long?, Long?, List<MusicBlock>, List<MediaBlock>) -> Long?,
@@ -1380,7 +1422,48 @@ private fun ReminderListScreen(
             textLineCount = 1
         }
     }
-    val expanded = editing || (voice.phase != VoicePhase.Idle && !voiceOnHome) || alertAt != null || requiresTimeSelection || (draftCategoryId != null && draftCategoryId != customCategory?.id) || isChecklistMode || isVoiceDraft || isShareDraft || sendImmediateNotification || pendingNotificationAction != PendingNotificationAction.NONE || draftAttachments.isNotEmpty()
+    // Only the open/closed flip matters; reading the raw IME height here recomposed the whole
+    // screen on every frame of the keyboard animation.
+    val imeInsets = WindowInsets.ime
+    val imeTargetInsets = WindowInsets.imeAnimationTarget
+    val imeDensity = LocalDensity.current
+    val navigationInsets = WindowInsets.navigationBars
+    val keyboardUp by remember(imeInsets, imeDensity) { derivedStateOf { imeInsets.getBottom(imeDensity) > 0 } }
+    val keyboardLeaving by remember(imeTargetInsets, imeDensity) { derivedStateOf { imeTargetInsets.getBottom(imeDensity) == 0 } }
+    // Once a keyboard was seen in this edit, it going down closes the panel right away, without waiting for the
+    // focus to be cleared. With no soft keyboard (hardware keyboard) focus alone opens it.
+    var keyboardSeen by remember { mutableStateOf(false) }
+    LaunchedEffect(editing) { keyboardSeen = false }
+    LaunchedEffect(editing, keyboardUp) { if (editing && keyboardUp) keyboardSeen = true }
+    val otherExpanded = (voice.phase != VoicePhase.Idle && !voiceOnHome) || alertAt != null || requiresTimeSelection || (draftCategoryId != null && draftCategoryId != customCategory?.id) || isChecklistMode || isVoiceDraft || isShareDraft || sendImmediateNotification || pendingNotificationAction != PendingNotificationAction.NONE || draftAttachments.isNotEmpty()
+    val composerTarget = editing && !(keyboardSeen && keyboardLeaving)
+    // Opened by typing, the bar and the panel do not morph into each other riding the (very fast) keyboard: the bar
+    // fades out at the bottom, then the panel fades and slides in above the keyboard on its own slower curve.
+    // Closing mirrors it. While the swap runs, height and dock chrome jump, hidden by the fade.
+    var composerUp by remember { mutableStateOf(false) }
+    var composerSwap by remember { mutableStateOf(false) }
+    val composerOut = remember { Animatable(0f) }
+    val composerIn = remember { Animatable(1f) }
+    LaunchedEffect(composerTarget) {
+        if (reduceAnimations || otherExpanded) {
+            composerSwap = false; composerUp = composerTarget
+            composerOut.snapTo(0f); composerIn.snapTo(1f)
+            return@LaunchedEffect
+        }
+        if (composerUp == composerTarget) {
+            // Turned back mid-way: bring whatever is showing back to rest.
+            composerSwap = false
+            composerOut.animateTo(0f, tween(120)); composerIn.animateTo(1f, tween(200))
+            return@LaunchedEffect
+        }
+        composerOut.animateTo(1f, tween(if (composerTarget) 120 else 170, easing = LinearOutSlowInEasing))
+        composerSwap = true
+        composerUp = composerTarget
+        composerIn.snapTo(0f); composerOut.snapTo(0f)
+        composerIn.animateTo(1f, tween(if (composerTarget) 340 else 260, easing = RealMotion.Emphasized))
+        composerSwap = false
+    }
+    val expanded = composerUp || otherExpanded
     // A view-only shared category (Sınırlı) cannot get new cards.
     val showComposer = category != ReminderCategory.JournalEntries && customCategory?.isReadOnlyShared != true
     LaunchedEffect(showDatePicker, showNotificationPermissionSheet, refocus) {
@@ -1444,7 +1527,8 @@ private fun ReminderListScreen(
     // relayouts the dock instead of recomposing this whole screen on every frame.
     val composerHeightState = animateDpAsState(
         targetComposerHeight,
-        if (reduceAnimations) snap() else tween(280, easing = RealMotion.Emphasized),
+        // Not tied to the keyboard (that part is the rise), so it can take its time and settle softly.
+        if (reduceAnimations || composerSwap) snap() else tween(360, easing = RealMotion.Emphasized),
         label = "composerHeight"
     )
     val labsProgress by animateFloatAsState(
@@ -1457,10 +1541,12 @@ private fun ReminderListScreen(
         if (reduceAnimations) snap() else tween(250),
         label = "bottomGap"
     )
-    // Only the open/closed flip matters; reading the raw IME height here recomposed the whole
-    // screen on every frame of the keyboard animation.
-    val imeInsets = WindowInsets.ime
-    val imeDensity = LocalDensity.current
+    // Typing: the cards behind go a little darker so the box and the keyboard stand out (read only in graphicsLayer).
+    val typingDimState = animateFloatAsState(
+        if (editing) 0.32f else 0f,
+        if (reduceAnimations) snap() else tween(340, easing = RealMotion.Standard),
+        label = "typingDim"
+    )
     val keyboardVisible by remember(imeInsets, imeDensity) { derivedStateOf { imeInsets.getBottom(imeDensity) > 0 } }
     var keyboardWasVisible by remember { mutableStateOf(false) }
     LaunchedEffect(keyboardVisible) {
@@ -1766,6 +1852,7 @@ private fun ReminderListScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize()
+                .keepHeightUnderKeyboard(navigationConsumed = !booksOpen)
                 .testTag("home_list")
                 // Keyboard open: a tap on the list only closes the keyboard; it does not open the category or card under
                 // the finger. Scrolling still works.
@@ -2177,6 +2264,8 @@ private fun ReminderListScreen(
                     }
                     // Sınırlı access to a shared category: the card is only looked at.
                     val viewOnly = fromCalendar || reminderCategory?.isReadOnlyShared == true
+                    // A calendar event that ended today: faded until midnight; a left swipe hides it now.
+                    val pastCalendar = fromCalendar && reminder.id in calendarCategoryCards.past
                     ReminderCard(
                         reminder, onToggle = { if (!viewOnly) onToggleCompleted(reminder.id) },
                         onOpen = {
@@ -2215,9 +2304,20 @@ private fun ReminderListScreen(
                         // A completed card leaves the list; a repeating one stays (it moves to its next time).
                         swipeRightKeepsCard = !plainHomeCards || reminder.hasRepeat,
                         plainStyle = plainHomeCards,
-                        onSwipeLeftDelete = if (viewOnly) null else ({ onDeleteReminders(setOf(reminder.id)) }),
+                        onSwipeLeftDelete = when {
+                            pastCalendar -> ({
+                                calendarCategoryCards.occurrences[reminder.id]?.let { o ->
+                                    com.cagri.real.calendar.CalendarPastDismissals.dismiss(context, o,
+                                        java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli())
+                                }
+                            })
+                            viewOnly -> null
+                            else -> ({ onDeleteReminders(setOf(reminder.id)) })
+                        },
+                        swipeLeftHides = pastCalendar,
                         modifier = Modifier
                             .testTag("home_card")
+                            .then(if (pastCalendar) Modifier.graphicsLayer { alpha = 0.45f } else Modifier)
                             .then(if (reduceAnimations) Modifier else Modifier.animateItem(
                                 placementSpec = RealMotion.smooth<IntOffset>(0.35f),
                                 fadeInSpec = if (isNewlyCreated) null else tween(180),
@@ -2520,6 +2620,7 @@ private fun ReminderListScreen(
         }
 
         if (showComposer) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = typingDimState.value }.background(Color.Black))
             BottomFade(Modifier.align(Alignment.BottomCenter).deferredHeight { composerHeightState.value + bottomGapState.value + 46.dp })
             HomeLiquidDock(
                 enabled = isHome,
@@ -2548,18 +2649,31 @@ private fun ReminderListScreen(
                 designStyle = designStyle,
                 reduceDynamicBlur = reduceDynamicBlur,
                 reduceAnimations = reduceAnimations,
+                chromeSnap = composerSwap,
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp)
                     .deferredBottomPadding { bottomGapState.value }
                     .graphicsLayer {
-                        translationY = if (isFirstHomeIntroPlaying) {
+                        val out = composerOut.value
+                        val inn = composerIn.value
+                        // The bar stays pinned at the bottom (under the keyboard) instead of riding it; the panel
+                        // rides the keyboard and slides in on its own.
+                        val pinned = if (composerUp) 0f else {
+                            val ime = imeInsets.getBottom(this)
+                            (if (booksOpen) ime else ime - navigationInsets.getBottom(this)).coerceAtLeast(0).toFloat()
+                        }
+                        val swapY = (1f - inn) * (if (composerUp) 26.dp else 10.dp).toPx() + out * (if (composerUp) 18.dp else 0.dp).toPx()
+                        val swapScale = (1f - 0.06f * out) * (0.95f + 0.05f * inn)
+                        scaleX = swapScale; scaleY = swapScale
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                        translationY = pinned + swapY + if (isFirstHomeIntroPlaying) {
                             val progress = composerEntranceProgress.value
                             val motionEase = RealMotion.Emphasized.transform(progress)
                             with(density) { (32.dp * (1f - motionEase)).toPx() }
                         } else {
                             selectionProgress * bottomSlideOffsetPx()
                         }
-                        alpha = if (isFirstHomeIntroPlaying) {
+                        alpha = (1f - out) * inn * if (isFirstHomeIntroPlaying) {
                             val progress = composerEntranceProgress.value
                             LinearOutSlowInEasing.transform(progress)
                         } else if (isColdStarting) {
@@ -2716,7 +2830,7 @@ private fun ReminderListScreen(
             // The panel explains location once; with permission granted the pin goes straight to the map.
             onPickLocation = {
                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
-                if (com.cagri.real.notifications.LocationReminders.hasLocation(context)) { locationPickForTrigger = true; showComposerLocation = true }
+                if (com.cagri.real.notifications.LocationReminders.hasLocation(context) && com.cagri.real.notifications.LocationReminders.hasBackground(context)) { locationPickForTrigger = true; showComposerLocation = true }
                 else showLocationChoice = true
             },
             locationWatching = locationWatching,
@@ -3231,10 +3345,10 @@ private fun ReminderListScreen(
         if (showYasamJournal) {
             YasamJournalSheet(
                 onDismiss = { showYasamJournal = false },
-                onSave = { text ->
+                onSave = { text, styles ->
                     val title = STANDALONE_JOURNAL_PREFIX + java.time.LocalDate.now()
                         .format(java.time.format.DateTimeFormatter.ofPattern("d MMMM", java.util.Locale("tr")))
-                    onCreateJournal(title, text)
+                    onCreateJournal(title, text, styles)
                 }
             )
         }
@@ -3468,6 +3582,26 @@ private fun VoiceBulkConfirmChip(
                         .padding(horizontal = 18.dp, vertical = 9.dp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * The home Box shrinks by the keyboard (imePadding) on every frame of its animation. A child with this modifier keeps
+ * the height it had without the keyboard and runs on under it, so the card list is not re-measured on each frame.
+ */
+private fun Modifier.keepHeightUnderKeyboard(navigationConsumed: Boolean): Modifier = composed {
+    val ime = WindowInsets.ime
+    val navigation = WindowInsets.navigationBars
+    layout { measurable, constraints ->
+        val under = if (navigationConsumed) (ime.getBottom(this) - navigation.getBottom(this)).coerceAtLeast(0) else ime.getBottom(this)
+        if (under == 0 || !constraints.hasBoundedHeight) {
+            val placeable = measurable.measure(constraints)
+            layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+        } else {
+            val full = constraints.maxHeight + under
+            val placeable = measurable.measure(constraints.copy(minHeight = full, maxHeight = full))
+            layout(placeable.width, constraints.maxHeight) { placeable.place(0, 0) }
         }
     }
 }

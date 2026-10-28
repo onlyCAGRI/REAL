@@ -1,11 +1,14 @@
 package com.cagri.real.ui.components
 
+import com.cagri.real.i18n.I18n
 import com.cagri.real.i18n.t
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -37,10 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -80,6 +83,31 @@ private sealed interface MediaResolutionState {
     object Failed : MediaResolutionState
 }
 
+private fun companionHeadlineFor(family: Int): String = when (family) {
+    0 -> t("Bu ağırlığa ortak olabilecek birkaç şey")
+    1 -> t("Bu yorgunluğun yanına bırakabileceğin birkaç şey")
+    2 -> t("Bu sakin ana eşlik edebilecek birkaç şey")
+    3 -> t("Bu iyi hissin yanına yakışacak birkaç şey")
+    else -> t("Bu enerjiye ortak olabilecek birkaç şey")
+}
+
+private fun companionBadgeFor(kind: MoodSuggestionKind): String = when (kind) {
+    MoodSuggestionKind.MUSIC -> t("MÜZİK · EŞLİK")
+    MoodSuggestionKind.MOVIE -> t("FİLM · ORTAK")
+    MoodSuggestionKind.TV -> t("DİZİ · ORTAK")
+    MoodSuggestionKind.READ -> t("KART · NOT")
+    MoodSuggestionKind.MESSAGE, MoodSuggestionKind.CALL -> t("KART · İFADE")
+    else -> t("KART · DÜŞÜNCE")
+}
+
+private fun contextSummaryLabels(family: Int, details: MoodDetails): List<String> {
+    val descMap = MoodDescriptorsV2[family].orEmpty().associate { it.key to it.label }
+    val factorMap = MoodFactorGroupsV2.flatMap { it.options }.associate { it.key to it.label }
+    val d = details.descriptors.mapNotNull { descMap[it] }
+    val f = details.factors.mapNotNull { factorMap[it] }
+    return (d + f).distinct().take(4)
+}
+
 @Composable
 fun MoodSuggestionsScreen(
     mood: JournalMood,
@@ -91,8 +119,12 @@ fun MoodSuggestionsScreen(
 ) {
     BackHandler(onBack = onDismiss)
 
-    val accent = moodV2Tint(mood)
-    val topTone = remember(accent) { lerp(Color.Black, accent, 0.20f) }
+    val family = remember(mood) { mood.familyIndexV2().coerceIn(0, 4) }
+    val tone = remember(family) { MoodV3Tones[family] }
+    val accent = tone.paper
+    val darkInk = tone.ink
+    val isEnglish = I18n.isEnglish
+    val contextTags = remember(family, details, isEnglish) { contextSummaryLabels(family, details) }
 
     var uiState by remember { mutableStateOf<SuggestionsUiState>(SuggestionsUiState.Loading) }
     var fetchTrigger by remember { mutableIntStateOf(0) }
@@ -102,10 +134,11 @@ fun MoodSuggestionsScreen(
     var musicResolutions by remember { mutableStateOf(mapOf<Int, MusicResolutionState>()) }
     var mediaResolutions by remember { mutableStateOf(mapOf<Int, MediaResolutionState>()) }
     var replacementExcludes by remember { mutableStateOf(mapOf<Int, List<String>>()) }
+    var autoRetriedIndices by remember { mutableStateOf(setOf<Int>()) }
 
     val historyContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val historyUid = com.cagri.real.platform.android.auth.AndroidBackend.auth.currentUser()?.id
-    val musicHistory = remember(historyContext, historyUid) {
+    val historyStore = remember(historyContext, historyUid) {
         historyUid?.let { com.cagri.real.platform.android.ai.MoodSuggestionHistoryStore(historyContext, it) }
     }
     val scope = rememberCoroutineScope()
@@ -125,12 +158,12 @@ fun MoodSuggestionsScreen(
         }
     }.distinct()
 
-    val requestReplacement: (Int, MoodSuggestion) -> Unit = { index, failedSuggestion ->
+    val requestReplacement: (Int, MoodSuggestion) -> Unit = { index, targetSuggestion ->
         if (index !in pendingIndices) {
             pendingIndices = pendingIndices + index
-            if (failedSuggestion.kind == MoodSuggestionKind.MUSIC) {
+            if (targetSuggestion.kind == MoodSuggestionKind.MUSIC) {
                 musicResolutions = musicResolutions + (index to MusicResolutionState.Loading)
-            } else if (failedSuggestion.kind == MoodSuggestionKind.MOVIE || failedSuggestion.kind == MoodSuggestionKind.TV) {
+            } else if (targetSuggestion.kind == MoodSuggestionKind.MOVIE || targetSuggestion.kind == MoodSuggestionKind.TV) {
                 mediaResolutions = mediaResolutions + (index to MediaResolutionState.Loading)
             }
             scope.launch {
@@ -138,31 +171,33 @@ fun MoodSuggestionsScreen(
                 val exclude = (
                     replacementExcludes[index].orEmpty() +
                         currentSuggestions.flatMap { exclusionKeys(it) } +
-                        exclusionKeys(failedSuggestion)
+                        exclusionKeys(targetSuggestion)
                     ).distinct().takeLast(16)
                 MoodSuggestionClient.fetchReplacement(
                     mood = mood,
                     details = details,
-                    kind = failedSuggestion.kind,
+                    kind = targetSuggestion.kind,
                     exclude = exclude,
-                    excludeMusic = musicHistory?.exclusions().orEmpty()
+                    excludeMusic = historyStore?.exclusions().orEmpty(),
+                    excludeMedia = historyStore?.mediaExclusions().orEmpty(),
+                    excludeIdeas = historyStore?.ideaExclusions().orEmpty()
                 ).fold(
                     onSuccess = { replacement ->
                         val latest = uiState as? SuggestionsUiState.Success
                         if (latest != null && index in latest.suggestions.indices) {
                             val updated = latest.suggestions.toMutableList().apply { this[index] = replacement }
                             replacementExcludes = replacementExcludes +
-                                (index to (replacementExcludes[index].orEmpty() + exclusionKeys(failedSuggestion)).distinct().takeLast(16))
+                                (index to (replacementExcludes[index].orEmpty() + exclusionKeys(targetSuggestion)).distinct().takeLast(16))
                             musicResolutions = musicResolutions - index
                             mediaResolutions = mediaResolutions - index
-                            musicHistory?.record(listOf(replacement))
+                            historyStore?.record(listOf(replacement))
                             uiState = SuggestionsUiState.Success(updated)
                         }
                     },
                     onFailure = {
-                        if (failedSuggestion.kind == MoodSuggestionKind.MUSIC) {
+                        if (targetSuggestion.kind == MoodSuggestionKind.MUSIC) {
                             musicResolutions = musicResolutions + (index to MusicResolutionState.Failed)
-                        } else if (failedSuggestion.kind == MoodSuggestionKind.MOVIE || failedSuggestion.kind == MoodSuggestionKind.TV) {
+                        } else if (targetSuggestion.kind == MoodSuggestionKind.MOVIE || targetSuggestion.kind == MoodSuggestionKind.TV) {
                             mediaResolutions = mediaResolutions + (index to MediaResolutionState.Failed)
                         }
                     }
@@ -172,16 +207,23 @@ fun MoodSuggestionsScreen(
         }
     }
 
-    LaunchedEffect(fetchTrigger, historyUid) {
+    LaunchedEffect(fetchTrigger, historyUid, isEnglish) {
         uiState = SuggestionsUiState.Loading
         musicResolutions = emptyMap()
         mediaResolutions = emptyMap()
         replacementExcludes = emptyMap()
-        val result = MoodSuggestionClient.fetchSuggestions(mood, details,
-            excludeMusic = musicHistory?.exclusions().orEmpty())
+        autoRetriedIndices = emptySet()
+        val result = MoodSuggestionClient.fetchSuggestions(
+            mood = mood,
+            details = details,
+            excludeMusic = historyStore?.exclusions().orEmpty(),
+            excludeMedia = historyStore?.mediaExclusions().orEmpty(),
+            excludeIdeas = historyStore?.ideaExclusions().orEmpty(),
+            language = if (isEnglish) "en" else "tr"
+        )
         result.fold(
             onSuccess = { list ->
-                musicHistory?.record(list)
+                historyStore?.record(list)
                 uiState = SuggestionsUiState.Success(list)
             },
             onFailure = { error ->
@@ -190,7 +232,7 @@ fun MoodSuggestionsScreen(
         )
     }
 
-    // Resolve music and media candidates when suggestions load
+    // Resolve music and media candidates when suggestions load (with one automatic silent replacement on catalog miss)
     val currentUiState = uiState
     if (currentUiState is SuggestionsUiState.Success) {
         currentUiState.suggestions.forEachIndexed { index, suggestion ->
@@ -204,10 +246,13 @@ fun MoodSuggestionsScreen(
                     if (musicResolutions[index] is MusicResolutionState.Success) return@LaunchedEffect
                     musicResolutions = musicResolutions + (index to MusicResolutionState.Loading)
                     val resolvedBlock = MusicCandidateMatcher.resolve(candidate)
-                    musicResolutions = if (resolvedBlock != null) {
-                        musicResolutions + (index to MusicResolutionState.Success(resolvedBlock))
+                    if (resolvedBlock != null) {
+                        musicResolutions = musicResolutions + (index to MusicResolutionState.Success(resolvedBlock))
+                    } else if (index !in autoRetriedIndices) {
+                        autoRetriedIndices = autoRetriedIndices + index
+                        requestReplacement(index, suggestion)
                     } else {
-                        musicResolutions + (index to MusicResolutionState.Failed)
+                        musicResolutions = musicResolutions + (index to MusicResolutionState.Failed)
                     }
                 }
             } else if (suggestion.kind == MoodSuggestionKind.MOVIE || suggestion.kind == MoodSuggestionKind.TV) {
@@ -224,25 +269,25 @@ fun MoodSuggestionsScreen(
                     } else {
                         MediaCatalog.resolveTv(candidate)
                     }
-                    mediaResolutions = if (resolvedBlock != null) {
-                        mediaResolutions + (index to MediaResolutionState.Success(resolvedBlock))
+                    if (resolvedBlock != null) {
+                        mediaResolutions = mediaResolutions + (index to MediaResolutionState.Success(resolvedBlock))
+                    } else if (index !in autoRetriedIndices) {
+                        autoRetriedIndices = autoRetriedIndices + index
+                        requestReplacement(index, suggestion)
                     } else {
-                        mediaResolutions + (index to MediaResolutionState.Failed)
+                        mediaResolutions = mediaResolutions + (index to MediaResolutionState.Failed)
                     }
                 }
             }
         }
     }
 
+    // Pure AMOLED Black (#000000) background with V3 Mood Contrast
     Box(
         Modifier
             .fillMaxSize()
             .zIndex(85f)
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(topTone, Color(0xFF08090C), Color.Black)
-                )
-            )
+            .background(Color.Black)
     ) {
         Column(
             Modifier
@@ -250,70 +295,126 @@ fun MoodSuggestionsScreen(
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 22.dp)
+                .padding(horizontal = 20.dp)
         ) {
-            // Header Bar
+            // Top Bar: V3 Mood Pill on Pure AMOLED + Done/Skip Capsule
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
+                    .padding(top = 12.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(Color.Black)
+                        .border(1.dp, accent.copy(alpha = 0.38f), RoundedCornerShape(28.dp))
+                        .padding(start = 10.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    MoodV2Face(mood = mood, size = 32.dp, tint = accent)
-                    Text(
-                        text = t("REAL Önerileri"),
-                        color = Color(0xFFF4F4F6),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold
+                    MoodV3Face(
+                        params = faceParamsAtV2(family.toFloat(), mood),
+                        ink = accent,
+                        size = 32.dp,
+                        description = MoodFamiliesV2[family].title
                     )
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = MoodFamiliesV2[family].title.uppercase(I18n.locale),
+                                color = accent,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 0.4.sp
+                            )
+                            Text(
+                                text = t("Kaydedildi"),
+                                color = accent,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(accent.copy(alpha = 0.16f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        if (contextTags.isNotEmpty()) {
+                            Text(
+                                text = contextTags.joinToString(" · "),
+                                color = Color.White.copy(alpha = 0.62f),
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
 
-                Text(
-                    text = if (createdRealIds.isNotEmpty()) t("Bitti") else t("Geç"),
-                    color = Color(0xFF9898A2),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
+                val hasAdded = createdRealIds.isNotEmpty()
+                Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(onClick = onDismiss)
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                )
+                        .padding(start = 10.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(if (hasAdded) accent else Color.Black)
+                        .border(
+                            1.dp,
+                            if (hasAdded) accent else Color.White.copy(alpha = 0.20f),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .clickable(role = Role.Button, onClick = onDismiss)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = if (hasAdded) t("Bitti · {0}", createdRealIds.size) else t("Geç"),
+                        color = if (hasAdded) darkInk else Color.White.copy(alpha = 0.78f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
+            // V3 Editorial Companion Headline
             Text(
-                text = t("Nasıl hissettiğine göre birkaç fikir"),
-                color = Color(0xFFE0E0E5),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 26.sp
+                text = companionHeadlineFor(family),
+                color = accent,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Black,
+                lineHeight = 28.sp
             )
 
             Spacer(Modifier.height(4.dp))
 
             Text(
-                text = t("Dilersen birini seçip tek dokunuşla REAL yapabilirsin."),
-                color = Color(0xFF85858E),
+                text = t("Tavsiye değil; hissine eşlik eden kartlar, sesler ve sahneler."),
+                color = Color.White.copy(alpha = 0.56f),
                 fontSize = 13.sp,
                 lineHeight = 18.sp
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
 
             when (val state = uiState) {
                 is SuggestionsUiState.Loading -> {
-                    SuggestionsLoadingView(accent = accent, reduceAnimations = reduceAnimations)
+                    SuggestionsLoadingView(
+                        family = family,
+                        mood = mood,
+                        accent = accent,
+                        reduceAnimations = reduceAnimations
+                    )
                 }
 
                 is SuggestionsUiState.Error -> {
                     SuggestionsErrorView(
                         accent = accent,
+                        darkInk = darkInk,
                         onRetry = { fetchTrigger++ },
                         onDismiss = onDismiss
                     )
@@ -332,6 +433,7 @@ fun MoodSuggestionsScreen(
                             val isMovie = suggestion.kind == MoodSuggestionKind.MOVIE
                             val isTv = suggestion.kind == MoodSuggestionKind.TV
                             val isMedia = isMovie || isTv
+                            val isCardSeed = !isMusic && !isMedia
 
                             val musicResolutionState = if (isMusic) {
                                 musicResolutions[index] ?: if (suggestion.music != null) MusicResolutionState.Loading else MusicResolutionState.Failed
@@ -350,174 +452,183 @@ fun MoodSuggestionsScreen(
                                 )
                             )
 
+                            val cardBg by animateColorAsState(
+                                targetValue = if (isAdded) accent else Color.Black,
+                                animationSpec = if (reduceAnimations) snap() else tween(200),
+                                label = "v3SugCardBg"
+                            )
+                            val cardBorder = if (isAdded) accent else accent.copy(alpha = 0.36f)
+                            val titleColor = if (isAdded) darkInk else Color(0xFFF5F5F7)
+                            val subColor = if (isAdded) darkInk.copy(alpha = 0.82f) else Color(0xFF9E9EA8)
+                            val badgeColor = if (isAdded) darkInk else accent
+
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                accent.copy(alpha = if (isAdded) 0.22f else 0.14f),
-                                                Color(0xFF141417).copy(alpha = 0.98f),
-                                                Color(0xFF0F0F12).copy(alpha = 0.98f)
-                                            )
-                                        )
-                                    )
-                                    .border(
-                                        0.8.dp,
-                                        if (isAdded) accent.copy(alpha = 0.65f) else accent.copy(alpha = 0.28f),
-                                        RoundedCornerShape(20.dp)
-                                    )
-                                    .padding(horizontal = 18.dp, vertical = 16.dp)
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(cardBg)
+                                    .border(1.2.dp, cardBorder, RoundedCornerShape(22.dp))
+                                    .padding(horizontal = 16.dp, vertical = 15.dp)
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth()) {
+                                    // Top Row: Companion Badge + Add Pill (+ REAL)
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .padding(end = 14.dp)
+                                        Text(
+                                            text = companionBadgeFor(suggestion.kind),
+                                            color = badgeColor,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 0.6.sp
+                                        )
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Text(
-                                                text = suggestion.title,
-                                                color = Color(0xFFF4F4F6),
-                                                fontSize = 15.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                lineHeight = 21.sp
-                                            )
-                                            if (suggestion.subtitle.isNotBlank()) {
-                                                Spacer(Modifier.height(4.dp))
-                                                Text(
-                                                    text = suggestion.subtitle,
-                                                    color = Color(0xFF9898A2),
-                                                    fontSize = 13.sp,
-                                                    lineHeight = 18.sp
-                                                )
-                                            }
-                                        }
-
-                                        val buttonShape = RoundedCornerShape(13.dp)
-                                        Box(
-                                            modifier = Modifier
-                                                .size(38.dp)
-                                                .clip(buttonShape)
-                                                .background(
-                                                    when {
-                                                        isAdded -> accent.copy(alpha = 0.25f)
-                                                        isPending -> Color(0xFF202026)
-                                                        !isActionEnabled -> Color(0xFF19191D)
-                                                        else -> Color(0xFF222228)
-                                                    }
-                                                )
-                                                .border(
-                                                    0.8.dp,
-                                                    when {
-                                                        isAdded -> accent.copy(alpha = 0.70f)
-                                                        !isActionEnabled -> Color(0xFF2B2B33)
-                                                        else -> Color(0xFF383842)
-                                                    },
-                                                    buttonShape
-                                                )
-                                                .clickable(
-                                                    enabled = isActionEnabled,
-                                                    onClick = {
-                                                        scope.launch {
-                                                            if (index in pendingIndices) return@launch
-                                                            pendingIndices = pendingIndices + index
-                                                            try {
-                                                                val existingId = createdRealIds[index]
-                                                                if (existingId != null) {
-                                                                    if (onUndoSuggestedReal(existingId)) {
-                                                                        createdRealIds = createdRealIds - index
-                                                                        RealHaptics.tick(view)
+                                            // Swap (↻) hidden for now; "Başka getir" stays on catalog misses only.
+                                            val pillShape = RoundedCornerShape(16.dp)
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(pillShape)
+                                                    .background(
+                                                        when {
+                                                            isAdded -> darkInk
+                                                            !isActionEnabled -> Color(0xFF141418)
+                                                            else -> accent
+                                                        }
+                                                    )
+                                                    .clickable(
+                                                        enabled = isActionEnabled,
+                                                        role = Role.Button,
+                                                        onClick = {
+                                                            scope.launch {
+                                                                if (index in pendingIndices) return@launch
+                                                                pendingIndices = pendingIndices + index
+                                                                try {
+                                                                    val existingId = createdRealIds[index]
+                                                                    if (existingId != null) {
+                                                                        if (onUndoSuggestedReal(existingId)) {
+                                                                            createdRealIds = createdRealIds - index
+                                                                            RealHaptics.tick(view)
+                                                                        }
+                                                                        return@launch
                                                                     }
-                                                                    return@launch
-                                                                }
 
-                                                                val musicToAttach = if (isMusic) {
-                                                                    verifiedMusicBlock ?: return@launch
-                                                                } else null
-                                                                val mediaToAttach = if (isMedia) {
-                                                                    verifiedMediaBlock ?: return@launch
-                                                                } else null
-                                                                val cardStackToAttach = if (suggestion.kind == MoodSuggestionKind.TEXT) {
-                                                                    CardStackBlock(
-                                                                        prompt = suggestion.subtitle.trim().takeIf { it.isNotBlank() },
-                                                                        cards = listOf(CardStackCard())
+                                                                    val musicToAttach = if (isMusic) {
+                                                                        verifiedMusicBlock ?: return@launch
+                                                                    } else null
+                                                                    val mediaToAttach = if (isMedia) {
+                                                                        verifiedMediaBlock ?: return@launch
+                                                                    } else null
+                                                                    val cardStackToAttach = if (isCardSeed) {
+                                                                        CardStackBlock(
+                                                                            prompt = suggestion.subtitle.trim().takeIf { it.isNotBlank() },
+                                                                            cards = listOf(CardStackCard())
+                                                                        )
+                                                                    } else null
+
+                                                                    val createdId = onAddSuggestedReal(
+                                                                        suggestion.title,
+                                                                        musicToAttach,
+                                                                        mediaToAttach,
+                                                                        cardStackToAttach
                                                                     )
-                                                                } else null
-
-                                                                val createdId = onAddSuggestedReal(
-                                                                    suggestion.title,
-                                                                    musicToAttach,
-                                                                    mediaToAttach,
-                                                                    cardStackToAttach
-                                                                )
-                                                                if (createdId != null) {
-                                                                    createdRealIds = createdRealIds + (index to createdId)
-                                                                    RealHaptics.success(view)
+                                                                    if (createdId != null) {
+                                                                        createdRealIds = createdRealIds + (index to createdId)
+                                                                        RealHaptics.success(view)
+                                                                    }
+                                                                } catch (_: Exception) {
+                                                                    // Keep current state so user can retry.
+                                                                } finally {
+                                                                    pendingIndices = pendingIndices - index
                                                                 }
-                                                            } catch (_: Exception) {
-                                                                // Keep the current state so the user can retry add/undo.
-                                                            } finally {
-                                                                pendingIndices = pendingIndices - index
                                                             }
                                                         }
-                                                    }
+                                                    )
+                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                                    .semantics {
+                                                        contentDescription = if (isAdded) t("Eklenen REAL’i geri al") else t("REAL olarak ekle")
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = when {
+                                                        isAdded -> t("✓ REAL'de")
+                                                        isPending -> "…"
+                                                        else -> t("+ REAL")
+                                                    },
+                                                    color = when {
+                                                        isAdded -> accent
+                                                        !isActionEnabled -> Color(0xFF55555E)
+                                                        else -> darkInk
+                                                    },
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold
                                                 )
-                                                .semantics {
-                                                    contentDescription = if (isAdded) t("Eklenen REAL’i geri al") else t("REAL olarak ekle")
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            when {
-                                                isAdded -> ActionIcon(ActionGlyph.Check, Modifier.size(17.dp), color = accent)
-                                                isPending -> Text("…", color = Color(0xFF8E8E98), fontSize = 16.sp)
-                                                !isActionEnabled -> ActionIcon(ActionGlyph.Add, Modifier.size(17.dp), color = Color(0xFF55555E))
-                                                else -> ActionIcon(ActionGlyph.Add, Modifier.size(17.dp), color = Color(0xFFF1F1F4))
                                             }
                                         }
+                                    }
+
+                                    Spacer(Modifier.height(8.dp))
+
+                                    Text(
+                                        text = suggestion.title,
+                                        color = titleColor,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        lineHeight = 22.sp
+                                    )
+
+                                    if (suggestion.subtitle.isNotBlank()) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = suggestion.subtitle,
+                                            color = subColor,
+                                            fontSize = 13.sp,
+                                            lineHeight = 18.sp
+                                        )
                                     }
 
                                     if (isMusic) {
                                         when (musicResolutionState) {
                                             is MusicResolutionState.Loading -> {
-                                                Spacer(Modifier.height(14.dp))
+                                                Spacer(Modifier.height(12.dp))
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(14.dp))
-                                                        .background(Color(0xFF16161A))
-                                                        .border(0.8.dp, Color(0xFF282830), RoundedCornerShape(14.dp))
+                                                        .clip(RoundedCornerShape(16.dp))
+                                                        .background(Color.Black)
+                                                        .border(0.8.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
                                                         .padding(14.dp),
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                                 ) {
                                                     Box(
                                                         modifier = Modifier
-                                                            .size(48.dp)
+                                                            .size(44.dp)
                                                             .clip(RoundedCornerShape(10.dp))
-                                                            .background(Color.White.copy(alpha = 0.08f)),
+                                                            .background(accent.copy(alpha = 0.14f)),
                                                         contentAlignment = Alignment.Center
                                                     ) {
-                                                        ActionIcon(ActionGlyph.Music, Modifier.size(22.dp), Color(0xFF85858E))
+                                                        ActionIcon(ActionGlyph.Music, Modifier.size(20.dp), accent)
                                                     }
                                                     Column(modifier = Modifier.weight(1f)) {
                                                         Text(
                                                             text = suggestion.music?.track?.takeIf { it.isNotBlank() } ?: t("Şarkı aranıyor…"),
-                                                            color = Color(0xFFE0E0E5),
+                                                            color = Color(0xFFF5F5F7),
                                                             fontSize = 14.sp,
-                                                            fontWeight = FontWeight.Medium,
+                                                            fontWeight = FontWeight.SemiBold,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
                                                         )
                                                         Spacer(Modifier.height(2.dp))
                                                         Text(
-                                                            text = suggestion.music?.artist?.takeIf { it.isNotBlank() }?.let { t("{0} • iTunes aranıyor…", it) } ?: t("Şarkı aranıyor…"),
-                                                            color = Color(0xFF85858E),
+                                                            text = suggestion.music?.artist?.takeIf { it.isNotBlank() } ?: t("Katalog kontrol ediliyor…"),
+                                                            color = Color(0xFF9E9EA8),
                                                             fontSize = 12.sp,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
@@ -527,7 +638,7 @@ fun MoodSuggestionsScreen(
                                             }
 
                                             is MusicResolutionState.Success -> {
-                                                Spacer(Modifier.height(14.dp))
+                                                Spacer(Modifier.height(12.dp))
                                                 MusicTrackCard(
                                                     block = verifiedMusicBlock!!,
                                                     selected = true
@@ -539,9 +650,9 @@ fun MoodSuggestionsScreen(
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(14.dp))
-                                                        .background(Color(0xFF16161A))
-                                                        .border(0.8.dp, Color(0xFF282830), RoundedCornerShape(14.dp))
+                                                        .clip(RoundedCornerShape(16.dp))
+                                                        .background(Color.Black)
+                                                        .border(0.8.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
                                                         .padding(horizontal = 14.dp, vertical = 12.dp),
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.SpaceBetween
@@ -551,25 +662,23 @@ fun MoodSuggestionsScreen(
                                                         verticalAlignment = Alignment.CenterVertically,
                                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                     ) {
-                                                        ActionIcon(ActionGlyph.Music, Modifier.size(20.dp), Color(0xFF85858E))
+                                                        ActionIcon(ActionGlyph.Music, Modifier.size(18.dp), accent)
                                                         Text(
                                                             text = t("Şarkı şu anda bulunamadı."),
-                                                            color = Color(0xFF85858E),
+                                                            color = Color(0xFF9E9EA8),
                                                             fontSize = 13.sp
                                                         )
                                                     }
-                                                    if (suggestion.music != null) {
-                                                        Text(
-                                                            text = t("Tekrar dene"),
-                                                            color = accent,
-                                                            fontSize = 13.sp,
-                                                            fontWeight = FontWeight.Medium,
-                                                            modifier = Modifier
-                                                                .clip(RoundedCornerShape(8.dp))
-                                                                .clickable { requestReplacement(index, suggestion) }
-                                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                        )
-                                                    }
+                                                    Text(
+                                                        text = t("Başka getir"),
+                                                        color = accent,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .clickable { requestReplacement(index, suggestion) }
+                                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
                                                 }
                                             }
 
@@ -581,40 +690,39 @@ fun MoodSuggestionsScreen(
                                         when (mediaResolutionState) {
                                             is MediaResolutionState.Loading -> {
                                                 val searchLabel = if (isMovie) t("Film aranıyor…") else t("Dizi aranıyor…")
-                                                val providerLabel = if (isMovie) t("Film • TheTVDB aranıyor…") else t("Dizi • TVmaze aranıyor…")
-                                                Spacer(Modifier.height(14.dp))
+                                                Spacer(Modifier.height(12.dp))
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(14.dp))
-                                                        .background(Color(0xFF16161A))
-                                                        .border(0.8.dp, Color(0xFF282830), RoundedCornerShape(14.dp))
+                                                        .clip(RoundedCornerShape(16.dp))
+                                                        .background(Color.Black)
+                                                        .border(0.8.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
                                                         .padding(14.dp),
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                                 ) {
                                                     Box(
                                                         modifier = Modifier
-                                                            .size(48.dp)
+                                                            .size(44.dp)
                                                             .clip(RoundedCornerShape(10.dp))
-                                                            .background(Color.White.copy(alpha = 0.08f)),
+                                                            .background(accent.copy(alpha = 0.14f)),
                                                         contentAlignment = Alignment.Center
                                                     ) {
-                                                        ActionIcon(ActionGlyph.Video, Modifier.size(22.dp), Color(0xFF85858E))
+                                                        ActionIcon(ActionGlyph.Video, Modifier.size(20.dp), accent)
                                                     }
                                                     Column(modifier = Modifier.weight(1f)) {
                                                         Text(
                                                             text = suggestion.media?.title?.takeIf { it.isNotBlank() } ?: searchLabel,
-                                                            color = Color(0xFFE0E0E5),
+                                                            color = Color(0xFFF5F5F7),
                                                             fontSize = 14.sp,
-                                                            fontWeight = FontWeight.Medium,
+                                                            fontWeight = FontWeight.SemiBold,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
                                                         )
                                                         Spacer(Modifier.height(2.dp))
                                                         Text(
-                                                            text = providerLabel,
-                                                            color = Color(0xFF85858E),
+                                                            text = searchLabel,
+                                                            color = Color(0xFF9E9EA8),
                                                             fontSize = 12.sp,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
@@ -624,7 +732,7 @@ fun MoodSuggestionsScreen(
                                             }
 
                                             is MediaResolutionState.Success -> {
-                                                Spacer(Modifier.height(14.dp))
+                                                Spacer(Modifier.height(12.dp))
                                                 MediaTrackCard(
                                                     block = verifiedMediaBlock!!
                                                 )
@@ -636,9 +744,9 @@ fun MoodSuggestionsScreen(
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(14.dp))
-                                                        .background(Color(0xFF16161A))
-                                                        .border(0.8.dp, Color(0xFF282830), RoundedCornerShape(14.dp))
+                                                        .clip(RoundedCornerShape(16.dp))
+                                                        .background(Color.Black)
+                                                        .border(0.8.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(16.dp))
                                                         .padding(horizontal = 14.dp, vertical = 12.dp),
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.SpaceBetween
@@ -648,63 +756,60 @@ fun MoodSuggestionsScreen(
                                                         verticalAlignment = Alignment.CenterVertically,
                                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                     ) {
-                                                        ActionIcon(ActionGlyph.Video, Modifier.size(20.dp), Color(0xFF85858E))
+                                                        ActionIcon(ActionGlyph.Video, Modifier.size(18.dp), accent)
                                                         Text(
                                                             text = failText,
-                                                            color = Color(0xFF85858E),
+                                                            color = Color(0xFF9E9EA8),
                                                             fontSize = 13.sp
                                                         )
                                                     }
-                                                    if (suggestion.media != null) {
-                                                        Text(
-                                                            text = t("Tekrar dene"),
-                                                            color = accent,
-                                                            fontSize = 13.sp,
-                                                            fontWeight = FontWeight.Medium,
-                                                            modifier = Modifier
-                                                                .clip(RoundedCornerShape(8.dp))
-                                                                .clickable { requestReplacement(index, suggestion) }
-                                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                        )
-                                                    }
+                                                    Text(
+                                                        text = t("Başka getir"),
+                                                        color = accent,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .clickable { requestReplacement(index, suggestion) }
+                                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
                                                 }
                                             }
 
                                             null -> {}
                                         }
                                     }
+
                                     com.cagri.real.ui.ai.AiReportButton(
                                         com.cagri.real.platform.android.ai.AiReportFeature.MOOD,
-                                        suggestion.title, suggestion.subtitle)
+                                        suggestion.title, suggestion.subtitle
+                                    )
                                 }
                             }
                         }
 
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(12.dp))
 
+                        val hasAdded = createdRealIds.isNotEmpty()
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(
-                                    if (createdRealIds.isNotEmpty()) accent.copy(alpha = 0.22f)
-                                    else Color(0xFF1A1A1E)
-                                )
+                                .clip(RoundedCornerShape(26.dp))
+                                .background(if (hasAdded) accent else Color.Black)
                                 .border(
-                                    0.8.dp,
-                                    if (createdRealIds.isNotEmpty()) accent.copy(alpha = 0.55f)
-                                    else Color(0xFF2C2C33),
-                                    RoundedCornerShape(18.dp)
+                                    1.4.dp,
+                                    if (hasAdded) accent else accent.copy(alpha = 0.50f),
+                                    RoundedCornerShape(26.dp)
                                 )
-                                .clickable(onClick = onDismiss)
-                                .padding(vertical = 14.dp),
+                                .clickable(role = Role.Button, onClick = onDismiss)
+                                .padding(vertical = 15.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (createdRealIds.isNotEmpty()) t("Tamam") else t("Geç"),
-                                color = Color(0xFFF4F4F6),
+                                text = if (hasAdded) t("Tamam") else t("Şimdilik geç"),
+                                color = if (hasAdded) darkInk else accent,
                                 fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -718,21 +823,23 @@ fun MoodSuggestionsScreen(
 
 @Composable
 private fun SuggestionsLoadingView(
+    family: Int,
+    mood: JournalMood,
     accent: Color,
     reduceAnimations: Boolean
 ) {
-    val alphaAnim = if (reduceAnimations) {
-        0.45f
+    val pulse = if (reduceAnimations) {
+        0.55f
     } else {
-        val transition = rememberInfiniteTransition(label = "skeletonPulse")
+        val transition = rememberInfiniteTransition(label = "v3MoodLoadingPulse")
         val alpha by transition.animateFloat(
-            initialValue = 0.30f,
-            targetValue = 0.65f,
+            initialValue = 0.28f,
+            targetValue = 0.72f,
             animationSpec = infiniteRepeatable(
-                animation = tween(850),
+                animation = tween(900),
                 repeatMode = RepeatMode.Reverse
             ),
-            label = "skeletonAlpha"
+            label = "v3PulseAlpha"
         )
         alpha
     }
@@ -741,104 +848,107 @@ private fun SuggestionsLoadingView(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        repeat(3) {
+        repeat(4) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(86.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                accent.copy(alpha = 0.08f * (alphaAnim / 0.5f)),
-                                Color(0xFF141417).copy(alpha = 0.95f),
-                                Color(0xFF0F0F12).copy(alpha = 0.95f)
-                            )
-                        )
-                    )
+                    .height(92.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color.Black)
                     .border(
-                        0.8.dp,
-                        accent.copy(alpha = 0.20f * (alphaAnim / 0.5f)),
-                        RoundedCornerShape(20.dp)
+                        1.2.dp,
+                        accent.copy(alpha = 0.32f * pulse),
+                        RoundedCornerShape(22.dp)
                     )
-                    .padding(horizontal = 18.dp, vertical = 16.dp)
+                    .padding(horizontal = 16.dp, vertical = 15.dp)
             ) {
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.70f)
-                                .height(14.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.White.copy(alpha = 0.12f * (alphaAnim / 0.5f)))
+                                .fillMaxWidth(0.32f)
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(accent.copy(alpha = 0.28f * pulse))
                         )
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.92f)
-                                .height(11.dp)
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(Color.White.copy(alpha = 0.07f * (alphaAnim / 0.5f)))
+                                .size(width = 64.dp, height = 24.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(accent.copy(alpha = 0.22f * pulse))
                         )
                     }
-
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(13.dp))
-                            .background(Color.White.copy(alpha = 0.06f * (alphaAnim / 0.5f)))
+                            .fillMaxWidth(0.76f)
+                            .height(14.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.White.copy(alpha = 0.14f * pulse))
                     )
                 }
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
 
-        Text(
-            text = t("Öneriler hazırlanıyor…"),
-            color = Color(0xFF85858E),
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MoodV3Face(
+                params = faceParamsAtV2(family.toFloat(), mood),
+                ink = accent.copy(alpha = pulse),
+                size = 22.dp,
+                description = ""
+            )
+            Spacer(Modifier.size(8.dp))
+            Text(
+                text = t("Hissine ortak olanlar hazırlanıyor…"),
+                color = accent.copy(alpha = 0.78f),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 
 @Composable
 private fun SuggestionsErrorView(
     accent: Color,
+    darkInk: Color,
     onRetry: () -> Unit,
     onDismiss: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFF141417))
-            .border(0.8.dp, Color(0xFF28282E), RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color.Black)
+            .border(1.2.dp, accent.copy(alpha = 0.38f), RoundedCornerShape(22.dp))
             .padding(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = t("Öneriler şu anda alınamadı"),
-            color = Color(0xFFF4F4F6),
+            color = Color(0xFFF5F5F7),
             fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.Bold
         )
 
         Spacer(Modifier.height(6.dp))
 
         Text(
             text = t("Bağlantını kontrol edip tekrar deneyebilir veya doğrudan devam edebilirsin."),
-            color = Color(0xFF85858E),
+            color = Color(0xFF9E9EA8),
             fontSize = 13.sp,
             textAlign = TextAlign.Center,
             lineHeight = 18.sp
@@ -852,33 +962,32 @@ private fun SuggestionsErrorView(
         ) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(accent.copy(alpha = 0.22f))
-                    .border(0.8.dp, accent.copy(alpha = 0.60f), RoundedCornerShape(16.dp))
-                    .clickable(onClick = onRetry)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(accent)
+                    .clickable(role = Role.Button, onClick = onRetry)
                     .padding(horizontal = 20.dp, vertical = 10.dp)
             ) {
                 Text(
                     text = t("Tekrar dene"),
-                    color = Color(0xFFF4F4F6),
+                    color = darkInk,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF1E1E23))
-                    .border(0.8.dp, Color(0xFF33333A), RoundedCornerShape(16.dp))
-                    .clickable(onClick = onDismiss)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color.Black)
+                    .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(20.dp))
+                    .clickable(role = Role.Button, onClick = onDismiss)
                     .padding(horizontal = 20.dp, vertical = 10.dp)
             ) {
                 Text(
                     text = t("Geç"),
-                    color = Color(0xFF9898A2),
+                    color = Color.White.copy(alpha = 0.78f),
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }

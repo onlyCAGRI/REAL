@@ -26,7 +26,11 @@ object NowBarReminderController {
     private const val PREF_ENABLED = "samsung_now_bar_enabled"
     private const val PREF_MANUAL_PIN_ID = "samsung_now_bar_manual_pin_id"
 
+    /** Now Bar is a Samsung (One UI) feature: elsewhere the setting is hidden and stays off. */
+    val isSupportedDevice: Boolean get() = android.os.Build.MANUFACTURER.equals("samsung", ignoreCase = true)
+
     fun isEnabled(context: Context): Boolean {
+        if (!isSupportedDevice) return false
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(PREF_ENABLED, false)
     }

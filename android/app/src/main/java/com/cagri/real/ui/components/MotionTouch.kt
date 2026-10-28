@@ -93,7 +93,9 @@ object RealHaptics {
     }
 
     private fun touchFeedbackOn(view: View): Boolean = view.isHapticFeedbackEnabled &&
-        runCatching { @Suppress("DEPRECATION") Settings.System.getInt(view.context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0 }
+        runCatching {
+            @Suppress("DEPRECATION")
+            Settings.System.getInt(view.context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0 }
             .getOrDefault(true)
 
     private fun perform(

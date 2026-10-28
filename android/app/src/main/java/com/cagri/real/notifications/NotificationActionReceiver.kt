@@ -47,6 +47,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
                                 val now = System.currentTimeMillis()
                                 val snoozeUntil = now + SNOOZE_DURATION_MILLIS
                                 repository.snooze(reminderId, snoozeUntil)
+                                intent.getStringExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_PLACE)?.let { place ->
+                                    LocationReminders.rememberSnoozedFire(app, reminderId, snoozeUntil, place,
+                                        intent.getBooleanExtra(ReminderNotifications.EXTRA_LOCATION_TRIGGER_ON_EXIT, false))
+                                }
                                 ReminderScheduler.reconcile(app, repository)
                                 changed = true
                             }

@@ -63,6 +63,10 @@ object LiquidGlassTokens {
     val dockEdgeTop = Color(0xA6FFFFFF)
     val dockEdgeBottom = Color(0x66FFFFFF)
     val dockSelectedPill = Color(0x73000000)
+    // Dock without the live glass ("Dinamik bulanıklığı azalt", or no backdrop): a flat grey with a quiet edge
+    // instead of the bright glass rim and shine, which look odd with nothing refracted behind them.
+    val dockSolid = Color(0xFF2E2E31)
+    val dockSolidEdge = Color(0xFF3D3D41)
 }
 
 

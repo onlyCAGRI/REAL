@@ -85,8 +85,6 @@ internal fun CardCompositionGrid(
     onPlacementChange: (String, CardBlockPlacement) -> Unit,
     onConfigure: (String) -> Unit = {},
     onBlockCoordinates: ((String, LayoutCoordinates?) -> Unit)? = null,
-    /** Widget blocks (counter, market) allowed down to half width. */
-    compactKeys: Set<String> = emptySet(),
     content: @Composable (String, Int) -> Unit
 ) {
     // Bounds are gesture bookkeeping, not state. Removing a block cannot leave a stale drop target.
@@ -288,7 +286,7 @@ internal fun CardCompositionGrid(
                                     onStart = { currentSelect(blockKey) },
                                     onDelta = { startPlacement, dx, _, _ ->
                                         val unitPx = ((gridWidthPx + gutter) / CARD_GRID_UNITS.toFloat()).coerceAtLeast(1f)
-                                        val minSpan = cardDetailMinimumSpan(blockKey, gridWidthPx / density, compactKeys)
+                                        val minSpan = cardDetailMinimumSpan(blockKey, gridWidthPx / density)
                                         val end = (startPlacement.column + startPlacement.span + dx / unitPx).roundToInt()
                                             .coerceIn(startPlacement.column + minOf(minSpan, CARD_GRID_UNITS - startPlacement.column), CARD_GRID_UNITS)
                                         val catalog = blockKey.substringBefore(':') in listOf("music", "media", "game")
@@ -337,7 +335,7 @@ internal fun CardCompositionGrid(
                                         onDelta = { startPlacement, dx, _, _ ->
                                             val unitPx = ((gridWidthPx + gutter) / CARD_GRID_UNITS.toFloat()).coerceAtLeast(1f)
                                             val end = startPlacement.column + startPlacement.span
-                                            val minSpan = cardDetailMinimumSpan(blockKey, gridWidthPx / density, compactKeys)
+                                            val minSpan = cardDetailMinimumSpan(blockKey, gridWidthPx / density)
                                             val column = (startPlacement.column + dx / unitPx).roundToInt()
                                                 .coerceIn(0, (end - minSpan).coerceAtLeast(0))
                                             val now = currentPlacements[blockKey]?.normalized() ?: CardBlockPlacement()

@@ -782,9 +782,28 @@ fun GlassComposer(
                     val hasDateOnly = !hasAlert && !hasPendingTime && dateHint != null
                     val isScheduled = hasAlert || hasPendingTime || hasDateOnly
 
+                    // The tools come in after the panel starts growing: a soft left-to-right sweep, so they read as
+                    // arriving one by one (calendar first, bell last).
+                    val toolsReveal = remember { Animatable(if (reduceAnimations) 1f else 0f) }
+                    LaunchedEffect(Unit) {
+                        if (!reduceAnimations) { delay(70); toolsReveal.animateTo(1f, tween(460, easing = RealMotion.Standard)) }
+                    }
                     // Tools scroll sideways when they do not fit (a long date chip); the bell is the last of them.
                     Row(
-                        modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        modifier = Modifier.weight(1f)
+                            .graphicsLayer {
+                                compositingStrategy = CompositingStrategy.Offscreen
+                                translationY = (1f - toolsReveal.value) * 6.dp.toPx()
+                            }
+                            .drawWithContent {
+                                drawContent()
+                                val front = size.width * toolsReveal.value * 1.4f
+                                drawRect(
+                                    Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = front - size.width * 0.4f, endX = front),
+                                    blendMode = BlendMode.DstIn
+                                )
+                            }
+                            .horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {

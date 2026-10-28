@@ -178,7 +178,7 @@ fun BookReaderScreen(
     val navBottom = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
     Box(modifier.fillMaxSize().background(bg).nestedScroll(connection)) {
         GlassEdges(background = bg, top = statusTop + 64.dp, bottom = navBottom + 130.dp, modifier = Modifier.fillMaxSize()) {
-            if (horizontal && paged != null) {
+            if (horizontal) {
                 HorizontalReader(paged, currentPage, { currentPage = it }, chapterLabel, chapterTitle,
                     showOriginal, pageRetry, theme, family, bodyStyle, fontSp) { pageRetry++ }
             } else LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), state = listState,

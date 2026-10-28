@@ -532,8 +532,8 @@ fun PlannerScreen(
             window?.setDimAmount(0f)
             window?.setWindowAnimations(0)
             onDispose {
-                if (previousDim != null) window?.setDimAmount(previousDim)
-                if (previousAnimations != null) window?.setWindowAnimations(previousAnimations)
+                if (previousDim != null) window.setDimAmount(previousDim)
+                if (previousAnimations != null) window.setWindowAnimations(previousAnimations)
             }
         }
         SharedTransitionLayout(

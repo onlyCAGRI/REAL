@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
@@ -68,6 +69,7 @@ fun LiquidGlassSurface(
     )
     val shape = remember(corners) { RoundedCornerShape(corners) }
     val rim = remember(role) { if (role == LiquidGlassRole.Dock) liquidDockRimBrush() else liquidRimBrush() }
+    val flatDock = !dynamic && role == LiquidGlassRole.Dock
     val tint = remember(dynamic, strength, role) {
         val body = when {
             role == LiquidGlassRole.Sheet -> LiquidGlassTokens.sheetTint
@@ -77,6 +79,7 @@ fun LiquidGlassSurface(
         }
         if (dynamic && role == LiquidGlassRole.Dock) Brush.verticalGradient(listOf(LiquidGlassTokens.dockTintTop, LiquidGlassTokens.dockTintBottom))
         else if (dynamic) Brush.verticalGradient(listOf(body, body.copy(alpha = body.alpha + 0.08f)))
+        else if (role == LiquidGlassRole.Dock) SolidColor(LiquidGlassTokens.dockSolid)
         else Brush.verticalGradient(listOf(LiquidGlassTokens.fallbackTop, LiquidGlassTokens.fallbackBottom))
     }
     Box(
@@ -99,11 +102,15 @@ fun LiquidGlassSurface(
             }
             .shadow(LiquidGlassTokens.shadow, shape, clip = false)
             .clip(shape)
-            .border(if (role == LiquidGlassRole.Dock) LiquidGlassTokens.dockEdgeWidth else LiquidGlassTokens.edgeWidth, rim, shape)
+            .border(
+                if (role == LiquidGlassRole.Dock) LiquidGlassTokens.dockEdgeWidth else LiquidGlassTokens.edgeWidth,
+                if (flatDock) SolidColor(LiquidGlassTokens.dockSolidEdge) else rim,
+                shape
+            )
     ) {
         if (dynamic) LiquidBackdrop(backdrop, { position - backdropPosition() }, corners, strength, role, Modifier.matchParentSize())
         Box(Modifier.matchParentSize().background(tint))
-        Box(Modifier.matchParentSize().drawWithCache {
+        if (!flatDock) Box(Modifier.matchParentSize().drawWithCache {
             val light = Brush.radialGradient(
                 listOf(Color.White.copy(alpha = when (role) { LiquidGlassRole.Sheet -> 0.045f; LiquidGlassRole.Dock -> 0.12f; else -> 0.07f }), Color.Transparent),
                 Offset(size.width * 0.16f, -size.height * 0.4f), size.width.coerceAtLeast(1f)

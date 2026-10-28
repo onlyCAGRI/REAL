@@ -82,7 +82,8 @@ fun SettingsScreen(
     onClearAllMoods: () -> Unit = {},
     widgetReminders: List<com.cagri.real.data.ReminderItem> = emptyList(),
     widgetMoodEntries: List<com.cagri.real.data.MoodTrackerEntry> = emptyList(),
-    onToggleWidgetReminder: ((Long) -> Unit)? = null
+    onToggleWidgetReminder: ((Long) -> Unit)? = null,
+    onOpenReminderDetail: ((Long) -> Unit)? = null
 ) {
     var showPetScenarios by remember { mutableStateOf(false) }
     var showLicensesDialog by remember { mutableStateOf(false) }
@@ -162,6 +163,13 @@ fun SettingsScreen(
         }) {
             if (showDeveloperTools) {
                 SettingsSectionHeader(t("GELİŞTİRİCİ ARAÇLARI"))
+                SettingsSectionHeader(t("VARINCA / AYRILINCA TESTİ"))
+                SettingsGlassGroup {
+                    LocationArrivalDeveloperTestSection(
+                        existingReminders = widgetReminders,
+                        onOpenCardDetail = onOpenReminderDetail
+                    )
+                }
                 SettingsSectionHeader(t("BAĞLAM KARTLARI TESTİ"))
 
                 SettingsGlassGroup {
@@ -244,7 +252,7 @@ fun SettingsScreen(
                     }
                 }
 
-                if (realPetEnabled) {
+                if (RealPetRuntime.mode != RealPetMode.Kapali) {
                     SettingsSectionHeader("REAL PET")
 
                     SettingsGlassGroup {
@@ -436,44 +444,53 @@ fun SettingsScreen(
                         com.cagri.real.i18n.AppLanguage.Turkish -> t("Türkçe")
                         com.cagri.real.i18n.AppLanguage.English -> "English"
                     }
-                    SettingsActionRow(
+                    SettingsChoiceRow(
                         icon = ActionGlyph.Theme,
-                        title = "Dil",
-                        subtitle = languageLabel,
+                        title = t("Dil"),
+                        value = languageLabel,
                         onClick = { showLanguageDialog = true }
                     )
                     if (showLanguageDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showLanguageDialog = false },
-                            containerColor = Color(0xFF1C1C21),
-                            title = { Text(com.cagri.real.i18n.t("Uygulama dilini seç"), color = Color.White) },
-                            text = {
-                                Column {
-                                    listOf(
-                                        com.cagri.real.i18n.AppLanguage.System to com.cagri.real.i18n.t("Telefonun dili"),
-                                        com.cagri.real.i18n.AppLanguage.Turkish to t("Türkçe"),
-                                        com.cagri.real.i18n.AppLanguage.English to "English"
-                                    ).forEach { (lang, label) ->
-                                        val picked = com.cagri.real.i18n.I18n.selected == lang
-                                        Row(
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .selectable(selected = picked, role = Role.RadioButton) {
-                                                    com.cagri.real.i18n.I18n.set(context, lang)
-                                                    showLanguageDialog = false
-                                                }
-                                                .padding(vertical = 12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(label, color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                                            if (picked) ActionIcon(ActionGlyph.Check, Modifier.size(18.dp), color = Color(0xFF3B82F6))
-                                        }
-                                    }
-                                }
-                            },
-                            confirmButton = {
-                                TextButton(onClick = { showLanguageDialog = false }) { Text(com.cagri.real.i18n.t("Kapat"), color = Color(0xFF91B9FF)) }
-                            }
+                        com.cagri.real.ui.components.ChoiceSheet(
+                            title = t("Uygulama dilini seç"),
+                            choices = listOf(
+                                com.cagri.real.ui.components.Choice(com.cagri.real.i18n.AppLanguage.System, t("Telefonun dili")),
+                                com.cagri.real.ui.components.Choice(com.cagri.real.i18n.AppLanguage.Turkish, t("Türkçe")),
+                                com.cagri.real.ui.components.Choice(com.cagri.real.i18n.AppLanguage.English, "English")
+                            ),
+                            selected = com.cagri.real.i18n.I18n.selected,
+                            onSelect = { com.cagri.real.i18n.I18n.set(context, it) },
+                            onDismiss = { showLanguageDialog = false }
+                        )
+                    }
+
+                    SettingsDivider()
+
+                    var showMapSheet by remember { mutableStateOf(false) }
+                    val mapDark = com.cagri.real.ui.components.MapAppearance.isDark(context)
+                    SettingsChoiceRow(
+                        icon = ActionGlyph.Pin,
+                        title = t("Harita görünümü"),
+                        value = (if (mapDark) t("Koyu") else t("Açık")) +
+                            (if (com.cagri.real.ui.components.MapAppearance.isPlain(context)) " · " + t("Sade") else ""),
+                        onClick = { showMapSheet = true }
+                    )
+                    if (showMapSheet) {
+                        com.cagri.real.ui.components.ChoiceSheet(
+                            title = t("Harita görünümü"),
+                            choices = listOf(
+                                com.cagri.real.ui.components.Choice(false, t("Açık"), t("Renkli: yeşil alanlar, mavi deniz")),
+                                com.cagri.real.ui.components.Choice(true, t("Koyu"), t("Siyah zemin, belirgin deniz"))
+                            ),
+                            selected = mapDark,
+                            onSelect = { com.cagri.real.ui.components.MapAppearance.setDark(context, it) },
+                            onDismiss = { showMapSheet = false },
+                            toggle = com.cagri.real.ui.components.ChoiceToggle(
+                                label = t("Sade harita"),
+                                detail = t("Haritada mekan adlarını gizler"),
+                                checked = com.cagri.real.ui.components.MapAppearance.isPlain(context),
+                                onChange = { com.cagri.real.ui.components.MapAppearance.setPlain(context, it) }
+                            )
                         )
                     }
 
@@ -498,16 +515,46 @@ fun SettingsScreen(
                     )
 
 
+                    if (REAL_PET_AVAILABLE) {
                     SettingsDivider()
 
-                    SettingsRow(
+                    val petPrefs = remember(context) { context.getSharedPreferences("real_pet_prefs", Context.MODE_PRIVATE) }
+                    remember(petPrefs) {
+                        RealPetRuntime.bindPreferences(petPrefs)
+                        true
+                    }
+                    val currentPetMode = RealPetRuntime.mode
+                    val petModeSubtitle = when (currentPetMode) {
+                        RealPetMode.Kapali -> t("Kapalı")
+                        RealPetMode.Sakin -> t("Sakin")
+                        RealPetMode.Normal -> t("Normal")
+                        RealPetMode.Yaramaz -> t("Yaramaz")
+                    }
+                    var showPetSheet by remember { mutableStateOf(false) }
+                    SettingsChoiceRow(
                         icon = ActionGlyph.Cat,
                         title = "REAL Pet",
-                        subtitle = t("Geçici olarak devre dışı bırakıldı"),
-                        checked = false,
-                        onCheckedChange = {},
-                        enabled = false
+                        value = petModeSubtitle,
+                        onClick = { showPetSheet = true }
                     )
+                    if (showPetSheet) {
+                        com.cagri.real.ui.components.ChoiceSheet(
+                            title = "REAL Pet",
+                            choices = listOf(
+                                com.cagri.real.ui.components.Choice(RealPetMode.Kapali, t("Kapalı")),
+                                com.cagri.real.ui.components.Choice(RealPetMode.Sakin, t("Sakin")),
+                                com.cagri.real.ui.components.Choice(RealPetMode.Normal, t("Normal")),
+                                com.cagri.real.ui.components.Choice(RealPetMode.Yaramaz, t("Yaramaz"))
+                            ),
+                            selected = currentPetMode,
+                            onSelect = { modeOption ->
+                                RealPetRuntime.mode = modeOption
+                                petPrefs.edit().putString(RealPetBrain.KEY_MODE, modeOption.storageKey).apply()
+                            },
+                            onDismiss = { showPetSheet = false }
+                        )
+                    }
+                    }
 
                     SettingsDivider()
 
@@ -556,17 +603,27 @@ fun SettingsScreen(
                     // Müzik uygulaması: where songs open (music discovery's up-swipe, music search default).
                     val musicContext = LocalContext.current
                     var musicSource by remember { mutableStateOf(com.cagri.real.ui.components.MusicSource.saved(musicContext)) }
-                    SettingsActionRow(
+                    var showMusicSheet by remember { mutableStateOf(false) }
+                    SettingsChoiceRow(
                         icon = ActionGlyph.Music,
                         title = t("Müzik uygulaması"),
-                        subtitle = musicSource.label + t(" · şarkılar burada açılır"),
-                        onClick = {
-                            val next = if (musicSource == com.cagri.real.ui.components.MusicSource.Apple)
-                                com.cagri.real.ui.components.MusicSource.Spotify else com.cagri.real.ui.components.MusicSource.Apple
-                            com.cagri.real.ui.components.MusicSource.save(musicContext, next)
-                            musicSource = next
-                        }
+                        value = musicSource.label,
+                        onClick = { showMusicSheet = true }
                     )
+                    if (showMusicSheet) {
+                        com.cagri.real.ui.components.ChoiceSheet(
+                            title = t("Müzik uygulaması"),
+                            choices = com.cagri.real.ui.components.MusicSource.entries.map {
+                                com.cagri.real.ui.components.Choice(it, it.label, t("Şarkılar burada açılır"))
+                            },
+                            selected = musicSource,
+                            onSelect = {
+                                com.cagri.real.ui.components.MusicSource.save(musicContext, it)
+                                musicSource = it
+                            },
+                            onDismiss = { showMusicSheet = false }
+                        )
+                    }
 
                     SettingsDivider()
 
@@ -601,13 +658,12 @@ fun SettingsScreen(
                     )
                     if (confirmMusicReset) {
                         val musicScope = rememberCoroutineScope()
-                        com.cagri.real.ui.components.RealAlertDialog(
-                            onDismissRequest = { confirmMusicReset = false },
-                            title = { Text(t("Önerileri sıfırlamak istediğine emin misin?")) },
-                            text = { Text(t("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır."), color = Color(0xFFA5A5AF), fontSize = 14.sp) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    confirmMusicReset = false
+                        com.cagri.real.ui.components.ConfirmSheet(
+                            title = t("Önerileri sıfırlamak istediğine emin misin?"),
+                            message = t("Müzik, film, dizi ve oyunda geçtiklerin ve mevcut desteler temizlenir. Kaydettiğin listeler ile İzledim / Oynadım dediklerin kalır."),
+                            confirmLabel = t("Sıfırla"),
+                            onDismiss = { confirmMusicReset = false },
+                            onConfirm = {
                                     val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "guest"
                                     musicScope.launch {
                                         val ok = runCatching {
@@ -619,9 +675,7 @@ fun SettingsScreen(
                                         }.isSuccess
                                         com.cagri.real.ui.components.RealToast.show(musicContext, if (ok) t("Öneriler sıfırlandı") else t("Sıfırlanamadı"))
                                     }
-                                }) { Text(t("Sıfırla"), color = Color(0xFFFF8A80)) }
-                            },
-                            dismissButton = { TextButton(onClick = { confirmMusicReset = false }) { Text(t("Vazgeç"), color = Color.White) } }
+                            }
                         )
                     }
 
@@ -637,39 +691,44 @@ fun SettingsScreen(
                         onClick = { confirmRatingReset = true }
                     )
                     if (confirmRatingReset) {
-                        com.cagri.real.ui.components.RealAlertDialog(
-                            onDismissRequest = { confirmRatingReset = false },
-                            title = { Text(t("Puanları sıfırlamak istediğine emin misin?")) },
-                            text = { Text(t("Puanlarım listesi boşalır. Bu geri alınamaz."), color = Color(0xFFA5A5AF), fontSize = 14.sp) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    confirmRatingReset = false
+                        com.cagri.real.ui.components.ConfirmSheet(
+                            title = t("Puanları sıfırlamak istediğine emin misin?"),
+                            message = t("Puanlarım listesi boşalır. Bu geri alınamaz."),
+                            confirmLabel = t("Sıfırla"),
+                            onDismiss = { confirmRatingReset = false },
+                            onConfirm = {
                                     val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
                                     if (uid != null) ratingScope.launch {
                                         val ok = runCatching { com.cagri.real.discovery.MediaRatingRepository(musicContext, uid).reset() }.isSuccess
                                         com.cagri.real.ui.components.RealToast.show(musicContext, if (ok) t("Puanlar sıfırlandı") else t("Sıfırlanamadı"))
                                     }
-                                }) { Text(t("Sıfırla"), color = Color(0xFFFF8A80)) }
-                            },
-                            dismissButton = { TextButton(onClick = { confirmRatingReset = false }) { Text(t("Vazgeç"), color = Color.White) } }
+                            }
                         )
                     }
 
                     SettingsDivider()
 
-                    // Kapalı → 7 gün → 14 gün, one tap each.
+                    // Kapalı / 7 gün / 14 gün, picked in a sheet.
                     val settingsContext = LocalContext.current
                     val homeCalendarDays = com.cagri.real.calendar.CalendarHomeDays.get(settingsContext)
-                    SettingsActionRow(
+                    var showCalendarSheet by remember { mutableStateOf(false) }
+                    SettingsChoiceRow(
                         icon = ActionGlyph.Calendar,
-                        title = "Ana ekranda takvim",
-                        subtitle = com.cagri.real.calendar.CalendarHomeDays.label(homeCalendarDays),
-                        onClick = {
-                            val options = com.cagri.real.calendar.CalendarHomeDays.options
-                            com.cagri.real.calendar.CalendarHomeDays.set(settingsContext,
-                                options[(options.indexOf(homeCalendarDays) + 1) % options.size])
-                        }
+                        title = t("Ana ekranda takvim"),
+                        value = com.cagri.real.calendar.CalendarHomeDays.label(homeCalendarDays),
+                        onClick = { showCalendarSheet = true }
                     )
+                    if (showCalendarSheet) {
+                        com.cagri.real.ui.components.ChoiceSheet(
+                            title = t("Ana ekranda takvim"),
+                            choices = com.cagri.real.calendar.CalendarHomeDays.options.map {
+                                com.cagri.real.ui.components.Choice(it, com.cagri.real.calendar.CalendarHomeDays.label(it))
+                            },
+                            selected = homeCalendarDays,
+                            onSelect = { com.cagri.real.calendar.CalendarHomeDays.set(settingsContext, it) },
+                            onDismiss = { showCalendarSheet = false }
+                        )
+                    }
                 }
 
                 // ==========================================
@@ -780,16 +839,27 @@ fun SettingsScreen(
 
                     SettingsDivider()
 
-                    SettingsActionRow(
+                    var showSnoozeSheet by remember { mutableStateOf(false) }
+                    SettingsChoiceRow(
                         icon = ActionGlyph.Repeat,
-                        title = "Alarm erteleme",
-                        subtitle = t("{0} dakika · değiştirmek için dokun", alarmSnooze),
-                        onClick = {
-                            val choices = com.cagri.real.notifications.RealAlarm.SNOOZE_CHOICES
-                            alarmSnooze = choices[(choices.indexOf(alarmSnooze) + 1) % choices.size]
-                            com.cagri.real.notifications.RealAlarm.setSnoozeMinutes(context, alarmSnooze)
-                        }
+                        title = t("Alarm erteleme"),
+                        value = t("{0} dakika", alarmSnooze),
+                        onClick = { showSnoozeSheet = true }
                     )
+                    if (showSnoozeSheet) {
+                        com.cagri.real.ui.components.ChoiceSheet(
+                            title = t("Alarm erteleme"),
+                            choices = com.cagri.real.notifications.RealAlarm.SNOOZE_CHOICES.map {
+                                com.cagri.real.ui.components.Choice(it, t("{0} dakika", it))
+                            },
+                            selected = alarmSnooze,
+                            onSelect = {
+                                alarmSnooze = it
+                                com.cagri.real.notifications.RealAlarm.setSnoozeMinutes(context, it)
+                            },
+                            onDismiss = { showSnoozeSheet = false }
+                        )
+                    }
 
                     // Optional: full screen also while the phone is in use; re-read when coming back from the system page.
                     var overPhone by remember { mutableStateOf(com.cagri.real.notifications.RealAlarm.canShowOverPhone(context)) }
@@ -826,14 +896,14 @@ fun SettingsScreen(
                         )
                     }
 
+                    // Samsung Now Bar toggle: only on Samsung phones, where Now Bar exists.
+                    if (NowBarReminderController.isSupportedDevice) {
                     SettingsDivider()
-
-                    // Samsung Now Bar toggle
                     var nowBarEnabled by remember { mutableStateOf(NowBarReminderController.isEnabled(context)) }
                     SettingsRow(
                         icon = ActionGlyph.NowBar,
                         title = "Samsung Now Bar",
-                        subtitle = t("Geliştiriliyor. Açıkken kartın üstündeki Yapıştır butonunun yerinde Now Bar butonu olur."),
+                        subtitle = t("Açıkken kartın üstündeki Yapıştır butonunun yerinde Now Bar butonu olur."),
                         badge = t("Geliştiriliyor"),
                         checked = nowBarEnabled,
                         onCheckedChange = {
@@ -841,6 +911,7 @@ fun SettingsScreen(
                             NowBarReminderController.setEnabled(context, it)
                         }
                     )
+                    }
                 }
 
                 // ==========================================
@@ -1113,7 +1184,8 @@ private fun SettingsRow(
                 .padding(end = 12.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SettingsTitle(title)
+                // The title may shrink (ellipsis) but never wraps letter by letter next to the badge.
+                Box(Modifier.weight(1f, fill = false)) { SettingsTitle(title) }
                 if (!badge.isNullOrBlank()) {
                     Spacer(Modifier.width(8.dp))
                     Box(
@@ -1127,7 +1199,9 @@ private fun SettingsRow(
                             text = badge,
                             color = Color(0xFF91B9FF),
                             fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -1147,6 +1221,29 @@ private fun SettingsRow(
                 uncheckedBorderColor = Color.White.copy(alpha = 0.14f)
             )
         )
+    }
+}
+
+/** A setting with a few values: the current one in grey on the right; tapping opens a ChoiceSheet. */
+@Composable
+private fun SettingsChoiceRow(
+    icon: ActionGlyph,
+    title: String,
+    value: String,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SettingsIconTile(icon)
+        Spacer(Modifier.width(14.dp))
+        Box(Modifier.weight(1f)) { SettingsTitle(title) }
+        Text(value, color = Color(0xFF9A9AA4), fontSize = 15.sp, maxLines = 1, modifier = Modifier.padding(start = 8.dp, end = 6.dp))
+        ActionIcon(ActionGlyph.ChevronRight, Modifier.size(16.dp), color = Color(0xFF75757F))
     }
 }
 
@@ -1349,6 +1446,8 @@ private fun PetScenariosDialog(
             RealPetScenarioTestKind.Sleep to "Sleep",
             RealPetScenarioTestKind.Sit to "Sit",
             RealPetScenarioTestKind.Hearts to "Hearts",
+            RealPetScenarioTestKind.AttentionVisit to "Ask for love",
+            RealPetScenarioTestKind.Leave to "Leave",
             RealPetScenarioTestKind.KeywordKedi to "Keyword: Kedi",
             RealPetScenarioTestKind.KeywordMama to "Keyword: Mama / Feed"
         )

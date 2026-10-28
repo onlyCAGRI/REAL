@@ -3,15 +3,11 @@ package com.cagri.real.data
 import kotlin.math.ceil
 
 /** UI-only constraints. Wire placement format and Pano transforms are unchanged. */
-/** [compactKeys]: small widget blocks (counter, market) that can sit two in a row at half width. */
-fun cardDetailMinimumSpan(key: String, widthDp: Float, compactKeys: Set<String> = emptySet()): Int {
-    val minimumDp = when {
-        key in compactKeys -> 150f
-        else -> when (key.substringBefore(':')) {
+fun cardDetailMinimumSpan(key: String, widthDp: Float): Int {
+    val minimumDp = when (key.substringBefore(':')) {
         "text", "checklist", "journal", "voice", "files", "location" -> 224f
         "card_stack" -> 156f
         else -> 88f
-        }
     }
     return ceil((minimumDp + 12f) / ((widthDp + 12f) / CARD_GRID_UNITS).coerceAtLeast(1f))
         .toInt().coerceIn(2, CARD_GRID_UNITS)
@@ -19,11 +15,11 @@ fun cardDetailMinimumSpan(key: String, widthDp: Float, compactKeys: Set<String> 
 
 /** Legacy narrow text fields are presented at the same readable floor as new handle edits. */
 fun cardDetailReadablePlacements(
-    placements: Map<String, CardBlockPlacement>, widthDp: Float, compactKeys: Set<String> = emptySet()
+    placements: Map<String, CardBlockPlacement>, widthDp: Float
 ): Map<String, CardBlockPlacement> =
     placements.mapValues { (key, value) ->
         val p = value.normalized()
-        val span = maxOf(p.span, cardDetailMinimumSpan(key, widthDp, compactKeys))
+        val span = maxOf(p.span, cardDetailMinimumSpan(key, widthDp))
         p.copy(span = span, column = p.column.coerceAtMost(CARD_GRID_UNITS - span))
     }
 

@@ -13,6 +13,12 @@ val testerUpdatesEnabled = providers.gradleProperty("REAL_TESTER_UPDATES_ENABLED
 
 val appCheckEnabled = providers.gradleProperty("REAL_APP_CHECK_ENABLED").orElse("true").get().toBooleanStrict()
 
+// Google Street View on place cards (where Look Around has no imagery): an Android key locked to REAL's package and
+// signature, kept in local.properties (never committed). Without it the card simply offers no Street View.
+val mapsApiKey = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.let { load(FileInputStream(it)) }
+}.getProperty("MAPS_API_KEY", "")
+
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.exists()) {
@@ -28,6 +34,8 @@ android {
     defaultConfig {
         buildConfigField("boolean", "REAL_TESTER_UPDATES_ENABLED", testerUpdatesEnabled.toString())
         buildConfigField("boolean", "REAL_APP_CHECK_ENABLED", appCheckEnabled.toString())
+        buildConfigField("boolean", "STREETVIEW_ENABLED", mapsApiKey.isNotBlank().toString())
+        manifestPlaceholders["mapsApiKey"] = mapsApiKey
         applicationId = "com.cagri.real"
         minSdk = 26
         targetSdk = 36
@@ -132,6 +140,7 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
     // "Konuma varınca hatırlat": battery-friendly geofences, registered only while such a card is waiting.
     implementation("com.google.android.gms:play-services-location:21.4.0")
+    implementation("com.google.android.gms:play-services-maps:19.0.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.13.0")

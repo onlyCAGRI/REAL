@@ -19,6 +19,10 @@ packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
     from: 8.0.0
+  # Real Labs map poster: vector OpenFreeMap tiles in the poster's own colours (MapLibre Native, BSD).
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    from: 6.0.0
 targets:
   Real:
     type: application
@@ -27,6 +31,11 @@ targets:
       - path: Real
       - path: Shared
       - path: ../android/app/src/main/assets/i18n/en.json
+        buildPhase: resources
+      # Sky poster catalogue: Yale Bright Star Catalog stars and d3-celestial figures (shared with Android).
+      - path: ../android/app/src/main/assets/sky/stars.csv
+        buildPhase: resources
+      - path: ../android/app/src/main/assets/sky/lines.csv
         buildPhase: resources
     dependencies:
       - package: Firebase
@@ -39,6 +48,8 @@ targets:
         product: FirebaseMessaging
       - package: GoogleSignIn
         product: GoogleSignIn
+      - package: MapLibre
+        product: MapLibre
       # Share → REAL (App Groups), push, Sign in with Apple, time-sensitive alerts and share links: paid team only.
       - target: RealShare
     settings:

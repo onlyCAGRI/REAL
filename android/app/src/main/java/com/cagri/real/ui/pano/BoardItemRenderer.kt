@@ -163,7 +163,7 @@ private fun BoardLocationBlock(item:PanoItem,controller:PanoController){
         PanoInfoBox{
             Text("⌖ ${place.placeName}",color=Color.White,fontSize=17.sp)
             if(place.address.isNotBlank())Text(place.address,color=PanoMuted,fontSize=12.sp,maxLines=2)}
-        com.cagri.real.ui.components.ReminderLocationMap(place,Modifier.weight(1f).fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),cameraZoom=cameraZoom.toDouble()) { openReminderLocationInMaps(context,place) }
+        com.cagri.real.ui.components.ReminderLocationMap(place,Modifier.weight(1f).fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),cameraZoom=cameraZoom.toDouble(),onOpen={ openReminderLocationInMaps(context,place) })
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             PanoPill("− Map"){cameraZoom=(cameraZoom-1f).coerceAtLeast(1f)}
             PanoPill("+ Map"){cameraZoom=(cameraZoom+1f).coerceAtMost(19f)}

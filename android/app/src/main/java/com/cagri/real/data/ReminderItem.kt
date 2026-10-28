@@ -27,7 +27,9 @@ data class ReminderJournal(
     val mood: JournalMood?,
     val text: String,
     val createdAt: Long,
-    val updatedAt: Long = createdAt
+    val updatedAt: Long = createdAt,
+    /** Same style ranges as card stack bodies; [text] stays plain. */
+    val styles: List<BodySpan> = emptyList()
 )
 
 /**

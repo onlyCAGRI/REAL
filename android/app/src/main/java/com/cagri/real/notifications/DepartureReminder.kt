@@ -129,10 +129,19 @@ object DepartureReminder {
         val out = FloatArray(1)
         Location.distanceBetween(here.latitude, here.longitude, lat, lng, out)
         if (out[0] <= 1500f) return null
+        return routeBetween(here.latitude, here.longitude, lat, lng)
+    }
+
+    /** The phone's position (cached or one fresh fix); null without location permission. */
+    suspend fun currentLocation(context: Context): Location? =
+        if (!locationAllowed(context)) null else lastLocation(context.applicationContext)
+
+    /** A driving route between two explicit points (e.g. the "Varınca" intro map); null offline or signed out. */
+    suspend fun routeBetween(fromLat: Double, fromLng: Double, lat: Double, lng: Double): Route? {
         return kotlinx.coroutines.withContext(Dispatchers.IO) {
             runCatching {
                 val body = JSONObject().put("route", JSONObject()
-                    .put("from", JSONObject().put("lat", here.latitude).put("lng", here.longitude))
+                    .put("from", JSONObject().put("lat", fromLat).put("lng", fromLng))
                     .put("to", JSONObject().put("lat", lat).put("lng", lng)))
                 val response = com.cagri.real.network.WorkerClient(com.cagri.real.platform.android.auth.AndroidBackend.workerTransport)
                     .postJson(ETA_URL, body.toString(), 10_000, 15_000, readErrorBody = false)
@@ -144,7 +153,7 @@ object DepartureReminder {
                     (p.optDouble(0) to p.optDouble(1)).takeIf { !it.first.isNaN() && !it.second.isNaN() }
                 }
                 val seconds = json.optDouble("seconds").takeIf { it.isFinite() && it > 0 }
-                Route(points, seconds?.let { ((it + 30) / 60).toLong().coerceAtLeast(1) }, here.latitude to here.longitude)
+                Route(points, seconds?.let { ((it + 30) / 60).toLong().coerceAtLeast(1) }, fromLat to fromLng)
                     .takeIf { points.size >= 2 }
             }.getOrNull()
         }

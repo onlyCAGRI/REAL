@@ -17,6 +17,19 @@ import kotlinx.coroutines.withContext
 internal data class ExternalCalendarRead(val events: List<CalendarOccurrence> = emptyList(), val error: String? = null)
 
 /**
+ * Son okumalar (aralık başına). Detaydan dönünce liste yeniden kurulur; boş başlayıp ~150 ms + sorgu sonra dolan
+ * takvim kartları alttaki kartları kaydırıyordu. Önbellekle ilk karede aynı içerik gelir, okuma arkada tazeler.
+ */
+private object ExternalCalendarCache {
+    private val reads = object : LinkedHashMap<Pair<Long, Long>, ExternalCalendarRead>(4, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<Long, Long>, ExternalCalendarRead>) = size > 4
+    }
+    @Synchronized fun get(start: Long, end: Long): ExternalCalendarRead? = reads[start to end]
+    @Synchronized fun put(start: Long, end: Long, read: ExternalCalendarRead) { reads[start to end] = read }
+    @Synchronized fun clear() = reads.clear()
+}
+
+/**
  * Okuma yalnız şu durumlarda yapılır (sistem takvimi DİNLENMEZ):
  *  - bu ekran açılınca / uygulama öne gelince (lifecycle RESUMED),
  *  - görünür aralık (start/end) değişince,
@@ -34,7 +47,8 @@ internal fun rememberExternalCalendarEvents(
     val store = remember(context) { CalendarStore(context) }
     val provider = remember(context) { DeviceCalendarProvider(context) }
     var revision by remember { mutableIntStateOf(0) }
-    var result by remember { mutableStateOf(ExternalCalendarRead()) }
+    var result by remember(start, end) { mutableStateOf(ExternalCalendarCache.get(start, end) ?: ExternalCalendarRead()) }
+    fun publish(read: ExternalCalendarRead) { result = read; ExternalCalendarCache.put(start, end, read) }
     // Okuma yalnız HANGİ kartların var olduğuna bakar (kartla temsil edilen etkinlikleri gizlemek için).
     val realIds = remember(reminders) { reminders.mapTo(HashSet<Long>()) { it.id } }
     DisposableEffect(store) {
@@ -59,11 +73,11 @@ internal fun rememberExternalCalendarEvents(
         }
     }
     LaunchedEffect(start, end, revision, lifecycle, realIds, refreshKey) {
-        if (!store.isCurrent()) { result = ExternalCalendarRead(); return@LaunchedEffect }
+        if (!store.isCurrent()) { ExternalCalendarCache.clear(); result = ExternalCalendarRead(); return@LaunchedEffect }
         if (!lifecycle.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
         val options = store.options()
-        if (options.readIds.isEmpty()) { result = ExternalCalendarRead(); return@LaunchedEffect }
-        if (!provider.canRead()) { result = ExternalCalendarRead(error = t("Takvim okuma izni gerekli. Ayarlar → Takvim bağlantısı.")); return@LaunchedEffect }
+        if (options.readIds.isEmpty()) { ExternalCalendarCache.clear(); result = ExternalCalendarRead(); return@LaunchedEffect }
+        if (!provider.canRead()) { publish(ExternalCalendarRead(error = t("Takvim okuma izni gerekli. Ayarlar → Takvim bağlantısı."))); return@LaunchedEffect }
         delay(150)
         try {
             val events = withContext(Dispatchers.IO) {
@@ -73,11 +87,11 @@ internal fun rememberExternalCalendarEvents(
             if (store.isCurrent()) {
                 val unchanged = result.error == null && result.events == events
                 calendarSyncLog("reader: ${events.size} events, " + (if (unchanged) "no-op" else "CHANGED") + " refreshKey=${refreshKey}")
-                if (!unchanged) result = ExternalCalendarRead(events)
+                if (!unchanged) publish(ExternalCalendarRead(events))
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) {
-            result = ExternalCalendarRead(error = t("Cihaz takvimi okunamadı. Ayarlardan yenileyebilirsin."))
+            publish(ExternalCalendarRead(error = t("Cihaz takvimi okunamadı. Ayarlardan yenileyebilirsin.")))
         }
     }
     return result

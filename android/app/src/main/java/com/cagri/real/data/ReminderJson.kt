@@ -77,7 +77,8 @@ object ReminderJson {
                             mood = JournalMood.fromKey(specificMoodKey) ?: JournalMood.fromKey(moodKey),
                             text = jObj.optString("text", ""),
                             createdAt = jObj.getLong("createdAt"),
-                            updatedAt = jObj.optLong("updatedAt", jObj.getLong("createdAt"))
+                            updatedAt = jObj.optLong("updatedAt", jObj.getLong("createdAt")),
+                            styles = BodySpans.decode(jObj.optJSONArray("styles"), jObj.optString("text", "").length)
                         )
                     } else null
                     add(
@@ -150,7 +151,7 @@ object ReminderJson {
                                 val arr = item.getJSONArray("contentBlockOrder")
                                 (0 until arr.length()).map { arr.getString(it) }
                             } else emptyList()
-                        )
+                        ).withTextBoxesAsCardStacks()
                     )
                 }
             }.sortedByDescending { it.createdAt }
@@ -254,6 +255,7 @@ object ReminderJson {
                             .put("text", j.text)
                             .put("createdAt", j.createdAt)
                             .put("updatedAt", j.updatedAt)
+                            .apply { BodySpans.encode(j.styles)?.let { put("styles", it) } }
                     } ?: JSONObject.NULL)
                     .apply {
                         if (reminder.contentBlockLayout.isNotEmpty()) put("contentBlockLayout", encodeCardContentLayout(reminder.contentBlockLayout))

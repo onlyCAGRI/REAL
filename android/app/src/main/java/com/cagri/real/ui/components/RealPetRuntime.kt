@@ -1,5 +1,6 @@
 package com.cagri.real.ui.components
 
+import android.content.SharedPreferences
 import android.os.SystemClock
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -7,10 +8,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import kotlin.math.hypot
 import kotlin.random.Random
+
+/** The pet is being reworked separately: while false it never appears and its settings are hidden. */
+const val REAL_PET_AVAILABLE = false
 
 const val REAL_PET_PERCH_COMPOSER = "real_pet:composer"
 const val REAL_PET_PERCH_COMPOSER_TEXT = "real_pet:composer:text"
@@ -69,7 +75,8 @@ enum class RealPetScenarioTestKind {
     MischiefVisit,
     QuietVisit,
     PoopAndRun,
-    DoubleTapSit
+    DoubleTapSit,
+    Leave
 }
 
 data class RealPetMamaFeedingRequest(
@@ -88,7 +95,6 @@ data class RealPetPrank(
     val type: RealPetPrankType
 )
 
-/** Current visibility/presence lifecycle for the occasional visitor model. */
 enum class RealPetPresence {
     Hidden,
     Arriving,
@@ -106,7 +112,6 @@ enum class RealPetVisitReason {
     TestRequest
 }
 
-/** A reminder was just marked done (or all-clear); the cat celebrates at (or near) its card. */
 data class RealPetCelebration(
     val token: Int,
     val reminderId: Long,
@@ -126,8 +131,90 @@ data class RealPetDetailNavigation(
     val isEntering: Boolean
 )
 
+/**
+ * Runtime perch registry & bridge to [RealPetBrain] (PLAN.md Sections 10 & 11).
+ *
+ * Retains perch coordinates (`perches`, `Modifier.realPetPerch`), binds the
+ * Kapalı / Sakin / Normal / Yaramaz setting (default [RealPetMode.Sakin]),
+ * tracks once-per-foreground-session `AppOpened` dispatch (resets after >30 min in background),
+ * and keeps compatibility stubs for existing UI call sites outside the pet module.
+ */
 object RealPetRuntime {
+    const val SESSION_RESET_BACKGROUND_MS = 30 * 60_000L
+
     val perches = mutableStateMapOf<String, Rect>()
+
+    /** Receives consumed vertical content scroll (px) so the cat keeps its place in the page. */
+    @Volatile
+    var onContentScrolled: ((Float) -> Unit)? = null
+
+    /** Attach above the app content: any scrollable below reports how far the page moved. */
+    val contentScrollConnection = object : NestedScrollConnection {
+        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+            if (consumed.y != 0f) onContentScrolled?.invoke(consumed.y)
+            return Offset.Zero
+        }
+    }
+
+    private var boundPrefs: SharedPreferences? = null
+    private var brainInstance = RealPetBrain(InMemoryRealPetStore())
+    val brain: RealPetBrain get() = brainInstance
+
+    private val modeState = mutableStateOf(RealPetMode.DEFAULT)
+    var mode: RealPetMode
+        get() = if (REAL_PET_AVAILABLE) modeState.value else RealPetMode.Kapali
+        set(value) {
+            modeState.value = value
+            brainInstance.mode = value
+        }
+
+    fun bindPreferences(prefs: SharedPreferences) {
+        if (boundPrefs === prefs) {
+            modeState.value = brainInstance.mode
+            return
+        }
+        boundPrefs = prefs
+        val store = SharedPreferencesRealPetStore(prefs)
+        val savedModeKey = store.getString(RealPetBrain.KEY_MODE, null)
+        if (savedModeKey == null) {
+            store.putString(RealPetBrain.KEY_MODE, RealPetMode.DEFAULT.storageKey)
+        }
+        brainInstance = RealPetBrain(store)
+        modeState.value = brainInstance.mode
+    }
+
+    @Volatile
+    private var appOpenedDispatchedInSession: Boolean = false
+
+    @Volatile
+    private var lastBackgroundedWallClockMs: Long = 0L
+
+    fun onAppForegrounded(nowWallClockMs: Long = System.currentTimeMillis()) {
+        val bgAt = lastBackgroundedWallClockMs
+        if (bgAt > 0L && (nowWallClockMs - bgAt) > SESSION_RESET_BACKGROUND_MS) {
+            appOpenedDispatchedInSession = false
+        }
+        lastBackgroundedWallClockMs = 0L
+    }
+
+    fun onAppBackgrounded(nowWallClockMs: Long = System.currentTimeMillis()) {
+        lastBackgroundedWallClockMs = nowWallClockMs
+    }
+
+    fun hasDispatchedAppOpenInSession(): Boolean = appOpenedDispatchedInSession
+
+    /**
+     * Marks `AppOpened` as dispatched for the current foreground session, persists
+     * `pet_last_open_ms` (wall clock), and returns the real `daysSinceLast` (or `null`
+     * if already dispatched in this session).
+     */
+    fun consumeSessionAppOpen(nowWallClockMs: Long = System.currentTimeMillis()): Int? {
+        synchronized(this) {
+            if (appOpenedDispatchedInSession) return null
+            appOpenedDispatchedInSession = true
+            return brainInstance.recordAppOpenAndComputeDaysSinceLast(nowWallClockMs)
+        }
+    }
 
     private val presenceState = mutableStateOf(RealPetPresence.Hidden)
     val presence: RealPetPresence get() = presenceState.value
@@ -182,23 +269,19 @@ object RealPetRuntime {
     @Volatile
     private var nextCasualVisitAllowedAtElapsedRealtime: Long = 0L
 
-    private fun currentElapsedRealtime(): Long {
-        return try {
-            SystemClock.elapsedRealtime()
-        } catch (_: RuntimeException) {
-            System.currentTimeMillis()
-        }
+    private fun currentElapsedRealtime(): Long = try {
+        SystemClock.elapsedRealtime()
+    } catch (_: RuntimeException) {
+        System.currentTimeMillis()
     }
 
     fun canStartCasualVisit(): Boolean =
-        currentElapsedRealtime() >= nextCasualVisitAllowedAtElapsedRealtime
+        mode.isEnabled && currentElapsedRealtime() >= nextCasualVisitAllowedAtElapsedRealtime
 
     fun casualVisitCooldownRemainingMs(): Long =
         (nextCasualVisitAllowedAtElapsedRealtime - currentElapsedRealtime()).coerceAtLeast(0L)
 
     private fun beginCasualVisitCooldown() {
-        // After the cat leaves, autonomous/casual appearances stay quiet for a while.
-        // Reactive events (completion/new card/etc.) intentionally do not consult this.
         val cooldownMs = Random.nextLong(120_000L, 300_001L)
         nextCasualVisitAllowedAtElapsedRealtime = currentElapsedRealtime() + cooldownMs
     }
@@ -207,6 +290,7 @@ object RealPetRuntime {
         reason: RealPetVisitReason = RealPetVisitReason.CasualVisit,
         durationMs: Long = 45_000L
     ): Boolean {
+        if (!mode.isEnabled) return false
         if ((reason == RealPetVisitReason.CasualVisit || reason == RealPetVisitReason.ComposerPrank) &&
             !canStartCasualVisit()
         ) {
@@ -226,9 +310,7 @@ object RealPetRuntime {
         visitUntilElapsedRealtime = maxOf(visitUntilElapsedRealtime, now + extraMs)
     }
 
-    fun isVisitExpired(): Boolean {
-        return currentElapsedRealtime() >= visitUntilElapsedRealtime
-    }
+    fun isVisitExpired(): Boolean = currentElapsedRealtime() >= visitUntilElapsedRealtime
 
     fun markArrived() {
         presenceState.value = RealPetPresence.Active
@@ -283,11 +365,9 @@ object RealPetRuntime {
     private val detailNavigationState = mutableStateOf<RealPetDetailNavigation?>(null)
     val detailNavigation: RealPetDetailNavigation? get() = detailNavigationState.value
 
-    // One global anti-spam gap plus per-event cooldowns keeps the cat playful rather than noisy.
     private var lastEventElapsedRealtime = 0L
     private var lastEventType: String? = null
     private val cooldowns = mutableMapOf<String, Long>()
-
 
     @Volatile
     private var composerTypingUntilElapsedRealtime: Long = 0L
@@ -337,7 +417,6 @@ object RealPetRuntime {
         if (commandState.value?.token == token) commandState.value = null
     }
 
-    /** Marks genuine keyboard activity so the pet can time typing-related mischief. */
     fun noteComposerTyping() {
         val now = currentElapsedRealtime()
         val startingNewSession = composerTypingUntilElapsedRealtime <= now
@@ -367,6 +446,21 @@ object RealPetRuntime {
         requestVisit(RealPetVisitReason.TestRequest, 60_000L)
         nextScenarioTestToken += 1
         scenarioTestRequestState.value = RealPetScenarioTestRequest(nextScenarioTestToken, kind)
+    }
+
+    /** PC testing: `adb shell am start -n com.cagri.real/.MainActivity -f 0x20000000 --es real_pet_test walk` */
+    fun requestScenarioTestByName(name: String) {
+        val kind = when (name.trim().lowercase()) {
+            "walk" -> RealPetScenarioTestKind.Walk
+            "run" -> RealPetScenarioTestKind.Run
+            "sleep" -> RealPetScenarioTestKind.Sleep
+            "sit", "nap" -> RealPetScenarioTestKind.Sit
+            "hearts" -> RealPetScenarioTestKind.Hearts
+            "love" -> RealPetScenarioTestKind.AttentionVisit
+            "leave" -> RealPetScenarioTestKind.Leave
+            else -> return
+        }
+        requestScenarioTest(kind)
     }
 
     fun consumeScenarioTest(token: Int) {
@@ -407,7 +501,6 @@ object RealPetRuntime {
 
     fun isComposerMicActive(): Boolean = composerMicActiveState.value
 
-    /** A reminder was just checked off; request a short celebration at its card if visible. */
     fun requestCelebration(reminderId: Long, minCooldownMs: Long = 15_000L): Boolean {
         if (!canTriggerEvent("celebration", minCooldownMs)) return false
         recordEventTriggered("celebration")
@@ -417,7 +510,6 @@ object RealPetRuntime {
         return true
     }
 
-    /** All reminders are completed (Inbox Zero); celebratory center visit. */
     fun requestAllClearCelebration(minCooldownMs: Long = 20_000L): Boolean {
         if (!canTriggerEvent("all_clear", minCooldownMs)) return false
         recordEventTriggered("all_clear")
@@ -431,7 +523,6 @@ object RealPetRuntime {
         if (celebrationState.value?.token == token) celebrationState.value = null
     }
 
-    /** A new reminder card was just added by the user; cat can greet it. */
     fun noteNewCardAdded(reminderId: Long, minCooldownMs: Long = 25_000L): Boolean {
         if (!canTriggerEvent("new_card", minCooldownMs)) return false
         recordEventTriggered("new_card")
@@ -462,7 +553,6 @@ object RealPetRuntime {
         }
     }
 
-    /** Genuine interaction with the cat only extends the current visit; there is no touch-hunger timer. */
     fun noteUserTouch() {
         extendVisit(12_000L)
     }
@@ -491,6 +581,12 @@ object RealPetRuntime {
     }
 
     fun resetForTesting() {
+        boundPrefs = null
+        brainInstance = RealPetBrain(InMemoryRealPetStore())
+        modeState.value = RealPetMode.DEFAULT
+        appOpenedDispatchedInSession = false
+        lastBackgroundedWallClockMs = 0L
+        presenceState.value = RealPetPresence.Hidden
         lastEventElapsedRealtime = 0L
         lastEventType = null
         cooldowns.clear()
@@ -504,6 +600,7 @@ object RealPetRuntime {
         prankState.value = null
         placeholderOverrideState.value = null
         composerMicActiveState.value = false
+        composerTypingUntilElapsedRealtime = 0L
         perches.clear()
         tokenStates.clear()
         nextCasualVisitAllowedAtElapsedRealtime = 0L

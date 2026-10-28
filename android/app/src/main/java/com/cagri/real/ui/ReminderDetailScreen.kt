@@ -24,8 +24,6 @@ import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.layout.layout
 import androidx.compose.runtime.SideEffect
-import com.cagri.real.data.isCounterBlock
-import com.cagri.real.data.isMarketBlock
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -70,6 +68,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -304,7 +306,6 @@ internal fun ReminderDetailScreen(
     var showTitleTools by remember(reminder.id, editing) { mutableStateOf(false) }
     var textToolsKey by remember(reminder.id, editing) { mutableStateOf("text") }
     /** Attachment id of the counter / market block whose settings dialog is open. */
-    var widgetSettingsId by remember(reminder.id, editing) { mutableStateOf<String?>(null) }
     var selectedLayoutBlock by remember(reminder.id) { mutableStateOf<String?>(null) }
     var configuringLayoutBlock by remember(reminder.id) { mutableStateOf<String?>(null) }
     var isReorderingBlocks by rememberSaveable(reminder.id) { mutableStateOf(false) }
@@ -315,6 +316,7 @@ internal fun ReminderDetailScreen(
     var deleting by remember { mutableStateOf(false) }
     val detailContentScroll = rememberScrollState()
     val cardBlockDrag = remember(reminder.id) { CardBlockDragState() }
+    val latestReminderForWidgets by rememberUpdatedState(reminder)
     var checklistBlockOpen by remember(reminder.id, editing) { mutableStateOf(reminder.checklistItems.isNotEmpty()) }
     val firstItemFocusRequester = remember { FocusRequester() }
     var shouldFocusFirstItem by remember { mutableStateOf(false) }
@@ -361,6 +363,10 @@ internal fun ReminderDetailScreen(
     var inlineCardStackKey by rememberSaveable(reminder.id) { mutableStateOf("card_stack") }
     val cardStackBringIntoViewRequester = remember { BringIntoViewRequester() }
     val coroutineScope = rememberCoroutineScope()
+    // Kaydet's one-shot mic sweep through the bottom dock (0..1) and when it started, so the normal dock's buttons
+    // can appear as the band passes over them.
+    val saveSweep = remember(reminder.id) { Animatable(0f) }
+    var saveSweepStartedAt by remember(reminder.id) { mutableLongStateOf(0L) }
     var musicSearchOpen by remember(reminder.id) { mutableStateOf(false) }
     var mediaSearchOpen by remember(reminder.id) { mutableStateOf(false) }
     var gameSearchOpen by remember(reminder.id) { mutableStateOf(false) }
@@ -369,31 +375,6 @@ internal fun ReminderDetailScreen(
     var editedReferenceUrl by remember(reminder.id, editing) { mutableStateOf(reminder.referenceUrl) }
     var attachmentBusy by remember { mutableStateOf(false) }
     var savingDetail by remember { mutableStateOf(false) }
-    val latestReminderForWidgets by rememberUpdatedState(reminder)
-    /**
-     * Counter / market blocks change outside edit mode too (tapping +1). Such a change waits for any
-     * running save, then stores the card with just that attachment replaced, so no tap is lost.
-     */
-    fun commitWidgetAttachment(updated: ReminderAttachment) {
-        if (editing) {
-            editedAttachments = editedAttachments.map { if (it.id == updated.id) updated else it }
-            return
-        }
-        coroutineScope.launch {
-            androidx.compose.runtime.snapshotFlow { savingDetail }.first { !it }
-            val r = latestReminderForWidgets
-            if (r.attachments.none { it.id == updated.id }) return@launch
-            savingDetail = true
-            try {
-                onSave(r.text, r.accentStart, r.accentEnd, r.customCategoryId, r.checklistItems, r.starBorderColorIndex,
-                    r.gradientBlendFraction, r.customSolidColorArgb, r.attachments.map { if (it.id == updated.id) updated else it },
-                    r.voiceRecordings, r.location, r.referenceUrl, r.musicBlocks, r.mediaBlocks, r.cardStack,
-                    r.contentBlockOrder, r.contentBlockLayout, r.useDarkText)
-            } finally {
-                savingDetail = false
-            }
-        }
-    }
     var attachmentError by remember { mutableStateOf<String?>(null) }
     var editGeneration by remember { mutableStateOf(0) }
     var screenAlive by remember(reminder.id) { mutableStateOf(true) }
@@ -493,7 +474,7 @@ internal fun ReminderDetailScreen(
     var showLocationGuide by rememberSaveable(reminder.id) { mutableStateOf(false) }
     var locationJustShared by remember(reminder.id) { mutableStateOf(false) }
     LaunchedEffect(reminder.id, reminder.location?.mapsUrl, reminder.location?.latitude) {
-        if (reminder.location?.mapsUrl != null && reminder.location?.latitude == null) onResolveLocationPreview()
+        if (reminder.location?.mapsUrl != null && reminder.location.latitude == null) onResolveLocationPreview()
     }
     LaunchedEffect(incomingLocation) {
         if (incomingLocation != null) {
@@ -776,7 +757,7 @@ internal fun ReminderDetailScreen(
         selectedCategoryId = reminder.customCategoryId
         editedChecklistItems = reminder.checklistItems
         editedContentBlockOrder = reminder.contentBlockOrder
-        editedContentBlockLayout = cardDetailReadablePlacements(reminder.contentBlockLayout, detailWidthDp, widgetBlockKeys(reminder.attachments))
+        editedContentBlockLayout = cardDetailReadablePlacements(reminder.contentBlockLayout, detailWidthDp)
         selectedLayoutBlock = null
         configuringLayoutBlock = null
         isReorderingBlocks = false
@@ -796,7 +777,7 @@ internal fun ReminderDetailScreen(
         selectedCategoryId = reminder.customCategoryId
         editedChecklistItems = reminder.checklistItems
         editedContentBlockOrder = reminder.contentBlockOrder
-        editedContentBlockLayout = cardDetailReadablePlacements(reminder.contentBlockLayout, detailWidthDp, widgetBlockKeys(reminder.attachments))
+        editedContentBlockLayout = cardDetailReadablePlacements(reminder.contentBlockLayout, detailWidthDp)
         selectedLayoutBlock = null
         configuringLayoutBlock = null
         isReorderingBlocks = false
@@ -1672,11 +1653,10 @@ internal fun ReminderDetailScreen(
                 } else Modifier
 
                 val visibleBlocks = if (heroKey != null) currentOrder.drop(1) else currentOrder
-                val widgetKeys = widgetBlockKeys(if (editing) editedAttachments else reminder.attachments)
                 val baseDisplayedLayout = cardDetailReadablePlacements(cardLayoutForKeys(
                     if (editing || inlineCardStackEditing) editedContentBlockLayout else reminder.contentBlockLayout,
                     activeBlockKeys
-                ), detailWidthDp, widgetKeys)
+                ), detailWidthDp)
                 val displayedLayout = if (heroKey == null) baseDisplayedLayout else {
                     // Blocks placed freely below the hero kept tops that counted the hero's slot in the grid.
                     // With the hero drawn above the grid, lift them by that slot so no empty band opens up.
@@ -1936,11 +1916,11 @@ internal fun ReminderDetailScreen(
                                             lineHeight = 26.sp, fontWeight = FontWeight.SemiBold,
                                             maxLines = 2, overflow = TextOverflow.Ellipsis)
                                         if (!details?.descriptors.isNullOrEmpty()) Text(
-                                            details!!.descriptors.take(3).joinToString(" · ") { moodDescriptorLabelV2(it) },
+                                            details.descriptors.take(3).joinToString(" · ") { moodDescriptorLabelV2(it) },
                                             color = Color(0xFFC9C9D0), fontSize = 13.sp, lineHeight = 18.sp,
                                             maxLines = 2, overflow = TextOverflow.Ellipsis)
                                         if (!details?.factors.isNullOrEmpty()) Text(
-                                            details!!.factors.take(4).joinToString(" · ") { moodFactorLabelV2(it) },
+                                            details.factors.take(4).joinToString(" · ") { moodFactorLabelV2(it) },
                                             color = Color(0xFF8E8E98), fontSize = 11.sp, lineHeight = 16.sp,
                                             maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     }
@@ -2011,58 +1991,7 @@ internal fun ReminderDetailScreen(
                         }
                         "files" -> {
                             val displayedAttachments = if (editing) editedAttachments else reminder.attachments
-                            val inlineText = displayedAttachments.firstOrNull {
-                                it.id == blockKey.substringAfter(':') && it.type == AttachmentType.TEXT_SNIPPET &&
-                                    it.sourceTitle == "REAL_TEXT_BLOCK"
-                            }
-                            val widget = displayedAttachments.firstOrNull {
-                                it.id == blockKey.substringAfter(':') && (it.isCounterBlock() || it.isMarketBlock())
-                            }
-                            if (widget != null && widget.isCounterBlock()) {
-                                com.cagri.real.ui.components.CounterBlockView(
-                                    attachment = widget,
-                                    editing = editing && !savingDetail,
-                                    enabled = !reminder.isCompleted || editing,
-                                    reduceAnimations = reduceAnimations,
-                                    showSettings = editing && selectedLayoutBlock == blockKey,
-                                    onSettings = { widgetSettingsId = widget.id },
-                                    onChange = ::commitWidgetAttachment,
-                                    onRemove = {
-                                        editedAttachments = editedAttachments.filterNot { it.id == widget.id }
-                                        selectedLayoutBlock = null
-                                    }
-                                )
-                            } else if (widget != null) {
-                                com.cagri.real.ui.components.MarketBlockView(
-                                    attachment = widget,
-                                    editing = editing && !savingDetail,
-                                    reduceAnimations = reduceAnimations,
-                                    showSettings = editing && selectedLayoutBlock == blockKey,
-                                    onSettings = { widgetSettingsId = widget.id },
-                                    onRemove = {
-                                        editedAttachments = editedAttachments.filterNot { it.id == widget.id }
-                                        selectedLayoutBlock = null
-                                    }
-                                )
-                            } else if (inlineText != null) {
-                                com.cagri.real.ui.components.CardStandaloneTextBox(
-                                    text = inlineText.text.orEmpty(),
-                                    editing = editing && !savingDetail,
-                                    placement = displayedLayout[blockKey] ?: CardBlockPlacement(),
-                                    darkText = if (editing) useDarkText else reminder.useDarkText,
-                                    designStyle = designStyle,
-                                    accentBrush = accentBrush,
-                                    showSettings = editing && selectedLayoutBlock == blockKey,
-                                    onSettings = { textToolsKey = blockKey; showTitleTools = true },
-                                    onTextChange = { value -> editedAttachments = editedAttachments.map {
-                                        if (it.id == inlineText.id) it.copy(text = value) else it
-                                    } },
-                                    onRemove = {
-                                        editedAttachments = editedAttachments.filterNot { it.id == inlineText.id }
-                                        selectedLayoutBlock = null
-                                    }
-                                )
-                            } else ReminderContentSections(
+                            ReminderContentSections(
                                 attachments = displayedAttachments.filter { it.id == blockKey.substringAfter(':') },
                                 referenceUrl = if (blockKey == "files:reference") (if (editing) editedReferenceUrl else reminder.referenceUrl) else null,
                                 editing = editing && !savingDetail, designStyle = designStyle,
@@ -2253,11 +2182,15 @@ internal fun ReminderDetailScreen(
                                         route = if (!editing && !reminder.isCompleted && left in 0L..60 * 60_000L)
                                             com.cagri.real.notifications.DepartureReminder.route(context, place.latitude, place.longitude) else null
                                     }
-                                    Column(Modifier.fillMaxWidth()) {
+                                    // One Apple Maps style card: map on top, place row, then the place chips.
+                                    Column(
+                                        Modifier.fillMaxWidth().cardBlockSurface()
+                                            .clip(locCardShape)
+                                            .background(if (designStyle == DesignStyle.LiquidGlass) LiquidGlassTokens.contentColor else Color(0xFF141416))
+                                    ) {
                                     Box(
                                         Modifier.fillMaxWidth().height((displayedLayout[blockKey]?.minHeight?.takeIf { it > 0 } ?: 180).coerceAtLeast(if (route != null) 280 else 120).dp)
-                                            .clip(locCardShape)
-                                            .background(if (designStyle == DesignStyle.LiquidGlass) LiquidGlassTokens.contentColor else Color(0xFF131820))
+                                            .background(com.cagri.real.ui.components.MapAppearance.placeholder(context))
                                     ) {
                                         // Zoom chosen while editing is stored on the location; pinch previews it live.
                                         val baseZoom = place.mapZoom ?: if (place.approximateCoordinates) 15.10 else 15.35
@@ -2290,12 +2223,15 @@ internal fun ReminderDetailScreen(
                                             }),
                                             cameraZoom = place.mapZoom,
                                             onOpen = {
-                                                if (!openReminderLocationInMaps(context, place))
+                                                // While editing, the map is the place's edit target (as the bar's Konum button), not a link out.
+                                                if (editing) showLocationGuide = true
+                                                else if (!openReminderLocationInMaps(context, place))
                                                     com.cagri.real.ui.components.RealToast.show(context, t("Harita uygulaması açılamadı"))
                                             },
                                             previewScale = { pinchScale },
                                             onSnapshotShown = { if (awaitingSnapshot) { awaitingSnapshot = false; pinchScale = 1f } },
-                                            route = route
+                                            route = route,
+                                            animateRoute = !reduceAnimations
                                         )
                                         route?.minutes?.let { minutes ->
                                             Text(
@@ -2339,23 +2275,42 @@ internal fun ReminderDetailScreen(
                                                 }
                                             }
                                         }
+                                    }
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        ActionIcon(ActionGlyph.Pin, Modifier.size(16.dp), Color(0xFF8ED7C4))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                place.placeName.ifBlank { com.cagri.real.ui.components.reminderLocationLabel(place) ?: t("Konum") },
+                                                color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                                            )
+                                            if (place.address.isNotBlank()) {
+                                                Text(place.address, color = Color(0xFFA5A5B0), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                        }
                                         if (editing) {
                                             IconButton(
                                                 onClick = { editedLocation = null; locationJustShared = false },
-                                                modifier = Modifier
-                                                    .align(Alignment.TopEnd)
-                                                    .padding(6.dp)
-                                                    .size(28.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(0xD918181B))
-                                                    .border(0.5.dp, Color(0x4DFFFFFF), CircleShape)
+                                                modifier = Modifier.size(28.dp)
                                             ) {
-                                                ActionIcon(ActionGlyph.Close, Modifier.size(13.dp), Color(0xFFF1F1F4))
+                                                ActionIcon(ActionGlyph.Close, Modifier.size(15.dp), Color(0xFF8E8E98))
                                             }
+                                        } else {
+                                            Text(
+                                                t("Haritada aç"), color = Color(0xFF4DA3FF), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false,
+                                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                                                    if (!openReminderLocationInMaps(context, place))
+                                                        com.cagri.real.ui.components.RealToast.show(context, t("Harita uygulaması açılamadı"))
+                                                }.padding(horizontal = 4.dp, vertical = 2.dp)
+                                            )
                                         }
                                     }
                                     // Look Around, Ara, Web sitesi (Apple Maps), as on iOS.
-                                    if (!editing) com.cagri.real.ui.components.PlaceDetails(place, Modifier.padding(top = 10.dp))
+                                    if (!editing) com.cagri.real.ui.components.PlaceDetails(place, Modifier.padding(horizontal = 14.dp).padding(bottom = 14.dp))
                                     }
                                 } else {
                                     Box(
@@ -2373,7 +2328,8 @@ internal fun ReminderDetailScreen(
                                                 modifier = Modifier
                                                     .weight(1f)
                                                     .clickable {
-                                                        if (!openReminderLocationInMaps(context, place)) {
+                                                        if (editing) showLocationGuide = true
+                                                        else if (!openReminderLocationInMaps(context, place)) {
                                                             com.cagri.real.ui.components.RealToast.show(context, t("Harita uygulaması açılamadı"))
                                                         }
                                                     },
@@ -2504,7 +2460,8 @@ internal fun ReminderDetailScreen(
                                             if (reminder.journal?.text?.isNotBlank() == true) {
                                                 Spacer(Modifier.height(12.dp))
                                                 Text(
-                                                    text = reminder.journal.text,
+                                                    text = com.cagri.real.ui.components.CardBodyLayout(reminder.journal.text,
+                                                        reminder.journal.styles, com.cagri.real.data.BodyFormat(), onDark = true).annotated,
                                                     color = Color(0xFFF4F4F6),
                                                     fontSize = 16.sp,
                                                     lineHeight = 22.sp
@@ -2557,7 +2514,6 @@ internal fun ReminderDetailScreen(
                         if (coords != null) contentBlockCoordinates[key] = coords
                         else contentBlockCoordinates.remove(key)
                     },
-                    compactKeys = widgetKeys,
                     content = { key, index ->
                         if (key == sharedTopKey && key != "text") {
                             Box(sharedCardModifier, propagateMinConstraints = true) { detailBlockContent(key, index) }
@@ -2650,12 +2606,21 @@ internal fun ReminderDetailScreen(
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { deleting = false }
                 .semantics { contentDescription = t("Silme sorusunu kapat") })
         }
+        // Moving a block: the docks slide out of the way and come back when the finger lifts.
+        val dockAway by animateFloatAsState(
+            targetValue = if (cardBlockDrag.active) 1f else 0f,
+            animationSpec = if (reduceAnimations) snap() else tween(if (cardBlockDrag.active) 200 else 260, easing = RealMotion.Emphasized),
+            label = "detailDockAway"
+        )
         DetailLayoutColumn(
             Modifier
                 .align(Alignment.BottomCenter)
                 .onGloballyPositioned { bottomPanelCoordinates = it }
                 .fillMaxWidth()
-                .graphicsLayer { alpha = chromeAlpha }
+                .graphicsLayer {
+                    alpha = chromeAlpha * (1f - dockAway)
+                    translationY = dockAway * (size.height + 24.dp.toPx())
+                }
                 .padding(horizontal = 24.dp, vertical = 18.dp)
         ) {
             if (editing) {
@@ -2949,24 +2914,6 @@ internal fun ReminderDetailScreen(
                                     }
                                 )
                                 DetailQuickActionButton(
-                                    designStyle = designStyle, reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.Note, description = t("Metin kutusu ekle"),
-                                    enabled = !savingDetail && !voiceRecordingActive,
-                                    active = editedAttachments.any { it.sourceTitle == "REAL_TEXT_BLOCK" },
-                                    onClick = {
-                                        focusManager.clearFocus()
-                                        val id = java.util.UUID.randomUUID().toString()
-                                        editedAttachments = editedAttachments + com.cagri.real.data.ReminderAttachment(
-                                            id = id, type = AttachmentType.TEXT_SNIPPET, mimeType = "text/plain",
-                                            displayName = t("Metin"), text = "", sourceTitle = t("REAL_TEXT_BLOCK")
-                                        )
-                                        val key = "files:$id"
-                                        editedContentBlockOrder = (editedContentBlockOrder + key).distinct()
-                                        editedContentBlockLayout = editedContentBlockLayout + (key to CardBlockPlacement())
-                                        selectedLayoutBlock = key
-                                    }
-                                )
-                                DetailQuickActionButton(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Pin,
@@ -3046,25 +2993,75 @@ internal fun ReminderDetailScreen(
                                         showMoodFullscreen = true
                                     }
                                 )
-                                // Counter (value box + step buttons) and market tile (Bitcoin, gram altın, Euro, Dolar).
-                                listOf(
-                                    Triple(ActionGlyph.Add, t("Sayaç ekle")) { com.cagri.real.data.newCounterAttachment() },
-                                    Triple(ActionGlyph.AudioWave, t("Piyasa ekle")) { com.cagri.real.data.newMarketAttachment() }
-                                ).forEach { (glyph, label, create) ->
-                                    DetailQuickActionButton(
-                                        designStyle = designStyle, reduceAnimations = reduceAnimations,
-                                        glyph = glyph, description = label,
-                                        enabled = !savingDetail && !voiceRecordingActive,
-                                        active = editedAttachments.any { if (glyph == ActionGlyph.Add) it.isCounterBlock() else it.isMarketBlock() },
-                                        onClick = {
-                                            focusManager.clearFocus()
-                                            val block = create()
-                                            editedAttachments = editedAttachments + block
-                                            val key = "files:${block.id}"
-                                            editedContentBlockOrder = (editedContentBlockOrder + key).distinct()
-                                            editedContentBlockLayout = editedContentBlockLayout + (key to CardBlockPlacement())
-                                            selectedLayoutBlock = key
+                                // Real Labs: beta tools, after a thin rule at the very end of the bar.
+                                var mapPosterOpen by remember { mutableStateOf(false) }
+                                Box(Modifier.padding(horizontal = 6.dp).size(width = 1.dp, height = 22.dp).background(Color.White.copy(alpha = 0.16f)))
+                                Text(
+                                    "Real Labs", color = Color.White.copy(alpha = 0.45f), fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium, maxLines = 1, modifier = Modifier.padding(end = 2.dp)
+                                )
+                                DetailQuickActionButton(
+                                    designStyle = designStyle,
+                                    reduceAnimations = reduceAnimations,
+                                    glyph = ActionGlyph.Poster,
+                                    description = t("Harita posteri"),
+                                    enabled = !savingDetail && !attachmentBusy,
+                                    active = false,
+                                    onClick = {
+                                        if (editedLocation?.latitude == null) {
+                                            com.cagri.real.ui.components.RealToast.show(context, t("Poster için önce bir konum seç"))
+                                            showLocationGuide = true
+                                        } else {
+                                            focusManager.clearFocus(); keyboard?.hide(); mapPosterOpen = true
                                         }
+                                    }
+                                )
+                                var skyPosterOpen by remember { mutableStateOf(false) }
+                                DetailQuickActionButton(
+                                    designStyle = designStyle,
+                                    reduceAnimations = reduceAnimations,
+                                    glyph = ActionGlyph.Sky,
+                                    description = t("Gökyüzü posteri"),
+                                    enabled = !savingDetail && !attachmentBusy,
+                                    active = false,
+                                    onClick = {
+                                        if (editedLocation?.latitude == null) {
+                                            com.cagri.real.ui.components.RealToast.show(context, t("Poster için önce bir konum seç"))
+                                            showLocationGuide = true
+                                        } else {
+                                            focusManager.clearFocus(); keyboard?.hide(); skyPosterOpen = true
+                                        }
+                                    }
+                                )
+                                editedLocation?.takeIf { skyPosterOpen }?.let { place ->
+                                    // The card's moment: its alert, else its planned day at 21:00, else when it was made.
+                                    val moment = reminder.alertAt
+                                        ?: reminder.plannedDateEpochDay?.let {
+                                            java.time.LocalDate.ofEpochDay(it).atTime(21, 0)
+                                                .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                        }
+                                        ?: reminder.createdAt
+                                    com.cagri.real.ui.poster.SkyPosterDialog(
+                                        place, moment,
+                                        onAttach = { file ->
+                                            if (photoCount >= 3) {
+                                                file.delete()
+                                                com.cagri.real.ui.components.RealToast.show(context, t("En fazla 3 fotoğraf eklenebilir"))
+                                            } else importPicked(emptyList(), 0, photosOnly = true, cameraFile = file)
+                                        },
+                                        onClose = { skyPosterOpen = false }
+                                    )
+                                }
+                                editedLocation?.takeIf { mapPosterOpen }?.let { place ->
+                                    com.cagri.real.ui.poster.MapPosterDialog(
+                                        place,
+                                        onAttach = { file ->
+                                            if (photoCount >= 3) {
+                                                file.delete()
+                                                com.cagri.real.ui.components.RealToast.show(context, t("En fazla 3 fotoğraf eklenebilir"))
+                                            } else importPicked(emptyList(), 0, photosOnly = true, cameraFile = file)
+                                        },
+                                        onClose = { mapPosterOpen = false }
                                     )
                                 }
                             }
@@ -3339,47 +3336,76 @@ internal fun ReminderDetailScreen(
                 liquidDynamic = true,
                 liquidDock = true
             ) {
+                val dockMode = when {
+                    inlineCardStackEditing && !editing -> DetailDockMode.InlineStack
+                    editing -> DetailDockMode.Edit
+                    else -> DetailDockMode.Normal
+                }
+                DetailDockDrops(dockMode, saveSweepStartedAt, reduceAnimations, Modifier.matchParentSize())
+                Box(Modifier.matchParentSize().detailDockSweep { saveSweep.value })
+                AnimatedContent(
+                    targetState = dockMode,
+                    transitionSpec = { EnterTransition.None togetherWith ExitTransition.None using SizeTransform(clip = false) },
+                    label = "detailDockMode"
+                ) { mode ->
+                // Fixed for this set's lifetime: staggered by the Kaydet sweep when it is still crossing the glass.
+                val enterDelays = remember {
+                    val elapsed = android.os.SystemClock.uptimeMillis() - saveSweepStartedAt
+                    detailDockEnterDelays(mode.slots, elapsed.takeIf { mode == DetailDockMode.Normal })
+                }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 0.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (inlineCardStackEditing && !editing) {
+                    val item: @Composable (Int) -> Modifier = { index -> Modifier.weight(1f).then(detailDockItemMotion(enterDelays[index], reduceAnimations)) }
+                    if (mode == DetailDockMode.InlineStack) {
                         DetailAction(
                             t("Bitti"),
                             ActionGlyph.Check,
-                            Modifier.weight(1f),
+                            item(0),
                             enabled = !savingDetail,
                             color = Color(0xFF91B9FF),
                             reduceAnimations = reduceAnimations,
                             onClick = saveDraftAndClose
                         )
-                    } else if (editing) {
-                        DetailAction(t("Vazgeç"), ActionGlyph.Close, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = finishEditing)
+                    } else if (mode == DetailDockMode.Edit) {
+                        DetailAction(t("Vazgeç"), ActionGlyph.Close, item(0), reduceAnimations = reduceAnimations, onClick = finishEditing)
                         DetailAction(
                             t("Kaydet"),
                             ActionGlyph.Check,
-                            Modifier.weight(1f),
+                            item(1),
                             enabled = !attachmentBusy && !savingDetail && !voiceRecordingActive &&
                                 (editedText.isNotBlank() || editedVoiceRecordings.isNotEmpty()) &&
                                 (!journalEditing || editedJournalMood != null || editedJournalText.trim().isNotBlank()),
                             color = Color(0xFF91B9FF),
                             reduceAnimations = reduceAnimations,
-                            onClick = saveDraftAndClose
+                            onClick = {
+                                // Only the Kaydet tap sends the mic sweep; the background-tap autosave closes quietly.
+                                if (!reduceAnimations) {
+                                    saveSweepStartedAt = android.os.SystemClock.uptimeMillis()
+                                    coroutineScope.launch {
+                                        saveSweep.snapTo(0f)
+                                        saveSweep.animateTo(1f, tween(DETAIL_DOCK_MILLIS, easing = LinearEasing))
+                                        saveSweep.snapTo(0f)
+                                    }
+                                }
+                                saveDraftAndClose()
+                            }
                         )
                     } else {
                         DetailAction(if (reminder.isCompleted) t("Geri al") else t("Tamamla"),
                             if (reminder.isCompleted) ActionGlyph.Undo else ActionGlyph.Check,
-                            Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
+                            item(0), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
                                 if (!reminder.isCompleted) {
                                     RealHaptics.success(view)
                                 }
                                 onToggleCompleted()
                             })
-                        DetailAction(t("Düzenle"), ActionGlyph.Edit, Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
+                        DetailAction(t("Düzenle"), ActionGlyph.Edit, item(1), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
                             focusManager.clearFocus()
                             keyboard?.hide()
                             loadReminderIntoDraft()
                             inlineCardStackEditing = false
                             editing = true
                         })
-                        DetailAction("Share", ActionGlyph.Share, Modifier.weight(1f), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
+                        DetailAction("Share", ActionGlyph.Share, item(2), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
                             val stackCards = reminder.cardStack?.cards.orEmpty()
                             if (stackCards.size == 1) {
                                 // Only one card: nothing to choose. Same ids the dialog would have passed on.
@@ -3392,18 +3418,11 @@ internal fun ReminderDetailScreen(
                                 showRealShareDialog = true
                             }
                         })
-                        DetailAction(t("Sil"), ActionGlyph.Delete, Modifier.weight(1f), reduceAnimations = reduceAnimations, onClick = { deleting = !deleting })
+                        DetailAction(t("Sil"), ActionGlyph.Delete, item(3), reduceAnimations = reduceAnimations, onClick = { deleting = !deleting })
                     }
                 }
+                }
             }
-        }
-        val settingsWidget = widgetSettingsId?.let { id -> editedAttachments.firstOrNull { it.id == id } }
-        if (editing && settingsWidget != null) {
-            com.cagri.real.ui.components.WidgetSettingsDialog(
-                attachment = settingsWidget,
-                onChange = ::commitWidgetAttachment,
-                onDismiss = { widgetSettingsId = null }
-            )
         }
         if (editing && showTitleTools) {
             com.cagri.real.ui.components.CardTitleTools(
@@ -3488,7 +3507,16 @@ internal fun ReminderDetailScreen(
                 showCamera = false
             }
         )
+        val setLocationTrigger = com.cagri.real.ui.components.LocalSetReminderLocationTrigger.current
         com.cagri.real.ui.components.LocationPickerSheet(
+            initialTrigger = reminder.locationTrigger,
+            onRemind = { place, trigger ->
+                showLocationGuide = false
+                editing = true
+                editedLocation = place
+                locationJustShared = true
+                setLocationTrigger(reminder.id, trigger)
+            },
             visible = showLocationGuide,
             initial = editedLocation,
             onSave = { place ->
@@ -3760,7 +3788,3 @@ internal const val DETAIL_HERO_MIN_HEIGHT_DP = 360
 
 /** Extra height the cover block reaches up under the status bar; 0 for every other block. */
 internal val LocalDetailHeroInset = androidx.compose.runtime.compositionLocalOf { 0.dp }
-
-/** Grid keys of counter / market blocks: they may shrink to half width, unlike other attachments. */
-private fun widgetBlockKeys(attachments: List<ReminderAttachment>): Set<String> =
-    attachments.filter { it.isCounterBlock() || it.isMarketBlock() }.mapTo(HashSet()) { "files:${it.id}" }
