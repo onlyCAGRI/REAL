@@ -800,7 +800,7 @@ struct MediaDiscoveryDetail: View {
             let finalHeight = min(heroWidth * 0.88, 300)
             let initialHeight = min(heroWidth / posterAspect, max(1, geo.size.height - 88))
             ZStack(alignment: .top) {
-                Color.black.opacity(0.94 * (1 - pullProgress * 0.45)).ignoresSafeArea()
+                Color.black.opacity(0.94 * (1 - Double(pullProgress) * 0.45)).ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         Color.clear.frame(height: 60)
