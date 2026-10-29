@@ -258,7 +258,7 @@ struct DiscoveryScreen: View {
             let block = CardGameBlock(providerId: id, title: m.title, year: m.year,
                                       genres: (m.genre ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
                                       platforms: card.platforms, artworkUrl: m.artworkUrl, description: m.description, providerUrl: m.providerUrl)
-            _ = store.addReminder(text: m.title) { r in r.gameBlocks = [block] }
+            _ = store.addReminder(text: m.title) { r in r.gameBlocks = [block]; r.sendImmediateNotification = false }
             RealToast.shared.show(t("REAL'e eklendi"))
             return
         }
@@ -271,7 +271,7 @@ struct DiscoveryScreen: View {
                 (media.providerId != nil ? $0.providerId == media.providerId : $0.providerUrl == media.providerUrl) }
         }
         guard !exists else { return }
-        _ = store.addReminder(text: media.title) { r in r.mediaBlocks = [media] }
+        _ = store.addReminder(text: media.title) { r in r.mediaBlocks = [media]; r.sendImmediateNotification = false }
     }
 }
 
@@ -770,6 +770,11 @@ private struct PosterDeck: View {
     }
 }
 
+private struct DetailPullKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
 /// MediaDiscoveryDetail: poster shrinks into a header image, then title, overview with "Devamını oku", cast and source.
 struct MediaDiscoveryDetail: View {
     let card: DiscoveryCard
@@ -782,6 +787,12 @@ struct MediaDiscoveryDetail: View {
     @State private var readMore = false
     @State private var arrived = false
     @State private var leaving = false
+    /// Pull-down from the top closes the detail (like a sheet): the page shrinks a little and the posters show through.
+    @State private var pull: CGFloat = 0
+    @State private var restTop: CGFloat?
+
+    private var pullProgress: CGFloat { min(pull / Self.pullToClose, 1) }
+    private static let pullToClose: CGFloat = 110
 
     var body: some View {
         GeometryReader { geo in
@@ -789,10 +800,13 @@ struct MediaDiscoveryDetail: View {
             let finalHeight = min(heroWidth * 0.88, 300)
             let initialHeight = min(heroWidth / posterAspect, max(1, geo.size.height - 88))
             ZStack(alignment: .top) {
-                Color.black.opacity(0.94).ignoresSafeArea()
+                Color.black.opacity(0.94 * (1 - pullProgress * 0.45)).ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         Color.clear.frame(height: 60)
+                            .background(GeometryReader { g in
+                                Color.clear.preference(key: DetailPullKey.self, value: g.frame(in: .named("detailScroll")).minY)
+                            })
                         PosterArtwork(media: card.media, titleSize: 18)
                             .frame(width: heroWidth, height: arrived && !leaving ? finalHeight : initialHeight)
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -815,11 +829,22 @@ struct MediaDiscoveryDetail: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                .coordinateSpace(name: "detailScroll")
+                .onPreferenceChange(DetailPullKey.self) { y in
+                    let rest = restTop ?? y
+                    if restTop == nil { restTop = y }
+                    pull = max(0, y - rest)
+                    if pull >= Self.pullToClose && !leaving {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        close()
+                    }
+                }
                 // No glass behind the header: content only fades out softly at the very top (films, series, games).
                 LinearGradient(colors: [.black, .black.opacity(0.85), .clear], startPoint: .top, endPoint: .bottom)
                     .frame(height: 64).ignoresSafeArea(edges: .top).allowsHitTesting(false)
-                header.opacity(leaving ? 0 : 1)
+                header.opacity(leaving ? 0 : 1 - pullProgress)
             }
+            .scaleEffect(1 - pullProgress * 0.06, anchor: .bottom)
         }
         .onAppear { withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.38)) { arrived = true } }
         .task(id: card.id) {

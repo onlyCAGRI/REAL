@@ -34,6 +34,15 @@ struct ReminderCardView: View {
     @State private var mayLeft = false
     @State private var mayRight = false
     @State private var cardWidth: CGFloat = 1
+    /// On while the swipe would act (past [swipeLine]); kept on while a committed card leaves.
+    @State private var swipeArmed = false
+    @State private var swipeCommitting = false
+    private static let swipeLine: CGFloat = 82
+    private static let swipeRubber: CGFloat = 140
+    private static let completeColor = Color(argb: 0xFF30D158)
+    private static let undoColor = Color(argb: 0xFF0A84FF)
+    private static let deleteColor = Color(argb: 0xFFFF453A)
+    private static let hideColor = Color(argb: 0xFF636366)
     @State private var recurringAck = false
 
     private var useDark: Bool { reminder.autoDarkText }
@@ -46,7 +55,7 @@ struct ReminderCardView: View {
         return reminder.isCompleted && !journalListMode ? RealColors.textMuted : RealColors.text
     }
     private var subtext: Color { useDark ? Color(argb: 0xFF282832) : RealColors.subtext }
-    private var strike: Bool { !journalListMode && reminder.isCompleted && reminder.journal == nil }
+    private var strike: Bool { !journalListMode && reminder.isCompleted && !reminder.hasCompletionNote }
     private var stripes: (Color, Color)? {
         guard showCategoryStripes, reminder.customCategoryId != nil, let category else { return nil }
         return category.visual.stripe
@@ -65,28 +74,16 @@ struct ReminderCardView: View {
 
     var body: some View {
         ZStack {
-            if swipeEnabled && dragX != 0 { CardSwipeGlow(x: dragX) }
-            if swipeEnabled && swipeRightOn {
-                let p = min(max(dragX / 82, 0), 1)
-                Text(swipeRightLabel)
-                    .font(RealFont.inter(12, .semibold))
-                    .foregroundStyle(RealColors.selection)
-                    .scaleEffect(0.85 + 0.15 * p, anchor: .leading)
-                    .padding(.leading, 18)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .opacity(Double(p))
-            }
-            if swipeEnabled && swipeLeftOn {
-                let p = min(max(-dragX / 82, 0), 1)
-                HStack(spacing: 6) {
-                    Image(systemName: swipeLeftHides ? "xmark" : "trash").font(.system(size: 13, weight: .semibold))
-                    Text(swipeLeftHides ? t("Gizle") : t("Sil")).font(RealFont.inter(12, .semibold))
-                }
-                .foregroundStyle(swipeLeftHides ? RealColors.subtext : Color(argb: 0xFFFF8A80))
-                .scaleEffect(0.85 + 0.15 * p, anchor: .trailing)
-                .padding(.trailing, 18)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .opacity(Double(p))
+            if swipeEnabled && dragX != 0 {
+                // The action behind the card (Android drawSwipeAction / SwipeActionIcon): a solid pill grows out of the
+                // edge the card leaves, its icon riding along; past the line it deepens and the icon jumps to the card.
+                let left = dragX < 0
+                CardSwipeAction(x: dragX, armed: swipeArmed || swipeCommitting,
+                                color: left ? (swipeLeftHides ? Self.hideColor : Self.deleteColor)
+                                            : (plainStyle && !reminder.isCompleted ? Self.completeColor : Self.undoColor),
+                                symbol: left ? (swipeLeftHides ? "xmark" : "trash.fill")
+                                             : (reminder.isCompleted ? "arrow.uturn.backward" : (plainStyle ? "checkmark" : "calendar")),
+                                label: left ? (swipeLeftHides ? t("Gizle") : t("Sil")) : swipeRightLabel)
             }
             swipeable
         }
@@ -320,26 +317,48 @@ struct ReminderCardView: View {
         mayRight = swipeRightOn && at <= 0.4
     }
 
+    /// Past the line the card follows the finger with rubber-band resistance (Android rubberSwipe).
+    private func rubber(_ raw: CGFloat) -> CGFloat {
+        let d = abs(raw)
+        guard d > Self.swipeLine else { return raw }
+        let over = d - Self.swipeLine
+        let eased = Self.swipeLine + Self.swipeRubber * (1 - 1 / (over / Self.swipeRubber * 0.9 + 1))
+        return raw < 0 ? -eased : eased
+    }
+
     private func swipeChanged(_ w: CGFloat) {
-        let clamped = min(max(w, mayLeft ? -.infinity : 0), mayRight ? .infinity : 0)
-        if abs(clamped) >= 82 && abs(dragX) < 82 { UISelectionFeedbackGenerator().selectionChanged() }
-        dragX = clamped
+        let raw = min(max(w, mayLeft ? -2000 : 0), mayRight ? 2000 : 0)
+        dragX = rubber(raw)
+        // A tick each way across the line: the action is on, then off again.
+        let armed = abs(dragX) >= Self.swipeLine
+        if armed != swipeArmed {
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.55)) { swipeArmed = armed }
+        }
     }
 
     private func swipeEnded(_ w: CGFloat, predicted: CGFloat) {
+        let velocity = (predicted - w) / 0.25
         let left = dragX < 0
-        let commit = abs(dragX) >= 82 || (abs(predicted) > 300 && (predicted < 0) == left && abs(dragX) > 28)
+        let commit = abs(dragX) >= Self.swipeLine || (abs(velocity) >= 520 && (velocity < 0) == left && abs(dragX) >= 28)
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.55)) { swipeArmed = false; swipeCommitting = commit }
         if commit && !left && swipeRightKeepsCard {
             // Move to 24 hour keeps the card here: act, then it slides back in (no bounce).
             onSwipeTo24Hour?()
+            swipeCommitting = false
             withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.32)) { dragX = 0 }
             return
         }
-        withAnimation(.spring(duration: 0.3)) { dragX = commit ? (left ? -900 : 900) : 0 }
+        // The finger's speed carries into the spring (relative to the distance left), like Android's settleSwipe.
+        let target: CGFloat = commit ? (left ? -900 : 900) : 0
+        let delta = target - dragX
+        let relative = abs(delta) > 1 ? min(max(velocity / delta, -20), 20) : 0
+        withAnimation(.interpolatingSpring(duration: 0.34, bounce: 0, initialVelocity: relative)) { dragX = target }
         if commit {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
                 if left { onSwipeDelete?() } else { onSwipeTo24Hour?() }
                 dragX = 0
+                swipeCommitting = false
             }
         }
     }
@@ -393,24 +412,40 @@ struct HorizontalSwipeGesture: UIGestureRecognizerRepresentable {
     }
 }
 
-/// Light from the edge a swiped card leaves (as on the posters): red on the right (Sil), blue on the left.
-private struct CardSwipeGlow: View {
+/// The revealed action behind a swiped card (Android): a solid rounded pill from the card's edge up to a small gap
+/// before the card, a little deeper until the swipe will act; the white icon waits in the middle of the first 76 pt,
+/// then springs over to ride against the card's edge.
+private struct CardSwipeAction: View {
     let x: CGFloat
+    let armed: Bool
+    let color: Color
+    let symbol: String
+    let label: String
+    private let button: CGFloat = 76
+    private let gap: CGFloat = 6
+
     var body: some View {
-        let p = min(abs(x) / 82, 1.4) / 1.4
-        let s = p * p * (3 - 2 * p)
-        let color = x < 0 ? Color(argb: 0xFFFF4D6D) : Color(argb: 0xFF4D8DFF)
-        let armed: Double = abs(x) >= 82 ? 1.35 : 1
-        GeometryReader { geo in
-            let radius = max(abs(x) * 1.15, geo.size.height * 0.8)
-            ZStack(alignment: x < 0 ? .trailing : .leading) {
-                RadialGradient(colors: [color.opacity(min(0.42 * s * armed, 0.6)), color.opacity(0.16 * s * armed), .clear],
-                               center: x < 0 ? .trailing : .leading, startRadius: 0, endRadius: radius)
-                LinearGradient(colors: [.clear, color.opacity(0.75 * s), .white.opacity(0.9 * s), color.opacity(0.75 * s), .clear],
-                               startPoint: .top, endPoint: .bottom)
-                    .frame(width: 2.5)
-            }
+        let left = x < 0
+        let w = max(abs(x) - gap, 0)
+        let a: CGFloat = armed ? 1 : 0
+        let resting = min(w, button) / 2
+        let riding = w - button / 2
+        let center = resting + max(riding - resting, 0) * a
+        let scale = (0.55 + 0.45 * min(w / button, 1)) * (1 + 0.1 * a)
+        ZStack(alignment: left ? .trailing : .leading) {
+            let pill = RoundedRectangle(cornerRadius: min(22, w / 2), style: .continuous)
+            pill.fill(color).overlay(pill.fill(.black.opacity(armed ? 0 : 0.22)))
+                .frame(width: w)
+            Image(systemName: symbol)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(.white)
+                .scaleEffect(scale)
+                .opacity(min(max((w - 8) / (button * 0.45), 0), 1))
+                .frame(width: button)
+                .offset(x: left ? -(center - button / 2) : center - button / 2)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: left ? .trailing : .leading)
+        .accessibilityLabel(label)
         .allowsHitTesting(false)
     }
 }

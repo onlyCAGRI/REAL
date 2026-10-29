@@ -23,6 +23,25 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.Handler
+import android.os.Looper
+import com.cagri.real.startup.StartupIssue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -72,21 +91,153 @@ fun StartupSkeletonReveal(readyToReveal: Boolean, categoryCount: Int, reduceMoti
 
 /** Only used when there is no usable local content in the resolved workspace. */
 @Composable
-fun StartupLoadingScreen(offline: Boolean, onRetry: () -> Unit, onUseLocal: () -> Unit, categoryCount: Int = 4) {
+fun StartupLoadingScreen(
+    offline: Boolean, onRetry: () -> Unit, onUseLocal: () -> Unit, categoryCount: Int = 4,
+    issue: StartupIssue = StartupIssue.UNKNOWN, issueDetail: String? = null, retrying: Boolean = false
+) {
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
         if (offline) {
-            Column(Modifier.fillMaxSize().padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center) {
-                Text(t("Kartlar henüz yüklenemedi. Bağlantını kontrol edebilirsin."), color = Color.LightGray)
-                TextButton(onClick = onRetry) { Text(t("Yeniden dene")) }
-                TextButton(onClick = onUseLocal) { Text(t("Yerel olarak devam et")) }
-            }
+            StartupIssueScreen(issue, issueDetail, retrying, onRetry, onUseLocal)
         } else {
             StartupCardSkeleton(
                 Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp),
                 categoryCount
             )
+        }
+    }
+}
+
+/** What went wrong, in words, with one clear next step. No network: it retries by itself once the phone is online. */
+@Composable
+private fun StartupIssueScreen(
+    issue: StartupIssue, detail: String?, retrying: Boolean, onRetry: () -> Unit, onUseLocal: () -> Unit
+) {
+    val (title, body) = when (issue) {
+        StartupIssue.NO_NETWORK -> t("İnternet bağlantısı yok") to
+            t("Kartların hesabında duruyor; yüklemek için telefonun internete bağlanması gerekiyor.")
+        StartupIssue.TIMEOUT -> t("Bağlantı çok yavaş") to
+            t("Sunucuya ulaştık ama cevap zamanında gelmedi. Daha güçlü bir ağda yeniden deneyebilirsin.")
+        StartupIssue.SECURE_CONNECTION -> t("Güvenli bağlantı kurulamadı") to
+            t("Telefonun tarih ve saati yanlışsa bu olur. Ayarlar'dan otomatik tarih ve saati açıp yeniden dene.")
+        StartupIssue.SESSION -> t("Oturumun yenilenmeli") to
+            t("Hesabına yeniden giriş yapman gerekiyor. Şimdilik internetsiz devam edip Ayarlar'dan tekrar giriş yapabilirsin.")
+        StartupIssue.SERVER -> t("REAL şu an cevap vermiyor") to
+            t("Sorun bizde, senin bağlantında değil. Birkaç dakika sonra yeniden dene.")
+        StartupIssue.UNKNOWN -> t("Kartlar yüklenemedi") to
+            t("Beklenmedik bir sorun oldu. Yeniden deneyebilir ya da şimdilik internetsiz devam edebilirsin.")
+    }
+    val noNetwork = issue == StartupIssue.NO_NETWORK
+    val context = LocalContext.current
+    val currentRetry by rememberUpdatedState(onRetry)
+    val currentRetrying by rememberUpdatedState(retrying)
+    if (noNetwork) DisposableEffect(context) {
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        val main = Handler(Looper.getMainLooper())
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))
+                    main.post { if (!currentRetrying) currentRetry() }
+            }
+        }
+        runCatching { cm?.registerDefaultNetworkCallback(callback) }
+        onDispose { runCatching { cm?.unregisterNetworkCallback(callback) } }
+    }
+    val dim = Color(0xFFA0A0A8)
+    Box(Modifier.fillMaxSize()
+        .drawWithCache {
+            val glow = Brush.radialGradient(listOf(Color.White.copy(alpha = 0.07f), Color.Transparent),
+                center = Offset(size.width / 2f, size.height * 0.36f), radius = size.width * 0.75f)
+            onDrawBehind { drawRect(glow) }
+        }
+        .statusBarsPadding().navigationBarsPadding().padding(horizontal = 28.dp)) {
+        Column(Modifier.align(Alignment.Center).padding(bottom = 120.dp),
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(76.dp).border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                .background(Color.White.copy(alpha = 0.06f), CircleShape),
+                contentAlignment = Alignment.Center) {
+                StartupIssueGlyph(issue, Modifier.size(32.dp))
+            }
+            Spacer(Modifier.height(26.dp))
+            Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(10.dp))
+            Text(body, color = dim, fontSize = 15.sp, lineHeight = 21.sp, textAlign = TextAlign.Center)
+            if (noNetwork) {
+                Spacer(Modifier.height(18.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val pulse by rememberInfiniteTransition(label = "waitNetwork")
+                        .animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "waitNetworkDot")
+                    Box(Modifier.size(7.dp).graphicsLayer { alpha = pulse }.background(Color(0xFF7FB2FF), CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text(t("İnternet gelince kendiliğinden denenecek"), color = dim, fontSize = 13.sp)
+                }
+            }
+            // The technical line only where it helps a bug report (not for no network, slow, or the clock).
+            if (!detail.isNullOrBlank() && issue in setOf(StartupIssue.SERVER, StartupIssue.SESSION, StartupIssue.UNKNOWN)) {
+                Spacer(Modifier.height(14.dp))
+                Text(detail, color = Color.White.copy(alpha = 0.32f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            }
+        }
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Button(onClick = onRetry, enabled = !retrying,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(27.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black,
+                    disabledContainerColor = Color.White.copy(alpha = 0.85f), disabledContentColor = Color.Black)) {
+                if (retrying) {
+                    com.cagri.real.ui.components.RealSpinner(Modifier.size(18.dp), color = Color.Black)
+                    Spacer(Modifier.width(10.dp))
+                    Text(t("Deneniyor…"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                } else Text(t("Yeniden dene"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(6.dp))
+            TextButton(onClick = onUseLocal, enabled = !retrying) {
+                Text(t("Şimdilik internetsiz devam et"), color = Color.White.copy(alpha = 0.78f), fontSize = 15.sp)
+            }
+            Text(t("Kartların bağlantı gelince yüklenir."), color = Color.White.copy(alpha = 0.35f), fontSize = 12.sp)
+        }
+    }
+}
+
+/** Line glyphs drawn here (the app only has material-icons-core): wifi with a slash, clock, lock, person, cloud. */
+@Composable
+private fun StartupIssueGlyph(issue: StartupIssue, modifier: Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val line = w * 0.075f
+        val stroke = Stroke(width = line, cap = StrokeCap.Round)
+        val c = Color.White
+        when (issue) {
+            StartupIssue.NO_NETWORK -> {
+                for (i in 0..2) {
+                    val r = w * (0.18f + i * 0.17f)
+                    drawArc(c, 225f, 90f, false, Offset(w / 2 - r, w * 0.78f - r), Size(r * 2, r * 2), style = stroke)
+                }
+                drawCircle(c, w * 0.055f, Offset(w / 2, w * 0.78f))
+                drawLine(c, Offset(w * 0.14f, w * 0.12f), Offset(w * 0.86f, w * 0.88f), line, StrokeCap.Round)
+            }
+            StartupIssue.TIMEOUT -> {
+                drawCircle(c, w * 0.42f, center, style = stroke)
+                drawLine(c, center, Offset(w / 2, w * 0.24f), line, StrokeCap.Round)
+                drawLine(c, center, Offset(w * 0.68f, w * 0.62f), line, StrokeCap.Round)
+            }
+            StartupIssue.SECURE_CONNECTION -> {
+                drawRoundRect(c, Offset(w * 0.18f, w * 0.44f), Size(w * 0.64f, w * 0.48f), CornerRadius(w * 0.08f), style = stroke)
+                drawArc(c, 180f, 180f, false, Offset(w * 0.3f, w * 0.12f), Size(w * 0.4f, w * 0.5f), style = stroke)
+                drawCircle(c, w * 0.05f, Offset(w / 2, w * 0.66f))
+            }
+            StartupIssue.SESSION -> {
+                drawCircle(c, w * 0.18f, Offset(w / 2, w * 0.3f), style = stroke)
+                drawArc(c, 180f, 180f, false, Offset(w * 0.16f, w * 0.6f), Size(w * 0.68f, w * 0.6f), style = stroke)
+            }
+            StartupIssue.SERVER, StartupIssue.UNKNOWN -> {
+                // A cloud with an exclamation mark.
+                drawArc(c, 150f, 220f, false, Offset(w * 0.08f, w * 0.34f), Size(w * 0.44f, w * 0.44f), style = stroke)
+                drawArc(c, 200f, 230f, false, Offset(w * 0.34f, w * 0.18f), Size(w * 0.56f, w * 0.56f), style = stroke)
+                drawLine(c, Offset(w * 0.22f, w * 0.78f), Offset(w * 0.8f, w * 0.78f), line, StrokeCap.Round)
+                drawLine(c, Offset(w * 0.56f, w * 0.4f), Offset(w * 0.56f, w * 0.56f), line, StrokeCap.Round)
+                drawCircle(c, w * 0.045f, Offset(w * 0.56f, w * 0.67f))
+            }
         }
     }
 }

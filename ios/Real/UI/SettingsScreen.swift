@@ -563,7 +563,7 @@ struct SettingsLayout<Content: View>: View {
             }
             .ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) { content() }
+                VStack(alignment: .leading, spacing: 0) { PullToCloseMarker(); content() }
                     .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 28)
             }
             .scrollIndicators(.hidden)

@@ -111,6 +111,24 @@ fun HomeLiquidDock(
         label = "homeDockExpansion"
     )
 
+    // Pull-up hint (every time home shows): after a quiet moment on home the dock lifts a little, twice, like a
+    // finger tugging it; motion only, no label. Any drag or opening ends it.
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val nudge = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(showChrome, interactionEnabled, navigationExpanded) {
+        if (!showChrome || !interactionEnabled || navigationExpanded || reduceAnimations) {
+            nudge.snapTo(0f)
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(2500)
+        val lift = with(density) { -14.dp.toPx() }
+        repeat(2) {
+            nudge.animateTo(lift, tween(280, easing = RealMotion.Emphasized))
+            nudge.animateTo(0f, spring(dampingRatio = 0.42f, stiffness = 360f))
+            kotlinx.coroutines.delay(380)
+        }
+    }
+
     BackHandler(enabled = showChrome && navigationExpanded && interactionEnabled) {
         navigationExpanded = false
     }
@@ -149,9 +167,10 @@ fun HomeLiquidDock(
             }
     } else Modifier
 
+    Box(modifier) {
     // The composer remains at one stable composition location in every state.
     Layout(
-        modifier = modifier.then(dockGesture).testTag("home_dock"),
+        modifier = Modifier.graphicsLayer { translationY = nudge.value }.then(dockGesture).testTag("home_dock"),
         content = {
             Box { composer() }
             if (chromeVisible) {
@@ -228,6 +247,7 @@ fun HomeLiquidDock(
             navigation?.placeRelativeWithLayer(0, navY, layerBlock = fade)
             microphone?.placeRelativeWithLayer(width - micSize, navY + (navHeight - micSize) / 2, layerBlock = fade)
         }
+    }
     }
 }
 

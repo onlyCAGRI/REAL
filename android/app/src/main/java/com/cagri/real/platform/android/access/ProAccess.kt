@@ -10,15 +10,23 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class ProRequired : IllegalStateException(t("Bu özellik REAL Pro ile kullanılabilir."))
+class NoInternet : IllegalStateException(t("İnternet bağlantın yok."))
 /** No transcript, card data or pending mutation is retained by the paywall. */
 object ProAccess {
-    data class Prompt(val uid: String?, val feature: RealFeature)
+    /** [offline]: the phone has no internet, so the "İnternet bağlantın yok" sheet shows instead of REAL Pro. */
+    data class Prompt(val uid: String?, val feature: RealFeature, val offline: Boolean = false)
     private val mutablePrompt = MutableStateFlow<Prompt?>(null)
     val prompt = mutablePrompt.asStateFlow()
     private val lock = Mutex()
     fun dismiss() { mutablePrompt.value = null }
+    fun showOffline() { mutablePrompt.value = Prompt(AndroidBackend.auth.currentUser()?.id, RealFeature.values().first(), offline = true) }
     suspend fun allowed(feature: RealFeature, showPrompt: Boolean = true): Boolean = lock.withLock {
         val uid = AndroidBackend.auth.currentUser()?.id
+        // Every gated feature talks to the server: with no internet say that, never "REAL Pro".
+        if (!com.cagri.real.platform.android.sync.SyncLocal.hasInternet()) {
+            if (showPrompt) mutablePrompt.value = Prompt(uid, feature, offline = true)
+            return@withLock false
+        }
         if (uid != null) {
             try {
                 val access = RealAccessRepository.cached(uid) ?: RealAccessRepository.refresh(uid)
@@ -38,6 +46,6 @@ object ProAccess {
             "/api/game-recommendations" -> RealFeature.GameDiscovery
             else -> return
         }
-        if (!allowed(feature)) throw ProRequired()
+        if (!allowed(feature)) throw if (prompt.value?.offline == true) NoInternet() else ProRequired()
     }
 }

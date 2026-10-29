@@ -455,8 +455,8 @@ fun GoogleProfileNamePrompt(reduceAnimations: Boolean = false) {
     var confirmedRevision by remember { mutableIntStateOf(0) }
     val forced by ProfileNamePrompt.forced
     val needed = remember(current?.id, confirmedRevision, forced) {
-        current != null && !current.isAnonymous && (forced || ("google.com" in current.providerIds &&
-            !prefs.getBoolean("confirmed_${current.id}", false)))
+        current != null && !current.isAnonymous && (forced || (("google.com" in current.providerIds ||
+            current.displayName.isNullOrBlank()) && !prefs.getBoolean("confirmed_${current.id}", false)))
     }
     if (current == null || !needed) return
     val scope = rememberCoroutineScope()

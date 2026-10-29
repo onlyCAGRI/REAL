@@ -352,7 +352,9 @@ struct CardBlockGrid<Block: View>: View {
             .scaleEffect(isMoving ? 1.025 : 1)
             .offset(isMoving ? snappedOffset(key) : .zero)
             .simultaneousGesture(TapGesture().onEnded { if editing { selected = key } }, including: editing ? .all : .subviews)
-            .simultaneousGesture(moveGesture(key), including: editing ? .all : .subviews)
+            // High priority while editing: the hold wins over the block's own taps and controls, so a block lifts
+            // from anywhere on it; a quick tap still reaches them once the hold fails.
+            .highPriorityGesture(moveGesture(key), including: editing ? .all : .subviews)
     }
 
     /// One owner per drag: long-press lifts the block, the drag moves it, release drops it in free space.

@@ -122,6 +122,20 @@ fun autoCardDarkText(accentStart: Int?, accentEnd: Int?, customSolidColorArgb: I
     return light > 0.35
 }
 
+/**
+ * Dark text on this card? A completed card's colour drops to 38% over the dark card (reminderAccentBrush), so the
+ * light-colour choice made for the full colour no longer holds: decide again from the colour actually shown.
+ */
+fun reminderUsesDarkText(useDarkText: Boolean, completed: Boolean, startIndex: Int?, endIndex: Int?, customSolidColorArgb: Int?): Boolean {
+    if (!completed) return useDarkText
+    val start = startIndex?.let { ReminderColorChoices.getOrNull(it)?.color }
+    val end = endIndex?.let { ReminderColorChoices.getOrNull(it)?.color }
+    val accent = customSolidColorArgb?.let { Color(it) }
+        ?: if (start != null && end != null) lerp(start, end, 0.5f) else (start ?: end)
+        ?: return false
+    return lerp(Color(0xFF151517), accent, 0.38f).luminance() > 0.35f
+}
+
 fun reminderAccentBrush(
     startIndex: Int?,
     endIndex: Int?,

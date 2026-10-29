@@ -5,13 +5,19 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class StartupPhase { UNKNOWN, SIGNED_OUT, SIGNED_IN_LOADING, READY, ERROR_OFFLINE }
 
+/** Why the first load failed, so the startup error screen can say it instead of a generic "check your connection". */
+enum class StartupIssue { NO_NETWORK, TIMEOUT, SECURE_CONNECTION, SESSION, SERVER, UNKNOWN }
+
 data class StartupState(
     val phase: StartupPhase = StartupPhase.UNKNOWN,
     val workspace: String? = null,
     val uid: String? = null,
     val generation: Long = 0,
     val revision: Long = 0,
-    val offlineAllowed: Boolean = false
+    val offlineAllowed: Boolean = false,
+    val issue: StartupIssue = StartupIssue.UNKNOWN,
+    /** Short technical line ("HTTP 503", "SSLHandshakeException") shown small under the explanation. */
+    val issueDetail: String? = null
 ) {
     fun showWelcome(onboardingCompleted: Boolean): Boolean =
         phase == StartupPhase.SIGNED_OUT && !onboardingCompleted
@@ -55,10 +61,10 @@ class StartupSession {
         mutable.value = old.copy(phase = StartupPhase.READY, revision = old.revision + 1, offlineAllowed = false)
     }
 
-    @Synchronized fun failed(generation: Long) {
+    @Synchronized fun failed(generation: Long, issue: StartupIssue = StartupIssue.UNKNOWN, detail: String? = null) {
         val old = mutable.value
         if (old.generation != generation || old.uid == null || old.phase == StartupPhase.READY) return
-        mutable.value = old.copy(phase = StartupPhase.ERROR_OFFLINE)
+        mutable.value = old.copy(phase = StartupPhase.ERROR_OFFLINE, issue = issue, issueDetail = detail)
     }
 
     @Synchronized fun allowOffline() {

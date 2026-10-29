@@ -10,6 +10,10 @@ struct WelcomeScreen: View {
     private enum Phase { case intro, namePrompt, greeting }
     @State private var phase: Phase = .intro
     @State private var name = ""
+    /// Sign-in comes first; the name is asked after it (prefilled with the account's first name). Without an account,
+    /// "Hesap olmadan devam et" opens the name field instead.
+    private enum NameStep { case signIn, guest, account }
+    @State private var nameStep: NameStep = .signIn
     @FocusState private var focused: Bool
     @State private var welcomeAlpha: Double = 0
     @State private var welcomeOffset: CGFloat = 39
@@ -115,9 +119,10 @@ struct WelcomeScreen: View {
 
     private var prompt: some View {
         VStack(spacing: 0) {
-            Text(t("Size nasıl hitap edelim?")).font(RealFont.inter(21, .semibold)).kerning(-0.3).foregroundStyle(Color(argb: 0xFFF7F7F8))
+            Text(nameStep == .signIn ? t("Hesabınla devam et") : t("Size nasıl hitap edelim?")).font(RealFont.inter(21, .semibold)).kerning(-0.3).foregroundStyle(Color(argb: 0xFFF7F7F8))
                 .opacity(questionAlpha).offset(y: questionOffset)
             Color.clear.frame(height: 20)
+            if nameStep != .signIn {
             HStack {
                 ZStack(alignment: .leading) {
                     if name.isEmpty { Text(t("Adınız")).font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFF5A5A62)) }
@@ -139,7 +144,15 @@ struct WelcomeScreen: View {
             .background(Capsule().fill(Color(argb: 0xFF141416)))
             .overlay(Capsule().strokeBorder(.white.opacity(focused ? 0.40 : 0.12), lineWidth: 1))
             .opacity(inputAlpha).offset(y: inputOffset)
-            Color.clear.frame(height: 14)
+            if nameStep == .guest {
+                Color.clear.frame(height: 14)
+                link(t("Giriş seçeneklerine dön")) { focused = false; withAnimation(.easeOut(duration: 0.25)) { nameStep = .signIn } }
+            }
+            if let authError, nameStep == .account {
+                Text(authError).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFFF9A9A))
+                    .multilineTextAlignment(.center).frame(width: 300).padding(.top, 10)
+            }
+            } else {
             Group {
                 googleButton
                 if let authError {
@@ -164,7 +177,9 @@ struct WelcomeScreen: View {
                 } else {
                     authButton("E-posta ile devam et", emphasized: false)
                 }
-                Color.clear.frame(height: 22)
+                Color.clear.frame(height: 6)
+                link(t("Hesap olmadan devam et")) { authError = nil; withAnimation(.easeOut(duration: 0.25)) { nameStep = .guest } }
+                Color.clear.frame(height: 16)
                 // Kept quiet on purpose: the three documents in one small row. The longer explanations live behind
                 // "Veri kullanımı" and AI asks for its own consent before it is first used.
                 HStack(spacing: 0) {
@@ -176,6 +191,7 @@ struct WelcomeScreen: View {
                 }
             }
             .opacity(inputAlpha)
+            }
         }
     }
 
@@ -240,8 +256,7 @@ struct WelcomeScreen: View {
         }
     }
 
-    /// After Google or e-posta: the account's cards, categories and moods come back, then onboarding finishes with the
-    /// typed name or the account's first name.
+    /// After Google, Apple or e-posta: the account's cards, categories and moods come back, then the name is asked.
     private func finishAfterAuthentication(_ account: RealAuth.Account) async {
         do {
             RealCloudSync.shared.reset()
@@ -249,12 +264,9 @@ struct WelcomeScreen: View {
         } catch {
             authError = t("Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin.")
         }
-        let typed = name.trimmingCharacters(in: .whitespaces)
-        name = typed.isEmpty ? (account.firstName ?? "") : typed
-        phase = .greeting
-        withAnimation(.easeOut(duration: 0.3)) { greetingAlpha = 1 }
-        try? await Task.sleep(for: .seconds(1.1))
-        onComplete(name)
+        // Then the name, prefilled with the account's first name; confirm() moves on to the greeting.
+        name = account.firstName ?? ""
+        withAnimation(.easeOut(duration: 0.25)) { nameStep = .account }
     }
 
     /// WelcomeAuthButton in its disabled state (sign-in not available in this build, or Apple for now).

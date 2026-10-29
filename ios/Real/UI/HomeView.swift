@@ -312,9 +312,9 @@ struct HomeView: View {
         .realOverlay(isPresented: $showAccountMenu) {
             AccountMenuOverlay(onSettings: { showSettings = true }, onCategoryOrder: { showCategoryOrder = true })
         }
-        .fullScreenCover(isPresented: $showSettings) { SettingsScreen { showSettings = false }.liftedTopSafeArea() }
+        .fullScreenCover(isPresented: $showSettings) { SettingsScreen { showSettings = false }.liftedTopSafeArea().pullToClose { showSettings = false } }
         .sheet(isPresented: $showCategoryOrder) { CategoryOrderSheet() }
-        .fullScreenCover(isPresented: $showPano) { PanoScreen().liftedTopSafeArea().presentationBackground(.black) }
+        .fullScreenCover(isPresented: $showPano) { PanoScreen().liftedTopSafeArea().pullToClose { showPano = false }.presentationBackground(.black) }
         .fullScreenCover(item: $contextTarget) { target in
             Group {
                 switch target {
@@ -342,6 +342,7 @@ struct HomeView: View {
                 path.append(.detail(id))
             })
             .liftedTopSafeArea()
+            .pullToClose { showYasam = false }
         }
         .sheet(item: $externalDetail) { ExternalCalendarEventDetail(event: $0) }
         .sheet(isPresented: Binding(get: { checkTargets != nil }, set: { if !$0 { checkTargets = nil } })) {

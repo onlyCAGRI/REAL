@@ -61,6 +61,7 @@ struct PanoScreen: View {
             header.yasamEnter(revealed, delay: 0, y: 0)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
+                    PullToCloseMarker()
                     if pano.boards.isEmpty { emptyState.yasamEnter(revealed, delay: 0.08, y: 16) }
                     if !mine.isEmpty { sectionLabel("My boards").yasamEnter(revealed, delay: 0.12, y: 0) }
                     ForEach(Array(mine.enumerated()), id: \.element.id) { index, board in

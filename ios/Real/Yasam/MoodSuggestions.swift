@@ -577,6 +577,7 @@ struct MoodSuggestionsView: View {
         let resolution = resolutions[s.id]
         let needsCatalog = s.kind == .MUSIC || s.kind == .MOVIE || s.kind == .TV
         let item = store.addReminder(text: s.title) { item in
+            item.sendImmediateNotification = false // added from a suggestion, not a reminder: no "Hemen bildir"
             if case .music(let block) = resolution { item.musicBlocks = [block] }
             if case .media(let block) = resolution { item.mediaBlocks = [block] }
             if !needsCatalog {

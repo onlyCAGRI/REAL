@@ -68,6 +68,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
@@ -122,6 +123,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -557,6 +559,39 @@ fun ReminderScreen(
         )
     }
 
+    LaunchedEffect(detailId) {
+        if (detailId == null && DetailDeleteMotion.active) { delay(700); DetailDeleteMotion.active = false }
+    }
+
+    // Category -> home, as iOS does it: while the finger pulls, the category list itself shrinks into a rounded card
+    // that follows it down (home is not shown yet); on release past the line the page closes and that card flies into
+    // its home card (the pull exit below + the hero's shared bounds); short of the line it springs back.
+    var categoryPullPx by remember { mutableFloatStateOf(0f) }
+    val categoryPullDismiss = remember(routeSeekState) {
+        DetailPullDismiss(
+            onStart = { CategoryPullMotion.active = true; categoryPullPx = 0f },
+            onDrag = { distance -> categoryPullPx = distance },
+            onEnd = { distance, velocity ->
+                if (distance / pullDistancePx >= 0.25f || velocity >= pullFlingPx) {
+                    category = null
+                    customCategoryId = null
+                    routeScope.launch { delay(450); categoryPullPx = 0f; CategoryPullMotion.active = false }
+                } else routeScope.launch {
+                    androidx.compose.animation.core.animate(categoryPullPx, 0f,
+                        animationSpec = spring(dampingRatio = 0.86f, stiffness = 520f)) { v, _ -> categoryPullPx = v }
+                    CategoryPullMotion.active = false
+                }
+            },
+            onCancel = {
+                routeScope.launch {
+                    androidx.compose.animation.core.animate(categoryPullPx, 0f,
+                        animationSpec = spring(dampingRatio = 0.86f, stiffness = 520f)) { v, _ -> categoryPullPx = v }
+                    CategoryPullMotion.active = false
+                }
+            }
+        )
+    }
+
     // Detail -> list: finger-driven predictive back (reduce-animations keeps the plain handler).
     PredictiveBackHandler(enabled = !showSettings && detailId != null && !reduceAnimations) { progress ->
         val homeRoute = ReminderRoute(category, customCategoryId, null)
@@ -590,17 +625,18 @@ fun ReminderScreen(
                 if (reduceAnimations) {
                     EnterTransition.None togetherWith ExitTransition.None
                 } else {
+                    // No cross-fade dip: the old page clears fast, the new one settles on a decelerating curve.
                     val enterAnim = fadeIn(
-                        tween(220, easing = RealMotion.Standard)
+                        tween(200, easing = RealMotion.Standard)
                     ) + scaleIn(
-                        tween(260, easing = RealMotion.Standard),
-                        initialScale = 0.98f
+                        tween(340, easing = RealMotion.Emphasized),
+                        initialScale = 0.97f
                     ) + slideInVertically(
-                        tween(260, easing = RealMotion.Standard)
+                        tween(340, easing = RealMotion.Emphasized)
                     ) { it / 32 }
 
                     val exitAnim = fadeOut(
-                        tween(180, easing = RealMotion.Exit)
+                        tween(110, easing = RealMotion.Exit)
                     ) + scaleOut(
                         tween(200, easing = RealMotion.Exit),
                         targetScale = 0.98f
@@ -680,8 +716,17 @@ fun ReminderScreen(
                                             tween(180, easing = RealMotion.Exit)
                                         )
                                     }
+                                    isClosingDetail && DetailDeleteMotion.active -> {
+                                        // Deleted from the detail: home settles in underneath.
+                                        // A quick slide to the left; home settles in underneath.
+                                        // Home is already there at full brightness (no fade veil) and settles from 0.97.
+                                        val enter = scaleIn(tween(380, easing = RealMotion.Emphasized), initialScale = 0.97f)
+                                        val exit = slideOutHorizontally(tween(300, easing = RealMotion.Exit)) { -it }
+                                        (enter togetherWith exit).apply { targetContentZIndex = -1f }
+                                    }
                                     isClosingDetail && !hasReturnCard(targetState, initialState.detailId) -> {
-                                        fadeIn(tween(160)) togetherWith fadeOut(tween(160))
+                                        (EnterTransition.None togetherWith fadeOut(tween(160, easing = RealMotion.Exit)))
+                                            .apply { targetContentZIndex = -1f }
                                     }
                                     isClosingDetail -> {
                                         fadeIn(
@@ -690,33 +735,44 @@ fun ReminderScreen(
                                             tween(240, easing = RealMotion.Exit)
                                         )
                                     }
+                                    isClosingCategoryToHome && CategoryPullMotion.active -> {
+                                        // Released past the line: the already shrunk page keeps shrinking toward its home
+                                        // card while the hero lands there (shared bounds). Home is already there at full
+                                        // brightness (no fade, which read as a black veil) and the page's dark body fades
+                                        // out at once so it never sits over the category cards.
+                                        val enter = EnterTransition.None
+                                        val exit = scaleOut(tween(340, easing = RealMotion.Emphasized), targetScale = 0.55f) +
+                                            fadeOut(tween(120, easing = RealMotion.Standard))
+                                        (enter togetherWith exit).apply { targetContentZIndex = -1f }
+                                    }
                                     isClosingCategoryToHome -> {
-                                        val enter = fadeIn(
-                                            tween(220, easing = RealMotion.Standard)
-                                        ) + scaleIn(
-                                            tween(240, easing = RealMotion.Standard),
+                                        // Home under the leaving page at full brightness; the page clears fast (no dip).
+                                        val enter = scaleIn(
+                                            tween(340, easing = RealMotion.Emphasized),
                                             initialScale = 0.98f
                                         )
                                         val exit = fadeOut(
-                                            tween(180, easing = RealMotion.Exit)
+                                            tween(130, easing = RealMotion.Exit)
                                         ) + scaleOut(
                                             tween(200, easing = RealMotion.Exit),
                                             targetScale = 0.98f
                                         )
-                                        enter togetherWith exit
+                                        (enter togetherWith exit).apply { targetContentZIndex = -1f }
                                     }
                                     else -> {
+                                        // Old page clears fast so the two never sit half-transparent together (the dark
+                                        // dip); the new one settles on a decelerating curve.
                                         val enter = fadeIn(
-                                            tween(220, easing = RealMotion.Standard)
+                                            tween(200, easing = RealMotion.Standard)
                                         ) + scaleIn(
-                                            tween(240, easing = RealMotion.Standard),
-                                            initialScale = 0.98f
+                                            tween(340, easing = RealMotion.Emphasized),
+                                            initialScale = 0.97f
                                         ) + slideInVertically(
-                                            tween(240, easing = RealMotion.Standard)
+                                            tween(340, easing = RealMotion.Emphasized)
                                         ) { it / 36 }
 
                                         val exit = fadeOut(
-                                            tween(170, easing = RealMotion.Exit)
+                                            tween(110, easing = RealMotion.Exit)
                                         ) + scaleOut(
                                             tween(200, easing = RealMotion.Exit),
                                             targetScale = 0.98f
@@ -794,6 +850,9 @@ fun ReminderScreen(
                                     onPanoLocationHandled = onPanoLocationHandled,
                                     reminders = reminders, category = route.category,
                                     customCategory = currentCustomCategory,
+                                    pullDismiss = if (!reduceAnimations && detailId == null && (route.category != null || route.customCategoryId != null))
+                                        categoryPullDismiss else null,
+                                    pullPx = { if (route.category != null || route.customCategoryId != null) categoryPullPx else 0f },
                                     dividers = currentCustomCategory?.let { c -> dividers.filter { it.customCategoryId == c.id } }.orEmpty(),
                                     onAddDivider = onAddDivider, onEditDivider = onEditDivider, onDeleteDivider = onDeleteDivider,
                                     onSetCompletionNote = onSetCompletionNote, onSetCheckRequest = onSetCheckRequest,
@@ -998,6 +1057,9 @@ enum class PendingNotificationAction {
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ReminderListScreen(
+    pullDismiss: DetailPullDismiss? = null,
+    /** How far a category is pulled down to home (px): the list shrinks into a card with it (iOS zoom dismiss). */
+    pullPx: () -> Float = { 0f },
     pendingPanoBoardId: String? = null, onPanoLocationHandled: () -> Unit = {},
     reminders: List<ReminderItem>, category: ReminderCategory?, draft: String,
     dividers: List<ReminderItem> = emptyList(),
@@ -1852,6 +1914,21 @@ private fun ReminderListScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize()
+                .pullDownToDismiss(pullDismiss, listState)
+                .graphicsLayer {
+                    val pulled = pullPx()
+                    if (pulled > 0f) {
+                        // The finger's pull, softened, moves the card down; it shrinks up to a third and rounds its
+                        // corners right away, like iOS.
+                        val p = (pulled / (size.height * 0.6f)).coerceIn(0f, 1f)
+                        val s = 1f - 0.34f * p
+                        scaleX = s; scaleY = s
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.12f)
+                        translationY = pulled * 0.55f
+                        shape = RoundedCornerShape((40f * (pulled / 60f).coerceAtMost(1f)).dp)
+                        clip = true
+                    }
+                }
                 .keepHeightUnderKeyboard(navigationConsumed = !booksOpen)
                 .testTag("home_list")
                 // Keyboard open: a tap on the list only closes the keyboard; it does not open the category or card under
@@ -1926,6 +2003,7 @@ private fun ReminderListScreen(
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         com.cagri.real.updates.TesterUpdateButton()
+                        com.cagri.real.ui.components.OfflineBadge()
                         val profileInteraction = remember { MutableInteractionSource() }
                         IconButton(
                             interactionSource = profileInteraction,

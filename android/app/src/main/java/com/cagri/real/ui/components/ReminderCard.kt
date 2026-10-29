@@ -181,7 +181,8 @@ fun ReminderCard(
             resolveCategoryStripeColors(customCategory)
         } else null
     }
-    val useDark = reminder.useDarkText
+    val useDark = reminderUsesDarkText(reminder.useDarkText, !journalListMode && reminder.isCompleted,
+        reminder.accentStart, reminder.accentEnd, reminder.customSolidColorArgb)
     val textColor by animateColorAsState(
         when {
             useDark -> if (reminder.isCompleted) Color(0xFF55555A) else Color(0xFF101010)
@@ -236,7 +237,7 @@ fun ReminderCard(
             }
         }
     }
-    val shouldStrikeThrough = !journalListMode && reminder.isCompleted && reminder.journal == null
+    val shouldStrikeThrough = !journalListMode && reminder.isCompleted && !com.cagri.real.ui.hasCompletionNote(reminder)
     val strikethroughProgress = remember(reminder.id) {
         Animatable(if (shouldStrikeThrough) 1f else 0f)
     }

@@ -35,17 +35,18 @@ enum DetailDockMotion {
     static let curve = (0.3, 0.9, 0.25, 1.0)
 
     /// When the sweep reaches the middle of button `index` of `count`, from the Kaydet tap.
-    static func waveDelay(_ index: Int, of count: Int) -> Double {
-        let center = (Double(index) + 0.5) / Double(count)
+    static func waveDelay(_ index: Int, of count: Int, fromLeft: Bool = false) -> Double {
+        let raw = (Double(index) + 0.5) / Double(count)
+        let center = fromLeft ? 1 - raw : raw
         return max(0, duration * (1.30 - center) / 1.60)
     }
 
     /// Enter delay of a new button: staggered by the sweep while it still crosses the glass, else one short pause.
-    static func enterDelay(_ index: Int, of count: Int, sweepStart: Date?) -> Double {
+    static func enterDelay(_ index: Int, of count: Int, sweepStart: Date?, fromLeft: Bool = false) -> Double {
         guard let start = sweepStart else { return itemInDelay }
         let elapsed = Date().timeIntervalSince(start)
         guard elapsed < duration else { return itemInDelay }
-        return max(0, waveDelay(index, of: count) - elapsed)
+        return max(0, waveDelay(index, of: count, fromLeft: fromLeft) - elapsed)
     }
 
     static func timing(_ seconds: Double) -> Animation {
@@ -84,6 +85,9 @@ struct DetailDockDrops: View {
     /// 2 while editing, 4 otherwise.
     let slots: Int
     let sweepStart: Date?
+    /// Tamamla: Kaydet mirrored. The four buttons stay four, so the drops replay Kaydet's two → four flow with the
+    /// band and stagger running from the left.
+    var completeStart: Date? = nil
 
     @State private var fromSlots = 4
     @State private var toSlots = 4
@@ -121,6 +125,15 @@ struct DetailDockDrops: View {
             delays = (0..<4).map { i in wave ? max(0, DetailDockMotion.waveDelay(slot(i, new), of: 4) - elapsed - 0.05) : 0 }
             start = Date()
         }
+        .onChange(of: completeStart) { _, new in
+            guard let new, !reduceMotion else { return }
+            fromSlots = 2
+            toSlots = 4
+            let elapsed = Date().timeIntervalSince(new)
+            travel = 0.25
+            delays = (0..<4).map { i in max(0, DetailDockMotion.waveDelay(slot(i, 4), of: 4, fromLeft: true) - elapsed - 0.05) }
+            start = Date()
+        }
     }
 
     private func slot(_ index: Int, _ count: Int) -> Int { index * count / 4 }
@@ -152,6 +165,8 @@ struct DetailDockDrops: View {
 /// Kaydet's one-shot sweep: fades in at the right edge, crosses the dock and fades out at the left.
 struct DetailDockSweep: View {
     let start: Date?
+    /// Tamamla: the same band, mirrored, from the left.
+    var fromLeft = false
 
     var body: some View {
         TimelineView(.animation(paused: start.map { Date().timeIntervalSince($0) > DetailDockMotion.duration } ?? true)) { tl in
@@ -159,7 +174,7 @@ struct DetailDockSweep: View {
                 let p = tl.date.timeIntervalSince(start) / DetailDockMotion.duration
                 if p > 0 && p < 1 {
                     let fade = p < 0.12 ? p / 0.12 : p > 0.85 ? (1 - p) / 0.15 : 1
-                    RealSweepBand(progress: p, strength: fade)
+                    RealSweepBand(progress: p, strength: fade).scaleEffect(x: fromLeft ? -1 : 1, y: 1)
                 }
             }
         }

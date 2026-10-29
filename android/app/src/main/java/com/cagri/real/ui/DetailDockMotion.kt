@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -41,7 +42,10 @@ import kotlin.math.sin
  * capsules behind the buttons flow into each other like drops, and the labels blur out and back in. Kaydet also
  * sends REAL's mic sweep through the glass once; the new buttons appear as the band passes over them.
  */
-internal enum class DetailDockMode(val slots: Int) { Normal(4), Edit(2), InlineStack(1) }
+internal enum class DetailDockMode(val slots: Int) { Normal(4), Done(4), Edit(2), InlineStack(1) }
+
+/** Glass drops behind the dock buttons: one per slot of the widest set. */
+private const val DROPS = 4
 
 internal const val DETAIL_DOCK_MILLIS = 450
 private const val ITEM_OUT_MILLIS = 180
@@ -59,15 +63,15 @@ private val GooBlur = 6.dp
 private const val PILL_ALPHA = 0.14f
 
 /** When the sweep reaches the middle of button [index] of [count], counted from the moment Kaydet was tapped. */
-private fun waveDelayMillis(index: Int, count: Int): Int {
-    val center = (index + 0.5f) / count
+private fun waveDelayMillis(index: Int, count: Int, fromLeft: Boolean = false): Int {
+    val center = ((index + 0.5f) / count).let { if (fromLeft) 1f - it else it }
     return (DETAIL_DOCK_MILLIS * (1.30f - center) / 1.60f).toInt().coerceAtLeast(0)
 }
 
 /** Enter delays for the new buttons: staggered by the sweep while it still crosses the glass, else one short pause. */
-internal fun detailDockEnterDelays(count: Int, waveElapsedMillis: Long?): IntArray = IntArray(count) { i ->
+internal fun detailDockEnterDelays(count: Int, waveElapsedMillis: Long?, fromLeft: Boolean = false): IntArray = IntArray(count) { i ->
     if (waveElapsedMillis == null || waveElapsedMillis >= DETAIL_DOCK_MILLIS) ITEM_IN_DELAY_MILLIS
-    else (waveDelayMillis(i, count) - waveElapsedMillis).toInt().coerceAtLeast(0)
+    else (waveDelayMillis(i, count, fromLeft) - waveElapsedMillis).toInt().coerceAtLeast(0)
 }
 
 /** Blur, fade and scale of one dock button while its set of actions comes in or leaves. */
@@ -95,7 +99,16 @@ internal fun AnimatedVisibilityScope.detailDockItemMotion(enterDelayMillis: Int,
 }
 
 /** The one-shot Kaydet sweep (REAL's mic band), drawn behind the dock buttons while [progress] runs 0..1. */
-internal fun Modifier.detailDockSweep(progress: () -> Float): Modifier = drawBehind { drawRealSweepOnce(progress()) }
+internal fun Modifier.detailDockSweep(progress: () -> Float, fromLeft: () -> Boolean = { false }): Modifier = drawBehind {
+    // Tamamla runs the same band mirrored, from the left (where its button sits).
+    if (fromLeft()) scale(-1f, 1f) { drawRealSweepOnce(progress()) } else drawRealSweepOnce(progress())
+}
+
+/** Sil confirmed in the card detail: the page leaves to the left on its way home (ReminderScreen). */
+internal object DetailDeleteMotion {
+    var active by androidx.compose.runtime.mutableStateOf(false)
+}
+
 
 /**
  * Four glass drops behind the dock buttons, shown only during a mode change: each drop narrows, travels to its new slot and
@@ -107,11 +120,12 @@ internal fun DetailDockDrops(
     mode: DetailDockMode,
     waveStartMillis: Long,
     reduceAnimations: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    waveFromLeft: Boolean = false
 ) {
     var fromMode by remember { mutableStateOf(mode) }
     var toMode by remember { mutableStateOf(mode) }
-    var delays by remember { mutableStateOf(IntArray(4)) }
+    var delays by remember { mutableStateOf(IntArray(DROPS)) }
     var duration by remember { mutableStateOf(PILL_MILLIS) }
     val clock = remember { Animatable(1f) }
     LaunchedEffect(mode) {
@@ -123,10 +137,13 @@ internal fun DetailDockDrops(
             return@LaunchedEffect
         }
         val elapsed = android.os.SystemClock.uptimeMillis() - waveStartMillis
-        val wave = mode == DetailDockMode.Normal && elapsed in 0 until DETAIL_DOCK_MILLIS
+        val wave = (mode == DetailDockMode.Normal || mode == DetailDockMode.Done) && elapsed in 0 until DETAIL_DOCK_MILLIS
         duration = if (wave) PILL_WAVE_MILLIS else PILL_MILLIS
-        delays = IntArray(4) { i ->
-            if (!wave) 0 else max(0, waveDelayMillis(slotOf(i, 4), 4) - elapsed.toInt() - 50)
+        // Tamamla is Kaydet mirrored: the drops flow out of a two-button dock just as they do after Kaydet (the same
+        // four slots before and after would leave them still), only the band and stagger run from the left.
+        if (wave && waveFromLeft && mode == DetailDockMode.Done) fromMode = DetailDockMode.Edit
+        delays = IntArray(DROPS) { i ->
+            if (!wave) 0 else max(0, waveDelayMillis(slotOf(i, DROPS), DROPS, waveFromLeft) - elapsed.toInt() - 50)
         }
         val total = duration + (delays.maxOrNull() ?: 0)
         clock.snapTo(0f)
@@ -161,7 +178,7 @@ internal fun DetailDockDrops(
             val width = (size.width - pad * 2) / count
             return (pad + index * width + gap / 2) to (width - gap)
         }
-        for (i in 0 until 4) {
+        for (i in 0 until DROPS) {
             val (fromLeft, fromWidth) = slot(slotOf(i, fromMode.slots), fromMode.slots)
             val (toLeft, toWidth) = slot(slotOf(i, toMode.slots), toMode.slots)
             val t = DockEasing.transform(((now - delays[i]) / duration).coerceIn(0f, 1f))
@@ -191,5 +208,5 @@ internal fun DetailDockDrops(
     }
 }
 
-/** Which slot drop [index] (of four) sits in when the dock shows [count] buttons. */
-private fun slotOf(index: Int, count: Int): Int = index * count / 4
+/** Which slot drop [index] (of [DROPS]) sits in when the dock shows [count] buttons. */
+private fun slotOf(index: Int, count: Int): Int = index * count / DROPS

@@ -73,7 +73,7 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /** Hero glyph shown above the title of a permission sheet. */
-enum class PermissionGlyph { Brand, Bell, Mic, Pin }
+enum class PermissionGlyph { Brand, Bell, Mic, Pin, Offline }
 
 private val SheetEnterEasing = RealMotion.Emphasized
 private val SheetExitEasing = RealMotion.Exit
@@ -428,6 +428,10 @@ private fun PermissionGlyphIcon(glyph: PermissionGlyph, animate: Boolean) {
         PermissionGlyph.Pin -> Canvas(Modifier.size(38.dp)) {
             drawPin(ink, breathe?.value ?: 0f)
         }
+
+        PermissionGlyph.Offline -> Canvas(Modifier.size(38.dp)) {
+            drawOffline(ink, cycle?.value)
+        }
     }
 }
 
@@ -501,6 +505,44 @@ private fun DrawScope.drawPin(color: Color, bob: Float) {
             drawPath(pin, color)
         }
     }
+}
+
+/** Wi-Fi arcs that light up one by one (searching), crossed by a slash. */
+private fun DrawScope.drawOffline(color: Color, cycle: Float?) {
+    val unit = size.width / 24f
+    scale(unit, unit, Offset.Zero) {
+        val stroke = Stroke(width = 1.9f, cap = StrokeCap.Round)
+        for (i in 0..2) {
+            val r = 4.2f + i * 4.1f
+            val lit = if (cycle == null) 1f else (1f - kotlin.math.abs(cycle * 3f - i - 0.5f)).coerceIn(0.3f, 1f)
+            drawArc(color.copy(alpha = color.alpha * lit), 225f, 90f, false,
+                Offset(12f - r, 19f - r), Size(r * 2, r * 2), style = stroke)
+        }
+        drawCircle(color, 1.4f, Offset(12f, 19f))
+        drawLine(color, Offset(4f, 3.5f), Offset(20f, 21f), strokeWidth = 1.9f, cap = StrokeCap.Round)
+    }
+}
+
+/** Gated features that need the server, when the phone is offline (instead of the REAL Pro screen). */
+@Composable
+fun NoInternetSheet(visible: Boolean, onDismiss: () -> Unit, reduceAnimations: Boolean = false) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    PermissionSheet(
+        visible = visible,
+        title = t("İnternet bağlantın yok"),
+        description = t("Bu özellik internetle çalışıyor. Telefon internete bağlanınca tekrar dene."),
+        onAllow = {
+            onDismiss()
+            val panel = if (android.os.Build.VERSION.SDK_INT >= 29) android.content.Intent(android.provider.Settings.Panel.ACTION_INTERNET_CONNECTIVITY)
+                else android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)
+            runCatching { context.startActivity(panel) }
+        },
+        onLater = onDismiss,
+        reduceAnimations = reduceAnimations,
+        primaryLabel = t("İnternet ayarlarını aç"),
+        secondaryLabel = t("Tamam"),
+        glyph = PermissionGlyph.Offline
+    )
 }
 
 // ---------------------------------------------------------------------------------------------

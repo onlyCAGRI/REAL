@@ -127,13 +127,20 @@ func relativeLuminance(_ c: Color) -> Double {
 }
 
 extension ReminderItem {
+    /// A completed card that got a closing note (journal, Günlük or Not card) reads as a record: its title stays normal.
+    var hasCompletionNote: Bool {
+        journal != nil || (cardStack?.cards.contains { $0.id.hasPrefix("completed_journal_") || $0.title == "Nasıl geçti?" || $0.title == t("Nasıl geçti?") } ?? false)
+    }
+
     /// Card text follows the card's colour, as categories do: dark on light colours, white on dark ones. Cards draw
     /// their colour at 76% over the dark card surface, so that blend is measured. No colour: white text.
     var autoDarkText: Bool {
         let colors: [Color] = customSolidColorArgb.map { [Color(argbInt: $0)] } ?? [paletteColor(accentStart), paletteColor(accentEnd)].compactMap { $0 }
         guard !colors.isEmpty else { return false }
         let surface = Color(argb: 0xFF151517)
-        let light = colors.map { relativeLuminance(surface.lerp($0, 0.76)) }.reduce(0, +) / Double(colors.count)
+        // A completed card shows its colour at 38% (reminderAccentGradient), so decide from that, not the full colour.
+        let mix = isCompleted ? 0.38 : 0.76
+        let light = colors.map { relativeLuminance(surface.lerp($0, mix)) }.reduce(0, +) / Double(colors.count)
         return light > 0.35
     }
 }

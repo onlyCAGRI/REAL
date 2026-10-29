@@ -124,6 +124,9 @@ fun WelcomeScreen(
     var started by remember { mutableStateOf(false) }
     val view = androidx.compose.ui.platform.LocalView.current
     var name by remember { mutableStateOf("") }
+    // Sign-in comes first; the name is asked after it (GoogleProfileNamePrompt on home). Without an account,
+    // "Hesap olmadan devam et" opens the name field here instead.
+    var guestName by remember { mutableStateOf(false) }
     var isFocused by remember { mutableStateOf(false) }
     var showEmailAuth by remember { mutableStateOf(false) }
     var showDataUse by remember { mutableStateOf(false) }
@@ -453,7 +456,7 @@ fun WelcomeScreen(
                         }
                 ) {
                     Text(
-                        text = t("Size nasıl hitap edelim?"),
+                        text = if (guestName) t("Size nasıl hitap edelim?") else t("Hesabınla devam et"),
                         color = Color(0xFFF7F7F8),
                         fontSize = 21.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -467,7 +470,7 @@ fun WelcomeScreen(
 
                     Spacer(Modifier.height(20.dp))
 
-                    
+                    if (guestName) {
                     Row(
                         modifier = Modifier
                             .graphicsLayer {
@@ -545,6 +548,8 @@ fun WelcomeScreen(
                     }
 
                     Spacer(Modifier.height(14.dp))
+                    WelcomeLink(t("Giriş seçeneklerine dön")) { keyboardController?.hide(); focusManager.clearFocus(); guestName = false }
+                    } else {
                     WelcomeAuthButton(
                         label = if (authBusy) t("Google açılıyor…") else t("Google ile devam et"),
                         emphasized = true,
@@ -589,6 +594,9 @@ fun WelcomeScreen(
                         focusManager.clearFocus()
                         authError = null
                         showEmailAuth = true
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    WelcomeLink(t("Hesap olmadan devam et")) { authError = null; guestName = true }
                     }
                     authError?.let { message ->
                         Spacer(Modifier.height(10.dp))

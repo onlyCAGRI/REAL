@@ -256,6 +256,33 @@ object SyncLocal {
     fun protects(path:String):Boolean=if(!::database.isInitialized)false else synchronized(lock) { database.protects(path) }
     /** This card id was ever used here (a live card or a deletion, ours or the account's): a new card must not take it. */
     fun cardKeyUsed(id:Long):Boolean=if(!::database.isInitialized)false else synchronized(lock) { database.rowByLogicalKey(active,"CARD",id.toString())!=null }
+    /** A validated network with internet; false also covers captive Wi-Fi that never reaches the server. */
+    fun hasInternet(): Boolean {
+        if (!::application.isInitialized) return true
+        val cm = application.getSystemService(android.net.ConnectivityManager::class.java) ?: return true
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+    private fun startupIssue(failure: Throwable): com.cagri.real.startup.StartupIssue {
+        val causes = generateSequence(failure) { it.cause }.take(6).toList()
+        fun has(type: Class<*>) = causes.any { type.isInstance(it) }
+        return when {
+            !hasInternet() || has(java.net.UnknownHostException::class.java) || has(java.net.ConnectException::class.java) ||
+                has(java.net.NoRouteToHostException::class.java) -> com.cagri.real.startup.StartupIssue.NO_NETWORK
+            has(javax.net.ssl.SSLException::class.java) || has(java.security.cert.CertificateException::class.java) ->
+                com.cagri.real.startup.StartupIssue.SECURE_CONNECTION
+            has(java.net.SocketTimeoutException::class.java) -> com.cagri.real.startup.StartupIssue.TIMEOUT
+            failure is com.cagri.real.cloud.CloudHttpFailure && (failure.status == 401 || failure.status == 403) ->
+                com.cagri.real.startup.StartupIssue.SESSION
+            failure is com.cagri.real.cloud.CloudHttpFailure && (failure.status >= 500 || failure.status == 429) ->
+                com.cagri.real.startup.StartupIssue.SERVER
+            else -> com.cagri.real.startup.StartupIssue.UNKNOWN
+        }
+    }
+    private fun startupIssueDetail(failure: Throwable): String =
+        if (failure is com.cagri.real.cloud.CloudHttpFailure) "HTTP ${failure.status}"
+        else (generateSequence(failure) { it.cause }.lastOrNull() ?: failure).javaClass.simpleName
     fun retryStartup() {
         startup.retry()
         requestSync()
@@ -378,7 +405,8 @@ object SyncLocal {
             successfulRun = true
             syncDemand.complete(coveredGeneration)
         } catch(timeout:TimeoutCancellationException) {
-            startup.failed(startupGeneration)
+            startup.failed(startupGeneration, if (hasInternet()) com.cagri.real.startup.StartupIssue.TIMEOUT
+                else com.cagri.real.startup.StartupIssue.NO_NETWORK)
             throw timeout
         } catch(cancelled:CancellationException) { throw cancelled }
         catch(failure:Exception) {
@@ -390,7 +418,7 @@ object SyncLocal {
                 startup.completed(startupGeneration)
                 return@withLock
             }
-            startup.failed(startupGeneration)
+            startup.failed(startupGeneration, startupIssue(failure), startupIssueDetail(failure))
             // Kind and message (e.g. "IllegalStateException: Cloud card is deleted"), shown in Hesapları yönet → Eşitleme.
             synchronized(lock) { database.meta(account,"last_error",
                 listOfNotNull(failure.javaClass.simpleName, failure.message?.take(160)).joinToString(": ")) }

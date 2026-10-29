@@ -240,7 +240,10 @@ class MainActivity : ComponentActivity() {
                         com.cagri.real.platform.android.sync.SyncLocal.retryStartup()
                     }
                 }
-                val startupOfflineShown = startup.phase == com.cagri.real.startup.StartupPhase.ERROR_OFFLINE && startupOfflineVisible
+                // Once shown, the error screen stays up during "Yeniden dene" (the button spins) until the load succeeds.
+                val startupRetrying = startup.phase == com.cagri.real.startup.StartupPhase.SIGNED_IN_LOADING
+                val startupOfflineShown = startupOfflineVisible &&
+                    (startup.phase == com.cagri.real.startup.StartupPhase.ERROR_OFFLINE || startupRetrying)
                 val showWelcome = startup.showWelcome(hasCompletedOnboarding)
 
 
@@ -289,7 +292,10 @@ class MainActivity : ComponentActivity() {
                                 offline = true,
                                 onRetry = { com.cagri.real.platform.android.sync.SyncLocal.retryStartup() },
                                 onUseLocal = { com.cagri.real.platform.android.sync.SyncLocal.startup.allowOffline() },
-                                categoryCount = skeletonCategoryCount
+                                categoryCount = skeletonCategoryCount,
+                                issue = startup.issue,
+                                issueDetail = startup.issueDetail,
+                                retrying = startupRetrying
                             )
                         } else Surface(Modifier.fillMaxSize(), color = Color.Black) {}
                     } else if (!ready) {

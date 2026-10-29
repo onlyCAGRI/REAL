@@ -33,7 +33,10 @@ struct ReminderDetailView: View {
     @State private var deleting = false
     /// When Kaydet sent the sweep through the dock; the normal dock's buttons appear as it passes them.
     @State private var saveSweepStart: Date?
+    /// Tamamla's sweep: Kaydet's, mirrored from the left.
+    @State private var completeSweepStart: Date?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var iconsPeek: CGFloat = 0
     @State private var reordering = false
     @State private var newChecklistText = ""
     @State private var checklistOpen = false
@@ -112,6 +115,8 @@ struct ReminderDetailView: View {
                     .animation(.spring(duration: 0.3), value: blockOrder(r))
                 }
                 .scrollDismissesKeyboard(.interactively)
+                // A lifted block owns the finger: the page does not scroll under it.
+                .scrollDisabled(blockMoving)
                 bottomColumn(r)
             } else {
                 Color.clear.onAppear { dismiss() }
@@ -387,7 +392,7 @@ struct ReminderDetailView: View {
         let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: r.isCompleted,
                                             blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
         let dark = r.autoDarkText
-        let struck = r.isCompleted && r.journal == nil
+        let struck = r.isCompleted && !r.hasCompletionNote
         let ink: Color = dark ? (struck ? Color(argb: 0xFF55555A) : Color(argb: 0xFF101010)) : (struck ? Color(argb: 0xFF9999A2) : Color(argb: 0xFFF4F4F6))
         return VStack(alignment: cover ? .center : .leading, spacing: 0) {
             if editing {
@@ -766,6 +771,8 @@ struct ReminderDetailView: View {
                 // Yol: within an hour of the card's time, the driving route from here (taller map).
                 CardRouteMap(location: l, coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
                              routeWanted: !editing && !card.isCompleted && card.alertAt.map { (0...3_600_000).contains($0 - EpochMillis.now) } == true)
+                // While editing the map does not pan, so a hold on it lifts the block.
+                .allowsHitTesting(!editing)
                 .overlay(alignment: .bottomTrailing) {
                     if let label = reminderLocationLabel(l) {
                         Text(label).font(RealFont.inter(11, .medium)).foregroundStyle(.white).lineLimit(1)
@@ -880,19 +887,14 @@ struct ReminderDetailView: View {
                     }
                 }
                 .padding(.bottom, 10)
-            } else if r.isCompleted && r.journal == nil && !(r.cardStack?.cards.contains { $0.title == "Nasıl geçti?" || $0.title == t("Nasıl geçti?") } ?? false) {
-                Button(action: addCompletionJournal) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(t("Günlük ekle")).font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
-                            Text(t("Nasıl geçti? Aklında kalanı yaz.")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
-                        }
-                        Spacer()
-                        RealSymbol("plus", size: 16.1).foregroundStyle(RealColors.accentBlue)
-                    }
-                    .padding(.horizontal, 20).padding(.vertical, 14)
-                    .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), role: .chrome)
+            } else if r.isCompleted && !r.hasCompletionNote {
+                // The Günlük ekle panel, now with Not ekle under it; both open a new card at the end of the stack.
+                VStack(spacing: 0) {
+                    completionRow(t("Günlük ekle"), t("Nasıl geçti? Aklında kalanı yaz.")) { addCompletionJournal(t("Nasıl geçti?")) }
+                    Rectangle().fill(.white.opacity(0.08)).frame(height: 0.7).padding(.horizontal, 20)
+                    completionRow(t("Not ekle"), t("Sonuç, öğrendiğin, sıradaki adım…")) { addCompletionJournal(t("Not")) }
                 }
+                .liquidGlass(RoundedRectangle(cornerRadius: 22, style: .continuous), role: .chrome)
                 .padding(.bottom, 12)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -908,6 +910,50 @@ struct ReminderDetailView: View {
         .animation(.easeOut(duration: 0.2), value: deleting)
     }
 
+    /// Tamamla · Düzenle · Share · Sil, or Geri al · … once completed. After Tamamla the Geri al set comes in as the
+    /// mirrored sweep passes (from the left); after Kaydet as Kaydet's sweep passes (from the right).
+    private func mainActions(_ r: ReminderItem, done: Bool) -> some View {
+        let visible = !editing && r.isCompleted == done
+        let fromLeft = done && completeSweepStart.map { Date().timeIntervalSince($0) < DetailDockMotion.duration } == true
+        let start = fromLeft ? completeSweepStart : saveSweepStart
+        func delay(_ i: Int) -> Double { DetailDockMotion.enterDelay(i, of: 4, sweepStart: start, fromLeft: fromLeft) }
+        return HStack(spacing: 0) {
+            if done {
+                DetailAction(label: t("Geri al"), symbol: "arrow.uturn.backward", enabled: !deleting) {
+                    withAnimation { store.toggleCompleted(reminderId) }
+                }
+                .detailDockItem(visible: visible, enterDelay: delay(0), reduceMotion: reduceMotion)
+            } else {
+                DetailAction(label: t("Tamamla"), symbol: "checkmark", enabled: !deleting) {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    if !reduceMotion { completeSweepStart = Date() }
+                    withAnimation { store.toggleCompleted(reminderId) }
+                }
+                .detailDockItem(visible: visible, enterDelay: delay(0), reduceMotion: reduceMotion)
+            }
+            DetailAction(label: t("Düzenle"), symbol: "pencil", enabled: !deleting) {
+                dockCollapsed = false   // every edit starts with the dock raised
+                draft = r
+                categorySelection = r.customCategoryId
+                checklistOpen = !r.checklistItems.isEmpty
+            }
+            .detailDockItem(visible: visible, enterDelay: delay(1), reduceMotion: reduceMotion)
+            Button { showCardShare = true } label: {
+                VStack(spacing: 1) {
+                    RealSymbol("square.and.arrow.up", size: 20.7)
+                    Text("Share").font(RealFont.inter(10))
+                }
+                .foregroundStyle(Color(argb: 0xFFF0F0F4))
+                .frame(maxWidth: .infinity, minHeight: 56)
+            }
+            .buttonStyle(.plain)
+            .disabled(deleting)
+            .detailDockItem(visible: visible, enterDelay: delay(2), reduceMotion: reduceMotion)
+            DetailAction(label: t("Sil"), symbol: "trash") { deleting.toggle() }
+                .detailDockItem(visible: visible, enterDelay: delay(3), reduceMotion: reduceMotion)
+        }
+    }
+
     /// Both sets of actions stay laid out on top of each other; DetailDockMotion blurs one out and the other in.
     private func actionBar(_ r: ReminderItem) -> some View {
         ZStack {
@@ -921,39 +967,16 @@ struct ReminderDetailView: View {
                 }
                 .detailDockItem(visible: editing, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
             }
-            HStack(spacing: 0) {
-                DetailAction(label: r.isCompleted ? t("Geri al") : t("Tamamla"), symbol: r.isCompleted ? "arrow.uturn.backward" : "checkmark", enabled: !deleting) {
-                    if !r.isCompleted { UINotificationFeedbackGenerator().notificationOccurred(.success) }
-                    withAnimation { store.toggleCompleted(reminderId) }
-                }
-                .detailDockItem(visible: !editing, enterDelay: DetailDockMotion.enterDelay(0, of: 4, sweepStart: saveSweepStart), reduceMotion: reduceMotion)
-                DetailAction(label: t("Düzenle"), symbol: "pencil", enabled: !deleting) {
-                    dockCollapsed = false   // every edit starts with the dock raised
-                    draft = r
-                    categorySelection = r.customCategoryId
-                    checklistOpen = !r.checklistItems.isEmpty
-                }
-                .detailDockItem(visible: !editing, enterDelay: DetailDockMotion.enterDelay(1, of: 4, sweepStart: saveSweepStart), reduceMotion: reduceMotion)
-                Button { showCardShare = true } label: {
-                    VStack(spacing: 1) {
-                        RealSymbol("square.and.arrow.up", size: 20.7)
-                        Text("Share").font(RealFont.inter(10))
-                    }
-                    .foregroundStyle(Color(argb: 0xFFF0F0F4))
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                }
-                .buttonStyle(.plain)
-                .disabled(deleting)
-                .detailDockItem(visible: !editing, enterDelay: DetailDockMotion.enterDelay(2, of: 4, sweepStart: saveSweepStart), reduceMotion: reduceMotion)
-                DetailAction(label: t("Sil"), symbol: "trash") { deleting.toggle() }
-                    .detailDockItem(visible: !editing, enterDelay: DetailDockMotion.enterDelay(3, of: 4, sweepStart: saveSweepStart), reduceMotion: reduceMotion)
-            }
+            // Tamamla · … and Geri al · …: two sets on top of each other, so Tamamla swaps the whole dock like Kaydet.
+            mainActions(r, done: false)
+            mainActions(r, done: true)
         }
         .padding(.horizontal, 6)
         .background {
             ZStack {
-                DetailDockDrops(slots: editing ? 2 : 4, sweepStart: saveSweepStart)
+                DetailDockDrops(slots: editing ? 2 : 4, sweepStart: saveSweepStart, completeStart: completeSweepStart)
                 DetailDockSweep(start: saveSweepStart)
+                DetailDockSweep(start: completeSweepStart, fromLeft: true)
             }
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         }
@@ -1073,6 +1096,18 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "sparkles", label: t("Gökyüzü posteri"), active: false) { openPoster { showSkyPoster = true } }
                 }
                 .padding(.leading, 2).padding(.trailing, 12)
+                .offset(x: iconsPeek)
+            }
+            // Hint (Android): shortly after the icons appear they slide a little left and back, twice.
+            .task {
+                guard !reduceMotion else { return }
+                try? await Task.sleep(for: .milliseconds(650))
+                for _ in 0..<2 {
+                    withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.42)) { iconsPeek = -36 }
+                    try? await Task.sleep(for: .milliseconds(420))
+                    withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.48)) { iconsPeek = 0 }
+                    try? await Task.sleep(for: .milliseconds(700))
+                }
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
@@ -1205,9 +1240,25 @@ struct ReminderDetailView: View {
     }
 
     /// Completed card: "Nasıl geçti?" card added to the stack and opened for writing.
-    private func addCompletionJournal() {
-        let card = CardStackCard(id: "completed_journal_\(EpochMillis.now)", title: t("Nasıl geçti?"), body: "")
+    private func addCompletionJournal(_ title: String) {
+        let card = CardStackCard(id: "completed_journal_\(EpochMillis.now)", title: title, body: "")
         editingStackCard = card
+    }
+
+    private func completionRow(_ title: String, _ subtitle: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
+                    Text(subtitle).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                }
+                Spacer()
+                RealSymbol("plus", size: 16.1).foregroundStyle(RealColors.accentBlue)
+            }
+            .padding(.horizontal, 20).padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func importPhotos(_ items: [PhotosPickerItem]) {
@@ -1292,6 +1343,12 @@ struct CardStackDeck: View {
     var onEdit: (CardStackCard) -> Void = { _ in }
     var onAdd: () -> Void = {}
     @State private var active = 0
+    /// Pinch on the front card's photo (Android CardPhotoZoomState): only the pixels move inside the card, never
+    /// the card itself, and nothing is saved; it resets when another card comes to the front.
+    @State private var photoScale: CGFloat = 1
+    @State private var photoOffset: CGSize = .zero
+    @State private var pinchStart: (scale: CGFloat, offset: CGSize)?
+    @State private var cardSize: CGSize = .zero
 
     var body: some View {
         let cards = stack.cards
@@ -1303,9 +1360,11 @@ struct CardStackDeck: View {
                     .zIndex(0)
             }
             if !cards.isEmpty {
-                card(cards[current], index: current)
+                card(cards[current], index: current, front: true)
                     .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
                     .onTapGesture { onEdit(cards[current]) }
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
+                    .simultaneousGesture(photoPinch, including: cards[current].imageUri != nil ? .all : .subviews)
                     .zIndex(2)
             }
             if current + 1 < cards.count {
@@ -1324,9 +1383,28 @@ struct CardStackDeck: View {
             }
         }
         .padding(.bottom, editing ? 22 : 0)
+        .onChange(of: active) { _, _ in photoScale = 1; photoOffset = .zero; pinchStart = nil }
     }
 
-    private func card(_ c: CardStackCard, index: Int) -> some View {
+    /// Two fingers zoom around the pinch point (1×–4×); one finger stays free to scroll or lift the block.
+    private var photoPinch: some Gesture {
+        MagnifyGesture()
+            .onChanged { v in
+                let start = pinchStart ?? (scale: photoScale, offset: photoOffset)
+                if pinchStart == nil { pinchStart = start }
+                let scale = min(max(start.scale * v.magnification, 1), 4)
+                let k = scale / start.scale
+                // Keep the photo point under the fingers still: offset' = d + (offset − d)·k, d = anchor − centre.
+                let dx = (v.startAnchor.x - 0.5) * cardSize.width, dy = (v.startAnchor.y - 0.5) * cardSize.height
+                let maxX = cardSize.width * (scale - 1) / 2, maxY = cardSize.height * (scale - 1) / 2
+                photoScale = scale
+                photoOffset = CGSize(width: min(max(dx + (start.offset.width - dx) * k, -maxX), maxX),
+                                     height: min(max(dy + (start.offset.height - dy) * k, -maxY), maxY))
+            }
+            .onEnded { _ in pinchStart = nil }
+    }
+
+    private func card(_ c: CardStackCard, index: Int, front: Bool = false) -> some View {
         let color = c.colorArgb.map { Color(argbInt: $0) } ?? Color(argb: 0xFF292B2D)
         let hasImage = c.imageUri != nil
         let dark = hasImage || luminance(color) < 0.48
@@ -1357,6 +1435,7 @@ struct CardStackDeck: View {
                 shape.fill(color)
                 if let path = c.imageUri, let img = AttachmentStorage.image(path) {
                     Image(uiImage: img).resizable().scaledToFill()
+                        .scaleEffect(front ? photoScale : 1).offset(front ? photoOffset : .zero)
                     LinearGradient(colors: [.black.opacity(0.06), .black.opacity(0.22), .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
                 }
             }

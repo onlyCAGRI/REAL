@@ -68,6 +68,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.togetherWith
@@ -224,6 +225,7 @@ import com.cagri.real.data.DEFAULT_GRADIENT_BLEND_FRACTION
 import com.cagri.real.ui.components.ReminderColorChoices
 import com.cagri.real.ui.components.ReminderColorPicker
 import com.cagri.real.ui.components.reminderAccentBrush
+import com.cagri.real.ui.components.reminderUsesDarkText
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.lerp
 import com.cagri.real.data.resolveGradientBlendFraction
@@ -367,6 +369,18 @@ internal fun ReminderDetailScreen(
     // can appear as the band passes over them.
     val saveSweep = remember(reminder.id) { Animatable(0f) }
     var saveSweepStartedAt by remember(reminder.id) { mutableLongStateOf(0L) }
+    // Tamamla's sweep runs from the left, Kaydet's from the right.
+    var sweepFromLeft by remember(reminder.id) { mutableStateOf(false) }
+    // The dock follows Tamamla / Geri al at once (like Kaydet), not when the saved card comes back, so its new buttons
+    // still appear while the sweep crosses them.
+    var dockCompleted by remember(reminder.id) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(reminder.isCompleted) { dockCompleted = null }
+    // Sil: the page leaves to the left on its way home (ReminderScreen's delete transition).
+    val deleteThen: (() -> Unit) -> Unit = { action ->
+        deleting = false
+        if (!reduceAnimations) DetailDeleteMotion.active = true
+        action()
+    }
     var musicSearchOpen by remember(reminder.id) { mutableStateOf(false) }
     var mediaSearchOpen by remember(reminder.id) { mutableStateOf(false) }
     var gameSearchOpen by remember(reminder.id) { mutableStateOf(false) }
@@ -1721,7 +1735,7 @@ internal fun ReminderDetailScreen(
                                     .padding(start = 22.dp, end = 22.dp, top = titlePadding + heroInset, bottom = titlePadding),
                                 verticalArrangement = if (heroInset > 0.dp) Arrangement.Center else Arrangement.Top
                             ) {
-                                val shownUseDarkText = if (editing) useDarkText else reminder.useDarkText
+                                val shownUseDarkText = if (editing) useDarkText else reminderUsesDarkText(reminder.useDarkText, reminder.isCompleted, shownAccentStart, shownAccentEnd, shownCustomSolidColorArgb)
                                 if (editing) {
                                     BasicTextField(
                                         value = editedText, onValueChange = { editedText = it },
@@ -1748,8 +1762,8 @@ internal fun ReminderDetailScreen(
                                             maxLines = titleLines,
                                             overflow = TextOverflow.Ellipsis,
                                             color = when {
-                                                shownUseDarkText -> if (reminder.isCompleted && reminder.journal == null) Color(0xFF55555A) else Color(0xFF101010)
-                                                reminder.isCompleted && reminder.journal == null -> Color(0xFF9999A2)
+                                                shownUseDarkText -> if (reminder.isCompleted && !hasCompletionNote(reminder)) Color(0xFF55555A) else Color(0xFF101010)
+                                                reminder.isCompleted && !hasCompletionNote(reminder) -> Color(0xFF9999A2)
                                                 else -> Color(0xFFF4F4F6)
                                             },
                                             fontSize = 21.sp,
@@ -1758,7 +1772,7 @@ internal fun ReminderDetailScreen(
                                             fontWeight = if (titlePlacement.textBold) FontWeight.Bold else FontWeight.Normal,
                                             fontStyle = if (titlePlacement.textItalic) FontStyle.Italic else FontStyle.Normal,
                                             modifier = Modifier.fillMaxWidth(),
-                                            textDecoration = if (reminder.isCompleted && reminder.journal == null) TextDecoration.LineThrough else TextDecoration.None
+                                            textDecoration = if (reminder.isCompleted && !hasCompletionNote(reminder)) TextDecoration.LineThrough else TextDecoration.None
                                         )
                                     }
                                 }
@@ -2809,10 +2823,23 @@ internal fun ReminderDetailScreen(
                                         )
                                     }
                                 }
+                            // Hint: the block icons scroll; shortly after they appear they slide a little left and back.
+                            val blockIconsScroll = rememberScrollState()
+                            val blockIconsPeek = with(LocalDensity.current) { 36.dp.toPx() }.toInt()
+                            LaunchedEffect(Unit) {
+                                if (reduceAnimations) return@LaunchedEffect
+                                kotlinx.coroutines.delay(650)
+                                if (!blockIconsScroll.canScrollForward || blockIconsScroll.value != 0) return@LaunchedEffect
+                                repeat(2) {
+                                    blockIconsScroll.animateScrollTo(blockIconsPeek, tween(420, easing = RealMotion.Emphasized))
+                                    blockIconsScroll.animateScrollTo(0, tween(480, easing = RealMotion.Emphasized))
+                                    kotlinx.coroutines.delay(220)
+                                }
+                            }
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
+                                    .horizontalScroll(blockIconsScroll)
                                     .padding(start = 2.dp, end = 12.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -3238,67 +3265,72 @@ internal fun ReminderDetailScreen(
             ) {
                 val scopedDelete = reminder.hasRepeat && repeatOccurrenceMillis != null
                 DeleteReminderPrompt(scene, { scenePosition },
-                    onDismiss = { deleting = false }, onConfirm = { deleting = false; onDelete() },
-                    onConfirmThisOccurrence = if (scopedDelete) ({ deleting = false; onDeleteRepeatOccurrence(com.cagri.real.data.RepeatDeleteScope.THIS_OCCURRENCE) }) else null,
-                    onConfirmThisAndFuture = if (scopedDelete) ({ deleting = false; onDeleteRepeatOccurrence(com.cagri.real.data.RepeatDeleteScope.THIS_AND_FUTURE) }) else null,
+                    onDismiss = { deleting = false }, onConfirm = { deleteThen(onDelete) },
+                    onConfirmThisOccurrence = if (scopedDelete) ({ deleteThen { onDeleteRepeatOccurrence(com.cagri.real.data.RepeatDeleteScope.THIS_OCCURRENCE) } }) else null,
+                    onConfirmThisAndFuture = if (scopedDelete) ({ deleteThen { onDeleteRepeatOccurrence(com.cagri.real.data.RepeatDeleteScope.THIS_AND_FUTURE) } }) else null,
                     occurrenceIsNext = repeatOccurrenceIsNext,
                     modifier = Modifier.padding(bottom = 12.dp), designStyle = designStyle, reduceDynamicBlur = reduceDynamicBlur)
             }
 
-            val hasCompletionJournalCard = remember(reminder.cardStack) {
-                reminder.cardStack?.cards?.any { card ->
-                    card.id.startsWith(COMPLETED_JOURNAL_CARD_ID_PREFIX) ||
-                        card.title.trim().equals("Nasıl geçti?", ignoreCase = true)
-                } == true
+            // Günlük ekle / Not ekle (completed cards): a new card at the end of the card stack, opened for writing.
+            val addCompletionNote: (String) -> Unit = { noteTitle ->
+                loadReminderIntoDraft()
+                val existing = reminder.cardStack
+                val noteCard = CardStackCard(
+                    id = COMPLETED_JOURNAL_CARD_ID_PREFIX + System.currentTimeMillis(),
+                    title = noteTitle,
+                    colorArgb = CardStackDefaultColor.toArgb()
+                )
+                editedCardStack = if (existing == null) {
+                    CardStackBlock(prompt = null, cards = listOf(noteCard))
+                } else {
+                    existing.copy(cards = existing.cards + noteCard)
+                }
+                val nextOrder = resolveBlockOrder(
+                    if (editing || inlineCardStackEditing) editedContentBlockOrder else reminder.contentBlockOrder,
+                    activeBlockKeys + setOf("card_stack")
+                ).filterNot { it == "card_stack" }.toMutableList()
+                nextOrder.add("card_stack")
+                editedContentBlockOrder = nextOrder
+                inlineCardStackKey = "card_stack"
+                inlineCardStackStartIndex = editedCardStack?.cards?.filter { it.stackGroupId == null }?.lastIndex ?: 0
+                inlineCardStackEditing = true
+                coroutineScope.launch {
+                    delay(80)
+                    try {
+                        cardStackBringIntoViewRequester.bringIntoView()
+                    } catch (_: Exception) {}
+                }
             }
+
+            // Completed cards: the old "Günlük ekle" panel above the dock, now with two rows. Both add a card at the end
+            // of the card stack, opened for writing: Günlük untitled (how it went), Not titled "Not".
             AnimatedVisibility(
-                visible = reminder.isCompleted && !editing && !inlineCardStackEditing && !hasCompletionJournalCard,
+                visible = reminder.isCompleted && !editing && !inlineCardStackEditing && !hasCompletionNote(reminder),
                 enter = fadeIn(tween(240)) + slideInVertically(tween(240)) { it / 4 },
                 exit = fadeOut(tween(160)) + slideOutVertically(tween(160)) { it / 4 }
             ) {
-                val addJournalCardRow: @Composable () -> Unit = {
+                val completionRow: @Composable (String, String, () -> Unit) -> Unit = { title, subtitle, onClick ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(22.dp))
-                            .clickable {
-                                loadReminderIntoDraft()
-                                val existing = reminder.cardStack
-                                val journalCard = CardStackCard(
-                                    id = COMPLETED_JOURNAL_CARD_ID_PREFIX + System.currentTimeMillis(),
-                                    title = "",
-                                    colorArgb = CardStackDefaultColor.toArgb()
-                                )
-                                editedCardStack = if (existing == null) {
-                                    CardStackBlock(prompt = null, cards = listOf(journalCard))
-                                } else {
-                                    existing.copy(cards = existing.cards + journalCard)
-                                }
-                                val nextOrder = resolveBlockOrder(
-                                    if (editing || inlineCardStackEditing) editedContentBlockOrder else reminder.contentBlockOrder,
-                                    activeBlockKeys + setOf("card_stack")
-                                ).filterNot { it == "card_stack" }.toMutableList()
-                                nextOrder.add("card_stack")
-                                editedContentBlockOrder = nextOrder
-                                inlineCardStackKey = "card_stack"
-                                inlineCardStackStartIndex = editedCardStack?.cards?.filter { it.stackGroupId == null }?.lastIndex ?: 0
-                                inlineCardStackEditing = true
-                                coroutineScope.launch {
-                                    delay(80)
-                                    try {
-                                        cardStackBringIntoViewRequester.bringIntoView()
-                                    } catch (_: Exception) {}
-                                }
-                            }
+                            .clickable(onClick = onClick)
                             .padding(horizontal = 20.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text(t("Günlük ekle"), color = Color(0xFFD3D3D9), fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                            Text(t("Nasıl geçti? Aklında kalanı yaz."), color = Color(0xFF8E8E98), fontSize = 12.sp)
+                            Text(title, color = Color(0xFFD3D3D9), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Text(subtitle, color = Color(0xFF8E8E98), fontSize = 12.sp)
                         }
                         ActionIcon(ActionGlyph.Add, Modifier.size(16.dp), Color(0xFF91B9FF))
+                    }
+                }
+                val completionRows: @Composable () -> Unit = {
+                    Column(Modifier.clip(RoundedCornerShape(22.dp))) {
+                        completionRow(t("Günlük ekle"), t("Nasıl geçti? Aklında kalanı yaz.")) { addCompletionNote("") }
+                        Box(Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(0.7.dp).background(Color.White.copy(alpha = 0.08f)))
+                        completionRow(t("Not ekle"), t("Sonuç, öğrendiğin, sıradaki adım…")) { addCompletionNote(t("Not")) }
                     }
                 }
                 if (designStyle == DesignStyle.LiquidGlass) {
@@ -3308,7 +3340,7 @@ internal fun ReminderDetailScreen(
                             .padding(bottom = 12.dp)
                             .liquidChrome(corners = 22.dp)
                     ) {
-                        addJournalCardRow()
+                        completionRows()
                     }
                 } else {
                     DesignPanel(
@@ -3319,7 +3351,7 @@ internal fun ReminderDetailScreen(
                         designStyle = designStyle,
                         reduceDynamicBlur = reduceDynamicBlur
                     ) {
-                        addJournalCardRow()
+                        completionRows()
                     }
                 }
             }
@@ -3339,10 +3371,12 @@ internal fun ReminderDetailScreen(
                 val dockMode = when {
                     inlineCardStackEditing && !editing -> DetailDockMode.InlineStack
                     editing -> DetailDockMode.Edit
+                    // Tamamla / Geri al swap the dock's set like Düzenle / Kaydet: drops flow, labels blur across.
+                    dockCompleted ?: reminder.isCompleted -> DetailDockMode.Done
                     else -> DetailDockMode.Normal
                 }
-                DetailDockDrops(dockMode, saveSweepStartedAt, reduceAnimations, Modifier.matchParentSize())
-                Box(Modifier.matchParentSize().detailDockSweep { saveSweep.value })
+                DetailDockDrops(dockMode, saveSweepStartedAt, reduceAnimations, Modifier.matchParentSize(), waveFromLeft = sweepFromLeft)
+                Box(Modifier.matchParentSize().detailDockSweep({ saveSweep.value }, { sweepFromLeft }))
                 AnimatedContent(
                     targetState = dockMode,
                     transitionSpec = { EnterTransition.None togetherWith ExitTransition.None using SizeTransform(clip = false) },
@@ -3351,7 +3385,7 @@ internal fun ReminderDetailScreen(
                 // Fixed for this set's lifetime: staggered by the Kaydet sweep when it is still crossing the glass.
                 val enterDelays = remember {
                     val elapsed = android.os.SystemClock.uptimeMillis() - saveSweepStartedAt
-                    detailDockEnterDelays(mode.slots, elapsed.takeIf { mode == DetailDockMode.Normal })
+                    detailDockEnterDelays(mode.slots, elapsed.takeIf { mode == DetailDockMode.Normal || mode == DetailDockMode.Done }, sweepFromLeft)
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 0.dp), verticalAlignment = Alignment.CenterVertically) {
                     val item: @Composable (Int) -> Modifier = { index -> Modifier.weight(1f).then(detailDockItemMotion(enterDelays[index], reduceAnimations)) }
@@ -3379,6 +3413,7 @@ internal fun ReminderDetailScreen(
                             onClick = {
                                 // Only the Kaydet tap sends the mic sweep; the background-tap autosave closes quietly.
                                 if (!reduceAnimations) {
+                                    sweepFromLeft = false
                                     saveSweepStartedAt = android.os.SystemClock.uptimeMillis()
                                     coroutineScope.launch {
                                         saveSweep.snapTo(0f)
@@ -3390,22 +3425,14 @@ internal fun ReminderDetailScreen(
                             }
                         )
                     } else {
-                        DetailAction(if (reminder.isCompleted) t("Geri al") else t("Tamamla"),
-                            if (reminder.isCompleted) ActionGlyph.Undo else ActionGlyph.Check,
-                            item(0), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
-                                if (!reminder.isCompleted) {
-                                    RealHaptics.success(view)
-                                }
-                                onToggleCompleted()
-                            })
-                        DetailAction(t("Düzenle"), ActionGlyph.Edit, item(1), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
+                        val startEditing: () -> Unit = {
                             focusManager.clearFocus()
                             keyboard?.hide()
                             loadReminderIntoDraft()
                             inlineCardStackEditing = false
                             editing = true
-                        })
-                        DetailAction("Share", ActionGlyph.Share, item(2), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
+                        }
+                        val shareCard: () -> Unit = {
                             val stackCards = reminder.cardStack?.cards.orEmpty()
                             if (stackCards.size == 1) {
                                 // Only one card: nothing to choose. Same ids the dialog would have passed on.
@@ -3417,7 +3444,29 @@ internal fun ReminderDetailScreen(
                                 sharedStackIds = null
                                 showRealShareDialog = true
                             }
-                        })
+                        }
+                        if (mode == DetailDockMode.Done) {
+                            DetailAction(t("Geri al"), ActionGlyph.Undo, item(0), enabled = !deleting, reduceAnimations = reduceAnimations,
+                                onClick = { dockCompleted = false; onToggleCompleted() })
+                        } else {
+                            DetailAction(t("Tamamla"), ActionGlyph.Check, item(0), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = {
+                                RealHaptics.success(view)
+                                // The same sweep as Kaydet; the new set comes in as the band passes.
+                                if (!reduceAnimations) {
+                                    sweepFromLeft = true
+                                    saveSweepStartedAt = android.os.SystemClock.uptimeMillis()
+                                    coroutineScope.launch {
+                                        saveSweep.snapTo(0f)
+                                        saveSweep.animateTo(1f, tween(DETAIL_DOCK_MILLIS, easing = LinearEasing))
+                                        saveSweep.snapTo(0f)
+                                    }
+                                }
+                                dockCompleted = true
+                                onToggleCompleted()
+                            })
+                        }
+                        DetailAction(t("Düzenle"), ActionGlyph.Edit, item(1), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = startEditing)
+                        DetailAction("Share", ActionGlyph.Share, item(2), enabled = !deleting, reduceAnimations = reduceAnimations, onClick = shareCard)
                         DetailAction(t("Sil"), ActionGlyph.Delete, item(3), reduceAnimations = reduceAnimations, onClick = { deleting = !deleting })
                     }
                 }
@@ -3746,6 +3795,12 @@ private fun DetailAction(
 }
 
 private const val COMPLETED_JOURNAL_CARD_ID_PREFIX = "completed_journal_"
+
+/** A completed card that got a closing note (journal or a Not ekle card) reads as a record: its title stays normal. */
+internal fun hasCompletionNote(reminder: ReminderItem): Boolean =
+    reminder.journal != null || reminder.cardStack?.cards?.any { card ->
+        card.id.startsWith(COMPLETED_JOURNAL_CARD_ID_PREFIX) || card.title.trim().equals("Nasıl geçti?", ignoreCase = true)
+    } == true
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Preview(name = "Cam detay", widthDp = 393, heightDp = 852, showBackground = true)

@@ -43,6 +43,7 @@ struct YasamScreen: View {
                 Color.black.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        PullToCloseMarker()
                         heroCard.padding(.top, 4)
                         if section == .journals {
                             journalList

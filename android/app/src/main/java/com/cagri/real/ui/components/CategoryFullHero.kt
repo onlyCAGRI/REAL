@@ -171,12 +171,17 @@ internal fun CategoryFullHero(
 ) {
     val heroShape = RoundedCornerShape(bottomStart = 34.dp, bottomEnd = 34.dp)
     val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null && !reduceAnimations) {
+        // Pulled down to home: the hero flies into its home card a little quicker than a back tap.
+        val pulled = com.cagri.real.ui.CategoryPullMotion.active
         val entering = animatedVisibilityScope.transition.targetState == androidx.compose.animation.EnterExitState.Visible
         with(sharedTransitionScope) {
             Modifier.sharedBounds(
                 rememberSharedContentState(key = "category_card_${customCategory?.id ?: category?.name}"),
                 animatedVisibilityScope = animatedVisibilityScope,
-                boundsTransform = { _, _ -> androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 300f) },
+                boundsTransform = { _, _ ->
+                    if (pulled) androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 420f)
+                    else androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 300f)
+                },
                 clipInOverlayDuringTransition = OverlayClip(heroShape),
                 renderInOverlayDuringTransition = entering,
                 zIndexInOverlay = if (entering) 1f else 0f

@@ -68,6 +68,10 @@ struct CategoryScreen: View {
     }
     private var custom: CustomCategory? { store.category(customId) }
 
+    @State private var pull: CGFloat = 0
+    @State private var leavingByPull = false
+    @State private var pullRest: CGFloat?
+
     var body: some View {
         let lists = projection
         let stats = store.cards.categoryProgress(builtIn: builtIn, customId: customId)
@@ -77,6 +81,11 @@ struct CategoryScreen: View {
             let topInset = max(outer.safeAreaInsets.top, windowTopInset)
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    // Top of the list: pulled below its resting place means the page is pulled down past the top.
+                    Color.clear.frame(height: 0)
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: CategoryPullKey.self, value: g.frame(in: .named("categoryScroll")).minY)
+                        })
                     if let visual {
                         CategoryHero(
                             visual: visual, description: custom?.description ?? "",
@@ -186,6 +195,19 @@ struct CategoryScreen: View {
             }
             .coordinateSpace(name: "categoryScroll")
             .onPreferenceChange(HeroBottomKey.self) { heroBottom = $0 }
+            // Pull down from the top: the page follows a little and slides back to home (every category, like the
+            // zoom transition's own swipe on custom ones).
+            .onPreferenceChange(CategoryPullKey.self) { y in
+                let rest = pullRest ?? y
+                if pullRest == nil { pullRest = y }
+                pull = max(0, y - rest)
+                if pull >= 110 && !leavingByPull && selectedIds.isEmpty {
+                    leavingByPull = true
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    dismiss()
+                }
+            }
+            .scaleEffect(1 - min(pull, 110) / 110 * 0.04, anchor: .bottom)
             .ignoresSafeArea(edges: .top)
             .overlay(alignment: .top) {
                 if let visual, heroBottom < topInset + 64, selectedIds.isEmpty {
@@ -757,4 +779,9 @@ var windowTopInset: CGFloat {
     UIApplication.shared.connectedScenes
         .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }
         .first ?? 0
+}
+
+private struct CategoryPullKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

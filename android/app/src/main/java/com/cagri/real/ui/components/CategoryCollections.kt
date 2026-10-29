@@ -474,13 +474,17 @@ fun CollectionCategoryCard(
     val sharedBoundsKey = "category_card_${customCategory?.id ?: category?.name}"
     val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null && !reduceAnimations) {
         val targetVisible = animatedVisibilityScope.transition.targetState == EnterExitState.Visible
-        val isForwardSharedMotion = (hero && targetVisible) || (!hero && !targetVisible)
+        // A pull back to home draws the flying card above the fading category page too.
+        val isForwardSharedMotion = (hero && targetVisible) || (!hero && !targetVisible) ||
+            (!hero && com.cagri.real.ui.CategoryPullMotion.active)
         with(sharedTransitionScope) {
             Modifier.sharedBounds(
                 rememberSharedContentState(key = sharedBoundsKey),
                 animatedVisibilityScope = animatedVisibilityScope,
                 boundsTransform = { _, _ ->
-                    spring(dampingRatio = 0.85f, stiffness = 300f)
+                    // A category pulled down to home flies back here a little quicker than a back tap.
+                    if (com.cagri.real.ui.CategoryPullMotion.active) spring(dampingRatio = 0.9f, stiffness = 420f)
+                    else spring(dampingRatio = 0.85f, stiffness = 300f)
                 },
                 clipInOverlayDuringTransition = OverlayClip(shape),
                 renderInOverlayDuringTransition = isForwardSharedMotion,

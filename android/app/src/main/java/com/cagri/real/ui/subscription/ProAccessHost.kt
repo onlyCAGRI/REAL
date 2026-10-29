@@ -14,7 +14,10 @@ fun ProAccessHost(uid: String?) {
         com.cagri.real.platform.android.access.RealAccessRepository.clear()
         onDispose { ProAccess.dismiss() }
     }
-    if (prompt != null && prompt?.uid == uid) {
+    val current = prompt
+    if (current != null && current.offline) {
+        com.cagri.real.ui.components.NoInternetSheet(visible = true, onDismiss = ProAccess::dismiss)
+    } else if (current != null && current.uid == uid) {
         RealProRoute(onDismiss = ProAccess::dismiss)
     }
 }

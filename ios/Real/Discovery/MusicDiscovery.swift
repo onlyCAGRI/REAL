@@ -376,7 +376,7 @@ struct MusicDiscoveryScreen: View {
 
     private func addToReal(_ m: MusicBlock) {
         if store.reminders.contains(where: { $0.musicBlocks.contains { $0.providerUrl == m.providerUrl } }) { RealToast.shared.show(t("Bu şarkı zaten bir kartta")); return }
-        _ = store.addReminder(text: [m.title, m.artist].filter { !$0.isEmpty }.joined(separator: " – ")) { r in r.musicBlocks = [m] }
+        _ = store.addReminder(text: [m.title, m.artist].filter { !$0.isEmpty }.joined(separator: " – ")) { r in r.musicBlocks = [m]; r.sendImmediateNotification = false }
         RealToast.shared.show(t("REAL'e eklendi"))
     }
 }
