@@ -100,6 +100,12 @@ enum NotificationScheduler {
                 cursor = next
             }
         }
+        if asking {
+            let clock = DateFormatter()
+            clock.dateFormat = "dd.MM HH:mm"
+            lastPlan = "Son kart: \(times.count) zaman" + (times.first.map { " · " + clock.string(from: $0.date) } ?? "")
+                + (item.isAlarm ? " · alarm" : "")
+        }
         let content = content(for: item, alerting: true)
         // Alarm card: a system alarm (iOS 26+, allowed) replaces the due notification; otherwise it is time-sensitive.
         var ringsAsAlarm = false
@@ -115,7 +121,7 @@ enum NotificationScheduler {
             let comps = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: time.date)
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
             if !ringsAsAlarm {
-                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier(item.id, i), content: content, trigger: trigger))
+                post(UNNotificationRequest(identifier: identifier(item.id, i), content: content, trigger: trigger))
             }
             // "Erken uyarı": a heads-up before each occurrence ("15 dk sonra · …").
             if let minutes = item.earlyAlertMinutes, (1...ReminderItem.maxEarlyAlertMinutes).contains(minutes) {
@@ -126,9 +132,20 @@ enum NotificationScheduler {
                 heads.subtitle = t("Erken uyarı")
                 heads.sound = .default
                 let c = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: early.date)
-                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: earlyIdentifier(item.id, i), content: heads,
+                post(UNNotificationRequest(identifier: earlyIdentifier(item.id, i), content: heads,
                     trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
             }
+        }
+    }
+
+    /// What iOS refused last and what the last card set by hand planned, for "Bildirim testi".
+    private static var lastError: String?
+    private static var lastPlan: String?
+
+    /// Every request goes through here so a refusal is not lost silently.
+    private static func post(_ request: UNNotificationRequest) {
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error { lastError = "\(request.identifier): \(error.localizedDescription)" }
         }
     }
 
@@ -150,7 +167,8 @@ enum NotificationScheduler {
             return t("Kurulamadı: {0}", error.localizedDescription)
         }
         let pending = await center.pendingNotificationRequests().filter { $0.identifier != "real-test" }.count
-        return t("İzin açık · {0} bekliyor", pending)
+        return ([t("İzin açık · {0} bekliyor", pending)] + [lastPlan, lastError.map { "Hata: " + $0 }].compactMap { $0 })
+            .joined(separator: "\n")
     }
 
     /// "15 dk sonra", "1 saat sonra", "2 gün sonra".
@@ -175,7 +193,7 @@ enum NotificationScheduler {
         // The trigger is cleared once it fires, so the tap reads the place from here (LocationArrivalFocusScreen).
         content.userInfo = ArrivalFocusContext(id: item.id, placeName: place.placeName, onExit: place.onExit,
                                                latitude: place.latitude, longitude: place.longitude).userInfo
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: placeIdentifier(item.id), content: content,
+        post(UNNotificationRequest(identifier: placeIdentifier(item.id), content: content,
             trigger: UNLocationNotificationTrigger(region: region, repeats: false)))
     }
     static func placeIdentifier(_ id: Int64) -> String { "reminder-\(id)-place" }
@@ -203,7 +221,7 @@ enum NotificationScheduler {
         guard enabled, !item.isCompleted, item.alertAt == nil, item.plannedDateEpochDay == nil, item.locationTrigger == nil,
               item.sendImmediateNotification, !item.isChecklist else { return }
         requestAuthorization()
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "reminder-\(item.id)-now",
+        post(UNNotificationRequest(identifier: "reminder-\(item.id)-now",
                                                                     content: content(for: item, alerting: false), trigger: nil))
     }
 
@@ -219,7 +237,7 @@ enum NotificationScheduler {
         content.interruptionLevel = .timeSensitive
         content.userInfo = ["reminderId": alarm.id]
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, alarm.at.date.timeIntervalSinceNow), repeats: false)
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "reminder-\(alarm.id)-snooze", content: content, trigger: trigger))
+        post(UNNotificationRequest(identifier: "reminder-\(alarm.id)-snooze", content: content, trigger: trigger))
     }
 
     static func cancel(_ id: Int64, alarms: Bool = true, keepSnooze: Bool = false) {
