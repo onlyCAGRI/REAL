@@ -2807,5 +2807,13 @@
   "Fotoğraf çekmek için Ayarlar > REAL bölümünden kamerayı açabilirsin.": "To take photos, turn on the camera in Settings > REAL.",
   "Ayarları aç": "Open Settings",
   "Bildirim izni kapalı": "Notifications are off",
-  "Hatırlatıcıların zamanında gelmesi için Ayarlar > REAL > Bildirimler bölümünden bildirimleri açabilirsin.": "To get your reminders on time, turn on notifications in Settings > REAL > Notifications."
+  "Hatırlatıcıların zamanında gelmesi için Ayarlar > REAL > Bildirimler bölümünden bildirimleri açabilirsin.": "To get your reminders on time, turn on notifications in Settings > REAL > Notifications.",
+  "Bildirim testi": "Notification test",
+  "10 saniye sonra deneme bildirimi gelir ve bekleyen bildirim sayısı görünür.": "A test notification arrives in 10 seconds and the number of pending notifications is shown.",
+  "Dene": "Try",
+  "İzin kapalı": "Permission off",
+  "İzin sorulmadı": "Not asked yet",
+  "Deneme bildirimi": "Test notification",
+  "Kurulamadı: {0}": "Couldn't schedule: {0}",
+  "İzin açık · {0} bekliyor": "Allowed · {0} pending"
 }

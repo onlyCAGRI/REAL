@@ -50,7 +50,10 @@ enum NotificationScheduler {
                     return
                 }
                 guard (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) == true else { return }
-                if let store = ReminderStore.current { reschedule(store.reminders) }
+                guard let store = ReminderStore.current else { return }
+                reschedule(store.reminders)
+                // "Hemen bildir" on the card that brought up the question was refused a moment ago: post it now.
+                store.reminders.filter { EpochMillis.now - $0.createdAt < 5 * 60_000 }.forEach(postImmediateIfNeeded)
             }
         }
     }
@@ -127,6 +130,27 @@ enum NotificationScheduler {
                     trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
             }
         }
+    }
+
+    /// Settings "Bildirim testi": one notification in 10 s, and what iOS holds right now ("İzin açık · 12 bekliyor").
+    static func sendTest() async -> String {
+        let center = UNUserNotificationCenter.current()
+        let status = await center.notificationSettings().authorizationStatus
+        guard status == .authorized || status == .provisional else {
+            return status == .denied ? t("İzin kapalı") : t("İzin sorulmadı")
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "REAL"
+        content.body = t("Deneme bildirimi")
+        content.sound = .default
+        do {
+            try await center.add(UNNotificationRequest(identifier: "real-test", content: content,
+                                                       trigger: UNTimeIntervalNotificationTrigger(timeInterval: 10, repeats: false)))
+        } catch {
+            return t("Kurulamadı: {0}", error.localizedDescription)
+        }
+        let pending = await center.pendingNotificationRequests().filter { $0.identifier != "real-test" }.count
+        return t("İzin açık · {0} bekliyor", pending)
     }
 
     /// "15 dk sonra", "1 saat sonra", "2 gün sonra".

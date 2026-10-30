@@ -205,6 +205,7 @@ struct SettingsScreen: View {
     private enum SettingsSheet { case language, map, calendar, music, snooze, suggestionReset, ratingReset }
     /// Set after asking; nil = read AlarmKit's state.
     @State private var alarmAllowed: Bool?
+    @State private var notificationTest: String?
 
     private enum Page { case main, developer, sources }
 
@@ -351,6 +352,12 @@ struct SettingsScreen: View {
                               subtitle: t("Ses, titreşim ve kilit ekranı uyarıları iOS bildirim ayarlarından yönetilir."),
                               actionLabel: t("Kanal ayarları")) {
                 if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+            }
+            SettingsDivider()
+            SettingsStatusRow(icon: .bell, title: t("Bildirim testi"), status: notificationTest ?? "", statusColor: Color(argb: 0xFF91B9FF),
+                              subtitle: t("10 saniye sonra deneme bildirimi gelir ve bekleyen bildirim sayısı görünür."),
+                              actionLabel: t("Dene")) {
+                Task { notificationTest = await NotificationScheduler.sendTest() }
             }
             SettingsDivider()
             SettingsStatusRow(icon: .calendar, title: t("Tam saatinde hatırlatma"), status: t("Açık"), statusColor: Color(argb: 0xFF91B9FF),
