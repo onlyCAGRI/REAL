@@ -331,7 +331,7 @@ final class ReminderStore {
         guard AppUpdateGate.writable() else { return }
         reminders.removeAll { ids.contains($0.id) }
         save()
-        ids.forEach(NotificationScheduler.cancel)
+        ids.forEach { NotificationScheduler.cancel($0) }
         ids.forEach(NotificationScheduler.removeDelivered)
     }
 
@@ -401,7 +401,7 @@ final class ReminderStore {
         categories.removeAll { $0.id == id }
         categoryOrderKeys.removeAll { $0 == "custom:\(id)" }
         save()
-        ids.forEach(NotificationScheduler.cancel)
+        ids.forEach { NotificationScheduler.cancel($0) }
     }
 
     /// A category deleted in the cloud (its cards arrive on their own).
@@ -462,7 +462,7 @@ final class ReminderStore {
         if deleteReminders {
             let ids = Set(reminders.filter { $0.customCategoryId == id }.map(\.id))
             reminders.removeAll { ids.contains($0.id) }
-            ids.forEach(NotificationScheduler.cancel)
+            ids.forEach { NotificationScheduler.cancel($0) }
         } else {
             reminders = reminders.map { r in
                 var r = r
