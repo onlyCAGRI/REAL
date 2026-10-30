@@ -6,7 +6,7 @@ import AVFoundation
 /// a permission was refused. Shown in its own window so it sits above the composer, ScheduleSheet and other covers.
 @MainActor
 enum PermissionPrompt {
-    enum Kind { case notifications, microphone, microphoneDenied, cameraDenied }
+    enum Kind { case notifications, notificationsDenied, microphone, microphoneDenied, cameraDenied }
     private static var window: UIWindow?
 
     /// true when the primary button was tapped.
@@ -16,10 +16,13 @@ enum PermissionPrompt {
                 .first(where: { $0.activationState == .foregroundActive }) else { return false }
         let previous = scene.keyWindow
         return await withCheckedContinuation { continuation in
+            // The sheet's buttons call this on the main thread; the local func itself is not main-actor isolated.
             func finish(_ ok: Bool) {
-                window?.isHidden = true
-                window = nil
-                previous?.makeKey()
+                MainActor.assumeIsolated {
+                    window?.isHidden = true
+                    window = nil
+                    previous?.makeKey()
+                }
                 continuation.resume(returning: ok)
             }
             let sheet: PermissionSheet
@@ -27,6 +30,11 @@ enum PermissionPrompt {
             case .notifications:
                 sheet = PermissionSheet(title: t("Bildirimlere izin verilsin mi?"),
                                         description: t("Real, hatırlatıcılarını zamanı geldiğinde gösterebilmek için bildirim iznine ihtiyaç duyar."),
+                                        glyph: .bell, onPrimary: { finish(true) }, onSecondary: { finish(false) })
+            case .notificationsDenied:
+                sheet = PermissionSheet(title: t("Bildirim izni kapalı"),
+                                        description: t("Hatırlatıcıların zamanında gelmesi için Ayarlar > REAL > Bildirimler bölümünden bildirimleri açabilirsin."),
+                                        primaryLabel: t("Ayarları aç"), secondaryLabel: t("Vazgeç"),
                                         glyph: .bell, onPrimary: { finish(true) }, onSecondary: { finish(false) })
             case .microphone:
                 sheet = PermissionSheet(title: t("Mikrofona izin verilsin mi?"),
@@ -77,6 +85,10 @@ enum PermissionPrompt {
 
     static func openSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+    }
+
+    static func openNotificationSettings() {
+        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
     }
 }
 

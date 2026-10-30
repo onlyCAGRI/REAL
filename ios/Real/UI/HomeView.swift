@@ -305,7 +305,8 @@ struct HomeView: View {
             // "Çıkma vakti": traffic changes, and so may where the phone is.
             if phase == .active, NotificationScheduler.enabled { DepartureReminder.refresh(store.reminders) }
             // iOS keeps only the soonest 64 pending requests: refill the later repeats each time REAL comes back.
-            if phase == .active { NotificationScheduler.reschedule(store.reminders) }
+            if phase == .active { NotificationScheduler.reschedule(store.reminders, alarms: false) }
+            if phase == .active, NotificationScheduler.enabled, #available(iOS 26.0, *) { RealAlarmKit.takeOverRinging() }
         }
         .task { await ProfilePictures.push() }
         .cloudSpaceNotice()

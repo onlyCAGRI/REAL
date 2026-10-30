@@ -28,16 +28,28 @@ enum NotificationScheduler {
         UNUserNotificationCenter.current().setNotificationCategories([due, immediate])
     }
 
+    /// Off while REAL re-adds everything on its own (launch, coming to the front): only a card being set asks.
+    private static var asking = true
+    /// "Daha sonra" / "Vazgeç" was tapped: no more sheets until the next launch.
+    private static var answeredThisLaunch = false
+
     /// Asks once; requests added before the answer are refused by iOS, so a grant re-adds every card's notifications.
+    /// Refused earlier: iOS never asks again, so the sheet sends the person to REAL's notification settings.
     static func requestAuthorization() {
-        guard enabled else { return }
+        guard enabled, asking, !answeredThisLaunch else { return }
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .notDetermined else { return }
-            // NotificationPermissionSheet first; "Daha sonra" leaves it undecided so the next timed card asks again.
+            let status = settings.authorizationStatus
+            guard status == .notDetermined || status == .denied else { return }
             Task { @MainActor in
-                guard await PermissionPrompt.ask(.notifications),
-                      (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) == true else { return }
+                guard !answeredThisLaunch else { return }
+                let ok = await PermissionPrompt.ask(status == .denied ? .notificationsDenied : .notifications)
+                guard ok else { answeredThisLaunch = true; return }
+                if status == .denied {
+                    PermissionPrompt.openNotificationSettings()
+                    return
+                }
+                guard (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) == true else { return }
                 if let store = ReminderStore.current { reschedule(store.reminders) }
             }
         }
@@ -66,7 +78,8 @@ enum NotificationScheduler {
 
     static func schedule(_ item: ReminderItem) {
         guard enabled else { return }
-        cancel(item.id)
+        // An edited alarm card keeps its snooze; a completed one, or one that is no longer an alarm, drops it.
+        cancel(item.id, alarms: touchingAlarms, keepSnooze: item.isAlarm && !item.isCompleted && item.alertAt != nil)
         DepartureReminder.plan(item)
         if !item.isCompleted, item.alertAt != nil || item.locationTrigger != nil { requestAuthorization() }
         if !item.isCompleted, let place = item.locationTrigger { schedulePlace(item, place) }
@@ -89,7 +102,7 @@ enum NotificationScheduler {
         var ringsAsAlarm = false
         if item.isAlarm {
             if #available(iOS 26.0, *), RealAlarmKit.authorized {
-                RealAlarmKit.schedule(item, times: times, categories: categories)
+                if touchingAlarms { RealAlarmKit.schedule(item, times: times, categories: categories) }
                 ringsAsAlarm = true
             } else {
                 content.interruptionLevel = .timeSensitive
@@ -185,10 +198,11 @@ enum NotificationScheduler {
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "reminder-\(alarm.id)-snooze", content: content, trigger: trigger))
     }
 
-    static func cancel(_ id: Int64) {
+    static func cancel(_ id: Int64, alarms: Bool = true, keepSnooze: Bool = false) {
         guard enabled else { return }
-        if #available(iOS 26.0, *) { RealAlarmKit.cancel(id) }
-        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) } + [placeIdentifier(id), DepartureReminder.identifier(id), "reminder-\(id)-snooze"]
+        if alarms, #available(iOS 26.0, *) { RealAlarmKit.cancel(id, keepSnooze: keepSnooze) }
+        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) } + [placeIdentifier(id), DepartureReminder.identifier(id)]
+            + (keepSnooze ? [] : ["reminder-\(id)-snooze"])
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 
@@ -199,14 +213,24 @@ enum NotificationScheduler {
             + ["reminder-\(id)-now", placeIdentifier(id), "reminder-\(id)-snooze"])
     }
 
-    static func reschedule(_ items: [ReminderItem]) {
+    /// Off while refilling notifications only: system alarms stay as they are (ringing, snoozed, scheduled).
+    private static var touchingAlarms = true
+
+    /// alarms: false = refill notifications only (REAL coming to the front); AlarmKit keeps its own alarms.
+    static func reschedule(_ items: [ReminderItem], alarms: Bool = true) {
         guard enabled else { return }
-        if #available(iOS 26.0, *) { RealAlarmKit.cancelAll() }
+        if alarms, #available(iOS 26.0, *) { RealAlarmKit.cancelAll() }
         // An alarm snoozed on REAL's page (pre-iOS 26) is not part of any card's schedule, so it stays.
         let center = UNUserNotificationCenter.current()
         center.getPendingNotificationRequests { pending in
             center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter { !$0.hasSuffix("-snooze") })
-            DispatchQueue.main.async { items.forEach(schedule) }
+            DispatchQueue.main.async {
+                asking = false
+                touchingAlarms = alarms
+                items.forEach(schedule)
+                touchingAlarms = true
+                asking = true
+            }
         }
     }
 

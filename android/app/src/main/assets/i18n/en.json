@@ -2805,5 +2805,7 @@
   "Sesli kart için Ayarlar > REAL bölümünden mikrofonu açabilirsin.": "To make voice cards, turn on the microphone in Settings > REAL.",
   "Kamera izni kapalı": "Camera is off",
   "Fotoğraf çekmek için Ayarlar > REAL bölümünden kamerayı açabilirsin.": "To take photos, turn on the camera in Settings > REAL.",
-  "Ayarları aç": "Open Settings"
+  "Ayarları aç": "Open Settings",
+  "Bildirim izni kapalı": "Notifications are off",
+  "Hatırlatıcıların zamanında gelmesi için Ayarlar > REAL > Bildirimler bölümünden bildirimleri açabilirsin.": "To get your reminders on time, turn on notifications in Settings > REAL > Notifications."
 }

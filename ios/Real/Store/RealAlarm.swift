@@ -110,7 +110,7 @@ enum RealAlarmKit {
     }
 
     static func schedule(_ item: ReminderItem, times: [EpochMillis], categories: [CustomCategory]) {
-        cancel(item.id)
+        cancel(item.id, keepSnooze: true)
         guard authorized else { return }
         for (i, time) in times.prefix(occurrences).enumerated() {
             add(RingingAlarm(item: item, categories: categories, at: time), index: i)
@@ -133,12 +133,17 @@ enum RealAlarmKit {
         Task { _ = try? await AlarmManager.shared.schedule(id: id, configuration: configuration) }
     }
 
-    static func cancel(_ id: Int64) {
-        for i in Array(0..<occurrences) + [snoozeIndex] { try? AlarmManager.shared.cancel(id: uuid(id, i)) }
+    /// keepSnooze: the card is only being re-set (edited), so a snooze from the alarm page still rings.
+    static func cancel(_ id: Int64, keepSnooze: Bool = false) {
+        for i in Array(0..<occurrences) + (keepSnooze ? [] : [snoozeIndex]) { try? AlarmManager.shared.cancel(id: uuid(id, i)) }
     }
 
+    /// Before re-adding every card: snoozes and a ringing alarm are not part of any card's schedule, so they stay.
     static func cancelAll() {
-        for alarm in (try? AlarmManager.shared.alarms) ?? [] { try? AlarmManager.shared.cancel(id: alarm.id) }
+        for alarm in (try? AlarmManager.shared.alarms) ?? []
+        where alarm.state != .alerting && alarm.id.uuid.7 != UInt8(snoozeIndex) {
+            try? AlarmManager.shared.cancel(id: alarm.id)
+        }
     }
 
     // What each scheduled alarm is, for the page that opens from it.
@@ -160,11 +165,20 @@ enum RealAlarmKit {
     static func watch() async {
         for await alarms in AlarmManager.shared.alarmUpdates {
             guard UIApplication.shared.applicationState == .active else { continue }
-            for alarm in alarms where alarm.state == .alerting {
-                guard let info = info(alarm.id.uuidString) else { continue }
-                try? AlarmManager.shared.stop(id: alarm.id)
-                if AlarmCenter.shared.ringing == nil { AlarmCenter.shared.present(info) }
-            }
+            takeOver(alarms)
+        }
+    }
+
+    /// REAL opened (not through "Aç") while an alarm is ringing: its page takes over too.
+    @MainActor
+    static func takeOverRinging() { takeOver((try? AlarmManager.shared.alarms) ?? []) }
+
+    @MainActor
+    private static func takeOver(_ alarms: [Alarm]) {
+        for alarm in alarms where alarm.state == .alerting {
+            guard let info = info(alarm.id.uuidString) else { continue }
+            try? AlarmManager.shared.stop(id: alarm.id)
+            if AlarmCenter.shared.ringing == nil { AlarmCenter.shared.present(info) }
         }
     }
 }
