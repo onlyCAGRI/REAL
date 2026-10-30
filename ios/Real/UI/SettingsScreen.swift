@@ -354,8 +354,11 @@ struct SettingsScreen: View {
                 if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
             }
             SettingsDivider()
-            SettingsStatusRow(icon: .bell, title: t("Bildirim testi"), status: notificationTest ?? "", statusColor: Color(argb: 0xFF91B9FF),
-                              subtitle: t("10 saniye sonra deneme bildirimi gelir ve bekleyen bildirim sayısı görünür."),
+            // The status pill is one line: the card plan and the last refusal go in the subtitle.
+            let testLines = notificationTest?.components(separatedBy: "\n") ?? []
+            SettingsStatusRow(icon: .bell, title: t("Bildirim testi"), status: testLines.first ?? "", statusColor: Color(argb: 0xFF91B9FF),
+                              subtitle: testLines.count > 1 ? testLines.dropFirst().joined(separator: "\n")
+                                                            : t("10 saniye sonra deneme bildirimi gelir ve bekleyen bildirim sayısı görünür."),
                               actionLabel: t("Dene")) {
                 Task { notificationTest = await NotificationScheduler.sendTest() }
             }
