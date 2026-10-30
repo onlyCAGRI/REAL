@@ -25,6 +25,7 @@ import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -194,7 +195,7 @@ fun WelcomeScreen(
             // The story ended on its own: "REAL." from the sentence becomes the wordmark (beat 20 of the music).
             // 0 REAL flies from the sentence into the logo (900 ms) with a haptic · 500 "Welcome to" rises in ·
             // 600 the shine sweeps · 2000 the name prompt and sign-in come in.
-            val scaleFrom = (from.width * 0.86f) / to.width   // "REAL" without the dot vs the wordmark
+            val scaleFrom = from.width / to.width   // the sentence's "Real" is the same wordmark, smaller
             flight = Flight(from.center.x - to.center.x, from.center.y - to.center.y, scaleFrom)
             welcomeLetterSpacing.snapTo(0.5f)
             welcomeOffsetY.snapTo(10f)
@@ -396,7 +397,7 @@ fun WelcomeScreen(
                     revealProgress = revealProgress.value,
                     shimmer = shimmer.value,
                     modifier = Modifier
-                        .size(width = 210.dp, height = 91.dp)
+                        .size(width = 210.dp, height = 86.dp)
                         .onGloballyPositioned { if (flight == null) logoBounds = it.boundsInRoot() }
                         .graphicsLayer {
                             val p = logoIn.value
@@ -745,11 +746,11 @@ private fun WelcomeWordmark(
             try {
                 val res = context.resources
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeResource(res, R.drawable.real_wordmark, bounds)
+                BitmapFactory.decodeResource(res, R.drawable.real_home_wordmark, bounds)
                 var sample = 1
                 while (bounds.outWidth / (sample * 2) >= targetWidthPx) sample *= 2
                 BitmapFactory.decodeResource(
-                    res, R.drawable.real_wordmark,
+                    res, R.drawable.real_home_wordmark,
                     BitmapFactory.Options().apply { inSampleSize = sample }
                 )?.asImageBitmap()
             } catch (_: Exception) {
@@ -925,7 +926,7 @@ private fun WelcomeWordStory(
         launch {
             launch { slotAlpha.animateTo(0f, tween(200, easing = StoryOutEase)) }
             slotShift.animateTo(-1.1f, tween(200, easing = StoryOutEase))
-            slotWord = "REAL."
+            slotWord = "Real"
             slotShift.snapTo(1.1f)
             launch { slotAlpha.animateTo(1f, tween(380, easing = StoryEase)) }
             slotShift.animateTo(0f, tween(380, easing = StoryEase))
@@ -966,16 +967,19 @@ private fun WelcomeWordStory(
             ) {
                 Text("Make it", style = style, maxLines = 1, modifier = Modifier.graphicsLayer { this.alpha = keepAlpha.value })
                 Spacer(Modifier.width(8.dp))
-                Box(Modifier.clipToBounds()) {
-                    Text(
-                        slotWord, style = style, maxLines = 1,
-                        modifier = Modifier
-                            .onGloballyPositioned { realBounds = it.boundsInRoot() }
-                            .graphicsLayer {
-                                this.alpha = slotAlpha.value
-                                translationY = slotShift.value * with(density) { 38.sp.toPx() }
-                            }
-                    )
+                Box(Modifier.clipToBounds(), contentAlignment = Alignment.Center) {
+                    val slotModifier = Modifier
+                        .onGloballyPositioned { realBounds = it.boundsInRoot() }
+                        .graphicsLayer {
+                            this.alpha = slotAlpha.value
+                            translationY = slotShift.value * with(density) { 38.sp.toPx() }
+                        }
+                    // "Real" rolls in already as the logo (Inter Tight wordmark), then flies up and grows into it.
+                    if (slotWord == "Real") Image(
+                        painterResource(R.drawable.real_home_wordmark), contentDescription = "Real",
+                        contentScale = ContentScale.Fit,
+                        modifier = slotModifier.padding(top = 2.dp).size(width = 59.dp, height = 24.dp)
+                    ) else Text(slotWord, style = style, maxLines = 1, modifier = slotModifier)
                 }
             }
         }

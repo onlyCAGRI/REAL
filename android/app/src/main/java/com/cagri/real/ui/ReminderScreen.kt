@@ -309,6 +309,7 @@ fun ReminderScreen(
     onAddGameBlock: (Long, com.cagri.real.data.CardGameBlock) -> Unit = { _, _ -> },
     onToggleCompleted: (Long) -> Unit,
     onToggleImportant: (Long) -> Unit,
+    onApplyComposerExtras: (Long, CardStackBlock?, List<com.cagri.real.data.CardGameBlock>) -> Unit = { _, _, _ -> },
     onMoveTo24Hour: suspend (Long) -> Boolean = { false },
     onEditReminder: suspend (Long, String, Int?, Int?, Long?, List<ChecklistItem>?, Int?, Float?, Int?, List<ReminderAttachment>?, List<ReminderVoiceRecording>?, ReminderLocation?, String?, List<MusicBlock>, List<MediaBlock>, CardStackBlock?, List<String>?, Map<String, com.cagri.real.data.CardBlockPlacement>?, Boolean) -> Boolean,
     onDeleteReminder: (Long) -> Unit,
@@ -943,6 +944,8 @@ fun ReminderScreen(
                                     onToggleCompleted = onToggleCompleted,
                                     onMoveTo24Hour = onMoveTo24Hour,
                                     onSetRepeatPattern = onSetRepeatPattern,
+                                    onToggleImportant = onToggleImportant,
+                                    onApplyComposerExtras = onApplyComposerExtras,
                                     onVoiceEdit = onVoiceEdit,
                                     voiceCardCallbacks = remember(onVoiceSkipOccurrence, onVoiceBulkShift, onVoiceAddChecklistItems, onDeleteReminderOccurrence) {
                                         VoiceCardCallbacks(onVoiceSkipOccurrence, onVoiceBulkShift, onVoiceAddChecklistItems, onDeleteReminderOccurrence)
@@ -1088,6 +1091,8 @@ private fun ReminderListScreen(
     onOpenSettings: () -> Unit, onAddReminder: suspend (String, Long?, RecurrenceRule, Long?, Boolean, List<ChecklistItem>, Boolean, String?, List<ReminderAttachment>, List<ReminderVoiceRecording>, ReminderLocation?, Long?, Long?, List<MusicBlock>, List<MediaBlock>) -> Long?,
     onMoveTo24Hour: suspend (Long) -> Boolean = { false },
     onSetRepeatPattern: (Long, Int, Long?) -> Unit = { _, _, _ -> },
+    onToggleImportant: (Long) -> Unit = {},
+    onApplyComposerExtras: (Long, CardStackBlock?, List<com.cagri.real.data.CardGameBlock>) -> Unit = { _, _, _ -> },
     onVoiceEdit: (Long, ReminderEditPatch) -> Unit = { _, _ -> },
     voiceCardCallbacks: VoiceCardCallbacks = VoiceCardCallbacks(),
     onAddSuggestedReal: suspend (String, MusicBlock?, MediaBlock?, CardStackBlock?) -> Long? = { _, _, _, _ -> null },
@@ -1330,6 +1335,24 @@ private fun ReminderListScreen(
     val whatsAppRecipientRepo = remember { WhatsAppRecipientRepository(context) }
     var isWhatsAppArmed by composerState.isWhatsAppArmed
     var isLabsOpen by composerState.isLabsOpen
+    // Composer pulled up to full screen (dark sheet above the keyboard).
+    var composerFullScreen by remember { mutableStateOf(false) }
+    // A sheet opened from full screen just closed: hold the panel open until the field has focus again.
+    var composerPickerWasOpen by remember { mutableStateOf(false) }
+    // Konum from the composer: only the normal location permission, then the map.
+    val composerLocationPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        locationPickForTrigger = result.values.any { it }
+        showComposerLocation = true
+    }
+    val composerBackgroundPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) android.widget.Toast.makeText(context, t("\"Her zaman izin ver\" seçilmezse hatırlatma REAL kapalıyken gelmez."), android.widget.Toast.LENGTH_LONG).show()
+    }
+    // Card-detail tools opened from the full-screen Ekler row.
+    var showComposerCamera by remember { mutableStateOf(false) }
     var showWhatsAppConsentSheet by rememberSaveable { mutableStateOf(false) }
     var showWhatsAppRecipientSheet by rememberSaveable { mutableStateOf(false) }
     val onToggleWhatsApp: () -> Unit = {
@@ -1451,7 +1474,8 @@ private fun ReminderListScreen(
         onDraftAttachmentsChange, onDraftReferenceUrlChange, onShareDraftChange, onSetRepeatPattern,
         com.cagri.real.ui.components.LocalSetReminderTiming.current,
         com.cagri.real.ui.components.LocalSetReminderAlarm.current,
-        com.cagri.real.ui.components.LocalSetReminderLocationTrigger.current)
+        com.cagri.real.ui.components.LocalSetReminderLocationTrigger.current,
+        onToggleImportant, onApplyComposerExtras)
     val latestVoiceReminders by rememberUpdatedState(reminders)
     val composerServices = ReminderComposerServices(context, view, focusManager, keyboard, scope,
         plannerRepository, entryTracker, whatsAppRecipientRepo, { latestVoiceReminders })
@@ -1497,7 +1521,9 @@ private fun ReminderListScreen(
     var keyboardSeen by remember { mutableStateOf(false) }
     LaunchedEffect(editing) { keyboardSeen = false }
     LaunchedEffect(editing, keyboardUp) { if (editing && keyboardUp) keyboardSeen = true }
-    val otherExpanded = (voice.phase != VoicePhase.Idle && !voiceOnHome) || alertAt != null || requiresTimeSelection || (draftCategoryId != null && draftCategoryId != customCategory?.id) || isChecklistMode || isVoiceDraft || isShareDraft || sendImmediateNotification || pendingNotificationAction != PendingNotificationAction.NONE || draftAttachments.isNotEmpty()
+    // A sheet opened from the full-screen composer (date, category, place) keeps it open behind the sheet.
+    val composerPickerOpen = showCategoryPicker || showComposerLocation || showLocationChoice || showDatePicker || showNotificationPermissionSheet || showComposerCamera
+    val otherExpanded = composerFullScreen || (voice.phase != VoicePhase.Idle && !voiceOnHome) || alertAt != null || requiresTimeSelection || (draftCategoryId != null && draftCategoryId != customCategory?.id) || isChecklistMode || isVoiceDraft || isShareDraft || sendImmediateNotification || pendingNotificationAction != PendingNotificationAction.NONE || draftAttachments.isNotEmpty()
     val composerTarget = editing && !(keyboardSeen && keyboardLeaving)
     // Opened by typing, the bar and the panel do not morph into each other riding the (very fast) keyboard: the bar
     // fades out at the bottom, then the panel fades and slides in above the keyboard on its own slower curve.
@@ -1529,7 +1555,10 @@ private fun ReminderListScreen(
     // A view-only shared category (Sınırlı) cannot get new cards.
     val showComposer = category != ReminderCategory.JournalEntries && customCategory?.isReadOnlyShared != true
     LaunchedEffect(showDatePicker, showNotificationPermissionSheet, refocus) {
-        if (!showDatePicker && !showNotificationPermissionSheet && refocus) { refocus = false; inputFocus.requestFocus(); keyboard?.show() }
+        if (!showDatePicker && !showNotificationPermissionSheet && refocus) {
+            refocus = false
+            if (!composerFullScreen) { inputFocus.requestFocus(); keyboard?.show() }
+        }
     }
     val labsExtraHeight = if (isLabsOpen && expanded) 76.dp else 0.dp
     val attachmentExtraHeight = if (draftAttachments.isNotEmpty()) 48.dp else 0.dp
@@ -1561,6 +1590,21 @@ private fun ReminderListScreen(
     // without moving the user's text around.
     val aiThinkingExtraHeight = if (expanded && voiceAiParsing) 10.dp else 0.dp
 
+    // Full screen: from under the status bar down to the keyboard. The keyboard's target height is read
+    // (not its per-frame height), so this only changes when the keyboard opens or closes.
+    val composerRootView = LocalView.current
+    // Full screen goes edge to edge.
+    val composerSidePad by animateDpAsState(
+        if (composerFullScreen && expanded) 0.dp else 16.dp,
+        if (reduceAnimations) snap() else tween(320, easing = RealMotion.Emphasized),
+        label = "composerSidePad"
+    )
+    val composerBottomInsetPx by remember(imeTargetInsets, navigationInsets, imeDensity) {
+        derivedStateOf { maxOf(imeTargetInsets.getBottom(imeDensity), navigationInsets.getBottom(imeDensity)) }
+    }
+    val fullScreenComposerHeight = with(imeDensity) {
+        (composerRootView.rootView.height - composerBottomInsetPx).coerceAtLeast(0).toDp()
+    }
     val targetComposerHeight = when {
         understandingCheck != null && voice.phase == VoicePhase.Idle -> {
             val extraLines = (voiceLineCount - 1).coerceIn(0, 3)
@@ -1570,6 +1614,8 @@ private fun ReminderListScreen(
             val extraLines = (voiceLineCount - 1).coerceIn(0, 3)
             (118 + extraLines * 27).dp
         }
+        composerFullScreen && expanded && voice.phase == VoicePhase.Idle && fullScreenComposerHeight > 200.dp ->
+            fullScreenComposerHeight
         isChecklistMode -> 280.dp + labsExtraHeight + attachmentExtraHeight + voiceAiMetaExtraHeight +
             dateSuggestionExtraHeight + aiThinkingExtraHeight
         voice.phase != VoicePhase.Idle -> {
@@ -1599,13 +1645,13 @@ private fun ReminderListScreen(
         label = "labsProgress"
     )
     val bottomGapState = animateDpAsState(
-        if (expanded) 20.dp else 12.dp,
+        if (composerFullScreen && expanded) 0.dp else if (expanded) 20.dp else 12.dp,
         if (reduceAnimations) snap() else tween(250),
         label = "bottomGap"
     )
     // Typing: the cards behind go a little darker so the box and the keyboard stand out (read only in graphicsLayer).
     val typingDimState = animateFloatAsState(
-        if (editing) 0.32f else 0f,
+        if (composerFullScreen && expanded) 0.82f else if (editing) 0.32f else 0f,
         if (reduceAnimations) snap() else tween(340, easing = RealMotion.Standard),
         label = "typingDim"
     )
@@ -1623,6 +1669,19 @@ private fun ReminderListScreen(
         homeSearchOpen = false; homeQuery = ""; focusManager.clearFocus(); keyboard?.hide()
     }
     BackHandler(enabled = isLabsOpen && !anySelectionMode) { isLabsOpen = false }
+    BackHandler(enabled = composerFullScreen && expanded && !anySelectionMode) { composerFullScreen = false }
+    LaunchedEffect(expanded) { if (!expanded) composerFullScreen = false }
+    // The sheet closed: back to typing in full screen; the hold ends once the field has focus (or after a moment).
+    LaunchedEffect(composerPickerOpen) {
+        if (composerPickerOpen) composerPickerWasOpen = composerFullScreen
+        else if (composerPickerWasOpen) {
+            delay(1200)
+            composerPickerWasOpen = false
+        }
+    }
+    LaunchedEffect(editing) { if (editing) composerPickerWasOpen = false }
+    // Saving a card closes full screen; the new card lands on its stack.
+    LaunchedEffect(saving) { if (saving) composerFullScreen = false }
     BackHandler(enabled = isColorFilterExpanded && !anySelectionMode) { isColorFilterExpanded = false }
     BackHandler(enabled = isCategorySelectionMode) { selectedCategoryIds = emptySet() }
     BackHandler(enabled = isSelectionMode && !isCategorySelectionMode && !showBulkCategoryPicker) { selectedIds = emptySet() }
@@ -1630,13 +1689,22 @@ private fun ReminderListScreen(
     BackHandler(enabled = showAccountMenu && !showCategoryOrderEditor && !anySelectionMode) { showAccountMenu = false }
     BackHandler(enabled = showCategoryPicker && !anySelectionMode) { showCategoryPicker = false }
     BackHandler(enabled = showBulkCategoryPicker) { showBulkCategoryPicker = false }
-    BackHandler(enabled = (isChecklistMode || draftAttachments.isNotEmpty()) && !showAccountMenu && !showDatePicker && !showCategoryPicker && !anySelectionMode) {
+    BackHandler(enabled = (isChecklistMode || draftAttachments.isNotEmpty() || ComposerTimingDraft.voiceRecordings.isNotEmpty() || pendingVoiceMusicBlocks.isNotEmpty() || pendingVoiceMediaBlocks.isNotEmpty() || ComposerTimingDraft.games.isNotEmpty() || ComposerTimingDraft.body.isNotEmpty()) && !showAccountMenu && !showDatePicker && !showCategoryPicker && !anySelectionMode) {
         if (draftAttachments.isNotEmpty()) {
             photoImportGeneration++
             val discardedPhotos = draftAttachments
             scope.launch(Dispatchers.IO + NonCancellable) { AttachmentStorage.deleteAttachmentFiles(context, discardedPhotos) }
             onDraftAttachmentsChange(emptyList())
         }
+        if (ComposerTimingDraft.voiceRecordings.isNotEmpty()) {
+            val discardedVoices = ComposerTimingDraft.voiceRecordings
+            scope.launch(Dispatchers.IO + NonCancellable) { discardedVoices.forEach { java.io.File(it.localPath).delete() } }
+            ComposerTimingDraft.voiceRecordings = emptyList()
+        }
+        pendingVoiceMusicBlocks = emptyList()
+        pendingVoiceMediaBlocks = emptyList()
+        ComposerTimingDraft.body = ""
+        ComposerTimingDraft.games = emptyList()
         isChecklistMode = false
         checklistDraftItems = listOf("")
         if (isVoiceDraft) {
@@ -1955,7 +2023,8 @@ private fun ReminderListScreen(
                 .onGloballyPositioned { scenePosition = it.positionInRoot() }
                 .drawWithContent {
                     if (com.cagri.real.ui.components.shouldCaptureBackdrop(designStyle, reduceDynamicBlur, Build.VERSION.SDK_INT)) {
-                        scene.record { this@drawWithContent.drawContent() }; drawLayer(scene)
+                        // Full-screen composer: sheets blur black, not the home screen hidden behind it.
+                        scene.record { if (composerFullScreen) drawRect(Color.Black) else this@drawWithContent.drawContent() }; drawLayer(scene)
                     } else drawContent()
                 }
                 .graphicsLayer {
@@ -1995,6 +2064,7 @@ private fun ReminderListScreen(
                                 .height(42.dp)
                                 .onGloballyPositioned { coords ->
                                     headerCoordinates = coords
+                                    StartupIntro.homeLaidOut = true
                                 }
                         ) {
                             HomeWordmark(
@@ -2013,7 +2083,7 @@ private fun ReminderListScreen(
                                 keyboard?.hide()
                                 showAccountMenu = true
                             },
-                            modifier = Modifier.then(if (designStyle == DesignStyle.LiquidGlass) Modifier.pressScale(profileInteraction, reduceAnimations = reduceAnimations, targetScale = 0.97f).liquidChrome() else Modifier).semantics { contentDescription = t("Hesap menüsünü aç") }
+                            modifier = Modifier.startupAvatar().then(if (designStyle == DesignStyle.LiquidGlass) Modifier.pressScale(profileInteraction, reduceAnimations = reduceAnimations, targetScale = 0.97f).liquidChrome() else Modifier).semantics { contentDescription = t("Hesap menüsünü aç") }
                         ) {
                             ProfileAvatar(
                                 modifier = Modifier.size(48.dp),
@@ -2131,6 +2201,7 @@ private fun ReminderListScreen(
                 item(key = "categories") {
                     AnimatedVisibility(
                         visible = !homeSearchOpen,
+                        modifier = Modifier.startupRise(0),
                         enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(220)) + expandVertically(tween(300)),
                         exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(160)) + shrinkVertically(tween(300))
                     ) {
@@ -2188,7 +2259,7 @@ private fun ReminderListScreen(
                         },
                         onClose = { homeSearchOpen = false; homeQuery = ""; focusManager.clearFocus() },
                         reduceAnimations = reduceAnimations,
-                        modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 6.dp, bottom = 12.dp),
+                        modifier = Modifier.startupRise(1).fillMaxWidth().padding(start = 18.dp, end = 6.dp, bottom = 12.dp),
                         titleAccessory = {
                             // One dot per context card waiting at the bottom of the list, right beside the title.
                             if (activeContextTypes.isNotEmpty()) Row(Modifier.padding(start = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2401,6 +2472,7 @@ private fun ReminderListScreen(
                                 fadeInSpec = if (isNewlyCreated) null else tween(180),
                                 fadeOutSpec = tween(180)
                             ))
+                            .startupRise(2 + index)
                             .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                     )
                     }
@@ -2729,14 +2801,15 @@ private fun ReminderListScreen(
                 reduceAnimations = reduceAnimations,
                 chromeSnap = composerSwap,
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp)
+                    .padding(start = composerSidePad, end = composerSidePad)
                     .deferredBottomPadding { bottomGapState.value }
                     .graphicsLayer {
                         val out = composerOut.value
                         val inn = composerIn.value
                         // The bar stays pinned at the bottom (under the keyboard) instead of riding it; the panel
                         // rides the keyboard and slides in on its own.
-                        val pinned = if (composerUp) 0f else {
+                        // Full screen stays put while focus moves to a checklist row or a sheet is open.
+                        val pinned = if (composerUp || (composerFullScreen && expanded)) 0f else {
                             val ime = imeInsets.getBottom(this)
                             (if (booksOpen) ime else ime - navigationInsets.getBottom(this)).coerceAtLeast(0).toFloat()
                         }
@@ -2759,6 +2832,9 @@ private fun ReminderListScreen(
                         } else {
                             (1f - selectionProgress)
                         }
+                        // Startup intro: the composer rises after the first cards.
+                        val rise = StartupIntro.rowProgress(5)
+                        if (rise < 1f) { alpha *= rise; translationY += (1f - rise) * 18.dp.toPx() }
                     }
             ) {
             if (voiceWindowVisible) {
@@ -2840,10 +2916,32 @@ private fun ReminderListScreen(
             customCategories = customCategories,
             selectedCategoryId = draftCategoryId,
             onPickCategory = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showCategoryPicker = true },
+            onCreateCategory = { voice.cancel(); focusManager.clearFocus(); keyboard?.hide(); showCreateCategoryDialog = true },
             onPickAttachment = handlePickComposerAttachment,
+            onOpenCamera = { focusManager.clearFocus(); keyboard?.hide(); showComposerCamera = true },
+            onPickFiles = attachmentActions.pickFiles,
+            draftVoiceRecordings = ComposerTimingDraft.voiceRecordings,
+            onVoiceRecorded = { ComposerTimingDraft.voiceRecordings = ComposerTimingDraft.voiceRecordings + it },
+            onRemoveVoiceRecording = { rec ->
+                ComposerTimingDraft.voiceRecordings = ComposerTimingDraft.voiceRecordings - rec
+                scope.launch(Dispatchers.IO + NonCancellable) { java.io.File(rec.localPath).delete() }
+            },
+            bodyText = ComposerTimingDraft.body,
+            onBodyChange = { ComposerTimingDraft.body = it },
+            draftGames = ComposerTimingDraft.games,
+            onAddGame = { g -> if (ComposerTimingDraft.games.none { it.providerId == g.providerId }) ComposerTimingDraft.games = ComposerTimingDraft.games + g },
+            onRemoveGame = { g -> ComposerTimingDraft.games = ComposerTimingDraft.games.filterNot { it.id == g.id } },
+            draftMusic = pendingVoiceMusicBlocks,
+            draftMedia = pendingVoiceMediaBlocks,
+            onAddMusic = { pendingVoiceMusicBlocks = pendingVoiceMusicBlocks + it },
+            onAddMedia = { pendingVoiceMediaBlocks = pendingVoiceMediaBlocks + it },
+            onRemoveMusic = { b -> pendingVoiceMusicBlocks = pendingVoiceMusicBlocks.filterNot { it.id == b.id } },
+            onRemoveMedia = { b -> pendingVoiceMediaBlocks = pendingVoiceMediaBlocks.filterNot { it.id == b.id } },
             draftAttachments = draftAttachments,
             onRemoveDraftAttachment = handleRemoveDraftAttachment,
             onSubmit = {
+                // The cat's "miyav" stays in the box for fun but never goes into a card.
+                val draft = RealPetRuntime.withoutComposerMeow(draft)
                 if (voice.phase != VoicePhase.Idle) voice.finish()
                 // "Yeri yaz": the typed place gets its address and the card is saved.
                 else if (voiceState.placeFix.value != null && draft.isNotBlank()) voiceState.placeFix.value?.invoke(draft)
@@ -2908,8 +3006,11 @@ private fun ReminderListScreen(
             // The panel explains location once; with permission granted the pin goes straight to the map.
             onPickLocation = {
                 voice.cancel(); focusManager.clearFocus(); keyboard?.hide()
-                if (com.cagri.real.notifications.LocationReminders.hasLocation(context) && com.cagri.real.notifications.LocationReminders.hasBackground(context)) { locationPickForTrigger = true; showComposerLocation = true }
-                else showLocationChoice = true
+                if (com.cagri.real.notifications.LocationReminders.hasLocation(context)) { locationPickForTrigger = true; showComposerLocation = true }
+                else composerLocationPermission.launch(arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                ))
             },
             locationWatching = locationWatching,
             isShareDraft = isShareDraft,
@@ -2922,6 +3023,23 @@ private fun ReminderListScreen(
             onConfigureRecipient = { showWhatsAppRecipientSheet = true },
             onSwipeUp = { if (expanded && !isLabsOpen) isLabsOpen = true },
             onSwipeDown = { if (isLabsOpen) isLabsOpen = false },
+            fullScreen = composerFullScreen && expanded,
+            isImportant = ComposerTimingDraft.important,
+            onSelectCategory = { draftCategoryId = it; voiceCategoryExplicit = true },
+            onApplyQuickTime = { day, hour, minute ->
+                manualDateClearedOrChanged = true
+                val at = day.atTime(hour, minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                pendingDateHintEpochDay = null
+                requiresTimeSelection = false
+                pendingTimeOfDay = null
+                onAlertChange(at, RecurrenceRule.NONE)
+            },
+            onToggleImportant = { ComposerTimingDraft.important = !ComposerTimingDraft.important },
+            onFullScreenChange = {
+                // Full screen opens as a calm page: keyboard down, nothing focused until a field is tapped.
+                if (it) { focusManager.clearFocus(); keyboard?.hide() }
+                composerFullScreen = it
+            },
             modifier = Modifier.fillMaxWidth().deferredHeight { composerHeightState.value }
             )
             }
@@ -3058,7 +3176,7 @@ private fun ReminderListScreen(
         // The pin closed the keyboard; once the map is done the composer comes back up so the person keeps typing.
         var refocusComposer by remember { mutableIntStateOf(0) }
         LaunchedEffect(refocusComposer) {
-            if (refocusComposer == 0) return@LaunchedEffect
+            if (refocusComposer == 0 || composerFullScreen) return@LaunchedEffect
             kotlinx.coroutines.delay(260)
             runCatching { inputFocus.requestFocus() }
             keyboard?.show()
@@ -3079,11 +3197,21 @@ private fun ReminderListScreen(
                 pendingVoiceLocation = place
                 ComposerTimingDraft.locationTrigger = trigger
                 refocusComposer++
+                // "Her zaman" is asked only now, when a place reminder is actually set.
+                if (!com.cagri.real.notifications.LocationReminders.hasBackground(context))
+                    composerBackgroundPermission.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
             } else null,
             // The Google Maps share hand-off needs a saved card, so for a draft it only closes the picker.
             onShareFromGoogleMaps = { showComposerLocation = false },
             onCancel = { showComposerLocation = false; refocusComposer++ }
         )
+        if (showComposerCamera) {
+            com.cagri.real.ui.components.CardCameraSheet(
+                reduceAnimations = reduceAnimations,
+                onDismiss = { showComposerCamera = false },
+                onUsePhoto = { file -> showComposerCamera = false; attachmentActions.addCameraPhoto(file) }
+            )
+        }
         CategorySelectionOverlay(
             visible = showCategoryPicker,
             modifier = Modifier.zIndex(20f),

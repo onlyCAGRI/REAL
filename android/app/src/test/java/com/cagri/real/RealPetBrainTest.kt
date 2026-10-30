@@ -33,14 +33,11 @@ class RealPetBrainTest {
     }
 
     @Test
-    fun defaultModeIsSakin() {
-        assertEquals(RealPetMode.Sakin, brain.mode)
-        assertEquals("Sakin", brain.mode.labelTr)
+    fun defaultModeIsNormal() {
+        assertEquals(RealPetMode.Normal, brain.mode)
+        assertEquals("Normal", brain.mode.labelTr)
         assertTrue(brain.mode.isEnabled)
-        assertNull(brain.mode.spontaneousIntervalMs)
-        assertEquals(1, brain.mode.maxDailyAskLove)
-        assertEquals(0, brain.mode.maxDailyPranks)
-        assertEquals(0f, brain.mischief, 0.001f)
+        assertEquals(10 * 60_000L, brain.mode.spontaneousIntervalMs)
     }
 
     @Test
@@ -107,27 +104,35 @@ class RealPetBrainTest {
         brain.clearActiveIntent()
         brain.updateBodyState(RealPetState.Offscreen)
 
-        // Before 10 minutes: cannot start spontaneous visit
-        assertFalse(brain.canStartSpontaneousVisit(t0 + 5 * 60_000L))
-        assertNull(brain.onEvent(RealPetEvent.SpontaneousTick, nowMs = t0 + 5 * 60_000L))
+        // Phone time alone does not count: an hour later with no in-app time, still no visit
+        assertFalse(brain.canStartSpontaneousVisit(t0 + 60 * 60_000L))
 
-        // At 10 minutes: can start spontaneous visit, and SpontaneousTick updates pet_last_visit_ms
-        val t10 = t0 + 10 * 60_000L
-        assertTrue(brain.canStartSpontaneousVisit(t10))
-        val spontaneousIntent = brain.onEvent(RealPetEvent.SpontaneousTick, nowMs = t10)
-        assertTrue(spontaneousIntent is RealPetIntent.Visit)
-        assertEquals(t10, store.getLong(RealPetBrain.KEY_LAST_VISIT_MS, 0L))
+        // 7 in-app minutes is under the 8–12 min window
+        brain.noteInAppTime(7 * 60_000L)
+        assertFalse(brain.canStartSpontaneousVisit(t0 + 60 * 60_000L))
+        assertNull(brain.onEvent(RealPetEvent.SpontaneousTick, nowMs = t0 + 60 * 60_000L))
+
+        // 12 in-app minutes is past any interval: a visit starts, and the in-app counter resets
+        brain.noteInAppTime(5 * 60_000L)
+        val t1 = t0 + 61 * 60_000L
+        assertTrue(brain.canStartSpontaneousVisit(t1))
+        val spontaneousIntent = brain.onEvent(RealPetEvent.SpontaneousTick, nowMs = t1)
+        assertNotNull(spontaneousIntent)
+        assertEquals(t1, store.getLong(RealPetBrain.KEY_LAST_VISIT_MS, 0L))
+        assertEquals(0L, store.getLong(RealPetBrain.KEY_IN_APP_SINCE_VISIT_MS, -1L))
+        val next = store.getLong(RealPetBrain.KEY_NEXT_VISIT_AFTER_MS, 0L)
+        assertTrue(next in 8 * 60_000L..12 * 60_000L)
 
         // While cat is on screen, canStartSpontaneousVisit is false even after interval
         brain.updateBodyState(RealPetState.Sitting)
-        assertFalse(brain.canStartSpontaneousVisit(t10 + 15 * 60_000L))
+        brain.noteInAppTime(15 * 60_000L)
+        assertFalse(brain.canStartSpontaneousVisit(t1 + 15 * 60_000L))
 
-        // In Yaramaz, interval is 5 minutes
+        // Sakin never comes by itself, however long the app is open
         brain.clearActiveIntent()
         brain.updateBodyState(RealPetState.Offscreen)
-        brain.mode = RealPetMode.Yaramaz
-        assertFalse(brain.canStartSpontaneousVisit(t10 + 4 * 60_000L))
-        assertTrue(brain.canStartSpontaneousVisit(t10 + 5 * 60_000L))
+        brain.mode = RealPetMode.Sakin
+        assertFalse(brain.canStartSpontaneousVisit(t1 + 30 * 60_000L))
     }
 
     @Test

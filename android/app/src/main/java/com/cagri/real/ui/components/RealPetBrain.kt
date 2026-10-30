@@ -64,7 +64,8 @@ enum class RealPetMode(
     val isEnabled: Boolean get() = this != Kapali
 
     companion object {
-        val DEFAULT: RealPetMode = Sakin
+        // Normal, not Sakin: Sakin never comes by itself, so most people would never meet the cat.
+        val DEFAULT: RealPetMode = Normal
 
         val Off: RealPetMode get() = Kapali
         val Calm: RealPetMode get() = Sakin
@@ -113,7 +114,7 @@ sealed interface RealPetEvent {
     data class KeywordMama(val cardId: Long) : RealPetEvent
 
     // App & User Context (Stage 1+)
-    data class UserBusy(val active: Boolean) : RealPetEvent {
+    data class UserBusy(val active: Boolean, val hidden: Boolean = false) : RealPetEvent {
         companion object {
             val Start = UserBusy(true)
             val End = UserBusy(false)
@@ -121,6 +122,14 @@ sealed interface RealPetEvent {
     }
     data class AppOpened(val daysSinceLast: Int = 0, val hourOfDay: Int = 12) : RealPetEvent
     data class ScreenChanged(val screenKey: String = "") : RealPetEvent
+
+    /** The composer's mic was turned on. */
+    data object MicStarted : RealPetEvent
+
+    /** Nobody has touched the app for a while (it is open and on screen). */
+    data object UserIdle : RealPetEvent
+    /** Typing stopped for a few seconds with words in the composer. */
+    data object TypingPaused : RealPetEvent
     data object SpontaneousTick : RealPetEvent
 
     // Touch Events (PLAN.md Section 7 & Section 11.1)
@@ -140,7 +149,16 @@ enum class RealPetVisitPurpose {
     GuideHop,
     RemindDueSoon,
     WaitBesideMamaCard,
-    CuriousComposerVisit
+    CuriousComposerVisit,
+
+    /** Runs in from one edge and straight out of the other. */
+    RunThrough,
+
+    /** Already sitting on a perch when the app opens, then goes on with its visit. */
+    FoundSitting,
+
+    /** Sits by the mic while the user speaks and "talks" along, silently. */
+    ListenToMic
 }
 
 enum class RealPetReactionKind {
@@ -177,7 +195,9 @@ sealed interface RealPetIntent {
         val targetPerchId: String? = null,
         val purpose: RealPetVisitPurpose = RealPetVisitPurpose.RoamAndNap,
         val preferRunning: Boolean = false,
-        override val priority: RealPetIntentPriority = RealPetIntentPriority.OwnLife
+        override val priority: RealPetIntentPriority = RealPetIntentPriority.OwnLife,
+        /** Wait this long before walking in, e.g. so the cat does not arrive the instant the app opens. */
+        val startDelayMs: Long = 0L
     ) : RealPetIntent
 
     data class React(
@@ -201,6 +221,12 @@ sealed interface RealPetIntent {
         val kind: RealPetPrankKind,
         val targetPerchId: String? = null,
         override val priority: RealPetIntentPriority = RealPetIntentPriority.Prank
+    ) : RealPetIntent
+
+    /** Comes in, sits, plays one [pose] (e.g. Drinking), sits again and leaves. Used by the test menu. */
+    data class Pose(
+        val pose: RealPetState,
+        override val priority: RealPetIntentPriority = RealPetIntentPriority.UserTouch
     ) : RealPetIntent
 
     data class Leave(
@@ -283,8 +309,9 @@ object RealPetTransitions {
         from: RealPetState,
         allowOpeningSleep: Boolean = false
     ): Set<RealPetState> = when (from) {
+        // On app open the cat may already be there, asleep or sitting on a perch.
         RealPetState.Offscreen -> if (allowOpeningSleep) {
-            setOf(RealPetState.Walking, RealPetState.Running, RealPetState.Sleeping)
+            setOf(RealPetState.Walking, RealPetState.Running, RealPetState.Sleeping, RealPetState.Sitting)
         } else {
             setOf(RealPetState.Walking, RealPetState.Running)
         }
@@ -422,9 +449,12 @@ class RealPetBrain(
         const val KEY_DAY_EPOCH = "pet_day_epoch"
         const val KEY_ASK_LOVE_TODAY = "pet_ask_love_today"
         const val KEY_PRANK_TODAY = "pet_prank_today"
+        const val KEY_TYPE_MEOW_TODAY = "pet_type_meow_today"
         const val KEY_LAST_OPEN_MS = "pet_last_open_ms"
         const val KEY_LAST_VISIT_MS = "pet_last_visit_ms"
         const val KEY_COOLDOWN_UNTIL_MS = "pet_cooldown_until_ms"
+        const val KEY_IN_APP_SINCE_VISIT_MS = "pet_in_app_since_visit_ms"
+        const val KEY_NEXT_VISIT_AFTER_MS = "pet_next_visit_after_ms"
         const val KEY_SEEN_GUIDES = "pet_seen_guides"
         const val KEY_REMINDED_CARDS = "pet_reminded_cards"
 
@@ -544,15 +574,28 @@ class RealPetBrain(
         return nowMs < until
     }
 
+    /** Adds time the app spent open; spontaneous visits count in-app time, not phone time. */
+    fun noteInAppTime(deltaMs: Long) {
+        if (deltaMs <= 0L) return
+        store.putLong(KEY_IN_APP_SINCE_VISIT_MS, store.getLong(KEY_IN_APP_SINCE_VISIT_MS, 0L) + deltaMs)
+    }
+
     /**
-     * Checks whether a spontaneous visit can start at wall-clock [nowMs] (PLAN.md Section 8).
-     * Only true in Normal (~10 min) or Yaramaz (~5 min) when offscreen, not busy, and not in cooldown.
+     * Checks whether a spontaneous visit can start (PLAN.md Section 8): after ~10 min (Normal) or
+     * ~5 min (Yaramaz) of in-app time, ±20% each time, when offscreen, not busy and not in cooldown.
      */
     fun canStartSpontaneousVisit(nowMs: Long): Boolean {
         if (!mode.isEnabled || isUserBusy || isOnScreen || isInCooldown(nowMs)) return false
         val interval = mode.spontaneousIntervalMs ?: return false
-        val lastVisit = store.getLong(KEY_LAST_VISIT_MS, 0L)
-        return lastVisit <= 0L || (nowMs - lastVisit) >= interval
+        val after = store.getLong(KEY_NEXT_VISIT_AFTER_MS, 0L).takeIf { it > 0L } ?: interval
+        return store.getLong(KEY_IN_APP_SINCE_VISIT_MS, 0L) >= after
+    }
+
+    private fun recordVisit(nowMs: Long) {
+        if (nowMs > 0L) store.putLong(KEY_LAST_VISIT_MS, nowMs)
+        store.putLong(KEY_IN_APP_SINCE_VISIT_MS, 0L)
+        val interval = mode.spontaneousIntervalMs ?: return
+        store.putLong(KEY_NEXT_VISIT_AFTER_MS, (interval * (0.8f + random.nextFloat() * 0.4f)).toLong())
     }
 
     /**
@@ -589,7 +632,9 @@ class RealPetBrain(
             is RealPetEvent.UserBusy -> {
                 isUserBusy = event.active
                 if (event.active) {
-                    if (isOnScreen) {
+                    // Hidden behind another screen (a card's detail): nobody sees it, so it stays put
+                    // instead of stepping aside invisibly and being caught mid-way on return.
+                    if (isOnScreen && !event.hidden) {
                         RealPetIntent.Visit(
                             targetPerchId = null,
                             purpose = RealPetVisitPurpose.StepAsideAndSit,
@@ -614,9 +659,7 @@ class RealPetBrain(
                 } else if (event.daysSinceLast > 3) {
                     // PLAN.md Section 6D exception: if >3 days since last open, any enabled mode
                     // starts already sleeping on screen.
-                    if (nowMs > 0L) {
-                        store.putLong(KEY_LAST_VISIT_MS, nowMs)
-                    }
+                    recordVisit(nowMs)
                     RealPetIntent.Nap(
                         targetPerchId = null,
                         startAlreadySleeping = true,
@@ -624,23 +667,33 @@ class RealPetBrain(
                     )
                 } else if (mode.spontaneousIntervalMs != null) {
                     // PLAN.md Section 8: Sakin never comes by itself; only Normal/Yaramaz start spontaneous visits.
-                    if (nowMs > 0L) {
-                        store.putLong(KEY_LAST_VISIT_MS, nowMs)
-                    }
-                    val isNightSleepy = energy <= 0.28f && random.nextFloat() < 0.45f
-                    if (isNightSleepy) {
-                        RealPetIntent.Nap(
+                    // Sometimes it is already there (asleep or sitting somewhere), otherwise it walks in
+                    // a few seconds after the app opens rather than at once.
+                    recordVisit(nowMs)
+                    val sleepyChance = if (energy <= 0.28f) 0.55f else 0.22f
+                    val roll = random.nextFloat()
+                    val prankChance = if (!canPrankToday(nowMs)) 0f else if (mode.maxDailyPranks >= 3) 0.30f else 0.15f
+                    when {
+                        random.nextFloat() < prankChance -> {
+                            // Renamed a category to "MEAWW" and fell asleep on it.
+                            store.putInt(KEY_PRANK_TODAY, prankCountToday(nowMs) + 1)
+                            RealPetIntent.Prank(RealPetPrankKind.CategoryMeowText, priority = RealPetIntentPriority.OwnLife)
+                        }
+                        roll < sleepyChance -> RealPetIntent.Nap(
                             targetPerchId = null,
                             startAlreadySleeping = true,
                             priority = RealPetIntentPriority.OwnLife
                         )
-                    } else {
-                        val preferRunning = energy >= 0.70f || (energy >= 0.50f && random.nextBoolean())
-                        RealPetIntent.Visit(
-                            targetPerchId = null,
-                            purpose = RealPetVisitPurpose.RoamAndNap,
-                            preferRunning = preferRunning,
+                        roll < sleepyChance + 0.22f -> RealPetIntent.Visit(
+                            purpose = RealPetVisitPurpose.FoundSitting,
                             priority = RealPetIntentPriority.OwnLife
+                        )
+                        else -> RealPetIntent.Visit(
+                            targetPerchId = null,
+                            purpose = if (random.nextBoolean()) RealPetVisitPurpose.RoamAndNap else RealPetVisitPurpose.RoamAndLeave,
+                            preferRunning = energy >= 0.70f || (energy >= 0.50f && random.nextBoolean()),
+                            priority = RealPetIntentPriority.OwnLife,
+                            startDelayMs = 2_500L + random.nextLong(2_501L)
                         )
                     }
                 } else {
@@ -652,21 +705,105 @@ class RealPetBrain(
                 if (!canStartSpontaneousVisit(nowMs)) {
                     null
                 } else {
-                    if (nowMs > 0L) {
-                        store.putLong(KEY_LAST_VISIT_MS, nowMs)
-                    }
+                    recordVisit(nowMs)
                     val preferRunning = energy >= 0.70f || (energy >= 0.50f && random.nextBoolean())
-                    RealPetIntent.Visit(
-                        targetPerchId = null,
-                        purpose = RealPetVisitPurpose.RoamAndNap,
-                        preferRunning = preferRunning,
-                        priority = RealPetIntentPriority.OwnLife
-                    )
+                    // Mostly a short drop-in; sometimes a nap, a dash across, or a visit to ask for love.
+                    val roll = random.nextFloat()
+                    when {
+                        roll < 0.18f -> RealPetIntent.Visit(
+                            purpose = RealPetVisitPurpose.RunThrough,
+                            preferRunning = true,
+                            priority = RealPetIntentPriority.OwnLife
+                        )
+                        roll < 0.36f && canAskLoveToday(nowMs) -> {
+                            store.putInt(KEY_ASK_LOVE_TODAY, askLoveCountToday(nowMs) + 1)
+                            RealPetIntent.AskLove(priority = RealPetIntentPriority.OwnLife)
+                        }
+                        roll < 0.55f -> RealPetIntent.Visit(
+                            purpose = RealPetVisitPurpose.RoamAndNap,
+                            preferRunning = preferRunning,
+                            priority = RealPetIntentPriority.OwnLife
+                        )
+                        else -> RealPetIntent.Visit(
+                            purpose = RealPetVisitPurpose.RoamAndLeave,
+                            preferRunning = preferRunning,
+                            priority = RealPetIntentPriority.OwnLife
+                        )
+                    }
                 }
             }
 
             is RealPetEvent.ScreenChanged -> {
                 null
+            }
+
+            is RealPetEvent.CardAdded -> {
+                // Sometimes runs over to the new card and checks it out.
+                val chance = when (mode) {
+                    RealPetMode.Kapali -> 0f
+                    RealPetMode.Sakin -> 0.15f
+                    RealPetMode.Yaramaz -> 0.6f
+                    else -> 0.35f
+                }
+                if (isInCooldown(nowMs) || random.nextFloat() >= chance) {
+                    null
+                } else {
+                    RealPetIntent.React(
+                        kind = RealPetReactionKind.InspectNewCard,
+                        targetPerchId = realPetReminderPerchId(event.id),
+                        priority = RealPetIntentPriority.ReminderOrReaction
+                    )
+                }
+            }
+
+            is RealPetEvent.ReminderDueSoon -> {
+                if (!mode.reactionsAndRemindersEnabled || isUserBusy || isOnScreen || isInCooldown(nowMs)) {
+                    null
+                } else {
+                    RealPetIntent.Visit(
+                        targetPerchId = realPetReminderPerchId(event.id),
+                        purpose = RealPetVisitPurpose.RemindDueSoon,
+                        priority = RealPetIntentPriority.ReminderOrReaction
+                    )
+                }
+            }
+
+            RealPetEvent.TypingPaused -> {
+                // Hops on the box and adds a "meaw" of its own: Normal once a day, Yaramaz twice, Sakin never.
+                val perDay = mode.maxDailyPranks.coerceAtMost(2)
+                ensureDayRollover(nowMs)
+                if (isUserBusy || store.getInt(KEY_TYPE_MEOW_TODAY, 0) >= perDay || random.nextFloat() >= 0.3f) null
+                else {
+                    store.putInt(KEY_TYPE_MEOW_TODAY, store.getInt(KEY_TYPE_MEOW_TODAY, 0) + 1)
+                    RealPetIntent.Prank(RealPetPrankKind.SitOnComposer, priority = RealPetIntentPriority.ReminderOrReaction)
+                }
+            }
+
+            RealPetEvent.UserIdle -> {
+                // Comes over and dozes off next to the quiet user (Normal / Yaramaz only).
+                if (mode.spontaneousIntervalMs == null || isUserBusy || isOnScreen || isInCooldown(nowMs)) {
+                    null
+                } else {
+                    RealPetIntent.Nap(priority = RealPetIntentPriority.OwnLife)
+                }
+            }
+
+            RealPetEvent.MicStarted -> {
+                val chance = when (mode) {
+                    RealPetMode.Kapali -> 0f
+                    RealPetMode.Sakin -> 0.15f
+                    RealPetMode.Yaramaz -> 1f
+                    else -> 0.5f
+                }
+                if (isInCooldown(nowMs) || random.nextFloat() >= chance) {
+                    null
+                } else {
+                    RealPetIntent.Visit(
+                        purpose = RealPetVisitPurpose.ListenToMic,
+                        preferRunning = true,
+                        priority = RealPetIntentPriority.ReminderOrReaction
+                    )
+                }
             }
 
             // Touch events (PLAN.md Section 5, Section 7, Section 12.1) — highest priority
@@ -730,8 +867,6 @@ class RealPetBrain(
             RealPetEvent.AllClear,
             RealPetEvent.WaterAdded,
             is RealPetEvent.MoodLogged,
-            is RealPetEvent.CardAdded,
-            is RealPetEvent.ReminderDueSoon,
             is RealPetEvent.FeatureFirstOpen,
             is RealPetEvent.EmptyScreen,
             RealPetEvent.KeywordKedi,
@@ -760,6 +895,7 @@ class RealPetBrain(
             store.putLong(KEY_DAY_EPOCH, currentEpochDay)
             store.putInt(KEY_ASK_LOVE_TODAY, 0)
             store.putInt(KEY_PRANK_TODAY, 0)
+            store.putInt(KEY_TYPE_MEOW_TODAY, 0)
         }
     }
 }

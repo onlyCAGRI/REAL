@@ -210,7 +210,7 @@ enum MapPosterRenderer {
         let small = PosterKit.monoFont(size: w * 0.0115)
         let faint = UIColor(argb: template.text, alpha: 165 / 255)
         PosterKit.drawCentered("© OpenStreetMap contributors", x: w * 0.975, baseline: h * 0.978, font: small, color: faint, align: .right)
-        PosterKit.drawCentered("REAL", x: w * 0.025, baseline: h * 0.978, font: small, color: faint, align: .left)
+        PosterKit.drawCentered("Real", x: w * 0.025, baseline: h * 0.978, font: PosterKit.brandFont(size: w * 0.0115), color: faint, align: .left)
         UIGraphicsPopContext()
     }
 }

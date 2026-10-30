@@ -172,7 +172,7 @@ internal fun MusicArtistLine(block: MusicBlock, color: Color, style: androidx.co
 }
 
 @Composable
-private fun MusicResultRow(track: MusicBlock, onAdd: () -> Unit) {
+internal fun MusicResultRow(track: MusicBlock, onAdd: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onAdd).padding(8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         MusicArtwork(track, Modifier.size(48.dp))
@@ -226,7 +226,7 @@ fun MusicContentSection(blocks: List<MusicBlock>, designStyle: DesignStyle, edit
 }
 
 @Composable
-private fun MusicArtwork(block: MusicBlock, modifier: Modifier, onAmbience: ((Color) -> Unit)? = null) {
+internal fun MusicArtwork(block: MusicBlock, modifier: Modifier, onAmbience: ((Color) -> Unit)? = null) {
     val context = LocalContext.current
     val request = remember(block.artworkUrl, context) {
         ImageRequest.Builder(context).data(block.artworkUrl).allowHardware(false).build()

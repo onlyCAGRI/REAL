@@ -65,7 +65,7 @@ private fun InviteHero(done: Boolean) {
             }
         } else androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(com.cagri.real.R.drawable.real_invite_logo),
-            contentDescription = t("REAL"),
+            contentDescription = t("Real"),
             modifier = Modifier.size(84.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(22.dp)),
         )
     }

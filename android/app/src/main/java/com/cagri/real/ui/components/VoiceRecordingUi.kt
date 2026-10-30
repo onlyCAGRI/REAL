@@ -81,18 +81,24 @@ private fun readAudioDuration(path: String, fallbackMillis: Long): Long {
     }.getOrNull()?.takeIf { it > 0L } ?: fallbackMillis.coerceAtLeast(1L)
 }
 
+/** Microphone recorder shared by the card's voice block and the composer's Ses kaydı row. */
+internal class VoiceRecorderState(
+    val isRecording: Boolean,
+    val elapsedMillis: Long,
+    val activityLevel: Float,
+    val errorText: String?,
+    val requestStart: () -> Unit,
+    val stop: () -> Unit,
+    val cancel: () -> Unit
+)
+
 @Composable
-fun VoiceRecorderInline(
-    recordings: List<ReminderVoiceRecording>,
+internal fun rememberVoiceRecorder(
+    enabled: Boolean,
     onRecorded: (ReminderVoiceRecording) -> Unit,
-    onRemove: (ReminderVoiceRecording) -> Unit,
-    modifier: Modifier = Modifier,
-    showHeader: Boolean = true,
-    compact: Boolean = false,
-    enabled: Boolean = true,
     onRecordingStateChange: (Boolean) -> Unit = {},
-    onClose: (() -> Unit)? = null
-) {
+    onBeforeStart: () -> Unit = {}
+): VoiceRecorderState {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
@@ -105,12 +111,6 @@ fun VoiceRecorderInline(
     var isRecording by remember { mutableStateOf(false) }
     var permissionStartPending by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
-    var activePlayingIds by remember { mutableStateOf(setOf<String>()) }
-
-    LaunchedEffect(recordings) {
-        val currentIds = recordings.map { it.id }.toSet()
-        activePlayingIds = activePlayingIds.intersect(currentIds)
-    }
 
     val cancelRecording: () -> Unit = {
         val current = recorder
@@ -160,7 +160,7 @@ fun VoiceRecorderInline(
 
     val startRecording: () -> Unit = start@{
         if (!enabled || isRecording) return@start
-        activePlayingIds = emptySet()
+        onBeforeStart()
         errorText = null
         val (id, output) = VoiceRecordingStorage.createOutput(context)
         val current = newMediaRecorder(context)
@@ -233,6 +233,36 @@ fun VoiceRecorderInline(
             if (isRecording || recorder != null) cancelRecording()
         }
     }
+
+    return VoiceRecorderState(isRecording, elapsedMillis, activityLevel, errorText, requestStart, stopRecording, cancelRecording)
+}
+
+@Composable
+fun VoiceRecorderInline(
+    recordings: List<ReminderVoiceRecording>,
+    onRecorded: (ReminderVoiceRecording) -> Unit,
+    onRemove: (ReminderVoiceRecording) -> Unit,
+    modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
+    compact: Boolean = false,
+    enabled: Boolean = true,
+    onRecordingStateChange: (Boolean) -> Unit = {},
+    onClose: (() -> Unit)? = null
+) {
+    var activePlayingIds by remember { mutableStateOf(setOf<String>()) }
+
+    LaunchedEffect(recordings) {
+        val currentIds = recordings.map { it.id }.toSet()
+        activePlayingIds = activePlayingIds.intersect(currentIds)
+    }
+    val voiceRecorder = rememberVoiceRecorder(enabled, onRecorded, onRecordingStateChange) { activePlayingIds = emptySet() }
+    val isRecording = voiceRecorder.isRecording
+    val elapsedMillis = voiceRecorder.elapsedMillis
+    val activityLevel = voiceRecorder.activityLevel
+    val errorText = voiceRecorder.errorText
+    val cancelRecording = voiceRecorder.cancel
+    val stopRecording = voiceRecorder.stop
+    val requestStart = voiceRecorder.requestStart
 
     // Match the new composer microphone language: while recording or playing back, the card itself takes on
     // the blue colour wash and reacts to the live level / playback pulse. The animation covers the entire card,

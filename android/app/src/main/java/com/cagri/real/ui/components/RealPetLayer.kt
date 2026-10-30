@@ -1,6 +1,7 @@
 package com.cagri.real.ui.components
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,6 +20,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -31,6 +34,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.util.Calendar
 import kotlin.random.Random
+
+internal const val REAL_PET_IDLE_NAP_AFTER_MS = 30_000L
+internal const val REAL_PET_IDLE_NAP_EVERY_MS = 10 * 60_000L
+
+/** Process-wide so a recomposed layer does not bring the idle nap back at once. */
+private var lastIdleNapElapsed = -REAL_PET_IDLE_NAP_EVERY_MS
+
+/** Cards the cat already sat on before their alert, so each gets one visit per app process. */
+private val remindedDueSoon = mutableSetOf<Long>()
 
 /**
  * Stage ("Sahne") for REAL pet companion (PLAN.md Sections 3, 11.3, 12.1).
@@ -48,7 +60,7 @@ fun RealPetLayer(
     reduceAnimations: Boolean,
     surfaceActive: Boolean = true,
     @Suppress("UNUSED_PARAMETER") onCreatePersistentCard: (String) -> Unit = {},
-    @Suppress("UNUSED_PARAMETER") reminders: List<ReminderItem> = emptyList(),
+    reminders: List<ReminderItem> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -175,14 +187,20 @@ fun RealPetLayer(
         // düzenleme ekranında, diyaloglarda ve ayarlarda ortaya çıkmaz. O sırada ekrandaysa kenara çekilip oturur."
         val composerTypingSession = RealPetRuntime.composerTypingSession
         val composerMicActive = RealPetRuntime.composerMicActive
+        var micWasActive by remember { mutableStateOf(false) }
         LaunchedEffect(surfaceActive, composerTypingSession, composerMicActive) {
             val isTyping = RealPetRuntime.isComposerTypingNow()
             val busyNow = !surfaceActive || composerMicActive || isTyping
-            bodyState.dispatchEvent(RealPetEvent.UserBusy(busyNow))
+            Log.d("RealPet", "surface active=$surfaceActive typing=$isTyping mic=$composerMicActive")
+            bodyState.dispatchEvent(RealPetEvent.UserBusy(busyNow, hidden = !surfaceActive))
+            // Mic just turned on: the cat may come and sit by it instead of stepping aside.
+            if (composerMicActive && !micWasActive && surfaceActive) bodyState.dispatchEvent(RealPetEvent.MicStarted)
+            micWasActive = composerMicActive
             if (isTyping) {
                 delay(3_100L)
                 val stillBusy = !surfaceActive || RealPetRuntime.composerMicActive || RealPetRuntime.isComposerTypingNow()
                 bodyState.dispatchEvent(RealPetEvent.UserBusy(stillBusy))
+                if (!stillBusy && RealPetRuntime.composerDraft.isNotBlank()) bodyState.dispatchEvent(RealPetEvent.TypingPaused)
             }
         }
 
@@ -205,12 +223,13 @@ fun RealPetLayer(
             )
         }
 
-        // Spontaneous visit scheduler for Normal (~10 min) and Yaramaz (~5 min):
-        // Polls about once a minute while foreground, surface active, not busy, and cat is offscreen.
+        // Spontaneous visit scheduler for Normal (~10 min) and Yaramaz (~5 min) of in-app time:
+        // every minute the app is open with the cat away counts; checks while not busy.
         LaunchedEffect(isForeground, surfaceActive, mode) {
             if (!isForeground || !surfaceActive || mode.spontaneousIntervalMs == null) return@LaunchedEffect
             while (isActive) {
                 delay(60_000L)
+                if (bodyState.state == RealPetState.Offscreen) bodyState.brain.noteInAppTime(60_000L)
                 val busyNow = !surfaceActive || RealPetRuntime.composerMicActive || RealPetRuntime.isComposerTypingNow()
                 if (!busyNow && bodyState.state == RealPetState.Offscreen) {
                     val now = System.currentTimeMillis()
@@ -250,11 +269,39 @@ fun RealPetLayer(
                 RealPetScenarioTestKind.AlreadySleeping -> {
                     bodyState.executeIntent(
                         RealPetIntent.Nap(
-                            startAlreadySleeping = false,
+                            startAlreadySleeping = req.kind == RealPetScenarioTestKind.AlreadySleeping,
                             priority = RealPetIntentPriority.UserTouch
                         )
                     )
                 }
+                RealPetScenarioTestKind.RunAcross -> {
+                    bodyState.executeIntent(
+                        RealPetIntent.Visit(
+                            purpose = RealPetVisitPurpose.RunThrough,
+                            preferRunning = true,
+                            priority = RealPetIntentPriority.UserTouch
+                        )
+                    )
+                }
+                RealPetScenarioTestKind.FoundSitting -> {
+                    bodyState.executeIntent(
+                        RealPetIntent.Visit(
+                            purpose = RealPetVisitPurpose.FoundSitting,
+                            priority = RealPetIntentPriority.UserTouch
+                        )
+                    )
+                }
+                RealPetScenarioTestKind.TypeMeow -> bodyState.executeIntent(
+                    RealPetIntent.Prank(RealPetPrankKind.SitOnComposer, priority = RealPetIntentPriority.UserTouch)
+                )
+                RealPetScenarioTestKind.NamePrank -> bodyState.executeIntent(
+                    RealPetIntent.Prank(RealPetPrankKind.CategoryMeowText, priority = RealPetIntentPriority.UserTouch)
+                )
+                RealPetScenarioTestKind.Drink -> bodyState.executeIntent(RealPetIntent.Pose(RealPetState.Drinking))
+                RealPetScenarioTestKind.Purr -> bodyState.executeIntent(RealPetIntent.Pose(RealPetState.Purring))
+                RealPetScenarioTestKind.Groom -> bodyState.executeIntent(RealPetIntent.Pose(RealPetState.Grooming))
+                RealPetScenarioTestKind.Paw -> bodyState.executeIntent(RealPetIntent.Pose(RealPetState.Pawing))
+                RealPetScenarioTestKind.Meow -> bodyState.executeIntent(RealPetIntent.Pose(RealPetState.Meowing))
                 RealPetScenarioTestKind.Sit,
                 RealPetScenarioTestKind.SitAndObserve,
                 RealPetScenarioTestKind.DoubleTapSit -> {
@@ -307,14 +354,73 @@ fun RealPetLayer(
 
         // The cat lives in the page: scrolling carries it (and a card it sits on) out of view and back.
         // A card that scrolls away keeps its last position in bodyState instead of dropping the cat to the ground.
+        // Scrolls on another screen (a card's detail) are not this page's; ignored while it is hidden.
+        val surfaceShown by rememberUpdatedState(surfaceActive)
         DisposableEffect(bodyState) {
-            RealPetRuntime.onContentScrolled = { dy -> bodyState.onContentScrolled(dy) }
+            RealPetRuntime.onContentScrolled = { dy -> if (surfaceShown) bodyState.onContentScrolled(dy) }
             onDispose { RealPetRuntime.onContentScrolled = null }
+        }
+        LaunchedEffect(bodyState) { bodyState.watchPerchShifts() }
+
+        // 30 s without a touch: comes and dozes by the user (at most every 10 min); a touch startles it awake.
+        LaunchedEffect(bodyState, surfaceActive, mode) {
+            if (!surfaceActive || mode.spontaneousIntervalMs == null) return@LaunchedEffect
+            while (isActive) {
+                delay(1_000L)
+                if (bodyState.state == RealPetState.Offscreen) bodyState.idleNapActive = false
+                val now = android.os.SystemClock.elapsedRealtime()
+                val idleFor = now - RealPetRuntime.lastScreenTouchElapsed
+                val sinceLast = now - lastIdleNapElapsed
+                val busy = RealPetRuntime.composerMicActive || RealPetRuntime.isComposerTypingNow()
+                if (idleFor > REAL_PET_IDLE_NAP_AFTER_MS && sinceLast > REAL_PET_IDLE_NAP_EVERY_MS &&
+                    bodyState.state == RealPetState.Offscreen && !busy
+                ) {
+                    lastIdleNapElapsed = now
+                    // Set first: the nap starts on its own coroutine, still Offscreen right after dispatch.
+                    bodyState.idleNapActive = true
+                    bodyState.dispatchEvent(RealPetEvent.UserIdle)
+                    delay(1_500L)
+                }
+            }
+        }
+        // A card's alert is 15 min or less away and the card is on screen: the cat goes and sits on it.
+        val currentReminders by rememberUpdatedState(reminders)
+        LaunchedEffect(surfaceActive, mode) {
+            if (!surfaceActive || !mode.reactionsAndRemindersEnabled) return@LaunchedEffect
+            while (isActive) {
+                delay(20_000L)
+                if (bodyState.state != RealPetState.Offscreen) continue
+                if (RealPetRuntime.composerMicActive || RealPetRuntime.isComposerTypingNow()) continue
+                val now = System.currentTimeMillis()
+                val due = currentReminders.firstOrNull { r ->
+                    val at = r.alertAt
+                    r.completedAt == null && at != null && at > now && at - now <= 15 * 60_000L &&
+                        r.id !in remindedDueSoon &&
+                        realPetReminderPerchId(r.id).let { id ->
+                            val b = RealPetRuntime.perches[id]
+                            b != null && b.top > 0f && b.bottom < heightPx && !RealPetRuntime.isPerchCovered(id)
+                        }
+                } ?: continue
+                remindedDueSoon += due.id
+                bodyState.dispatchEvent(RealPetEvent.ReminderDueSoon(due.id))
+            }
+        }
+        val appEvent = RealPetRuntime.appEvent
+        LaunchedEffect(appEvent?.first) {
+            val event = appEvent?.second ?: return@LaunchedEffect
+            if (!surfaceActive) return@LaunchedEffect
+            delay(700L) // a new card needs a frame or two to land in the list and report its bounds
+            bodyState.dispatchEvent(event)
+        }
+        val screenTouch = RealPetRuntime.screenTouchToken
+        LaunchedEffect(screenTouch) {
+            if (bodyState.idleNapActive) bodyState.startleAwake()
         }
 
         val currentState = bodyState.state
         val isSoundState = currentState == RealPetState.Meowing || currentState == RealPetState.Calling
-        if (surfaceActive) {
+        // Never while the mic records: the cat "talking" by the mic is silent.
+        if (surfaceActive && !composerMicActive) {
             RealPetMeowSound(
                 state = if (isSoundState) RealPetState.Meowing else currentState
             )
@@ -323,7 +429,7 @@ fun RealPetLayer(
         val rx = bodyState.renderX
         val ry = bodyState.renderY
         val onScreenBounds = rx + petSizePx > 0f && rx < widthPx && ry + petSizePx > 0f && ry < heightPx
-        val petVisible = surfaceActive && currentState != RealPetState.Offscreen && onScreenBounds
+        val petVisible = surfaceActive && currentState != RealPetState.Offscreen && onScreenBounds && !bodyState.isCovered
 
         RealPetBody(
             bodyState = bodyState,

@@ -215,7 +215,10 @@ object SkyPosterRenderer {
         paint.textAlign = Paint.Align.RIGHT
         canvas.drawText("Yale Bright Star Catalog · d3-celestial", w * 0.975f, h * 0.978f, paint)
         paint.textAlign = Paint.Align.LEFT
-        canvas.drawText("REAL", w * 0.025f, h * 0.978f, paint)
+        // Signature in the logo's typeface.
+        paint.typeface = com.cagri.real.ui.RealBrandType.bold
+        paint.letterSpacing = -0.03f
+        canvas.drawText("Real", w * 0.025f, h * 0.978f, paint)
     }
 
     /**

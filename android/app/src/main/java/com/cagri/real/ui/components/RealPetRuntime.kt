@@ -3,7 +3,9 @@ package com.cagri.real.ui.components
 import android.content.SharedPreferences
 import android.os.SystemClock
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
@@ -16,7 +18,7 @@ import kotlin.math.hypot
 import kotlin.random.Random
 
 /** The pet is being reworked separately: while false it never appears and its settings are hidden. */
-const val REAL_PET_AVAILABLE = false
+const val REAL_PET_AVAILABLE = true
 
 const val REAL_PET_PERCH_COMPOSER = "real_pet:composer"
 const val REAL_PET_PERCH_COMPOSER_TEXT = "real_pet:composer:text"
@@ -76,7 +78,17 @@ enum class RealPetScenarioTestKind {
     QuietVisit,
     PoopAndRun,
     DoubleTapSit,
-    Leave
+    Leave,
+
+    // Single poses from sitting, for checking each animation and its bridges.
+    Drink,
+    Purr,
+    Groom,
+    Paw,
+    Meow,
+    FoundSitting,
+    NamePrank,
+    TypeMeow
 }
 
 data class RealPetMamaFeedingRequest(
@@ -143,6 +155,17 @@ object RealPetRuntime {
     const val SESSION_RESET_BACKGROUND_MS = 30 * 60_000L
 
     val perches = mutableStateMapOf<String, Rect>()
+
+    /**
+     * A card's detail screen sits over the home list, whose cards keep reporting their bounds.
+     * While one is open those perches are covered: a cat on them waits there, unseen.
+     */
+    fun isPerchCovered(perchId: String): Boolean =
+        !perchId.startsWith(DETAIL_PERCH_PREFIX) && isDetailOpen()
+
+    fun isDetailOpen(): Boolean = perches.keys.any { it.startsWith(DETAIL_PERCH_PREFIX) }
+
+    private const val DETAIL_PERCH_PREFIX = "real_pet:detail"
 
     /** Receives consumed vertical content scroll (px) so the cat keeps its place in the page. */
     @Volatile
@@ -395,7 +418,12 @@ object RealPetRuntime {
 
     fun updatePerch(id: String, bounds: Rect) {
         perches[id] = bounds
+        if (id == REAL_PET_PERCH_COMPOSER_MIC) lastMicBounds = bounds
     }
+
+    /** Where the mic button last was: while listening the composer swaps layouts and may drop its perch. */
+    var lastMicBounds: Rect? = null
+        private set
 
     fun removePerch(id: String) {
         perches.remove(id)
@@ -406,6 +434,25 @@ object RealPetRuntime {
     fun requestPlaceOn(perchId: String) {
         nextToken += 1
         commandState.value = RealPetCommand(nextToken, perchId, dropFromTop = false)
+    }
+
+    /**
+     * PC testing: `--es real_pet_perch card` naps on the top visible home card, or pass a full perch id.
+     * Logs where that card is so a script can tap it.
+     */
+    fun requestNapOnByName(name: String) {
+        val id = if (name == "card") {
+            perches.entries.filter { it.key.startsWith("real_pet:reminder:") && it.value.top > 0f }
+                .minByOrNull { it.value.top }?.key
+        } else {
+            name.takeIf { it in perches }
+        }
+        if (id == null) {
+            android.util.Log.d("RealPet", "test perch '$name' not found in ${perches.entries.joinToString { "${it.key}@${it.value.top.toInt()}" }}")
+            return
+        }
+        android.util.Log.d("RealPet", "test perch $id bounds=${perches[id]}")
+        requestPlaceOn(id)
     }
 
     fun requestDropTo(perchId: String) {
@@ -433,6 +480,21 @@ object RealPetRuntime {
     fun isComposerTypingNow(): Boolean =
         composerTypingUntilElapsedRealtime > currentElapsedRealtime()
 
+    /** The word the cat typed into the composer; one backspace removes it whole and it is never sent. */
+    var composerMeow: String? = null
+    /** Latest composer draft, so the cat only "types" into a draft that has words in it. */
+    var composerDraft: String = ""
+
+    fun withoutComposerMeow(text: String): String {
+        val meow = composerMeow ?: return text
+        composerMeow = null
+        val at = text.lastIndexOf(meow)
+        return if (at < 0) text else text.removeRange(at, at + meow.length)
+    }
+
+    /** Category perch the cat is asleep on after renaming it ("MEAWW"); the title shows the joke while set. */
+    var namePrankPerchId by mutableStateOf<String?>(null)
+
     fun consumePrank(token: Int) {
         if (prankState.value?.token == token) prankState.value = null
     }
@@ -450,7 +512,16 @@ object RealPetRuntime {
 
     /** PC testing: `adb shell am start -n com.cagri.real/.MainActivity -f 0x20000000 --es real_pet_test walk` */
     fun requestScenarioTestByName(name: String) {
+        if (name == "newcard" || name == "duesoon") {
+            // As if the top visible home card had just been added / its alert were 15 min away.
+            val id = perches.entries.filter { it.key.startsWith("real_pet:reminder:") && it.value.top > 0f }
+                .minByOrNull { it.value.top }?.key?.removePrefix("real_pet:reminder:")?.toLongOrNull() ?: return
+            postEvent(if (name == "newcard") RealPetEvent.CardAdded(id) else RealPetEvent.ReminderDueSoon(id))
+            return
+        }
         val kind = when (name.trim().lowercase()) {
+            "nameprank" -> RealPetScenarioTestKind.NamePrank
+            "typemeow" -> RealPetScenarioTestKind.TypeMeow
             "walk" -> RealPetScenarioTestKind.Walk
             "run" -> RealPetScenarioTestKind.Run
             "sleep" -> RealPetScenarioTestKind.Sleep
@@ -458,7 +529,8 @@ object RealPetRuntime {
             "hearts" -> RealPetScenarioTestKind.Hearts
             "love" -> RealPetScenarioTestKind.AttentionVisit
             "leave" -> RealPetScenarioTestKind.Leave
-            else -> return
+            // Any other kind by its enum name, e.g. drink, groom, foundsitting, runacross.
+            else -> RealPetScenarioTestKind.entries.firstOrNull { it.name.lowercase() == name.trim().lowercase() } ?: return
         }
         requestScenarioTest(kind)
     }
@@ -551,6 +623,29 @@ object RealPetRuntime {
         if (detailNavigationState.value?.token == token) {
             detailNavigationState.value = null
         }
+    }
+
+    /** App events for the pet (a card added, a reminder coming up); the layer hands them to the brain. */
+    private val appEventState = mutableStateOf<Pair<Int, RealPetEvent>?>(null)
+    val appEvent: Pair<Int, RealPetEvent>? get() = appEventState.value
+    private var nextAppEventToken = 0
+
+    fun postEvent(event: RealPetEvent) {
+        nextAppEventToken += 1
+        appEventState.value = nextAppEventToken to event
+    }
+
+    /** Any finger down anywhere in the app (MainActivity.dispatchTouchEvent): the idle nap and its startle. */
+    private val screenTouchState = mutableStateOf(0)
+    val screenTouchToken: Int get() = screenTouchState.value
+
+    @Volatile
+    var lastScreenTouchElapsed: Long = android.os.SystemClock.elapsedRealtime()
+        private set
+
+    fun noteScreenTouch() {
+        lastScreenTouchElapsed = android.os.SystemClock.elapsedRealtime()
+        screenTouchState.value = screenTouchState.value + 1
     }
 
     fun noteUserTouch() {

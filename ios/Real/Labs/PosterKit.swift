@@ -121,6 +121,8 @@ enum PosterKit {
     static func titleFont(size: CGFloat) -> UIFont { .systemFont(ofSize: size, weight: .bold) }
     static func lightFont(size: CGFloat) -> UIFont { .systemFont(ofSize: size, weight: .light) }
     static func monoFont(size: CGFloat) -> UIFont { .monospacedSystemFont(ofSize: size, weight: .regular) }
+    /// The logo's typeface for the "Real" signature (Inter Tight Bold, bundled).
+    static func brandFont(size: CGFloat) -> UIFont { UIFont(name: "InterTight-Bold", size: size) ?? .boldSystemFont(ofSize: size) }
 }
 
 extension UIColor {

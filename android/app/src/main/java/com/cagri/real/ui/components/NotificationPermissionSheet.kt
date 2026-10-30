@@ -404,10 +404,10 @@ private fun PermissionGlyphIcon(glyph: PermissionGlyph, animate: Boolean) {
 
     when (glyph) {
         PermissionGlyph.Brand -> Image(
-            painter = painterResource(R.drawable.real_r_mark),
+            painter = painterResource(R.drawable.real_home_wordmark),
             contentDescription = null,
             modifier = Modifier
-                .size(46.dp)
+                .size(width = 59.dp, height = 24.dp)
                 .graphicsLayer {
                     val b = breathe?.value ?: 0f
                     scaleX = 1f + 0.06f * b

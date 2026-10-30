@@ -16,6 +16,7 @@ class RealApplication : Application(), coil.ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         com.cagri.real.i18n.I18n.init(this)
+        com.cagri.real.ui.RealBrandType.init(this)
         com.cagri.real.platform.android.ai.AndroidAiConsent.initialize(this)
         com.cagri.real.updates.AppUpdateGate.init(this)
         com.cagri.real.platform.android.account.CloudBackupEpochStore.initialize(this)

@@ -39,7 +39,9 @@ internal class ReminderComposerCallbacks(
     val onSetRepeatPattern: (Long, Int, Long?) -> Unit,
     val onSetTiming: (Long, Int?, Long?) -> Unit = { _, _, _ -> },
     val onSetAlarm: (Long, Boolean) -> Unit = { _, _ -> },
-    val onSetLocationTrigger: (Long, com.cagri.real.data.LocationTrigger?) -> Unit = { _, _ -> }
+    val onSetLocationTrigger: (Long, com.cagri.real.data.LocationTrigger?) -> Unit = { _, _ -> },
+    val onToggleImportant: (Long) -> Unit = {},
+    val onApplyComposerExtras: (Long, com.cagri.real.data.CardStackBlock?, List<com.cagri.real.data.CardGameBlock>) -> Unit = { _, _, _ -> }
 )
 
 /** Early warning, end and alarm picked in the composer, applied once the card exists. */
@@ -50,7 +52,15 @@ internal object ComposerTimingDraft {
     var alarm by androidx.compose.runtime.mutableStateOf(false)
     /** "Konuma varınca hatırlat" picked from the composer pin. */
     var locationTrigger by androidx.compose.runtime.mutableStateOf<com.cagri.real.data.LocationTrigger?>(null)
-    fun clear() { clearTiming(); locationTrigger = null }
+    /** Star in the full-screen composer: the new card is marked important. */
+    var important by androidx.compose.runtime.mutableStateOf(false)
+    /** Voice notes recorded on the full-screen Ses page, saved with the card. */
+    var voiceRecordings by androidx.compose.runtime.mutableStateOf<List<com.cagri.real.data.ReminderVoiceRecording>>(emptyList())
+    /** Full-screen note under the title. */
+    var body by androidx.compose.runtime.mutableStateOf("")
+    /** Games picked on the full-screen Medya page. */
+    var games by androidx.compose.runtime.mutableStateOf<List<com.cagri.real.data.CardGameBlock>>(emptyList())
+    fun clear() { clearTiming(); locationTrigger = null; important = false; voiceRecordings = emptyList(); body = ""; games = emptyList() }
     /** The date was removed: what hangs on a clock time goes, a place reminder stays. */
     fun clearTiming() { earlyAlertMinutes = null; endAt = null; alarm = false }
 }

@@ -11,12 +11,12 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun GlassPanel(backdrop: GraphicsLayer, backdropPosition: () -> Offset,
     modifier: Modifier = Modifier, corners: Dp = 30.dp, reduceDynamicBlur: Boolean = false,
-    blurRadius: Dp = 18.dp, extraFrosted: Boolean = false,
+    blurRadius: Dp = 18.dp, extraFrosted: Boolean = false, rim: Boolean = true,
     content: @Composable BoxScope.() -> Unit) {
     if (LocalDesignStyle.current == com.cagri.real.ui.DesignStyle.LiquidGlass) {
         if (extraFrosted) LiquidGlassContentSurface(modifier, corners, content)
-        else LiquidGlassSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur, content = content)
+        else LiquidGlassSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur, showRim = rim, content = content)
         return
     }
-    FrostedSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur, blurRadius, false, extraFrosted, content)
+    FrostedSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur, blurRadius, false, extraFrosted, rim, content)
 }

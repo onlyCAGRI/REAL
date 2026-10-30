@@ -112,7 +112,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.BLACK))
         disableStatusBarContrastEnforcementCompat()
-        setContent { RealTheme { StartupLoadingScreen(false, {}, {}) } }
+        // The first frame draws the same wordmark in the same spot, so drop the splash at once (its fade dimmed it).
+        if (android.os.Build.VERSION.SDK_INT >= 31) splashScreen.setOnExitAnimationListener { it.remove() }
+        setContent { RealTheme { com.cagri.real.ui.StartupWordmarkScreen() } }
         lifecycleScope.launch {
             try {
                 com.cagri.real.platform.android.sync.SyncLocal.awaitInitialized()
@@ -340,6 +342,9 @@ class MainActivity : ComponentActivity() {
                                     createdId = newest.id
                                     if (alertAt == null && canShowImmediateNotification(newest) && !ReminderNotifications.show(this@MainActivity, newest)) waiting.add(newest.id)
                                 }
+                                if (success) createdId?.let {
+                                    com.cagri.real.ui.components.RealPetRuntime.postEvent(com.cagri.real.ui.components.RealPetEvent.CardAdded(it))
+                                }
                                 if (success) createdId else null
                             },
                             onAddSuggestedReal = { text, musicBlock, mediaBlock, cardStackBlock ->
@@ -375,6 +380,9 @@ class MainActivity : ComponentActivity() {
                             },
                             onAddGameBlock = { reminderId, block ->
                                 mutate { repository.addGameBlock(reminderId, block) }
+                            },
+                            onApplyComposerExtras = { reminderId, stack, games ->
+                                mutate { repository.applyComposerExtras(reminderId, stack, games) }
                             },
                             onRemoveGameBlock = { reminderId, blockId ->
                                 mutate { repository.removeGameBlock(reminderId, blockId) }
@@ -637,10 +645,9 @@ class MainActivity : ComponentActivity() {
 
                     if (!showWelcome && !loadFailed && !startupOfflineShown) {
                         key(localWorkspaceToken) {
-                            StartupSkeletonReveal(
+                            com.cagri.real.ui.StartupIntroOverlay(
                                 readyToReveal = skeletonPreviewFinished && !startupBlocksHome && ready &&
                                     startup.workspace == localWorkspaceToken,
-                                categoryCount = skeletonCategoryCount,
                                 reduceMotion = reduceAnimations
                             )
                         }
@@ -753,6 +760,13 @@ class MainActivity : ComponentActivity() {
         try { startActivity(intent) }
         catch (_: Exception) { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
     }
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+            com.cagri.real.ui.components.RealPetRuntime.noteScreenTouch()
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
         openedReminderId = intent.getLongExtra(ReminderNotifications.EXTRA_REMINDER_ID, -1L).takeIf { it > 0 }
@@ -767,8 +781,13 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra(com.cagri.real.platform.android.boards.PanoPush.EXTRA_BOARD)?.let { pendingPanoBoardId = it; intent.removeExtra(com.cagri.real.platform.android.boards.PanoPush.EXTRA_BOARD) }
         // Pet testing from a PC: adb shell am start -n com.cagri.real/.MainActivity -f 0x20000000 --es real_pet_test walk
         intent.getStringExtra("real_pet_test")?.let {
-            com.cagri.real.ui.components.RealPetRuntime.requestScenarioTestByName(it)
+            window.decorView.postDelayed({ com.cagri.real.ui.components.RealPetRuntime.requestScenarioTestByName(it) }, 800L)
             intent.removeExtra("real_pet_test")
+        }
+        intent.getStringExtra("real_pet_perch")?.let {
+            // Arrives while paused, when the cards have not reported their bounds yet.
+            window.decorView.postDelayed({ com.cagri.real.ui.components.RealPetRuntime.requestNapOnByName(it) }, 800L)
+            intent.removeExtra("real_pet_perch")
         }
         if (::repository.isInitialized) handleShareIntent(intent)
         // While storage starts, openRealContent consumes the latest Intent after awaiting it.

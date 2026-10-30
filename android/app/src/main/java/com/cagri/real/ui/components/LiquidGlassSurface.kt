@@ -55,6 +55,8 @@ fun LiquidGlassSurface(
     strength: LiquidGlassStrength = LiquidGlassStrength.Regular,
     reduceAnimations: Boolean = LocalLiquidReduceMotion.current,
     role: LiquidGlassRole = LiquidGlassRole.Chrome,
+    /** false: no glass edge line (the full-screen composer). */
+    showRim: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
     val nested = LocalInsideLiquidGlass.current
@@ -102,11 +104,12 @@ fun LiquidGlassSurface(
             }
             .shadow(LiquidGlassTokens.shadow, shape, clip = false)
             .clip(shape)
-            .border(
+            // A 0.dp border still draws a hairline, so no rim means no border at all.
+            .then(if (!showRim) Modifier else Modifier.border(
                 if (role == LiquidGlassRole.Dock) LiquidGlassTokens.dockEdgeWidth else LiquidGlassTokens.edgeWidth,
                 if (flatDock) SolidColor(LiquidGlassTokens.dockSolidEdge) else rim,
                 shape
-            )
+            ))
     ) {
         if (dynamic) LiquidBackdrop(backdrop, { position - backdropPosition() }, corners, strength, role, Modifier.matchParentSize())
         Box(Modifier.matchParentSize().background(tint))

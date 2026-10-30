@@ -160,7 +160,7 @@ fun MediaSearchSheet(
 }
 
 /** Films and series in one list: titles that start with the query first, then the rest alternating film / series. */
-private fun mergeMediaResults(query: String, movies: List<MediaBlock>, series: List<MediaBlock>): List<MediaBlock> {
+internal fun mergeMediaResults(query: String, movies: List<MediaBlock>, series: List<MediaBlock>): List<MediaBlock> {
     val q = query.lowercase()
     val alternating = buildList {
         for (i in 0 until maxOf(movies.size, series.size)) {

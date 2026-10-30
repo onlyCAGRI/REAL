@@ -48,6 +48,7 @@ fun BlurredBackdrop(backdrop: GraphicsLayer, offset: () -> Offset, radius: Dp, m
 fun FrostedSurface(
     backdrop: GraphicsLayer, backdropPosition: () -> Offset, modifier: Modifier,
     corners: Dp, reduceDynamicBlur: Boolean, blurRadius: Dp, icy: Boolean, dense: Boolean,
+    showRim: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
     var position by remember { mutableStateOf(Offset.Zero) }
@@ -62,7 +63,7 @@ fun FrostedSurface(
         })
     }
     val rim = remember(icy) { Brush.verticalGradient(listOf(Color.White.copy(alpha = if (icy) 0.15f else 0.22f), Color.White.copy(alpha = 0.055f))) }
-    Box(modifier.onGloballyPositioned { position = it.positionInRoot() }.clip(shape).border(0.8.dp, rim, shape)) {
+    Box(modifier.onGloballyPositioned { position = it.positionInRoot() }.clip(shape).then(if (showRim) Modifier.border(0.8.dp, rim, shape) else Modifier)) {
         if (dynamic) BlurredBackdrop(backdrop, { position - backdropPosition() }, blurRadius, Modifier.matchParentSize())
         Box(Modifier.matchParentSize().background(tint))
         content()
@@ -81,5 +82,5 @@ fun DesignPanel(backdrop: GraphicsLayer, backdropPosition: () -> Offset, modifie
         return
     }
     FrostedSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur,
-        if (designStyle == DesignStyle.Ice) 38.dp else 18.dp, designStyle == DesignStyle.Ice, false, content)
+        if (designStyle == DesignStyle.Ice) 38.dp else 18.dp, designStyle == DesignStyle.Ice, false, content = content)
 }

@@ -55,8 +55,8 @@ internal fun PrivacyDetailsDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     com.cagri.real.ui.components.RealBackButton(onBack, description = stringResource(R.string.real_privacy_back))
                     Spacer(Modifier.weight(1f))
-                    Image(painterResource(R.drawable.real_r_mark), contentDescription = null,
-                        modifier = Modifier.size(32.dp))
+                    Image(painterResource(R.drawable.real_home_wordmark), contentDescription = null,
+                        modifier = Modifier.size(width = 54.dp, height = 22.dp))
                 }
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)) {

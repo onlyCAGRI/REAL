@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 288dp splash icon with the 132dp-wide wordmark in the middle (inside the 192dp safe circle). -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="27.08%"
+    android:insetRight="27.08%"
+    android:insetTop="40.6%"
+    android:insetBottom="40.6%">
+    <bitmap android:src="@drawable/real_home_wordmark" android:gravity="fill" android:filter="true" />
+</inset>

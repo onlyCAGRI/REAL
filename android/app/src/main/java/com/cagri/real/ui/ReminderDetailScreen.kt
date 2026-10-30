@@ -2535,36 +2535,26 @@ internal fun ReminderDetailScreen(
                     }
                 )
 
-                if (musicSearchOpen && editing) {
-                    MusicSearchSheet(designStyle = designStyle,
-                        onDismiss = { musicSearchOpen = false },
-                        onSelect = { track ->
-                            editedMusicBlocks = editedMusicBlocks + track
-                            musicSearchOpen = false
-                        })
-                }
-
-                if (gameSearchOpen) {
-                    com.cagri.real.ui.components.GameSearchSheet(designStyle = designStyle,
-                        onDismiss = { gameSearchOpen = false },
-                        onSelect = { game -> onAddGameBlock(game); gameSearchOpen = false })
-                }
-
-                if (mediaSearchOpen && editing) {
-                    MediaSearchSheet(
-                        designStyle = designStyle,
-                        onDismiss = { mediaSearchOpen = false },
-                        onSelect = { mediaBlock ->
+                // One search for songs, films, series and games (same page as the full-screen composer's Medya).
+                if (musicSearchOpen) {
+                    com.cagri.real.ui.components.MediaSearchAllSheet(
+                        music = editedMusicBlocks,
+                        media = editedMediaBlocks,
+                        games = reminder.gameBlocks,
+                        onAddMusic = { track -> if (editing) editedMusicBlocks = editedMusicBlocks + track },
+                        onAddMedia = { mediaBlock ->
                             val alreadyExists = editedMediaBlocks.any { existing ->
                                 (!existing.providerId.isNullOrBlank() && existing.providerId == mediaBlock.providerId) ||
                                 existing.providerUrl == mediaBlock.providerUrl ||
                                 (existing.title.equals(mediaBlock.title, ignoreCase = true) && existing.type == mediaBlock.type && existing.year == mediaBlock.year)
                             }
-                            if (!alreadyExists) {
-                                editedMediaBlocks = editedMediaBlocks + mediaBlock
-                            }
-                            mediaSearchOpen = false
-                        }
+                            if (editing && !alreadyExists) editedMediaBlocks = editedMediaBlocks + mediaBlock
+                        },
+                        onAddGame = { game -> onAddGameBlock(game) },
+                        onRemoveMusic = { track -> editedMusicBlocks = editedMusicBlocks.filterNot { it.id == track.id } },
+                        onRemoveMedia = { item -> editedMediaBlocks = editedMediaBlocks.filterNot { it.id == item.id } },
+                        onRemoveGame = { game -> onRemoveGameBlock(game.id) },
+                        onDismiss = { musicSearchOpen = false }
                     )
                 }
 
@@ -2959,35 +2949,16 @@ internal fun ReminderDetailScreen(
                                     count = if (voiceCount > 0) voiceCount else null,
                                     onClick = { focusManager.clearFocus(); keyboard?.hide(); voiceRecorderOpen = true }
                                 )
+                                val allMediaCount = musicCount + mediaCount + reminder.gameBlocks.size
                                 DetailQuickActionButton(
                                     designStyle = designStyle,
                                     reduceAnimations = reduceAnimations,
                                     glyph = ActionGlyph.Music,
-                                    description = t("Müzik"),
+                                    description = t("Medya"),
                                     enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
-                                    active = musicCount > 0,
-                                    count = if (musicCount > 0) musicCount else null,
+                                    active = allMediaCount > 0,
+                                    count = if (allMediaCount > 0) allMediaCount else null,
                                     onClick = { focusManager.clearFocus(); keyboard?.hide(); musicSearchOpen = true }
-                                )
-                                DetailQuickActionButton(
-                                    designStyle = designStyle,
-                                    reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.Video,
-                                    description = t("Film & Dizi"),
-                                    enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
-                                    active = mediaCount > 0,
-                                    count = if (mediaCount > 0) mediaCount else null,
-                                    onClick = { focusManager.clearFocus(); keyboard?.hide(); mediaSearchOpen = true }
-                                )
-                                DetailQuickActionButton(
-                                    designStyle = designStyle,
-                                    reduceAnimations = reduceAnimations,
-                                    glyph = ActionGlyph.Play,
-                                    description = t("Oyun"),
-                                    enabled = !savingDetail && !attachmentBusy && !voiceRecordingActive,
-                                    active = reminder.gameBlocks.isNotEmpty(),
-                                    count = reminder.gameBlocks.size.takeIf { it > 0 },
-                                    onClick = { focusManager.clearFocus(); keyboard?.hide(); gameSearchOpen = true }
                                 )
                                 DetailQuickActionButton(
                                     designStyle = designStyle,

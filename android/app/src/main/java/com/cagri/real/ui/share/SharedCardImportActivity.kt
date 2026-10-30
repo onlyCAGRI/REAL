@@ -49,7 +49,10 @@ private fun SharedCardImportScreen(id: String, onSignIn: () -> Unit, onDone: () 
     var claimed by androidx.compose.runtime.saveable.rememberSaveable(id) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(Color.Black).padding(28.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("REAL", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+        androidx.compose.foundation.Image(
+            androidx.compose.ui.res.painterResource(com.cagri.real.R.drawable.real_home_wordmark), contentDescription = "Real",
+            modifier = Modifier.height(30.dp).width(73.dp)
+        )
         Spacer(Modifier.height(22.dp))
         Text("Add shared card", color = Color.White)
         Text("Save an independent copy to your home screen.", color = Color.Gray, modifier = Modifier.padding(vertical = 16.dp))

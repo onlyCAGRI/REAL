@@ -16,7 +16,7 @@ struct RootView: View {
     @State private var path: [Route]
     @Namespace private var nav
     @State private var showWelcome = false
-    /// Cold start: the skeleton with its shimmer, then a wipe to the real home (StartupSkeletonReveal).
+    /// Cold start: the launch screen's "Real" slides into the header and the rows rise (StartupIntroOverlay).
     @State private var startupShown = !ProcessInfo.processInfo.arguments.contains("-REALNoStartup")
     /// Varınca / Ayrılınca notification tapped (or the developer test): the arrival focus screen.
     @State private var arrival: ArrivalFocusContext?
@@ -65,7 +65,7 @@ struct RootView: View {
         .preferredColorScheme(.dark)
         .overlay {
             if startupShown && !showWelcome {
-                StartupSkeletonReveal { startupShown = false }
+                StartupIntroOverlay { startupShown = false }
             }
         }
         .overlay {
@@ -172,7 +172,7 @@ struct HomeView: View {
                     .padding(.top, 20)
                     .padding(.bottom, 22)
                     .opacity(selectedIds.isEmpty ? 1 : 0)
-                if !searchOpen { categoryDeck.padding(.horizontal, 16).zIndex(1).transition(.opacity) }
+                if !searchOpen { categoryDeck.padding(.horizontal, 16).startupRise(0).zIndex(1).transition(.opacity) }
                 // "Kartlarım" (swipe left to search) + the category screen's sort arrow: newest on top → newest at the
                 // bottom → nearest date.
                 HomeCardsSearchTitle(open: $searchOpen.animation(.timingCurve(0.2, 0, 0, 1, duration: 0.3)), query: $searchQuery) {
@@ -183,6 +183,7 @@ struct HomeView: View {
                     .accessibilityLabel(t("Sıralamayı değiştir"))
                 }
                 .padding(.leading, 18).padding(.trailing, 6).padding(.top, 12).padding(.bottom, 12)
+                .startupRise(1)
                 if let sortHint {
                     Text(sortHint.text).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB8B9C2))
                         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -205,8 +206,8 @@ struct HomeView: View {
                     HomeContextCard(onOpen: openContext)
                     GuestBackupNudge(cardCount: store.reminders.count)
                 }
-                ForEach(active) { reminder in
-                    card(reminder, swipe: true, label: searching)
+                ForEach(Array(active.enumerated()), id: \.element.id) { index, reminder in
+                    card(reminder, swipe: true, label: searching).startupRise(2 + index)
                 }
                 ForEach(calendarItems) { o in
                     // A phone-calendar event: opens the event window; no completing or selecting. Once it ended
@@ -272,6 +273,7 @@ struct HomeView: View {
                             onOpenPlanner: { path.append(.planner) },
                             onOpenYasam: { withoutAnimation { showYasam = true } },
                             onOpenPano: { showPano = true })
+                    .startupRise(5)
                     // The fade belongs to the dock: drawn above every card (stacked category cards included) and
                     // below the composer, from above the dock down to the screen edge.
                     .background(alignment: .bottom) { BottomFade() }
@@ -369,13 +371,22 @@ struct HomeView: View {
 
     private var header: some View {
         HStack {
-            // The welcome screen's wordmark at header size.
+            // The app icon's "Real" (Inter Tight Bold) at header size.
             Image("RealWordmark").resizable().scaledToFit()
-                .frame(width: 69, height: 30, alignment: .leading)
-                .accessibilityLabel("REAL")
+                .frame(width: 73, height: 30, alignment: .leading)
+                .accessibilityLabel("Real")
+                // Hidden while the startup intro's own copy slides into this spot; reports where that is.
+                .opacity(StartupIntro.shared.landed ? 1 : 0)
+                .background(GeometryReader { g in
+                    Color.clear
+                        .onAppear { StartupIntro.shared.headerFrame = g.frame(in: .global) }
+                        .onChange(of: g.frame(in: .global)) { _, f in
+                            if !StartupIntro.shared.landed { StartupIntro.shared.headerFrame = f }
+                        }
+                })
             Spacer()
             Button { withoutAnimation { showAccountMenu = true } } label: {
-                ProfileAvatar(name: store.ownerName, size: 44)
+                ProfileAvatar(name: store.ownerName, size: 44).startupAvatar()
             }
             .accessibilityLabel(t("Hesap menüsünü aç"))
         }

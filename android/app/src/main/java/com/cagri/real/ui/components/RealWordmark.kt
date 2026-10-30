@@ -25,11 +25,11 @@ fun prewarmRealWordmark(context: Context) {
         val width = (112 * resources.displayMetrics.density).toInt()
         if (cache.get(width) == null) {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeResource(resources, R.drawable.real_wordmark, bounds)
+            BitmapFactory.decodeResource(resources, R.drawable.real_home_wordmark, bounds)
             var sample = 1
             while (bounds.outWidth / (sample * 2) >= width) sample *= 2
             BitmapFactory.decodeResource(
-                resources, R.drawable.real_wordmark,
+                resources, R.drawable.real_home_wordmark,
                 BitmapFactory.Options().apply { inSampleSize = sample }
             )?.asImageBitmap()?.also { cache.put(width, it) }
         }
@@ -43,10 +43,10 @@ fun RealWordmark(modifier: Modifier = Modifier) {
     val bitmap by produceState<ImageBitmap?>(cache.get(width), width) {
         value = cache.get(width) ?: withContext(Dispatchers.IO) {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeResource(resources, R.drawable.real_wordmark, bounds)
+            BitmapFactory.decodeResource(resources, R.drawable.real_home_wordmark, bounds)
             var sample = 1
             while (bounds.outWidth / (sample * 2) >= width) sample *= 2
-            BitmapFactory.decodeResource(resources, R.drawable.real_wordmark,
+            BitmapFactory.decodeResource(resources, R.drawable.real_home_wordmark,
                 BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()?.also { cache.put(width, it) }
         }
     }

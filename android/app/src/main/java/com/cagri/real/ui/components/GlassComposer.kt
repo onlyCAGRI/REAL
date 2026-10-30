@@ -1,6 +1,13 @@
 package com.cagri.real.ui.components
 
 import com.cagri.real.i18n.t
+import androidx.activity.compose.BackHandler
+import com.cagri.real.ui.detailDockItemMotion
+import com.cagri.real.ui.DETAIL_DOCK_MILLIS
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.BlurEffect
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -41,6 +48,9 @@ import com.cagri.real.speech.formatPendingScheduleLabel
 import com.cagri.real.speech.formatComposerScheduleLabel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -49,6 +59,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -70,6 +81,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -83,7 +95,9 @@ import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -111,6 +125,9 @@ import com.cagri.real.ui.DesignStyle
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -185,6 +202,35 @@ fun GlassComposer(
     onConfigureRecipient: () -> Unit = {},
     onSwipeUp: () -> Unit = {},
     onSwipeDown: () -> Unit = {},
+    /** Pulled up: the composer fills the screen above the keyboard (the host sizes it). */
+    fullScreen: Boolean = false,
+    onFullScreenChange: (Boolean) -> Unit = {},
+    isImportant: Boolean = false,
+    onToggleImportant: () -> Unit = {},
+    /** Full screen picks a category in place (null: no category). */
+    onSelectCategory: ((Long?) -> Unit)? = null,
+    /** Full-screen "Yeni…": straight to the new-category editor, not the category list. */
+    onCreateCategory: (() -> Unit)? = null,
+    /** Full-screen body under the title; saved as the card's first stack card. */
+    bodyText: String = "",
+    onBodyChange: ((String) -> Unit)? = null,
+    /** Full screen time suggestion for the picked day: date, hour, minute. */
+    onApplyQuickTime: ((LocalDate, Int, Int) -> Unit)? = null,
+    /** Full-screen Ekler: the card detail's attach tools. Null hides that tool. */
+    onOpenCamera: (() -> Unit)? = null,
+    onPickFiles: (() -> Unit)? = null,
+    draftVoiceRecordings: List<com.cagri.real.data.ReminderVoiceRecording> = emptyList(),
+    onVoiceRecorded: ((com.cagri.real.data.ReminderVoiceRecording) -> Unit)? = null,
+    onRemoveVoiceRecording: (com.cagri.real.data.ReminderVoiceRecording) -> Unit = {},
+    draftGames: List<com.cagri.real.data.CardGameBlock> = emptyList(),
+    onAddGame: ((com.cagri.real.data.CardGameBlock) -> Unit)? = null,
+    onRemoveGame: (com.cagri.real.data.CardGameBlock) -> Unit = {},
+    draftMusic: List<com.cagri.real.data.MusicBlock> = emptyList(),
+    draftMedia: List<com.cagri.real.data.MediaBlock> = emptyList(),
+    onAddMusic: ((com.cagri.real.data.MusicBlock) -> Unit)? = null,
+    onAddMedia: ((com.cagri.real.data.MediaBlock) -> Unit)? = null,
+    onRemoveMusic: (com.cagri.real.data.MusicBlock) -> Unit = {},
+    onRemoveMedia: (com.cagri.real.data.MediaBlock) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val corners by animateDpAsState(
@@ -192,13 +238,59 @@ fun GlassComposer(
         if (reduceAnimations) snap() else RealMotion.smooth(0.28f),
         label = "glassCorners"
     )
-    // Expanded panel hosts text: same clear dock glass, plus a dim so text stays readable over pastel cards.
-    // Dim and text inset are read in draw/layout only, so opening the composer does not recompose it per frame.
+    // Expanded panel hosts text: dark glass so the cards behind never bleed into what is being typed;
+    // full screen is nearly solid. Dim, tint and text inset are read in draw/layout only.
     val expandedDimState = animateFloatAsState(
-        if (expanded) 0.26f else 0f,
+        when {
+            expanded && fullScreen -> 1f
+            expanded -> 0.68f
+            else -> 0f
+        },
         if (reduceAnimations) snap() else tween(220, easing = FastOutSlowInEasing),
         label = "composerDim"
     )
+    val selectedCategory = remember(customCategories, selectedCategoryId) {
+        customCategories.firstOrNull { it.id == selectedCategoryId }
+    }
+    val selectedCategoryColor = selectedCategory?.let { ReminderColorChoices.getOrNull(it.accentStart)?.color }
+    // Full screen runs under the status bar; its content starts below it.
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val latestOnFullScreenChange = rememberUpdatedState(onFullScreenChange)
+    // Full screen: the checklist items get their own page; back (or Tamam) returns to the rows.
+    var checklistPageOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(isChecklistMode, fullScreen) { if (!isChecklistMode || !fullScreen) checklistPageOpen = false }
+    BackHandler(enabled = checklistPageOpen && fullScreen && isChecklistMode) { checklistPageOpen = false }
+    // Medya (one search for songs, films and series) gets its own page in full screen.
+    var mediaPageOpen by remember { mutableStateOf(false) }
+    var voiceRecordingActive by remember { mutableStateOf(false) }
+    LaunchedEffect(fullScreen) { if (!fullScreen) mediaPageOpen = false }
+    BackHandler(enabled = mediaPageOpen && fullScreen) { mediaPageOpen = false }
+    // Growing / shrinking: text and tools blur out and back in like the card detail dock's labels.
+    val morph = remember { Animatable(0f) }
+    var morphArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(fullScreen) {
+        if (!morphArmed) { morphArmed = true; return@LaunchedEffect }
+        if (reduceAnimations) return@LaunchedEffect
+        morph.snapTo(0f)
+        morph.animateTo(1f, tween(DETAIL_DOCK_MILLIS, easing = LinearEasing))
+        morph.snapTo(0f)
+    }
+    fun GraphicsLayerScope.composerMorph(lag: Float) {
+        val p = ((morph.value - lag) / (1f - lag)).coerceIn(0f, 1f)
+        val pulse = kotlin.math.sin(Math.PI * p).toFloat()
+        if (pulse <= 0.001f) { renderEffect = null; return }
+        alpha = 1f - 0.5f * pulse
+        scaleX = 1f + 0.03f * pulse
+        scaleY = scaleX
+        val radius = 9.dp.toPx() * pulse
+        renderEffect = if (Build.VERSION.SDK_INT >= 31 && radius > 0.5f) BlurEffect(radius, radius, TileMode.Decal) else null
+    }
+    val inputTextStyle = if (fullScreen && !isChecklistMode) {
+        RealType.composerInput.copy(fontSize = 30.sp, lineHeight = 36.sp)
+    } else RealType.composerInput
+    val promptTextStyle = if (fullScreen) {
+        RealType.composerPrompt.copy(fontSize = 30.sp, lineHeight = 36.sp)
+    } else RealType.composerPrompt
     val textInsetState = animateDpAsState(
         if (expanded) 14.dp else 0.dp,
         if (reduceAnimations) snap() else RealMotion.smooth(0.28f),
@@ -254,6 +346,10 @@ fun GlassComposer(
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
     val isResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
 
+    var fieldLastText by remember { mutableStateOf(value) }
+    var fieldSelection by remember { mutableStateOf(TextRange(value.length)) }
+    var fieldComposition by remember { mutableStateOf<TextRange?>(null) }
+
     val petPrank = RealPetRuntime.prank
     val latestComposerValue = rememberUpdatedState(value)
     val latestOnValueChange = rememberUpdatedState(onValueChange)
@@ -272,13 +368,15 @@ fun GlassComposer(
             return@LaunchedEffect
         }
 
-        val target = listOf(" meaw", " meaww", " meawww", " meaw meaww")[prank.token % 4]
+        val target = listOf(" miyav", " mrrr", " meaww")[prank.token % 3]
         var draft = latestComposerValue.value
         target.forEach { ch ->
             draft += ch
             latestOnValueChange.value(draft)
             delay(if (reduceAnimations) 22L else 82L)
         }
+        RealPetRuntime.composerMeow = target
+        RealPetRuntime.composerDraft = draft
         RealPetRuntime.consumePrank(prank.token)
     }
 
@@ -420,19 +518,53 @@ fun GlassComposer(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(expanded) {
-                    // The pull-up "Labs" panel is a future feature; no vertical pull gestures for now.
                     if (!expanded) {
                         detectTapGestures {  }
                     }
                 }
+                .pointerInput(expanded, recording, mediaPageOpen) {
+                    // Only the open panel grows: a swipe up on the closed bar belongs to the home (Yaşam).
+                    // On the Medya page a drag scrolls the results, never closes full screen.
+                    if (recording || !expanded || mediaPageOpen) return@pointerInput
+                    // Pushed up: the composer grows to full screen; pulled down: back.
+                    // Watched on the Initial pass without consuming, because the text field's scroll takes drags first.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        var dx = 0f
+                        var dy = 0f
+                        while (true) {
+                            val change = awaitPointerEvent(PointerEventPass.Initial).changes
+                                .firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            dx += change.position.x - change.previousPosition.x
+                            dy += change.position.y - change.previousPosition.y
+                        }
+                        val threshold = 40.dp.toPx()
+                        if (kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.5f) {
+                            if (dy < -threshold) {
+                                latestOnFullScreenChange.value(true)
+                            } else if (dy > threshold) {
+                                latestOnFullScreenChange.value(false)
+                            }
+                        }
+                    }
+                }
                 .padding(bottom = if (expanded) 6.dp else 0.dp)
-                .deferredTopPadding { if (expanded) 16.dp else textInsetState.value }
+                .deferredTopPadding { if (fullScreen) statusTop + 40.dp else if (expanded) 16.dp else textInsetState.value }
         ) {
+            val fullScreenRows = expanded && fullScreen && !recording && !(isChecklistMode && checklistPageOpen) && !mediaPageOpen
             val inputRowModifier = if (recording) {
                 Modifier
                     .fillMaxWidth()
                     .padding(start = 22.dp, end = 9.dp)
                     .weight(1f)
+            } else if (fullScreenRows) {
+                // Title grows with its lines (up to five), the detail rows sit right under it.
+                val extraLines = (textLineCount - 1).coerceIn(0, 4)
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 22.dp, end = 62.dp)
+                    .height((56 + extraLines * 36).dp)
             } else if (expanded && !isChecklistMode) {
                 val extraLines = (textLineCount - 1).coerceIn(0, 3)
                 Modifier
@@ -443,11 +575,11 @@ fun GlassComposer(
                 Modifier
                     .fillMaxWidth()
                     .padding(start = 22.dp, end = 9.dp)
-                    .height(if (expanded) 48.dp else 54.dp)
+                    .height(if (fullScreen) 60.dp else if (expanded) 48.dp else 54.dp)
             }
             Row(
                 modifier = inputRowModifier,
-                verticalAlignment = if (recording) Alignment.Bottom else if (expanded && !isChecklistMode) Alignment.Bottom else Alignment.CenterVertically
+                verticalAlignment = if (recording) Alignment.Bottom else if (fullScreen && !isChecklistMode) Alignment.Top else if (expanded && !isChecklistMode) Alignment.Bottom else Alignment.CenterVertically
             ) {
                 if (recording) {
                     Box(
@@ -485,6 +617,7 @@ fun GlassComposer(
                             .weight(1f)
                             .padding(end = 6.dp)
                             .realPetPerch(REAL_PET_PERCH_COMPOSER_TEXT)
+                            .graphicsLayer { composerMorph(0f) }
                             .then(
                                 if (expanded && !isChecklistMode) {
                                     Modifier
@@ -494,14 +627,32 @@ fun GlassComposer(
                                     Modifier
                                 }
                             ),
-                        contentAlignment = if (expanded && !isChecklistMode && textLineCount > 1) Alignment.BottomStart else Alignment.CenterStart
+                        contentAlignment = if (fullScreen && !isChecklistMode) Alignment.TopStart else if (expanded && !isChecklistMode && textLineCount > 1) Alignment.BottomStart else Alignment.CenterStart
                     ) {
+                        // Text set from outside (the cat's "miyav", voice) puts the caret at the end.
+                        if (value != fieldLastText) {
+                            fieldLastText = value
+                            fieldSelection = TextRange(value.length)
+                            fieldComposition = null
+                        }
                         BasicTextField(
-                            value = value,
-                            onValueChange = { changed ->
-                                val cleaned = changed.replace("\r", "").replace("\n", " ")
-                                if (cleaned != value && !isChecklistMode) RealPetRuntime.noteComposerTyping()
-                                onValueChange(cleaned)
+                            value = TextFieldValue(value, fieldSelection, fieldComposition),
+                            onValueChange = { changedField ->
+                                val cleaned = changedField.text.replace("\r", "").replace("\n", " ")
+                                val petMeow = RealPetRuntime.composerMeow
+                                val next = if (petMeow != null && value.endsWith(petMeow) && cleaned.length == value.length - 1) {
+                                    // One backspace (wherever the caret is) takes the cat's whole word away.
+                                    RealPetRuntime.composerMeow = null
+                                    value.removeSuffix(petMeow).also { fieldSelection = TextRange(it.length); fieldComposition = null }
+                                } else {
+                                    if (cleaned != value && !isChecklistMode) RealPetRuntime.noteComposerTyping()
+                                    fieldSelection = TextRange(changedField.selection.start.coerceAtMost(cleaned.length), changedField.selection.end.coerceAtMost(cleaned.length))
+                                    fieldComposition = changedField.composition?.takeIf { cleaned.length == changedField.text.length }
+                                    cleaned
+                                }
+                                fieldLastText = next
+                                RealPetRuntime.composerDraft = next
+                                if (next != value) onValueChange(next)
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -516,7 +667,8 @@ fun GlassComposer(
                             readOnly = saving,
                             singleLine = isChecklistMode,
                             visualTransformation = VisualTransformation.None,
-                            textStyle = (if (isChecklistMode) RealType.composerInputEmphasized else RealType.composerInput).copy(
+                            textStyle = (if (isChecklistMode && fullScreen) RealType.composerInputEmphasized.copy(fontSize = 30.sp, lineHeight = 36.sp)
+                                else if (isChecklistMode) RealType.composerInputEmphasized else inputTextStyle).copy(
                                 color = Color(0xFFF7F7F8)
                             ),
                             cursorBrush = SolidColor(Color(0xFF9AB9FF)),
@@ -543,7 +695,7 @@ fun GlassComposer(
                                             Text(
                                                 text = t("Başlık"),
                                                 color = Color(0xFFB8B8BF),
-                                                style = RealType.composerPrompt
+                                                style = promptTextStyle
                                             )
                                         } else {
                                             var placeholderTextWidthPx by remember { mutableFloatStateOf(0f) }
@@ -552,7 +704,7 @@ fun GlassComposer(
                                             Text(
                                                 text = RealPetRuntime.placeholderOverride ?: if (expanded) t("Aklında ne var?") else t("Add to REAL"),
                                                 color = Color(0xFF8E8E96),
-                                                style = RealType.composerPrompt,
+                                                style = promptTextStyle,
                                                 onTextLayout = { layoutResult ->
                                                     placeholderTextWidthPx = layoutResult.size.width.toFloat()
                                                 }
@@ -563,7 +715,7 @@ fun GlassComposer(
                                                 Text(
                                                     text = RealPetRuntime.placeholderOverride ?: if (expanded) t("Aklında ne var?") else t("Add to REAL"),
                                                     color = Color.White,
-                                                    style = RealType.composerPrompt,
+                                                    style = promptTextStyle,
                                                     modifier = Modifier
                                                         .graphicsLayer {
                                                             val p = shimmerProgress.value
@@ -735,7 +887,280 @@ fun GlassComposer(
                 }
             }
 
-            if (expanded) {
+            if (fullScreenRows) {
+                // Full screen: thin detail rows (Apple style, our line icons); date, time and category open in place.
+                var openRow by remember { mutableStateOf<String?>(null) }
+                val hasAlert = alertAt != null
+                val hasPendingTime = requiresTimeSelection && alertAt == null
+                val hasDateOnly = !hasAlert && !hasPendingTime && dateHint != null
+                val today = LocalDate.now(ZoneId.systemDefault())
+                val scheduleLabel = when {
+                    hasAlert -> formatComposerScheduleLabel(alertAt!!, repeatRule)
+                    hasPendingTime -> formatPendingScheduleLabel(dateHint, repeatRule, timeOfDay)
+                    hasDateOnly -> when (dateHint) {
+                        today -> t("Bugün")
+                        today.plusDays(1) -> t("Yarın")
+                        else -> dateHint!!.format(DateTimeFormatter.ofPattern(if (com.cagri.real.i18n.I18n.isEnglish) "MMMM d" else "d MMMM", com.cagri.real.i18n.I18n.locale))
+                    }
+                    else -> null
+                }
+                val rowEnabled = !saving
+                val detailRow: @Composable (ActionGlyph, String, String?, Color?, Boolean, () -> Unit) -> Unit = { glyph, label, valueText, dot, active, onClick ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = rowEnabled, onClick = onClick)
+                            .padding(horizontal = 14.dp, vertical = 15.dp)
+                            .semantics { contentDescription = if (valueText != null) "$label: $valueText" else label },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ActionIcon(glyph, Modifier.size(20.dp), if (active) Color(0xFF91B9FF) else Color(0xFFBABAC3))
+                        Spacer(Modifier.width(14.dp))
+                        Text(label, color = Color(0xFFE9E9EE), style = RealType.composerStatus.copy(fontSize = 15.sp))
+                        Spacer(Modifier.weight(1f))
+                        if (dot != null) {
+                            Box(Modifier.size(7.dp).background(dot, CircleShape))
+                            Spacer(Modifier.width(7.dp))
+                        }
+                        if (valueText != null) {
+                            Text(
+                                valueText,
+                                color = if (active) Color(0xFFB9CFFF) else Color(0xFF7C7C86),
+                                style = RealType.composerStatus.copy(fontSize = 13.sp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 170.dp)
+                            )
+                        }
+                    }
+                }
+                val chip: @Composable (String, Color?, Boolean, () -> Unit) -> Unit = { label, dot, on, onClick ->
+                    Row(
+                        Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .border(0.5.dp, if (on) Color.White.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
+                            .background(if (on) Color.White.copy(alpha = 0.10f) else Color.Transparent)
+                            .clickable(enabled = rowEnabled, onClick = onClick)
+                            .padding(horizontal = 11.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (dot != null) {
+                            Box(Modifier.size(7.dp).background(dot, CircleShape))
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(label, color = if (on) Color.White else Color(0xFFD4D4DA), style = RealType.composerStatus)
+                    }
+                }
+                val options: @Composable (Boolean, @Composable () -> Unit) -> Unit = { visible, content ->
+                    AnimatedVisibility(
+                        visible = visible,
+                        enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(180)),
+                        exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(140))
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 48.dp, end = 12.dp, bottom = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) { content() }
+                    }
+                }
+                // Each row is its own soft block (separate pills read clearer than hairlines on the dark glass).
+                val block: @Composable (@Composable ColumnScope.() -> Unit) -> Unit = { content ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color.White.copy(alpha = 0.055f)),
+                        content = content
+                    )
+                }
+                val divider: @Composable () -> Unit = { Spacer(Modifier.height(8.dp)) }
+                fun toggle(row: String) { openRow = if (openRow == row) null else row }
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 14.dp)
+                        .graphicsLayer { composerMorph(0.15f) }
+                ) {
+                    if (onBodyChange != null) {
+                        Box(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 2.dp, bottom = 26.dp)) {
+                            if (bodyText.isEmpty()) Text(t("Not ekle"), color = Color(0xFF6E6E78), style = RealType.composerStatus.copy(fontSize = 17.sp, lineHeight = 24.sp))
+                            BasicTextField(
+                                value = bodyText,
+                                onValueChange = { onBodyChange(it.take(4000)) },
+                                enabled = rowEnabled,
+                                textStyle = RealType.composerStatus.copy(fontSize = 17.sp, lineHeight = 24.sp, color = Color(0xFFD9D9E0)),
+                                cursorBrush = SolidColor(Color.White),
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
+                            )
+                        }
+                    } else Spacer(Modifier.height(20.dp))
+                    block {
+                    detailRow(ActionGlyph.Calendar, t("Tarih ve saat"), scheduleLabel ?: t("Yok"), null, scheduleLabel != null) { toggle("date") }
+                    options(openRow == "date") {
+                        onApplyDateSuggestion?.let { apply ->
+                            chip(t("Bugün"), null, (hasDateOnly || hasAlert) && (dateHint ?: alertAt?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }) == today) { apply(true) }
+                            chip(t("Yarın"), null, (hasDateOnly || hasAlert) && (dateHint ?: alertAt?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }) == today.plusDays(1)) { apply(false) }
+                        }
+                        chip(t("Seç…"), null, false) { openRow = null; onPickDate() }
+                        if (scheduleLabel != null) chip(t("Kaldır"), null, false) { openRow = null; onClearDate() }
+                    }
+                    // A day was picked without a time: a few likely times for that day.
+                    val quickTimeDay = dateHint.takeIf { hasDateOnly }
+                    val quickTimes = remember(quickTimeDay) {
+                        val day = quickTimeDay ?: return@remember emptyList()
+                        val nowHour = java.time.LocalTime.now().hour
+                        listOf(9, 12, 15, 18, 21).filter { day != today || it > nowHour }.take(4)
+                    }
+                    options(openRow == "date" && quickTimeDay != null && quickTimes.isNotEmpty() && onApplyQuickTime != null) {
+                        quickTimes.forEach { hour ->
+                            chip(String.format(Locale.ROOT, "%02d:00", hour), null, false) {
+                                quickTimeDay?.let { day -> onApplyQuickTime?.invoke(day, hour, 0) }
+                                openRow = null
+                            }
+                        }
+                    }
+                    }
+                    divider()
+                    block {
+                    detailRow(ActionGlyph.Category, t("Kategori"), selectedCategory?.name ?: t("Yok"), selectedCategoryColor, selectedCategory != null) {
+                        if (onSelectCategory != null) toggle("category") else onPickCategory()
+                    }
+                    options(openRow == "category" && onSelectCategory != null) {
+                        chip(t("Yok"), null, selectedCategory == null) { onSelectCategory?.invoke(null); openRow = null }
+                        customCategories.forEach { category ->
+                            val color = ReminderColorChoices.getOrNull(category.accentStart)?.color
+                            chip(category.name, color, category.id == selectedCategoryId) { onSelectCategory?.invoke(category.id); openRow = null }
+                        }
+                        chip(t("Yeni…"), null, false) { openRow = null; (onCreateCategory ?: onPickCategory)() }
+                    }
+                    }
+                    divider()
+                    block { detailRow(ActionGlyph.Pin, t("Konum"), voiceLocationName?.takeIf { it.isNotBlank() } ?: t("Ekle"), null, !voiceLocationName.isNullOrBlank() || locationWatching, onPickLocation) }
+                    divider()
+                    val filledItems = checklistDraftItems.count { it.isNotBlank() }
+                    block { detailRow(
+                        ActionGlyph.Checklist,
+                        t("Liste"),
+                        if (isChecklistMode && filledItems > 0) t("{0} madde", filledItems) else t("Ekle"),
+                        null,
+                        isChecklistMode && filledItems > 0
+                    ) {
+                        if (!isChecklistMode) onToggleChecklistMode()
+                        checklistPageOpen = true
+                    } }
+                    divider()
+                    // Ekler: one picker for photos, files and audio. Camera, voice and media sit on their own rows.
+                    block {
+                        detailRow(
+                            ActionGlyph.Add,
+                            t("Ekler"),
+                            if (draftAttachments.isEmpty()) t("Ekle") else t("{0} ek", draftAttachments.size),
+                            null,
+                            draftAttachments.isNotEmpty(),
+                            onPickFiles ?: onPickAttachment
+                        )
+                    }
+                    onOpenCamera?.let { openCamera ->
+                        divider()
+                        block { detailRow(ActionGlyph.Camera, t("Kamera"), t("Çek"), null, false, openCamera) }
+                    }
+                    if (onVoiceRecorded != null) {
+                        divider()
+                        block {
+                            // Kaydet starts recording right here; a blue circle breathes with the voice level.
+                            val recorder = rememberVoiceRecorder(rowEnabled, onVoiceRecorded, { voiceRecordingActive = it })
+                            if (recorder.isRecording) {
+                                val level by animateFloatAsState(kotlin.math.sqrt(recorder.activityLevel.coerceIn(0f, 1f)), tween(110), label = "composerVoiceLevel")
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable(onClick = recorder.stop)
+                                        .padding(horizontal = 10.dp, vertical = 11.dp)
+                                        .semantics { contentDescription = t("Ses kaydını durdur") },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                                        Box(
+                                            Modifier
+                                                .size(28.dp)
+                                                .graphicsLayer { val k = 0.55f + level * 0.45f; scaleX = k; scaleY = k; alpha = 0.25f + level * 0.35f }
+                                                .background(Color(0xFF4F8DFF), CircleShape)
+                                        )
+                                        Box(Modifier.size(12.dp).background(Color(0xFF91B9FF), CircleShape))
+                                    }
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(t("Dinliyorum…"), color = Color(0xFFE9E9EE), style = RealType.composerStatus.copy(fontSize = 15.sp))
+                                    Spacer(Modifier.weight(1f))
+                                    Text(com.cagri.real.data.formatVoiceDuration(recorder.elapsedMillis), color = Color(0xFFB9CFFF), style = RealType.composerStatus.copy(fontSize = 13.sp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Box(Modifier.size(13.dp).background(Color(0xFFE9E9EE), RoundedCornerShape(3.dp)))
+                                    Spacer(Modifier.width(4.dp))
+                                }
+                            } else {
+                                detailRow(
+                                    ActionGlyph.Mic,
+                                    t("Ses kaydı"),
+                                    if (draftVoiceRecordings.isEmpty()) t("Kaydet") else t("{0} kayıt", draftVoiceRecordings.size),
+                                    null,
+                                    draftVoiceRecordings.isNotEmpty(),
+                                    recorder.requestStart
+                                )
+                            }
+                            recorder.errorText?.let {
+                                Text(it, color = Color(0xFFE0B5A8), style = RealType.composerStatus.copy(fontSize = 12.sp), modifier = Modifier.padding(start = 48.dp, end = 12.dp, bottom = 10.dp))
+                            }
+                            draftVoiceRecordings.forEach { recording ->
+                                key(recording.id) {
+                                    VoicePlaybackRow(
+                                        recording = recording,
+                                        onDelete = { onRemoveVoiceRecording(recording) },
+                                        compact = true,
+                                        modifier = Modifier.padding(start = 34.dp, end = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (onAddMusic != null || onAddMedia != null) {
+                        divider()
+                        val mediaCount = draftMusic.size + draftMedia.size + draftGames.size
+                        block {
+                            detailRow(
+                                ActionGlyph.Music,
+                                t("Medya"),
+                                if (mediaCount == 0) t("Şarkı, film, dizi") else t("{0} ek", mediaCount),
+                                null,
+                                mediaCount > 0
+                            ) { mediaPageOpen = true }
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                }
+            }
+
+            if (expanded && fullScreen && mediaPageOpen && !recording) {
+                ComposerMediaSearch(
+                    music = draftMusic,
+                    media = draftMedia,
+                    onAddMusic = { onAddMusic?.invoke(it) },
+                    onAddMedia = { onAddMedia?.invoke(it) },
+                    onRemoveMusic = onRemoveMusic,
+                    onRemoveMedia = onRemoveMedia,
+                    games = draftGames,
+                    onAddGame = onAddGame,
+                    onRemoveGame = onRemoveGame,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+
+            // The Medya page is the media place itself: no tool icons under it.
+            if (expanded && !fullScreenRows && !(fullScreen && mediaPageOpen)) {
                 val detectedSuggestion = remember(value) { detectDateSuggestion(value) }
                 val showSuggestionChip = remember(detectedSuggestion, dateHint, alertAt) {
                     if (detectedSuggestion == null || onApplyDateSuggestion == null) false
@@ -794,6 +1219,7 @@ fun GlassComposer(
                             .graphicsLayer {
                                 compositingStrategy = CompositingStrategy.Offscreen
                                 translationY = (1f - toolsReveal.value) * 6.dp.toPx()
+                                composerMorph(0.2f)
                             }
                             .drawWithContent {
                                 drawContent()
@@ -876,9 +1302,6 @@ fun GlassComposer(
                         }
                     }
 
-                    val selectedCategory = remember(customCategories, selectedCategoryId) {
-                        customCategories.firstOrNull { it.id == selectedCategoryId }
-                    }
                     val isCatSelected = selectedCategory != null
                     val catColor = if (isCatSelected) {
                         ReminderColorChoices.getOrNull(selectedCategory!!.accentStart)?.color ?: Color(0xFF91B9FF)
@@ -1084,45 +1507,85 @@ fun GlassComposer(
                 }
             }
 
-            if (expanded && draftAttachments.isNotEmpty()) {
+            // Everything added sits here as square tiles: photos, files, voice notes, songs, films and series.
+            val trayCount = draftAttachments.size + draftVoiceRecordings.size + draftMusic.size + draftMedia.size + draftGames.size
+            if (expanded && trayCount > 0 && !(fullScreen && isChecklistMode && checklistPageOpen) && !(fullScreen && mediaPageOpen)) {
+                val tile = if (fullScreen) 58.dp else 36.dp
+                val trayTile: @Composable (String, () -> Unit, @Composable BoxScope.() -> Unit) -> Unit = { description, onRemove, content ->
+                    Box(modifier = Modifier.size(tile + 4.dp)) {
+                        Box(
+                            Modifier
+                                .size(tile)
+                                .align(Alignment.BottomStart)
+                                .clip(RoundedCornerShape(if (fullScreen) 12.dp else 8.dp))
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .border(0.8.dp, Color(0x33FFFFFF), RoundedCornerShape(if (fullScreen) 12.dp else 8.dp))
+                                .semantics { contentDescription = description },
+                            contentAlignment = Alignment.Center,
+                            content = content
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(if (fullScreen) 20.dp else 16.dp)
+                                .align(Alignment.TopEnd)
+                                .clip(CircleShape)
+                                .background(Color(0xE61E1E24))
+                                .border(0.5.dp, Color(0x4DFFFFFF), CircleShape)
+                                .clickable(enabled = !saving, onClick = onRemove),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            ActionIcon(ActionGlyph.Close, Modifier.size(if (fullScreen) 9.dp else 8.dp), Color(0xFFEEEEF2))
+                        }
+                    }
+                }
+                val glyphSize = if (fullScreen) 22.dp else 18.dp
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 14.dp, end = 14.dp, bottom = 4.dp),
+                        .horizontalScroll(rememberScrollState())
+                        .padding(start = 14.dp, end = 14.dp, bottom = if (fullScreen) 10.dp else 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     draftAttachments.forEachIndexed { index, attachment ->
-                        Box(modifier = Modifier.size(40.dp)) {
-                            AsyncImage(
+                        trayTile(t("Taslak ek {0}", index + 1), { onRemoveDraftAttachment(index) }) {
+                            if (attachment.type != com.cagri.real.data.AttachmentType.IMAGE) {
+                                ActionIcon(ActionGlyph.File, Modifier.size(glyphSize), Color(0xFFD4D4DA))
+                            } else AsyncImage(
                                 model = File(attachment.localPath),
-                                contentDescription = t("Taslak ek {0}", index + 1),
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .align(Alignment.BottomStart)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .border(0.8.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp)),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
                             )
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .align(Alignment.TopEnd)
-                                    .clip(CircleShape)
-                                    .background(Color(0xE61E1E24))
-                                    .border(0.5.dp, Color(0x4DFFFFFF), CircleShape)
-                                    .clickable(enabled = !saving) { onRemoveDraftAttachment(index) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                ActionIcon(ActionGlyph.Close, Modifier.size(8.dp), Color(0xFFEEEEF2))
+                        }
+                    }
+                    draftVoiceRecordings.forEach { recording ->
+                        key(recording.id) {
+                            trayTile(t("Ses kaydı"), { onRemoveVoiceRecording(recording) }) {
+                                ActionIcon(ActionGlyph.AudioWave, Modifier.size(glyphSize), Color(0xFF91B9FF))
                             }
+                        }
+                    }
+                    draftMusic.forEach { song ->
+                        key(song.id) {
+                            trayTile(song.title, { onRemoveMusic(song) }) { MusicArtwork(song, Modifier.fillMaxSize()) }
+                        }
+                    }
+                    draftMedia.forEach { item ->
+                        key(item.id) {
+                            trayTile(item.title, { onRemoveMedia(item) }) { MediaArtwork(item, Modifier.fillMaxSize()) }
+                        }
+                    }
+                    draftGames.forEach { game ->
+                        key(game.id) {
+                            trayTile(game.title, { onRemoveGame(game) }) { GameCover(game, Modifier.fillMaxSize()) }
                         }
                     }
                 }
             }
 
 
-            if (expanded && isChecklistMode) {
+            if (expanded && isChecklistMode && !fullScreenRows) {
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -1334,6 +1797,113 @@ fun GlassComposer(
                 }
             }
         }
+        if (expanded && !recording) {
+            // Grabber: pull (or tap) to switch between the panel and full screen.
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = if (fullScreen) statusTop + 4.dp else 0.dp)
+                    .size(width = 72.dp, height = 16.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        enabled = !saving
+                    ) { onFullScreenChange(!fullScreen) }
+                    .semantics { contentDescription = if (fullScreen) t("Küçült") else t("Tam ekran") },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(Modifier.size(width = 36.dp, height = 4.dp).background(Color.White.copy(alpha = 0.28f), CircleShape))
+            }
+        }
+        AnimatedVisibility(
+            visible = fullScreen && selectedCategory != null,
+            modifier = Modifier.align(Alignment.TopStart).padding(start = 22.dp, top = statusTop + 24.dp),
+            enter = EnterTransition.None,
+            exit = ExitTransition.None
+        ) {
+            val shownCategory = selectedCategory ?: return@AnimatedVisibility
+            Row(Modifier.then(detailDockItemMotion(140, reduceAnimations)), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(7.dp).background(selectedCategoryColor ?: Color(0xFF91B9FF), CircleShape))
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    shownCategory.name,
+                    color = Color(0xFFE4E4EA).copy(alpha = 0.8f),
+                    style = RealType.composerStatus,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        // Bell and star sit top right in full screen; the checklist page shows Tamam there instead.
+        AnimatedVisibility(
+            visible = fullScreen && !(isChecklistMode && checklistPageOpen) && !mediaPageOpen,
+            modifier = Modifier.align(Alignment.TopEnd).padding(end = 10.dp, top = statusTop + 12.dp),
+            enter = EnterTransition.None,
+            exit = ExitTransition.None
+        ) {
+            val bellOn = alertAt != null || (requiresTimeSelection && alertAt == null) || sendImmediateNotification
+            Row(Modifier.then(detailDockItemMotion(200, reduceAnimations))) {
+                IconButton(
+                    onClick = onToggleImmediateNotification,
+                    enabled = !saving,
+                    modifier = Modifier.size(40.dp).semantics { contentDescription = if (bellOn) t("Bildirim açık") else t("Bildirim kapalı") }
+                ) {
+                    ActionIcon(if (bellOn) ActionGlyph.Bell else ActionGlyph.BellOff, Modifier.size(18.dp), if (bellOn) Color(0xFF91B9FF) else Color(0xFFBABAC3))
+                }
+                IconButton(
+                    onClick = onToggleImportant,
+                    enabled = !saving,
+                    modifier = Modifier.size(40.dp).semantics { contentDescription = if (isImportant) t("Önemli işaretini kaldır") else t("Önemli olarak işaretle") }
+                ) {
+                    ActionIcon(ActionGlyph.Star, Modifier.size(18.dp), if (isImportant) Color(0xFFEACB75) else Color(0xFFBABAC3), filled = isImportant)
+                }
+            }
+        }
+        // Small blue done key at the end of the title line (keyboard enter); only there once something is written.
+        AnimatedVisibility(
+            visible = fullScreen && value.isNotBlank() && !(isChecklistMode && checklistPageOpen) && !mediaPageOpen,
+            modifier = Modifier.align(Alignment.TopEnd).padding(end = 20.dp, top = statusTop + 55.dp),
+            enter = if (reduceAnimations) EnterTransition.None else fadeIn(tween(160)),
+            exit = if (reduceAnimations) ExitTransition.None else fadeOut(tween(120))
+        ) {
+            Box(
+                Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF3A7BFF))
+                    .clickable(enabled = !saving) { onSubmit() }
+                    .semantics { contentDescription = t("Kaydet") },
+                contentAlignment = Alignment.Center
+            ) {
+                ActionIcon(ActionGlyph.Check, Modifier.size(13.dp), Color.White)
+            }
+        }
+        AnimatedVisibility(
+            visible = fullScreen && ((isChecklistMode && checklistPageOpen) || mediaPageOpen),
+            modifier = Modifier.align(Alignment.TopEnd).padding(end = 12.dp, top = statusTop + 14.dp),
+            enter = EnterTransition.None,
+            exit = ExitTransition.None
+        ) {
+            Text(
+                t("Tamam"),
+                color = Color(0xFF91B9FF),
+                style = RealType.composerStatus.copy(fontSize = 15.sp),
+                modifier = Modifier
+                    .then(detailDockItemMotion(120, reduceAnimations))
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(enabled = !voiceRecordingActive) { checklistPageOpen = false; mediaPageOpen = false }
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            )
+        }
+    }
+
+    // Dark glass under every design style; one colour whatever the category.
+    val panelWithDim: @Composable BoxScope.() -> Unit = {
+        Box(Modifier.matchParentSize().drawBehind {
+            val dim = expandedDimState.value
+            if (dim > 0.001f) drawRect(Color.Black.copy(alpha = dim))
+        })
+        panelContent()
     }
 
     val petPerchModifier = modifier.realPetPerch(REAL_PET_PERCH_COMPOSER)
@@ -1342,13 +1912,8 @@ fun GlassComposer(
         LiquidGlassSurface(backdrop, backdropPosition, petPerchModifier, corners, reduceDynamicBlur,
             reduceAnimations = reduceAnimations,
             role = LiquidGlassRole.Dock,
-            content = {
-                Box(Modifier.matchParentSize().drawBehind {
-                    val dim = expandedDimState.value
-                    if (dim > 0.001f) drawRect(Color.Black.copy(alpha = dim))
-                })
-                panelContent()
-            })
+            showRim = !fullScreen,
+            content = panelWithDim)
     } else if (designStyle == DesignStyle.Ice) {
         IcePanel(
             backdrop = backdrop,
@@ -1358,7 +1923,7 @@ fun GlassComposer(
             reduceDynamicBlur = reduceDynamicBlur,
             blurRadius = 38.dp,
             dense = false,
-            content = panelContent
+            content = panelWithDim
         )
     } else {
         GlassPanel(
@@ -1367,7 +1932,8 @@ fun GlassComposer(
             modifier = petPerchModifier,
             corners = corners,
             reduceDynamicBlur = reduceDynamicBlur,
-            content = panelContent
+            rim = !fullScreen,
+            content = panelWithDim
         )
     }
 }

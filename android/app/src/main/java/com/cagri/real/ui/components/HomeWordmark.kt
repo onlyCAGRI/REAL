@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.ContentScale
@@ -15,7 +16,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.cagri.real.R
 
-/** Home branding: the welcome screen's wordmark at header size (947×412 artwork, so 30dp tall ≈ 69dp wide). */
+/** Home branding: the app icon's "Real" (Inter Tight Bold) in white, cropped to ink (585×240, so 30dp tall ≈ 73dp wide). */
 @Composable
 fun HomeWordmark(
     modifier: Modifier = Modifier,
@@ -24,12 +25,14 @@ fun HomeWordmark(
 ) {
     Box(modifier, contentAlignment = Alignment.CenterStart) {
         Image(
-            painter = painterResource(R.drawable.real_wordmark),
+            painter = painterResource(R.drawable.real_home_wordmark),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .height(30.dp)
-                .width(69.dp)
+                .width(73.dp)
+                // Hidden while the startup intro's own copy is still sliding into this spot.
+                .graphicsLayer { alpha = if (com.cagri.real.ui.StartupIntro.wordmarkLanded) 1f else 0f }
                 .semantics { this.contentDescription = contentDescription }
         )
     }

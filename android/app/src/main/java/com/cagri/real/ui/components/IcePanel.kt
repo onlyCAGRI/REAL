@@ -13,5 +13,5 @@ fun IcePanel(backdrop: GraphicsLayer, backdropPosition: () -> Offset,
     modifier: Modifier = Modifier, corners: Dp = 30.dp, reduceDynamicBlur: Boolean = false,
     blurRadius: Dp = 38.dp, dense: Boolean = false,
     content: @Composable BoxScope.() -> Unit) {
-    FrostedSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur, blurRadius, true, dense, content)
+    FrostedSurface(backdrop, backdropPosition, modifier, corners, reduceDynamicBlur, blurRadius, true, dense, content = content)
 }

@@ -78,7 +78,7 @@ struct WelcomeScreen: View {
                     // Same typeface and colour as the word story (23pt, #F3F1F4, regular).
                     Text("Welcome to").font(RealFont.inter(23)).kerning(welcomeKerning - 1).foregroundStyle(Color(argb: 0xFFF3F1F4))
                         .opacity(welcomeAlpha).offset(y: welcomeOffset)
-                    WelcomeWordmark(reveal: 1, shimmer: shimmer).frame(width: 210, height: 91)
+                    WelcomeWordmark(reveal: 1, shimmer: shimmer).frame(width: 210, height: 86)
                         .background(GeometryReader { g in
                             Color.clear
                                 .onAppear { logoFrame = g.frame(in: .global) }
@@ -328,7 +328,14 @@ struct WelcomeScreen: View {
             } else {
                 HStack(spacing: 8) {
                     Text("Make it").opacity(keepAlpha)
-                    Text(slotWord)
+                    // "Real" rolls in already as the logo (Inter Tight wordmark), then flies up and grows into it.
+                    Group {
+                        if slotWord == "Real" {
+                            Image("RealWordmark").resizable().scaledToFit().frame(width: 59, height: 24).padding(.top, 2)
+                        } else {
+                            Text(slotWord)
+                        }
+                    }
                         .offset(y: slotShift * 38).opacity(slotAlpha)
                         .background(GeometryReader { g in
                             Color.clear
@@ -390,7 +397,7 @@ struct WelcomeScreen: View {
             withAnimation(Self.storyOut) { slotShift = -1.1; slotAlpha = 0 }
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(200))
-                slotWord = "REAL."; slotShift = 1.1
+                slotWord = "Real"; slotShift = 1.1
                 withAnimation(Self.storyEase(0.38)) { slotShift = 0; slotAlpha = 1 }
             }
             guard await at(19.5) else { return }
@@ -420,7 +427,7 @@ struct WelcomeScreen: View {
             let emphasized = { (d: Double) in Animation.timingCurve(0.16, 1, 0.3, 1, duration: d) }
             if let from, logoFrame.width > 0 {
                 flightOffset = CGSize(width: from.midX - logoFrame.midX, height: from.midY - logoFrame.midY)
-                flightScale = (from.width * 0.86) / logoFrame.width   // "REAL" without the dot vs the wordmark
+                flightScale = from.width / logoFrame.width   // the sentence's "Real" is the same wordmark, smaller
                 welcomeOffset = 10
                 logoIn = 1
                 withAnimation(emphasized(0.9)) { flightOffset = .zero; flightScale = 1 }

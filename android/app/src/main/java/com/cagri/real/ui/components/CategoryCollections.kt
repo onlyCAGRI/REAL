@@ -567,7 +567,9 @@ fun CollectionCategoryCard(
         )) {
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                petTitleOverride ?: title,
+                petTitleOverride
+                    ?: (if (RealPetRuntime.namePrankPerchId == petPerchId) "MEAWWW" else null)
+                    ?: title,
                 color = foreground,
                 style = if (hero) RealType.categoryTitleHero else RealType.categoryTitle,
                 modifier = Modifier

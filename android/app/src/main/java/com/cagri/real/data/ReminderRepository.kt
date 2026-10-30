@@ -115,6 +115,27 @@ class ReminderRepository(private val preferences: SharedPreferences) {
         if (it.isDivider) it.copy(text = title.trim().take(DIVIDER_TITLE_MAX), updatedAt = System.currentTimeMillis()) else it
     }
 
+    /**
+     * A card just made in the full-screen composer: its note becomes the first stack card, picked games are added,
+     * and with a few blocks on it the most visual one goes on top as the big hero ("En üstteki içeriği büyüt" ticked).
+     */
+    fun applyComposerExtras(reminderId: Long, stack: CardStackBlock?, games: List<CardGameBlock>): List<ReminderItem> = update(reminderId) { reminder ->
+        val withGames = games.fold(reminder.gameBlocks) { acc, g -> if (acc.any { it.providerId == g.providerId }) acc else acc + g }
+        var next = reminder.copy(cardStack = stack ?: reminder.cardStack, gameBlocks = withGames, updatedAt = System.currentTimeMillis())
+        val blocks = next.cardContentKeys().filter { it != "text" && it != "weather" }
+        if (blocks.size >= 2 && next.contentBlockOrder.isEmpty() && next.contentBlockLayout.isEmpty()) {
+            val hero = listOf("photos:", "media:", "game:", "music:").firstNotNullOfOrNull { prefix -> blocks.firstOrNull { it.startsWith(prefix) } }
+                ?: blocks.first()
+            val order = listOf(hero) + resolveCardContentOrder(null, next.cardContentKeys()).filter { it != hero }
+            next = next.copy(
+                contentBlockOrder = order,
+                contentBlockLayout = mapOf(hero to CardBlockPlacement(span = CARD_GRID_UNITS, column = 0,
+                    minHeight = com.cagri.real.ui.DETAIL_HERO_MIN_HEIGHT_DP).normalized())
+            )
+        }
+        next
+    }
+
     fun addGameBlock(reminderId: Long, block: CardGameBlock): List<ReminderItem> = update(reminderId) { reminder ->
         if (reminder.gameBlocks.any { it.providerId == block.providerId }) reminder
         else reminder.copy(gameBlocks = reminder.gameBlocks + block, updatedAt = System.currentTimeMillis())

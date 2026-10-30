@@ -202,6 +202,7 @@ fun HomeLiquidDock(
                 Box(
                     Modifier
                         .fillMaxSize()
+                        .realPetPerch(REAL_PET_PERCH_COMPOSER_MIC)
                         .clickable(enabled = interactionEnabled && micEnabled && showChrome, role = Role.Button, onClick = onMicClick)
                         .semantics { contentDescription = t("Sesle REAL oluştur") },
                     contentAlignment = Alignment.Center

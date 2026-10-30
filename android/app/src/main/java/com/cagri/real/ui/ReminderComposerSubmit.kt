@@ -90,7 +90,7 @@ internal fun reminderSubmitAction(
                             val createdId = onAddReminder(
                                 resolvedTitle, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE,
                                 draftCategoryId, true, items, sendImmediateNotification && ComposerTimingDraft.locationTrigger == null, draftReferenceUrl,
-                                draftAttachments, emptyList(), pendingVoiceLocation,
+                                draftAttachments, ComposerTimingDraft.voiceRecordings, pendingVoiceLocation,
                                 plannedDateForSave, quick24HourUntilAt, pendingVoiceMusicBlocks, pendingVoiceMediaBlocks
                             )
                             if (createdId != null) {
@@ -122,6 +122,14 @@ internal fun reminderSubmitAction(
                                 }
                                 if (alertAt != null && ComposerTimingDraft.alarm) onSetAlarm(createdId, true)
                                 ComposerTimingDraft.locationTrigger?.let { onSetLocationTrigger(createdId, it) }
+                                if (ComposerTimingDraft.important) onToggleImportant(createdId)
+                                onApplyComposerExtras(
+                                    createdId,
+                                    ComposerTimingDraft.body.trim().takeIf { it.isNotEmpty() }?.let { note ->
+                                        com.cagri.real.data.CardStackBlock(cards = listOf(com.cagri.real.data.CardStackCard(body = note)))
+                                    },
+                                    ComposerTimingDraft.games
+                                )
                                 ComposerTimingDraft.clear()
                                 composerDurationMinutes = null
                                 pendingVoiceDurationMinutes = null
@@ -203,7 +211,7 @@ internal fun reminderSubmitAction(
                             val createdId = onAddReminder(
                                 reminderText, alertAt, if (alertAt != null) repeatRule else RecurrenceRule.NONE,
                                 draftCategoryId, false, emptyList(), sendImmediateNotification && ComposerTimingDraft.locationTrigger == null, draftReferenceUrl,
-                                draftAttachments, emptyList(), pendingVoiceLocation,
+                                draftAttachments, ComposerTimingDraft.voiceRecordings, pendingVoiceLocation,
                                 plannedDateForSave, quick24HourUntilAt, pendingVoiceMusicBlocks, pendingVoiceMediaBlocks
                             )
                             if (createdId != null) {
@@ -235,6 +243,14 @@ internal fun reminderSubmitAction(
                                 }
                                 if (alertAt != null && ComposerTimingDraft.alarm) onSetAlarm(createdId, true)
                                 ComposerTimingDraft.locationTrigger?.let { onSetLocationTrigger(createdId, it) }
+                                if (ComposerTimingDraft.important) onToggleImportant(createdId)
+                                onApplyComposerExtras(
+                                    createdId,
+                                    ComposerTimingDraft.body.trim().takeIf { it.isNotEmpty() }?.let { note ->
+                                        com.cagri.real.data.CardStackBlock(cards = listOf(com.cagri.real.data.CardStackCard(body = note)))
+                                    },
+                                    ComposerTimingDraft.games
+                                )
                                 ComposerTimingDraft.clear()
                                 composerDurationMinutes = null
                                 pendingVoiceDurationMinutes = null
