@@ -891,7 +891,7 @@ extension ComposerBar {
                         }
                         .buttonStyle(.plain)
                     }
-                    fsBlock { fsRow("camera", t("Kamera"), t("Çek"), active: false) { focus = nil; showCamera = true } }
+                    fsBlock { fsRow("camera", t("Kamera"), t("Çek"), active: false) { focus = nil; Task { if await PermissionPrompt.cameraReady() { showCamera = true } } } }
                     voiceBlock
                     fsBlock {
                         let count = musicPicks.count + mediaPicks.count + gamePicks.count

@@ -31,6 +31,13 @@ final class VoiceRecorderEngine: NSObject, AVAudioPlayerDelegate {
 
     func start() {
         stopPlayback()
+        Task { @MainActor in
+            guard await PermissionPrompt.microphoneReady() else { return }
+            requestAndRecord()
+        }
+    }
+
+    private func requestAndRecord() {
         AVAudioApplication.requestRecordPermission { granted in
             DispatchQueue.main.async {
                 guard granted else { self.error = t("Mikrofon izni gerekli. Ayarlar'dan REAL için mikrofonu açabilirsin."); return }

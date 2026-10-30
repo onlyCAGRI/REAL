@@ -1085,7 +1085,7 @@ struct ReminderDetailView: View {
                     }
                     QuickAction(symbol: "photo", label: t("Fotoğraf ekle"), active: false,
                                 count: d?.attachments.filter { $0.type == .image }.count) { showPhotoPicker = true }
-                    QuickAction(symbol: "camera", label: t("Kamera ile fotoğraf ekle"), active: false) { showCamera = true }
+                    QuickAction(symbol: "camera", label: t("Kamera ile fotoğraf ekle"), active: false) { Task { if await PermissionPrompt.cameraReady() { showCamera = true } } }
                     QuickAction(symbol: "checklist", label: t("Checklist"), active: checklistOpen || !(d?.checklistItems.isEmpty ?? true),
                                 count: d?.checklistItems.count) {
                         checklistOpen = true

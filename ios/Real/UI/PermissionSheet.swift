@@ -1,4 +1,84 @@
 import SwiftUI
+import UIKit
+import AVFoundation
+
+/// NotificationPermissionSheet / MicrophonePermissionSheet before the system prompt, and a "Ayarları aç" sheet once
+/// a permission was refused. Shown in its own window so it sits above the composer, ScheduleSheet and other covers.
+@MainActor
+enum PermissionPrompt {
+    enum Kind { case notifications, microphone, microphoneDenied, cameraDenied }
+    private static var window: UIWindow?
+
+    /// true when the primary button was tapped.
+    static func ask(_ kind: Kind) async -> Bool {
+        guard window == nil,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }) else { return false }
+        let previous = scene.keyWindow
+        return await withCheckedContinuation { continuation in
+            func finish(_ ok: Bool) {
+                window?.isHidden = true
+                window = nil
+                previous?.makeKey()
+                continuation.resume(returning: ok)
+            }
+            let sheet: PermissionSheet
+            switch kind {
+            case .notifications:
+                sheet = PermissionSheet(title: t("Bildirimlere izin verilsin mi?"),
+                                        description: t("Real, hatırlatıcılarını zamanı geldiğinde gösterebilmek için bildirim iznine ihtiyaç duyar."),
+                                        glyph: .bell, onPrimary: { finish(true) }, onSecondary: { finish(false) })
+            case .microphone:
+                sheet = PermissionSheet(title: t("Mikrofona izin verilsin mi?"),
+                                        description: t("Real, sesli hatırlatıcı oluşturabilmek için mikrofon iznine ihtiyaç duyar."),
+                                        glyph: .mic, onPrimary: { finish(true) }, onSecondary: { finish(false) })
+            case .microphoneDenied:
+                sheet = PermissionSheet(title: t("Mikrofon izni kapalı"),
+                                        description: t("Sesli kart için Ayarlar > REAL bölümünden mikrofonu açabilirsin."),
+                                        primaryLabel: t("Ayarları aç"), secondaryLabel: t("Vazgeç"),
+                                        glyph: .mic, onPrimary: { finish(true) }, onSecondary: { finish(false) })
+            case .cameraDenied:
+                sheet = PermissionSheet(title: t("Kamera izni kapalı"),
+                                        description: t("Fotoğraf çekmek için Ayarlar > REAL bölümünden kamerayı açabilirsin."),
+                                        primaryLabel: t("Ayarları aç"), secondaryLabel: t("Vazgeç"),
+                                        glyph: .camera, onPrimary: { finish(true) }, onSecondary: { finish(false) })
+            }
+            let host = UIHostingController(rootView: sheet)
+            host.view.backgroundColor = .clear
+            let w = UIWindow(windowScene: scene)
+            w.windowLevel = .alert
+            w.backgroundColor = .clear
+            w.rootViewController = host
+            window = w
+            w.makeKeyAndVisible()
+        }
+    }
+
+    /// Microphone: our sheet first, the system prompt after it; refused → offer Settings.
+    static func microphoneReady() async -> Bool {
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted: return true
+        case .denied:
+            if await ask(.microphoneDenied) { openSettings() }
+            return false
+        default: return await ask(.microphone)
+        }
+    }
+
+    /// Camera: the system asks on first use; refused → offer Settings instead of an empty camera.
+    static func cameraReady() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .denied, .restricted:
+            if await ask(.cameraDenied) { openSettings() }
+            return false
+        default: return true
+        }
+    }
+
+    static func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+    }
+}
 
 /// NotificationPermissionSheet.kt PermissionSheet: dim scrim, bottom sheet with a pulsing glass hero, title, body,
 /// white primary pill and a quiet secondary action; every element staggers in.

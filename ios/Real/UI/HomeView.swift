@@ -304,6 +304,8 @@ struct HomeView: View {
             if phase == .active { Task { await ProfilePictures.push() } }
             // "Çıkma vakti": traffic changes, and so may where the phone is.
             if phase == .active, NotificationScheduler.enabled { DepartureReminder.refresh(store.reminders) }
+            // iOS keeps only the soonest 64 pending requests: refill the later repeats each time REAL comes back.
+            if phase == .active { NotificationScheduler.reschedule(store.reminders) }
         }
         .task { await ProfilePictures.push() }
         .cloudSpaceNotice()

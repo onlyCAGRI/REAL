@@ -28,9 +28,19 @@ enum NotificationScheduler {
         UNUserNotificationCenter.current().setNotificationCategories([due, immediate])
     }
 
+    /// Asks once; requests added before the answer are refused by iOS, so a grant re-adds every card's notifications.
     static func requestAuthorization() {
         guard enabled else { return }
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else { return }
+            // NotificationPermissionSheet first; "Daha sonra" leaves it undecided so the next timed card asks again.
+            Task { @MainActor in
+                guard await PermissionPrompt.ask(.notifications),
+                      (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) == true else { return }
+                if let store = ReminderStore.current { reschedule(store.reminders) }
+            }
+        }
     }
 
     private static func content(for item: ReminderItem, alerting: Bool) -> UNMutableNotificationContent {
@@ -58,6 +68,7 @@ enum NotificationScheduler {
         guard enabled else { return }
         cancel(item.id)
         DepartureReminder.plan(item)
+        if !item.isCompleted, item.alertAt != nil || item.locationTrigger != nil { requestAuthorization() }
         if !item.isCompleted, let place = item.locationTrigger { schedulePlace(item, place) }
         guard !item.isCompleted, let alert = item.alertAt else { return }
         let now = EpochMillis.now
@@ -154,6 +165,7 @@ enum NotificationScheduler {
     static func postImmediateIfNeeded(_ item: ReminderItem) {
         guard enabled, !item.isCompleted, item.alertAt == nil, item.plannedDateEpochDay == nil, item.locationTrigger == nil,
               item.sendImmediateNotification, !item.isChecklist else { return }
+        requestAuthorization()
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "reminder-\(item.id)-now",
                                                                     content: content(for: item, alerting: false), trigger: nil))
     }
@@ -176,21 +188,26 @@ enum NotificationScheduler {
     static func cancel(_ id: Int64) {
         guard enabled else { return }
         if #available(iOS 26.0, *) { RealAlarmKit.cancel(id) }
-        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) } + [placeIdentifier(id), DepartureReminder.identifier(id)]
+        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) } + [placeIdentifier(id), DepartureReminder.identifier(id), "reminder-\(id)-snooze"]
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 
     /// Delivered banners of a completed / deleted card are removed too (ReminderNotifications.cancel).
     static func removeDelivered(_ id: Int64) {
         guard enabled else { return }
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: (0..<repeatsAhead).map { identifier(id, $0) } + ["reminder-\(id)-now", placeIdentifier(id)])
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) }
+            + ["reminder-\(id)-now", placeIdentifier(id), "reminder-\(id)-snooze"])
     }
 
     static func reschedule(_ items: [ReminderItem]) {
         guard enabled else { return }
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         if #available(iOS 26.0, *) { RealAlarmKit.cancelAll() }
-        items.forEach(schedule)
+        // An alarm snoozed on REAL's page (pre-iOS 26) is not part of any card's schedule, so it stays.
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { pending in
+            center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter { !$0.hasSuffix("-snooze") })
+            DispatchQueue.main.async { items.forEach(schedule) }
+        }
     }
 
     // MARK: Category large icon

@@ -33,6 +33,13 @@ final class VoiceInput {
     func start(onText: @escaping (String) -> Void, onFinished: ((String, @escaping () -> Void) -> Void)? = nil) {
         self.onText = onText
         self.onFinished = onFinished
+        Task { @MainActor in
+            guard await PermissionPrompt.microphoneReady() else { return }
+            requestAndBegin()
+        }
+    }
+
+    private func requestAndBegin() {
         SFSpeechRecognizer.requestAuthorization { status in
             DispatchQueue.main.async {
                 guard status == .authorized else { self.errorText = t("Konuşma tanıma izni verilmedi"); return }

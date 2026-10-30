@@ -2800,5 +2800,10 @@
   "Sonuç": "Result",
   "Öğrendiğim": "What I learned",
   "Sıradaki adım": "Next step",
-  "Sonuç, öğrendiğin, sıradaki adım…": "Result, what you learned, next step…"
+  "Sonuç, öğrendiğin, sıradaki adım…": "Result, what you learned, next step…",
+  "Mikrofon izni kapalı": "Microphone is off",
+  "Sesli kart için Ayarlar > REAL bölümünden mikrofonu açabilirsin.": "To make voice cards, turn on the microphone in Settings > REAL.",
+  "Kamera izni kapalı": "Camera is off",
+  "Fotoğraf çekmek için Ayarlar > REAL bölümünden kamerayı açabilirsin.": "To take photos, turn on the camera in Settings > REAL.",
+  "Ayarları aç": "Open Settings"
 }
