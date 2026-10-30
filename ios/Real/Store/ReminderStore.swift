@@ -52,6 +52,7 @@ final class ReminderStore {
               let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         reminders = snap.reminders
         categories = snap.categories
+        NotificationScheduler.categories = snap.categories
         builtInColors = Dictionary(uniqueKeysWithValues: snap.builtInColors.compactMap { key, value in
             ReminderCategory(rawValue: key).map { ($0, value) }
         })

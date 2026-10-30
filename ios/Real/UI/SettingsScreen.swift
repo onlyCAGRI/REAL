@@ -342,8 +342,12 @@ struct SettingsScreen: View {
                               statusColor: notificationsAllowed ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFA5A5AF),
                               subtitle: notificationsAllowed ? t("Hatırlatıcı bildirimleri bu cihazda etkin.") : t("Bildirimleri alabilmek için bildirim iznini açabilirsin."),
                               actionLabel: notificationsAllowed ? nil : t("İzni aç")) {
-                NotificationScheduler.requestAuthorization()
-                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                // Never asked: iOS's question here (Settings would have no Notifications row yet); otherwise iOS Settings.
+                Task {
+                    await NotificationScheduler.allowFromSettings()
+                    let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+                    notificationsAllowed = status == .authorized || status == .provisional
+                }
             }
             SettingsDivider()
             // Android's "Hatırlatıcı kanalı" is a per-channel setting; iOS keeps sound/banners in the app's notification settings.

@@ -32,6 +32,9 @@ enum NotificationScheduler {
     private static var asking = true
     /// "Daha sonra" / "Vazgeç" was tapped: no more sheets until the next launch.
     private static var answeredThisLaunch = false
+    /// A sheet is up: a second call in the same moment (schedule + the composer both ask) waits it out instead of
+    /// counting as "Daha sonra".
+    private static var prompting = false
 
     /// Asks once; requests added before the answer are refused by iOS, so a grant re-adds every card's notifications.
     /// Refused earlier: iOS never asks again, so the sheet sends the person to REAL's notification settings.
@@ -42,20 +45,38 @@ enum NotificationScheduler {
             let status = settings.authorizationStatus
             guard status == .notDetermined || status == .denied else { return }
             Task { @MainActor in
-                guard !answeredThisLaunch else { return }
+                guard !answeredThisLaunch, !prompting else { return }
+                prompting = true
+                defer { prompting = false }
                 let ok = await PermissionPrompt.ask(status == .denied ? .notificationsDenied : .notifications)
                 guard ok else { answeredThisLaunch = true; return }
                 if status == .denied {
                     PermissionPrompt.openNotificationSettings()
                     return
                 }
-                guard (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) == true else { return }
-                guard let store = ReminderStore.current else { return }
-                reschedule(store.reminders)
-                // "Hemen bildir" on the card that brought up the question was refused a moment ago: post it now.
-                store.reminders.filter { EpochMillis.now - $0.createdAt < 5 * 60_000 }.forEach(postImmediateIfNeeded)
+                await askSystem()
             }
         }
+    }
+
+    /// Settings "İzni aç": the system question when it was never asked, otherwise REAL's page in iOS Settings.
+    @MainActor
+    static func allowFromSettings() async {
+        guard enabled else { return }
+        if await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .notDetermined {
+            await askSystem()
+        } else {
+            PermissionPrompt.openNotificationSettings()
+        }
+    }
+
+    /// iOS's own question; a grant re-adds everything and posts the "Hemen bildir" that was refused a moment ago.
+    @MainActor
+    private static func askSystem() async {
+        guard (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) == true,
+              let store = ReminderStore.current else { return }
+        reschedule(store.reminders)
+        store.reminders.filter { EpochMillis.now - $0.createdAt < 5 * 60_000 }.forEach(postImmediateIfNeeded)
     }
 
     private static func content(for item: ReminderItem, alerting: Bool) -> UNMutableNotificationContent {
@@ -106,21 +127,18 @@ enum NotificationScheduler {
             lastPlan = "Son kart: \(times.count) zaman" + (times.first.map { " · " + clock.string(from: $0.date) } ?? "")
                 + (item.isAlarm ? " · alarm" : "")
         }
-        let content = content(for: item, alerting: true)
         // Alarm card: a system alarm (iOS 26+, allowed) replaces the due notification; otherwise it is time-sensitive.
         var ringsAsAlarm = false
-        if item.isAlarm {
-            if #available(iOS 26.0, *), RealAlarmKit.authorized {
-                if touchingAlarms { RealAlarmKit.schedule(item, times: times, categories: categories) }
-                ringsAsAlarm = true
-            } else {
-                content.interruptionLevel = .timeSensitive
-            }
+        if item.isAlarm, #available(iOS 26.0, *), RealAlarmKit.authorized {
+            if touchingAlarms { RealAlarmKit.schedule(item, times: times, categories: categories) }
+            ringsAsAlarm = true
         }
         for (i, time) in times.enumerated() {
-            let trigger = calendarTrigger(time.date)
             if !ringsAsAlarm {
-                post(UNNotificationRequest(identifier: identifier(item.id, i), content: content, trigger: trigger))
+                // Fresh content per occurrence: iOS moves an attachment's file away on add, so a shared one fails after the first.
+                let content = content(for: item, alerting: true)
+                if item.isAlarm { content.interruptionLevel = .timeSensitive }
+                post(UNNotificationRequest(identifier: identifier(item.id, i), content: content, trigger: calendarTrigger(time.date)))
             }
             // "Erken uyarı": a heads-up before each occurrence ("15 dk sonra · …").
             if let minutes = item.earlyAlertMinutes, (1...ReminderItem.maxEarlyAlertMinutes).contains(minutes) {
@@ -281,7 +299,8 @@ enum NotificationScheduler {
             DispatchQueue.main.async {
                 asking = false
                 touchingAlarms = alarms
-                items.forEach(schedule)
+                // The cards as they are now: one added while iOS answered is not lost to the earlier snapshot.
+                (ReminderStore.current?.reminders ?? items).forEach(schedule)
                 touchingAlarms = true
                 asking = true
             }
