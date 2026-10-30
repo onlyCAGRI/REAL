@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import UIKit
 import PhotosUI
+import UniformTypeIdentifiers
 
 /// Draft schedule chosen in the composer or the detail screen (ReminderDateSheet).
 struct ScheduleDraft: Equatable {
@@ -112,18 +113,30 @@ struct ComposerBar: View {
     @State private var showLocationEditor = false
     @State private var location: ReminderLocation?
     /// Pin → "Konum ekle" or "Konuma varınca hatırlat"; the trigger rides on the draft like the place.
-    @State private var showLocationChoice = false
     @State private var pickForTrigger = false
     @State private var placeTrigger: LocationTrigger?
     @State private var placePermission = PlaceReminderPermission()
     @State private var navExpanded = false
     @State private var hintLift: CGFloat = 0
+    /// Full screen (pushed up on the open panel): the detail rows, a note under the title, the tray of everything added.
+    @State var fullScreen = false
+    @State var fsPage: FullScreenPage?
+    @State var fsOpenRow: String?
+    @State var noteText = ""
+    @State var voiceNotes: [ReminderVoiceRecording] = []
+    @State var musicPicks: [MusicBlock] = []
+    @State var mediaPicks: [MediaBlock] = []
+    @State var gamePicks: [CardGameBlock] = []
+    @State var fsRecorder = VoiceRecorderEngine()
+    @State var showCamera = false
+    @State var showFileImporter = false
+    @State var showNewCategory = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var voice = VoiceInput()
     @Namespace private var dockNS
-    @FocusState private var focus: Field?
+    @FocusState var focus: Field?
 
-    private enum Field: Hashable { case title, item(Int) }
+    enum Field: Hashable { case title, item(Int), fsTitle, fsNote, fsItem(Int) }
 
     @AppStorage("reduce_animations") private var reduceAnimations = false
     /// The panel as shown. Opened by focus alone, the bar and the panel do not morph into each other riding the
@@ -139,6 +152,12 @@ struct ComposerBar: View {
     private var showChrome: Bool { isHome && !expanded }
 
     var body: some View {
+        withComposerSheets(dockBody, active: !fullScreen)
+            .onChange(of: photoItems) { _, items in importPhotos(items) }
+            .fullScreenCover(isPresented: $fullScreen) { fullScreenPage }
+    }
+
+    private var dockBody: some View {
         VStack(spacing: 10) {
             ZStack {
                 Group {
@@ -217,51 +236,6 @@ struct ComposerBar: View {
                 focus = .title
             })
         }
-        .realOverlay(isPresented: $showDateSheet) {
-            ScheduleSheet(draft: $schedule, alarm: Binding(get: { alarm }, set: { on in
-                if on && !alarm, #available(iOS 26.0, *), !RealAlarmKit.authorized {
-                    // First alarm: the system's permission prompt; once allowed, alarm cards move to AlarmKit.
-                    Task { if await RealAlarmKit.requestAuthorization() { NotificationScheduler.reschedule(store.reminders) } }
-                }
-                alarm = on
-            }))
-        }
-        .realOverlay(isPresented: $showCategoryPicker) { CategoryPickerSheet(selected: $categoryId) }
-        .realOverlay(isPresented: $showLocationChoice) {
-            PermissionSheet(title: t("Konum"),
-                            description: t("Yeri karta ekleyebilir ya da o yere varınca (veya oradan ayrılınca) bir kere hatırlatılabilirsin. Hatırlatma için konum yalnızca bekleyen bir konum hatırlatman varken izlenir ve hatırlatma gelince takip biter."),
-                            // First choice: just add the place; reminding on arrival / departure is the second one.
-                            primaryLabel: t("Konum ekle"), secondaryLabel: t("Varınca / ayrılınca hatırlat"), glyph: .pin,
-                            onPrimary: {
-                                showLocationChoice = false
-                                pickForTrigger = false
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { showLocationEditor = true }
-                            },
-                            onSecondary: {
-                                showLocationChoice = false
-                                placePermission.request { granted in
-                                    guard granted else { return }
-                                    pickForTrigger = true
-                                    // After iOS's own permission alert: open the map once that alert is gone.
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showLocationEditor = true }
-                                }
-                            },
-                            onDismiss: { showLocationChoice = false })
-        }
-        // "Varınca / Ayrılınca hatırlat" sits on the map itself once location permission is there.
-        // The pin closed the keyboard; once the map is done the composer comes back up so the person keeps typing.
-        .fullScreenCover(isPresented: $showLocationEditor, onDismiss: {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focus = .title }
-        }) {
-            LocationEditor(initial: location, initialTrigger: placeTrigger,
-                           // With permission the map always offers Varınca / Ayrılınca (as when the pin opens it directly).
-                           onRemind: pickForTrigger || placePermission.granted ? { place, trigger in location = place; placeTrigger = trigger } : nil) { picked in
-                location = picked
-                placeTrigger = nil
-            }
-        }
-        .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 10, matching: .images)
-        .onChange(of: photoItems) { _, items in importPhotos(items) }
     }
 
     @MainActor
@@ -358,6 +332,12 @@ struct ComposerBar: View {
         .padding(.bottom, expanded ? 6 : 0)
         .frame(minHeight: expanded ? 118 : 54)
         .liquidGlass(shape, dim: expanded ? 0.26 : 0)
+        // Only the open panel grows: a swipe up on the closed bar still belongs to the home (Yaşam).
+        .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { v in
+            guard expanded, voice.phase == .idle, v.translation.height < -40,
+                  abs(v.translation.height) > abs(v.translation.width) * 1.5 else { return }
+            openFullScreen()
+        })
     }
 
     private var inputRow: some View {
@@ -384,7 +364,7 @@ struct ComposerBar: View {
                     .submitLabel(checklistMode ? .next : .done)
                     .onChange(of: text) { _, new in
                         // Return submits (the Android field strips newlines and submits on Done).
-                        if new.contains("\n") {
+                        if !fullScreen, new.contains("\n") {
                             text = new.replacingOccurrences(of: "\n", with: "")
                             if checklistMode { focus = .item(0) } else { submit() }
                         }
@@ -493,10 +473,8 @@ struct ComposerBar: View {
             // The green dot: some card is waiting for its place (iOS watches it).
             toolButton("mappin", placeTrigger.map(\.label) ?? location.map { t("Konum: {0}", $0.placeName) } ?? t("Konum ekle"),
                        active: location != nil || placeTrigger != nil) {
-                focus = nil
-                // The panel explains location once; with permission the pin goes straight to the map.
-                if placePermission.granted { pickForTrigger = true; showLocationEditor = true }
-                else { showLocationChoice = true }
+                // Straight to the map; "Her zaman" is asked only when a place reminder is set there.
+                openPlace()
             }
             .overlay(alignment: .topTrailing) {
                 if store.reminders.contains(where: { $0.locationTrigger != nil && !$0.isCompleted }) {
@@ -675,6 +653,8 @@ struct ComposerBar: View {
         let place = location
         let trigger = placeTrigger
         let rings = alarm && draft.alertAt != nil
+        let note = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let voices = voiceNotes, songs = musicPicks, titles = mediaPicks, games = gamePicks
         store.addReminder(text: title, alertAt: draft.alertAt, plannedDay: draft.plannedDay, repeatRule: draft.repeatRule,
                           categoryId: categoryId, isImportant: important, checklist: items) { item in
             draft.apply(to: &item)
@@ -683,11 +663,18 @@ struct ComposerBar: View {
             if let place { item.location = place }
             item.isAlarm = rings
             item.locationTrigger = trigger
+            if !note.isEmpty { item.cardStack = CardStackBlock(cards: [CardStackCard(body: note)]) }
+            item.voiceRecordings = voices
+            item.musicBlocks = songs
+            item.mediaBlocks = titles
+            item.gameBlocks = games
+            ComposerBar.applyHeroDefault(&item)
         }
         if draft.alertAt != nil || trigger != nil { NotificationScheduler.requestAuthorization() }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         reset()
         focus = nil
+        fullScreen = false
     }
 
     private func reset() {
@@ -706,6 +693,493 @@ struct ComposerBar: View {
         alarm = false
         location = nil
         placeTrigger = nil
+        noteText = ""
+        voiceNotes = []
+        musicPicks = []
+        mediaPicks = []
+        gamePicks = []
+        fsPage = nil
+        fsOpenRow = nil
+    }
+}
+
+// MARK: Full screen (GlassComposer fullScreen)
+
+/// Full-screen composer: pushed up on the open panel. Title, a note, the card-detail rows as soft blocks
+/// (Tarih ve saat, Kategori, Konum, Liste, Ekler, Kamera, Ses kaydı, Medya) and everything added as tiles at the bottom.
+extension ComposerBar {
+    enum FullScreenPage { case checklist, media }
+
+    func gate(_ binding: Binding<Bool>, _ active: Bool) -> Binding<Bool> {
+        Binding(get: { active && binding.wrappedValue }, set: { binding.wrappedValue = $0 })
+    }
+
+    /// The composer's sheets, presented from the dock or (while it is open) from the full-screen page above it.
+    func withComposerSheets<V: View>(_ content: V, active: Bool) -> some View {
+        content
+            .realOverlay(isPresented: gate($showDateSheet, active)) {
+                ScheduleSheet(draft: $schedule, alarm: Binding(get: { alarm }, set: { on in
+                    if on && !alarm, #available(iOS 26.0, *), !RealAlarmKit.authorized {
+                        // First alarm: the system's permission prompt; once allowed, alarm cards move to AlarmKit.
+                        Task { if await RealAlarmKit.requestAuthorization() { NotificationScheduler.reschedule(store.reminders) } }
+                    }
+                    alarm = on
+                }))
+            }
+            .realOverlay(isPresented: gate($showCategoryPicker, active)) { CategoryPickerSheet(selected: $categoryId) }
+            // The pin goes straight to the map; "Her zaman" is asked only once a place reminder is set on it.
+            .fullScreenCover(isPresented: gate($showLocationEditor, active), onDismiss: {
+                if !fullScreen { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { focus = .title } }
+            }) {
+                LocationEditor(initial: location, initialTrigger: placeTrigger,
+                               onRemind: { place, trigger in
+                                   location = place
+                                   placeTrigger = trigger
+                                   if !placePermission.granted { placePermission.request { _ in } }
+                               }) { picked in
+                    location = picked
+                    placeTrigger = nil
+                }
+            }
+            .photosPicker(isPresented: gate($showPhotoPicker, active), selection: $photoItems, maxSelectionCount: 10, matching: .images)
+            .fullScreenCover(isPresented: gate($showCamera, active)) {
+                CameraPicker { data in if let a = AttachmentStorage.save(data) { attachments.append(a) } }.ignoresSafeArea()
+            }
+            .fileImporter(isPresented: gate($showFileImporter, active), allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+                if case .success(let urls) = result { attachments += urls.compactMap { AttachmentStorage.saveFile($0) } }
+            }
+            .sheet(isPresented: gate($showNewCategory, active)) { CategoryEditorSheet(existing: nil) { categoryId = $0.id } }
+    }
+
+    func openFullScreen() {
+        focus = nil
+        fsPage = nil
+        fsOpenRow = nil
+        fullScreen = true
+    }
+
+    func closeFullScreen() {
+        if fsRecorder.recording { if let r = fsRecorder.stop() { voiceNotes.append(r) } }
+        fsRecorder.stopPlayback()
+        focus = nil
+        fsPage = nil
+        fullScreen = false
+    }
+
+    var fullScreenPage: some View {
+        withComposerSheets(
+            VStack(spacing: 0) {
+                fsTopBar
+                Group {
+                    switch fsPage {
+                    case .checklist: fsChecklistPage
+                    case .media:
+                        MediaSearchAll(music: musicPicks, media: mediaPicks, games: gamePicks,
+                                       onAddMusic: { musicPicks.append($0) },
+                                       onAddMedia: { mediaPicks.append($0) },
+                                       onAddGame: { g in if !gamePicks.contains(where: { $0.providerId == g.providerId }) { gamePicks.append(g) } },
+                                       onRemoveMusic: { m in musicPicks.removeAll { $0.id == m.id } },
+                                       onRemoveMedia: { m in mediaPicks.removeAll { $0.id == m.id } },
+                                       onRemoveGame: { g in gamePicks.removeAll { $0.id == g.id } })
+                            .padding(.horizontal, 14).padding(.top, 8)
+                    case nil: fsMain
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
+                if fsPage == nil && trayCount > 0 { fsTray }
+            }
+            .background(Color.black.ignoresSafeArea())
+            .presentationBackground(.black),
+            active: true)
+    }
+
+    private var fsTopBar: some View {
+        VStack(spacing: 4) {
+            Capsule().fill(Color.white.opacity(0.28)).frame(width: 36, height: 4)
+                .frame(maxWidth: .infinity).frame(height: 18).contentShape(Rectangle())
+                .onTapGesture { closeFullScreen() }
+                .accessibilityLabel(t("Küçült"))
+            HStack(spacing: 6) {
+                if let cat = store.category(categoryId) {
+                    Circle().fill(paletteColor(cat.accentStart) ?? RealColors.accentBlue).frame(width: 7, height: 7)
+                    Text(cat.name).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFE4E4EA).opacity(0.8)).lineLimit(1)
+                }
+                Spacer()
+                if fsPage != nil {
+                    Button(t("Tamam")) { if !fsRecorder.recording { focus = nil; fsPage = nil } }
+                        .font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFF91B9FF))
+                        .padding(.horizontal, 10).frame(height: 40)
+                } else {
+                    bellButton
+                    Button { important.toggle() } label: {
+                        RealSymbol(important ? "star.fill" : "star", size: 18)
+                            .foregroundStyle(important ? Color(argb: 0xFFEACB75) : Color(argb: 0xFFBABAC3))
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(important ? t("Önemli işaretini kaldır") : t("Önemli olarak işaretle"))
+                }
+            }
+            .padding(.leading, 22).padding(.trailing, 10)
+        }
+        .padding(.top, 4)
+        .contentShape(Rectangle())
+        // Pulled down on the top bar: back to the dock.
+        .gesture(DragGesture(minimumDistance: 20).onEnded { v in if v.translation.height > 50 { closeFullScreen() } })
+    }
+
+    private func fsTitleChanged(_ new: String) {
+        guard new.contains("\n") else { return }
+        text = new.replacingOccurrences(of: "\n", with: "")
+        if fsPage == .checklist { focus = .fsItem(0) } else { submit() }
+    }
+
+    private var fsMain: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 10) {
+                    TextField("", text: $text, prompt: Text(t("Aklında ne var?")).foregroundStyle(Color(argb: 0xFF8E8E96)), axis: .vertical)
+                        .font(RealFont.inter(30)).foregroundStyle(Color(argb: 0xFFF7F7F8)).tint(Color(argb: 0xFF9AB9FF))
+                        .lineLimit(1...5)
+                        .focused($focus, equals: .fsTitle)
+                        .submitLabel(.done)
+                        .onChange(of: text) { _, new in fsTitleChanged(new) }
+                        .accessibilityLabel(t("Hatırlatıcı metni"))
+                    // Small blue done key (keyboard enter): only there once something is written.
+                    if !text.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Button(action: submit) {
+                            RealSymbol("checkmark", size: 13).foregroundStyle(.white)
+                                .frame(width: 26, height: 26).background(Circle().fill(Color(argb: 0xFF3A7BFF)))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 9)
+                        .accessibilityLabel(t("Kaydet"))
+                        .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.16), value: text.isEmpty)
+                .padding(.leading, 22).padding(.trailing, 20).padding(.top, 12)
+
+                TextField("", text: $noteText, prompt: Text(t("Not ekle")).foregroundStyle(Color(argb: 0xFF6E6E78)), axis: .vertical)
+                    .font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFFD9D9E0)).tint(.white)
+                    .lineLimit(3...12)
+                    .focused($focus, equals: .fsNote)
+                    .padding(.horizontal, 22).padding(.top, 8).padding(.bottom, 26)
+
+                VStack(spacing: 8) {
+                    dateBlock
+                    categoryBlock
+                    fsBlock {
+                        fsRow("mappin", t("Konum"), placeTrigger.map(\.label) ?? location?.placeName ?? t("Ekle"),
+                              active: location != nil || placeTrigger != nil) { openPlace() }
+                    }
+                    fsBlock {
+                        let filled = checklistItems.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
+                        fsRow("checklist", t("Liste"), checklistMode && filled > 0 ? t("{0} madde", filled) : t("Ekle"),
+                              active: checklistMode && filled > 0) {
+                            if !checklistMode { checklistMode = true; checklistItems = [""] }
+                            fsPage = .checklist
+                        }
+                    }
+                    // Ekler: photos and any file; camera, voice and media sit on their own rows.
+                    fsBlock {
+                        Menu {
+                            Button(t("Fotoğraf")) { showPhotoPicker = true }
+                            Button(t("Dosya")) { showFileImporter = true }
+                        } label: {
+                            fsRowLabel("plus", t("Ekler"), attachments.isEmpty ? t("Ekle") : t("{0} ek", attachments.count), active: !attachments.isEmpty)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    fsBlock { fsRow("camera", t("Kamera"), t("Çek"), active: false) { focus = nil; showCamera = true } }
+                    voiceBlock
+                    fsBlock {
+                        let count = musicPicks.count + mediaPicks.count + gamePicks.count
+                        fsRow("music.note", t("Medya"), count == 0 ? t("Şarkı, film, dizi") : t("{0} ek", count), active: count > 0) {
+                            focus = nil
+                            fsPage = .media
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 16)
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var dateBlock: some View {
+        fsBlock {
+            fsRow("calendar", t("Tarih ve saat"), schedule.isEmpty ? t("Yok") : schedule.summary, active: !schedule.isEmpty) { toggleRow("date") }
+            if fsOpenRow == "date" {
+                fsChips {
+                    fsChip(t("Bugün"), on: isDay(0)) { applySuggestion(.today) }
+                    fsChip(t("Yarın"), on: isDay(1)) { applySuggestion(.tomorrow) }
+                    fsChip(t("Seç…")) { fsOpenRow = nil; withoutAnimation { showDateSheet = true } }
+                    if !schedule.isEmpty { fsChip(t("Kaldır")) { fsOpenRow = nil; schedule = ScheduleDraft(); alarm = false } }
+                }
+                // A day without a time: a few likely times for that day.
+                if let day = schedule.date, !schedule.hasTime {
+                    let hours = quickHours(day)
+                    if !hours.isEmpty {
+                        fsChips {
+                            ForEach(hours, id: \.self) { h in
+                                fsChip(String(format: "%02d:00", h)) {
+                                    schedule.date = Calendar.real.date(bySettingHour: h, minute: 0, second: 0, of: day)
+                                    schedule.hasTime = true
+                                    fsOpenRow = nil
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var categoryBlock: some View {
+        fsBlock {
+            let cat = store.category(categoryId)
+            fsRow("square.grid.2x2", t("Kategori"), cat?.name ?? t("Yok"), dot: cat.flatMap { paletteColor($0.accentStart) },
+                  active: cat != nil) { toggleRow("category") }
+            if fsOpenRow == "category" {
+                fsChips {
+                    fsChip(t("Yok"), on: categoryId == nil) { categoryId = nil; fsOpenRow = nil }
+                    ForEach(store.categories) { c in
+                        fsChip(c.name, dot: paletteColor(c.accentStart), on: c.id == categoryId) { categoryId = c.id; fsOpenRow = nil }
+                    }
+                    fsChip(t("Yeni…")) { fsOpenRow = nil; showNewCategory = true }
+                }
+            }
+        }
+    }
+
+    /// Kaydet starts recording right on the row; a blue circle breathes with the voice level.
+    private var voiceBlock: some View {
+        fsBlock {
+            if fsRecorder.recording {
+                Button { if let r = fsRecorder.stop() { voiceNotes.append(r) } } label: {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle().fill(Color(argb: 0xFF4F8DFF)).frame(width: 28, height: 28)
+                                .scaleEffect(CGFloat(0.55 + 0.45 * fsRecorder.level))
+                                .opacity(0.25 + 0.35 * fsRecorder.level)
+                            Circle().fill(Color(argb: 0xFF91B9FF)).frame(width: 12, height: 12)
+                        }
+                        .frame(width: 28, height: 28)
+                        .animation(.easeOut(duration: 0.11), value: fsRecorder.level)
+                        Text(t("Dinliyorum…")).font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFE9E9EE))
+                        Spacer()
+                        Text(formatVoiceDuration(fsRecorder.elapsed)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFB9CFFF))
+                        RoundedRectangle(cornerRadius: 3).fill(Color(argb: 0xFFE9E9EE)).frame(width: 13, height: 13).padding(.leading, 8)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 11)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t("Ses kaydını durdur"))
+            } else {
+                fsRow("mic", t("Ses kaydı"), voiceNotes.isEmpty ? t("Kaydet") : t("{0} kayıt", voiceNotes.count),
+                      active: !voiceNotes.isEmpty) { focus = nil; fsRecorder.start() }
+            }
+            if let error = fsRecorder.error {
+                Text(error).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFE0B5A8))
+                    .padding(.leading, 50).padding(.trailing, 12).padding(.bottom, 10)
+            }
+            ForEach(voiceNotes) { r in
+                HStack(spacing: 10) {
+                    Button { fsRecorder.togglePlayback(r) } label: {
+                        RealSymbol(fsRecorder.playingId == r.id ? "pause.fill" : "play.fill", size: 13)
+                            .foregroundStyle(.white).frame(width: 30, height: 30)
+                            .background(Circle().fill(Color.white.opacity(0.10)))
+                    }
+                    .buttonStyle(.plain)
+                    Text(formatVoiceDuration(r.durationMillis)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD4D4DA))
+                    Spacer()
+                    Button { removeVoice(r) } label: {
+                        RealSymbol("xmark", size: 11).foregroundStyle(Color(argb: 0xFF9A9AA4)).frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(t("Kaldır"))
+                }
+                .padding(.leading, 46).padding(.trailing, 10).padding(.bottom, 8)
+            }
+        }
+    }
+
+    private var fsChecklistPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("", text: $text, prompt: Text(t("Başlık")).foregroundStyle(Color(argb: 0xFF8E8E96)), axis: .vertical)
+                    .font(RealFont.inter(30, .semibold)).foregroundStyle(.white).tint(Color(argb: 0xFF9AB9FF))
+                    .lineLimit(1...4)
+                    .focused($focus, equals: .fsTitle)
+                    .onChange(of: text) { _, new in fsTitleChanged(new) }
+                    .padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 12)
+                ForEach(checklistItems.indices, id: \.self) { index in
+                    HStack(spacing: 12) {
+                        Circle().strokeBorder(Color(argb: 0xFF5A5A66), lineWidth: 1.4).frame(width: 20, height: 20)
+                        TextField("", text: Binding(get: { checklistItems.indices.contains(index) ? checklistItems[index] : "" },
+                                                    set: { if checklistItems.indices.contains(index) { checklistItems[index] = $0 } }),
+                                  prompt: Text(t("Madde {0}", index + 1)).foregroundStyle(Color(argb: 0xFF6C6C76)))
+                            .font(RealFont.inter(18)).foregroundStyle(Color(argb: 0xFFEEEEF2))
+                            .focused($focus, equals: .fsItem(index))
+                            .submitLabel(.next)
+                            .onSubmit {
+                                let current = checklistItems.indices.contains(index) ? checklistItems[index] : ""
+                                if !current.trimmingCharacters(in: .whitespaces).isEmpty && index == checklistItems.count - 1 { checklistItems.append("") }
+                                if index + 1 < checklistItems.count { focus = .fsItem(index + 1) }
+                            }
+                        if checklistItems.count > 1 {
+                            Button { checklistItems.remove(at: index) } label: {
+                                RealSymbol("xmark", size: 11.5).foregroundStyle(Color(argb: 0xFF7A7A85)).frame(width: 28, height: 28)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 22).padding(.vertical, 6)
+                }
+                Button {
+                    if checklistItems.last?.trimmingCharacters(in: .whitespaces).isEmpty == false || checklistItems.isEmpty { checklistItems.append("") }
+                    focus = .fsItem(checklistItems.count - 1)
+                } label: {
+                    Label(t("Madde ekle"), systemImage: "plus").font(RealFont.inter(14, .medium)).foregroundStyle(RealColors.accentBlue)
+                }
+                .padding(.horizontal, 24).padding(.vertical, 10)
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    var trayCount: Int { attachments.count + voiceNotes.count + musicPicks.count + mediaPicks.count + gamePicks.count }
+
+    /// Everything added sits here as square tiles: photos, files, voice notes, songs, films, series and games.
+    private var fsTray: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(attachments) { a in
+                    trayTile({ AttachmentStorage.remove(a); attachments.removeAll { $0.id == a.id } }) {
+                        if a.type == .image, let img = AttachmentStorage.image(a.localPath) { Image(uiImage: img).resizable().scaledToFill() }
+                        else { RealSymbol("doc", size: 22).foregroundStyle(Color(argb: 0xFFD4D4DA)) }
+                    }
+                }
+                ForEach(voiceNotes) { r in
+                    trayTile({ removeVoice(r) }) { RealSymbol("waveform", size: 22).foregroundStyle(Color(argb: 0xFF91B9FF)) }
+                }
+                ForEach(musicPicks) { m in trayTile({ musicPicks.removeAll { $0.id == m.id } }) { MusicArtwork(url: m.artworkUrl) } }
+                ForEach(mediaPicks) { m in trayTile({ mediaPicks.removeAll { $0.id == m.id } }) { PosterArtwork(media: m, titleSize: 6) } }
+                ForEach(gamePicks) { g in trayTile({ gamePicks.removeAll { $0.id == g.id } }) { GameCover(block: g) } }
+            }
+            .padding(.horizontal, 14).padding(.top, 6)
+        }
+        .padding(.bottom, 10)
+    }
+
+    private func trayTile<C: View>(_ remove: @escaping () -> Void, @ViewBuilder _ content: () -> C) -> some View {
+        ZStack(alignment: .topTrailing) {
+            ZStack { Color.white.opacity(0.08); content() }
+                .frame(width: 58, height: 58)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(argb: 0x33FFFFFF), lineWidth: 0.8))
+                .frame(width: 62, height: 62, alignment: .bottomLeading)
+            Button(action: remove) {
+                RealSymbol("xmark", size: 9).foregroundStyle(Color(argb: 0xFFEEEEF2))
+                    .frame(width: 20, height: 20).background(Circle().fill(Color(argb: 0xE61E1E24)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(t("Kaldır"))
+        }
+    }
+
+    // Row building blocks: each row its own soft block, choices open under it as chips.
+
+    private func fsBlock<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        VStack(spacing: 0, content: content)
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.055)))
+    }
+
+    private func fsRowLabel(_ symbol: String, _ label: String, _ value: String?, dot: Color? = nil, active: Bool) -> some View {
+        HStack(spacing: 14) {
+            RealSymbol(symbol, size: 19).foregroundStyle(active ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFBABAC3)).frame(width: 22)
+            Text(label).font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFE9E9EE))
+            Spacer()
+            if let dot { Circle().fill(dot).frame(width: 7, height: 7) }
+            if let value {
+                Text(value).font(RealFont.inter(13)).foregroundStyle(active ? Color(argb: 0xFFB9CFFF) : Color(argb: 0xFF7C7C86))
+                    .lineLimit(1).frame(maxWidth: 170, alignment: .trailing)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 15)
+        .contentShape(Rectangle())
+    }
+
+    private func fsRow(_ symbol: String, _ label: String, _ value: String?, dot: Color? = nil, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) { fsRowLabel(symbol, label, value, dot: dot, active: active) }
+            .buttonStyle(.plain)
+            .disabled(fsRecorder.recording)
+    }
+
+    private func fsChips<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6, content: content)
+        }
+        .padding(.leading, 50).padding(.trailing, 12).padding(.bottom, 12)
+    }
+
+    private func fsChip(_ label: String, dot: Color? = nil, on: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let dot { Circle().fill(dot).frame(width: 7, height: 7) }
+                Text(label).font(RealFont.inter(13))
+            }
+            .foregroundStyle(on ? Color.white : Color(argb: 0xFFD4D4DA))
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(Capsule().fill(on ? Color.white.opacity(0.10) : Color.clear))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(on ? 0.7 : 0.22), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toggleRow(_ row: String) {
+        withAnimation(.easeOut(duration: 0.18)) { fsOpenRow = fsOpenRow == row ? nil : row }
+    }
+
+    private func isDay(_ offset: Int) -> Bool {
+        let cal = Calendar.real
+        guard let target = cal.date(byAdding: .day, value: offset, to: cal.startOfDay(for: Date())) else { return false }
+        return schedule.date.map { cal.isDate($0, inSameDayAs: target) } ?? false
+    }
+
+    private func quickHours(_ day: Date) -> [Int] {
+        let cal = Calendar.real
+        let nowHour = cal.component(.hour, from: Date())
+        return Array([9, 12, 15, 18, 21].filter { !cal.isDateInToday(day) || $0 > nowHour }.prefix(4))
+    }
+
+    func openPlace() {
+        focus = nil
+        pickForTrigger = true
+        showLocationEditor = true
+    }
+
+    func removeVoice(_ r: ReminderVoiceRecording) {
+        if fsRecorder.playingId == r.id { fsRecorder.stopPlayback() }
+        try? FileManager.default.removeItem(at: AttachmentStorage.directory.appendingPathComponent(r.localPath))
+        voiceNotes.removeAll { $0.id == r.id }
+    }
+
+    /// A new card with a few blocks opens with its most visual one on top, big ("En üstteki içeriği büyüt" ticked).
+    static func applyHeroDefault(_ item: inout ReminderItem) {
+        let blocks = item.cardContentKeys().filter { $0 != "text" && $0 != "weather" }
+        guard blocks.count >= 2, item.contentBlockOrder.isEmpty, item.contentBlockLayout.isEmpty else { return }
+        let hero = ["photos:", "media:", "game:", "music:"].lazy.compactMap { p in blocks.first { $0.hasPrefix(p) } }.first ?? blocks[0]
+        item.contentBlockOrder = [hero] + item.cardContentKeys().filter { $0 != hero }
+        var placement = CardBlockPlacement()
+        placement.span = CardBlockPlacement.units
+        placement.column = 0
+        placement.minHeight = detailHeroMinHeight
+        item.contentBlockLayout = [hero: placement.normalized]
     }
 }
 

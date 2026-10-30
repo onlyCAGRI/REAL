@@ -175,8 +175,25 @@ struct ReminderDetailView: View {
                 }
             }
         }
+        // Medya: one search for songs, films, series and games (the full-screen composer's page, Android MediaSearchAllSheet).
         .sheet(isPresented: $showMusicSearch) {
-            MusicSearchSheet { m in withAnimation(.spring(duration: 0.3)) { draft?.musicBlocks.append(m) } }
+            let d = draft ?? store.reminder(reminderId)
+            MediaSearchAllSheet(search: MediaSearchAll(
+                music: d?.musicBlocks ?? [], media: d?.mediaBlocks ?? [], games: d?.gameBlocks ?? [],
+                onAddMusic: { m in withAnimation(.spring(duration: 0.3)) { draft?.musicBlocks.append(m) } },
+                onAddMedia: { m in withAnimation(.spring(duration: 0.3)) { draft?.mediaBlocks.append(m) } },
+                onAddGame: { g in
+                    withAnimation(.spring(duration: 0.3)) {
+                        if editing { if draft?.gameBlocks.contains(where: { $0.providerId == g.providerId }) != true { draft?.gameBlocks.append(g) } }
+                        else { store.mutate(reminderId) { r in if !r.gameBlocks.contains(where: { $0.providerId == g.providerId }) { r.gameBlocks.append(g) } } }
+                    }
+                },
+                onRemoveMusic: { m in draft?.musicBlocks.removeAll { $0.id == m.id } },
+                onRemoveMedia: { m in draft?.mediaBlocks.removeAll { $0.id == m.id } },
+                onRemoveGame: { g in
+                    if editing { draft?.gameBlocks.removeAll { $0.id == g.id } }
+                    else { store.mutate(reminderId) { r in r.gameBlocks.removeAll { $0.id == g.id } } }
+                }))
         }
         .sheet(isPresented: $showMediaSearch) {
             MediaSearchSheet { m in withAnimation(.spring(duration: 0.3)) { draft?.mediaBlocks.append(m) } }
@@ -1080,12 +1097,9 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "mappin", label: t("Konum"), active: d?.location != nil) { withoutAnimation { showLocationGuide = true } }
                     QuickAction(symbol: "waveform", label: t("Ses kaydı"), active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
                                 count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
-                    QuickAction(symbol: "music.note", label: t("Müzik"), active: !(d?.musicBlocks.isEmpty ?? true),
-                                count: d?.musicBlocks.count) { showMusicSearch = true }
-                    QuickAction(symbol: "play.rectangle", label: t("Film & Dizi"), active: !(d?.mediaBlocks.isEmpty ?? true),
-                                count: d?.mediaBlocks.count) { showMediaSearch = true }
-                    QuickAction(symbol: "gamecontroller", label: t("Oyun"), active: !(d?.gameBlocks.isEmpty ?? true),
-                                count: d?.gameBlocks.count) { showGameSearch = true }
+                    let mediaTotal = (d?.musicBlocks.count ?? 0) + (d?.mediaBlocks.count ?? 0) + (d?.gameBlocks.count ?? 0)
+                    QuickAction(symbol: "music.note", label: t("Medya"), active: mediaTotal > 0,
+                                count: mediaTotal > 0 ? mediaTotal : nil) { showMusicSearch = true }
                     QuickAction(symbol: "doc", label: t("Dosya ekle"), active: false,
                                 count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
                     QuickAction(symbol: "face.smiling", label: t("Mood"), active: d?.mood != nil) { showMoodPicker = true }

@@ -205,7 +205,7 @@ struct MediaSearchSheet: View {
         if results.isEmpty { message = t("Sonuç bulunamadı.") }
     }
 
-    private static func merge(_ query: String, _ movies: [MediaBlock], _ series: [MediaBlock]) -> [MediaBlock] {
+    static func merge(_ query: String, _ movies: [MediaBlock], _ series: [MediaBlock]) -> [MediaBlock] {
         var alternating: [MediaBlock] = []
         for i in 0..<max(movies.count, series.count) {
             if i < movies.count { alternating.append(movies[i]) }
