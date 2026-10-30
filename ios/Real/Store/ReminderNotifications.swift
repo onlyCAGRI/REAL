@@ -118,8 +118,7 @@ enum NotificationScheduler {
             }
         }
         for (i, time) in times.enumerated() {
-            let comps = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: time.date)
-            let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+            let trigger = calendarTrigger(time.date)
             if !ringsAsAlarm {
                 post(UNNotificationRequest(identifier: identifier(item.id, i), content: content, trigger: trigger))
             }
@@ -131,9 +130,7 @@ enum NotificationScheduler {
                 heads.body = earlyLead(minutes) + " · " + heads.body
                 heads.subtitle = t("Erken uyarı")
                 heads.sound = .default
-                let c = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: early.date)
-                post(UNNotificationRequest(identifier: earlyIdentifier(item.id, i), content: heads,
-                    trigger: UNCalendarNotificationTrigger(dateMatching: c, repeats: false)))
+                post(UNNotificationRequest(identifier: earlyIdentifier(item.id, i), content: heads, trigger: calendarTrigger(early.date)))
             }
         }
     }
@@ -166,9 +163,24 @@ enum NotificationScheduler {
         } catch {
             return t("Kurulamadı: {0}", error.localizedDescription)
         }
-        let pending = await center.pendingNotificationRequests().filter { $0.identifier != "real-test" }.count
-        return ([t("İzin açık · {0} bekliyor", pending)] + [lastPlan, lastError.map { "Hata: " + $0 }].compactMap { $0 })
+        let requests = await center.pendingNotificationRequests().filter { $0.identifier != "real-test" }
+        let pending = requests.count
+        // When iOS itself will fire the soonest one, in REAL's clock: shows a time-zone mismatch at a glance.
+        let clock = DateFormatter()
+        clock.dateFormat = "dd.MM HH:mm"
+        let next = requests.compactMap { $0.trigger as? UNCalendarNotificationTrigger }.compactMap { $0.nextTriggerDate() }.min()
+            .map { "iOS: " + clock.string(from: $0) }
+        return ([t("İzin açık · {0} bekliyor", pending)] + [next, lastPlan, lastError.map { "Hata: " + $0 }].compactMap { $0 })
             .joined(separator: "\n")
+    }
+
+    /// The wall-clock time carries REAL's time zone: without it iOS reads "23:54" in the system's zone, which can
+    /// differ from the app's (Appetize gives the app the viewer's zone, the simulator keeps its own: 2 hours late).
+    private static func calendarTrigger(_ date: Date) -> UNCalendarNotificationTrigger {
+        var comps = Calendar.real.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        comps.calendar = Calendar.real
+        comps.timeZone = Calendar.real.timeZone
+        return UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
     }
 
     /// "15 dk sonra", "1 saat sonra", "2 gün sonra".
