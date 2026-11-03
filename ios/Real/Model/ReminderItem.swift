@@ -202,7 +202,7 @@ extension CardPerson {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
-        uid = (try c.decodeIfPresent(String.self, forKey: .personUid)) ?? (try c.decodeIfPresent(String.self, forKey: .uid))
+        uid = try c.decodeIfPresent(String.self, forKey: .personUid) ?? c.decodeIfPresent(String.self, forKey: .uid)
         pictureVersion = try c.decodeIfPresent(Int64.self, forKey: .pictureVersion)
     }
 

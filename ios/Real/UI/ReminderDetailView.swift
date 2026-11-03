@@ -629,7 +629,7 @@ struct ReminderDetailView: View {
                     .frame(maxWidth: .infinity, alignment: frameAlign)
                     .padding(.top, 10)
             } else if !r.isCompleted, let epochDay = r.plannedDateEpochDay {
-                let d = Calendar.real.date(fromEpochDay: epochDay)
+                let d = Calendar.real.startOfDay(epochDay: epochDay)
                 let weekday = t(Calendar.real.isoWeekday(of: d).full)
                 let day = detailDay(d)
                 (Text(weekday).font(RealFont.inter(15, .medium)).foregroundColor(blueColor)
