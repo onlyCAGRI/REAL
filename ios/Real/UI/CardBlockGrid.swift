@@ -293,6 +293,8 @@ struct CardBlockGrid<Block: View>: View {
     @State private var frames: [String: CGRect] = [:]
     @State private var moving: String?
     @State private var moveOffset: CGSize = .zero
+    /// Falls back on its own when the system cancels the hold (a sheet, the keyboard), where onEnded never runs.
+    @GestureState private var moveAlive = false
     @State private var gridWidth: CGFloat = 0
     @State private var handleStart: (placement: CardBlockPlacement, frames: [String: CGRect], layout: [String: CardBlockPlacement])?
     private let gutter: CGFloat = 12
@@ -317,6 +319,9 @@ struct CardBlockGrid<Block: View>: View {
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: keys)
         .onChange(of: editing) { _, on in if !on { selected = nil; moving = nil } }
         .onChange(of: moving != nil) { _, lifted in onMovingChange(lifted) }
+        .onChange(of: moveAlive) { _, alive in
+            if !alive && moving != nil { withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { moving = nil; moveOffset = .zero } }
+        }
     }
 
     private func placement(_ key: String) -> CardBlockPlacement { (layout[key] ?? CardBlockPlacement()).normalized }
@@ -378,6 +383,7 @@ struct CardBlockGrid<Block: View>: View {
     private func moveGesture(_ key: String) -> some Gesture {
         LongPressGesture(minimumDuration: 0.35)
             .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("cardGrid")))
+            .updating($moveAlive) { _, alive, _ in alive = true }
             .onChanged { value in
                 guard editing else { return }
                 switch value {

@@ -22,6 +22,7 @@ struct AccountMenuOverlay: View {
     @State private var notice: String?
     @State private var showPeople = false
     @State private var showManage = false
+    @State private var showPro = false
 
     /// Google sign-in, then the account's cards / categories / moods replace this device's (read-only restore).
     /// Hesap ekle: Google or e-posta (AuthChoiceSheet), then the account's cards come back.
@@ -69,7 +70,7 @@ struct AccountMenuOverlay: View {
                 .padding(.top, 13)
                 VStack(spacing: 3) {
                     item(.person, t("Fotoğrafın veya avatarın")) { showPhotoChoice = true }
-                    item(.star, "REAL Pro") { notice = t("REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak.") }
+                    item(.star, "REAL Pro") { showPro = true }
                     if auth.account == nil {
                         item(.add, auth.busy ? t("Google açılıyor…") : t("Hesap ekle")) { signInAndRestore() }
                             .sheet(isPresented: $showAuthChoice) { AuthChoiceSheet { _ in restore(keepGuest: true) } }
@@ -113,6 +114,7 @@ struct AccountMenuOverlay: View {
             Button(t("Tamam"), role: .cancel) {}
         } message: { Text(notice ?? "") }
         .sheet(isPresented: $showPeople) { PeopleScreen() }
+        .fullScreenCover(isPresented: $showPro) { RealProScreen() }
         .sheet(isPresented: $showManage) {
             AccountManageSheet(
                 onEditName: { showManage = false; close(then: { RealAuth.shared.nameEditRequested = true }) },
@@ -201,6 +203,7 @@ struct SettingsScreen: View {
     @State private var sheet: SettingsSheet?
     /// Ben ekranının sırala / gizle sayfası (Ben'deki "Düzenle" ile aynı).
     @State private var showYasamLayout = false
+    @State private var showPro = false
     @AppStorage(MapAppearance.darkKey) private var mapDark = false
     @AppStorage(MapAppearance.plainKey) private var mapPlain = false
 
@@ -228,6 +231,7 @@ struct SettingsScreen: View {
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
         .sheet(isPresented: $showYasamLayout) { YasamLayoutSheet() }
         .sheet(isPresented: $showAiPrivacy) { AiPrivacySheet() }
+        .fullScreenCover(isPresented: $showPro) { RealProScreen() }
         .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false }.liftedTopSafeArea() }
         .overlay { sheetOverlay }
         .alert(t("Tüm mood kayıtlarını sil?"), isPresented: $showClearMoods) {
@@ -306,59 +310,11 @@ struct SettingsScreen: View {
 
     @ViewBuilder
     private var mainPage: some View {
-        SettingsSectionHeader(title: t("GÖRÜNÜM"))
         SettingsGlassGroup {
-            SettingsActionRow(icon: .cards, title: t("Ben ekranı"), subtitle: t("Bölümleri sırala ya da gizle")) {
-                showYasamLayout = true
-            }
-            SettingsDivider()
-            SettingsChoiceRow(icon: .theme, title: t("Dil"), value: language.currentLabel) { sheet = .language }
-            SettingsDivider()
-            SettingsChoiceRow(icon: .theme, title: t("Uygulama simgesi"), value: iconDark ? t("Siyah") : t("Beyaz")) { sheet = .appIcon }
-            SettingsDivider()
-            SettingsChoiceRow(icon: .pin, title: t("Harita görünümü"),
-                              value: (mapDark ? t("Koyu") : t("Açık")) + (mapPlain ? " · " + t("Sade") : "")) { sheet = .map }
-            SettingsDivider()
-            SettingsToggleRow(icon: .motionOff, title: t("Animasyonu azalt"), subtitle: t("Arayüz hareketlerini ve geçiş efektlerini sakinleştirir"), isOn: $reduceAnimations)
-            SettingsDivider()
-            SettingsToggleRow(icon: .blurOff, title: t("Dinamik bulanıklığı azalt"), subtitle: t("Bulanıklık efektleri yerine sabit koyu yüzeyler kullanır"), isOn: $reduceDynamicBlur)
-            SettingsDivider()
-            SettingsToggleRow(icon: .cat, title: "REAL Pet", subtitle: t("Geçici olarak devre dışı bırakıldı"), isOn: .constant(false), enabled: false)
-            SettingsDivider()
-            SettingsToggleRow(icon: .bell, title: t("Bağlam kartları"), subtitle: t("Ana ekranın altında arada su, mood, kitap ve film önerisi gösterir"), isOn: $contextCards)
-            SettingsDivider()
-            SettingsActionRow(icon: .calendar, title: t("Takvim bağlantısı"), subtitle: t("Google / iCloud takvimlerini göster ve planlarını gönder")) {
-                showCalendar = true
-            }
-            SettingsDivider()
-            SettingsToggleRow(icon: .check, title: t("Sade kartlar (Deneysel)"),
-                              subtitle: t("Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır."), isOn: $plainCards)
-            SettingsDivider()
-            // Kapalı / 7 gün / 14 gün, picked in a sheet.
-            SettingsChoiceRow(icon: .calendar, title: t("Ana ekranda takvim"),
-                              value: calendarHomeDays > 0 ? t("Önümüzdeki {0} gün", calendarHomeDays) : t("Kapalı")) { sheet = .calendar }
-            SettingsDivider()
-            // Where songs open (music discovery's up-swipe, the music search's default).
-            SettingsChoiceRow(icon: .music, title: t("Müzik uygulaması"), value: musicSource.label) { sheet = .music }
-            SettingsDivider()
-            // Apple Music hesabı: "Sana özel" in Müzik keşfi, a right swipe also adds to the library.
-            let appleMusic = AppleMusicAccount.shared
-            SettingsActionRow(icon: .music, title: t("Apple Music hesabı"),
-                              subtitle: appleMusic.isConnected ? t("Bağlı · dokun, bağlantıyı kes") : t("Bağla · sana özel öneriler, REAL çalma listesi")) {
-                if appleMusic.isConnected { appleMusic.disconnect() } else { appleMusic.connect() }
-            }
-            SettingsDivider()
-            // Puanlarım: film / dizi / bölüm puanlarını siler (şimdilik test için).
-            // Öneriler (müzik, film / dizi, oyun): geçilenler yeniden gelebilir; kayıtlı listeler ve İzledim / Oynadım kalır.
-            SettingsActionRow(icon: .music, title: t("Önerileri sıfırla"), subtitle: t("Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez")) {
-                sheet = .suggestionReset
-            }
-            SettingsDivider()
-            SettingsActionRow(icon: .delete, title: t("Puanlarımı sıfırla"), subtitle: t("Film, dizi ve bölüm puanlarının hepsini siler")) {
-                sheet = .ratingReset
-            }
+            SettingsActionRow(icon: .star, title: "REAL Pro", subtitle: t("Pro’yu keşfet, mağaza aboneliklerini yönet")) { showPro = true }
         }
-        SettingsSectionHeader(title: t("BİLDİRİMLER VE DAVRANIŞ"))
+        .padding(.top, 6)
+        SettingsSectionHeader(title: t("BİLDİRİMLER VE ALARMLAR"))
         SettingsGlassGroup {
             SettingsStatusRow(icon: .bell, title: t("Bildirim izni"), status: notificationsAllowed ? t("Açık") : t("Kapalı"),
                               statusColor: notificationsAllowed ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFA5A5AF),
@@ -378,15 +334,6 @@ struct SettingsScreen: View {
                               subtitle: t("Ses, titreşim ve kilit ekranı uyarıları iOS bildirim ayarlarından yönetilir."),
                               actionLabel: t("Kanal ayarları")) {
                 if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
-            }
-            SettingsDivider()
-            // The status pill is one line: the card plan and the last refusal go in the subtitle.
-            let testLines = notificationTest?.components(separatedBy: "\n") ?? []
-            SettingsStatusRow(icon: .bell, title: t("Bildirim testi"), status: testLines.first ?? "", statusColor: Color(argb: 0xFF91B9FF),
-                              subtitle: testLines.count > 1 ? testLines.dropFirst().joined(separator: "\n")
-                                                            : t("10 saniye sonra deneme bildirimi gelir ve bekleyen bildirim sayısı görünür."),
-                              actionLabel: t("Dene")) {
-                Task { notificationTest = await NotificationScheduler.sendTest() }
             }
             SettingsDivider()
             SettingsStatusRow(icon: .calendar, title: t("Tam saatinde hatırlatma"), status: t("Açık"), statusColor: Color(argb: 0xFF91B9FF),
@@ -411,10 +358,62 @@ struct SettingsScreen: View {
             }
             SettingsChoiceRow(icon: .repeat_, title: t("Alarm erteleme"), value: t("{0} dakika", alarmSnooze)) { sheet = .snooze }
         }
-        SettingsSectionHeader(title: "REAL PRO")
+        SettingsSectionHeader(title: t("ANA EKRAN VE KARTLAR"))
         SettingsGlassGroup {
-            SettingsActionRow(icon: .star, title: "REAL Pro", subtitle: t("Pro’yu keşfet, mağaza aboneliklerini yönet")) {
-                notice = t("REAL Pro aboneliği iOS'ta REAL hesabı ve App Store bağlantısı kurulunca açılacak.")
+            SettingsActionRow(icon: .cards, title: t("Ben ekranı"), subtitle: t("Bölümleri sırala ya da gizle")) {
+                showYasamLayout = true
+            }
+            SettingsDivider()
+            SettingsToggleRow(icon: .check, title: t("Sade kartlar (Deneysel)"),
+                              subtitle: t("Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır."), isOn: $plainCards)
+            SettingsDivider()
+            SettingsToggleRow(icon: .bell, title: t("Bağlam kartları"), subtitle: t("Ana ekranın altında arada su, mood, kitap ve film önerisi gösterir"), isOn: $contextCards)
+            SettingsDivider()
+            // Kapalı / 7 gün / 14 gün, picked in a sheet.
+            SettingsChoiceRow(icon: .calendar, title: t("Ana ekranda takvim"),
+                              value: calendarHomeDays > 0 ? t("Önümüzdeki {0} gün", calendarHomeDays) : t("Kapalı")) { sheet = .calendar }
+            SettingsDivider()
+            SettingsToggleRow(icon: .cat, title: "REAL Pet", subtitle: t("Geçici olarak devre dışı bırakıldı"), isOn: .constant(false), enabled: false)
+        }
+        SettingsSectionHeader(title: t("DİL VE GÖRÜNÜM"))
+        SettingsGlassGroup {
+            SettingsChoiceRow(icon: .theme, title: t("Dil"), value: language.currentLabel) { sheet = .language }
+            SettingsDivider()
+            SettingsChoiceRow(icon: .theme, title: t("Uygulama simgesi"), value: iconDark ? t("Siyah") : t("Beyaz")) { sheet = .appIcon }
+            SettingsDivider()
+            SettingsChoiceRow(icon: .pin, title: t("Harita görünümü"),
+                              value: (mapDark ? t("Koyu") : t("Açık")) + (mapPlain ? " · " + t("Sade") : "")) { sheet = .map }
+            SettingsDivider()
+            SettingsToggleRow(icon: .motionOff, title: t("Animasyonu azalt"), subtitle: t("Arayüz hareketlerini ve geçiş efektlerini sakinleştirir"), isOn: $reduceAnimations)
+            SettingsDivider()
+            SettingsToggleRow(icon: .blurOff, title: t("Dinamik bulanıklığı azalt"), subtitle: t("Bulanıklık efektleri yerine sabit koyu yüzeyler kullanır"), isOn: $reduceDynamicBlur)
+        }
+        SettingsSectionHeader(title: t("BAĞLANTILAR"))
+        SettingsGlassGroup {
+            SettingsActionRow(icon: .calendar, title: t("Takvim bağlantısı"), subtitle: t("Google / iCloud takvimlerini göster ve planlarını gönder")) {
+                showCalendar = true
+            }
+            SettingsDivider()
+            // Where songs open (music discovery's up-swipe, the music search's default).
+            SettingsChoiceRow(icon: .music, title: t("Müzik uygulaması"), value: musicSource.label) { sheet = .music }
+            SettingsDivider()
+            // Apple Music hesabı: "Sana özel" in Müzik keşfi, a right swipe also adds to the library.
+            let appleMusic = AppleMusicAccount.shared
+            SettingsActionRow(icon: .music, title: t("Apple Music hesabı"),
+                              subtitle: appleMusic.isConnected ? t("Bağlı · dokun, bağlantıyı kes") : t("Bağla · sana özel öneriler, REAL çalma listesi")) {
+                if appleMusic.isConnected { appleMusic.disconnect() } else { appleMusic.connect() }
+            }
+        }
+        SettingsSectionHeader(title: t("ÖNERİLER VE PUANLAR"))
+        SettingsGlassGroup {
+            // Puanlarım: film / dizi / bölüm puanlarını siler (şimdilik test için).
+            // Öneriler (müzik, film / dizi, oyun): geçilenler yeniden gelebilir; kayıtlı listeler ve İzledim / Oynadım kalır.
+            SettingsActionRow(icon: .music, title: t("Önerileri sıfırla"), subtitle: t("Müzik, film, dizi ve oyunda geçtiklerin yeniden gelebilir; listelerin silinmez")) {
+                sheet = .suggestionReset
+            }
+            SettingsDivider()
+            SettingsActionRow(icon: .delete, title: t("Puanlarımı sıfırla"), subtitle: t("Film, dizi ve bölüm puanlarının hepsini siler")) {
+                sheet = .ratingReset
             }
         }
         SettingsSectionHeader(title: t("GİZLİLİK"))
@@ -489,6 +488,17 @@ struct SettingsScreen: View {
     @ViewBuilder
     private var developerPage: some View {
         SettingsSectionHeader(title: t("GELİŞTİRİCİ ARAÇLARI"))
+        SettingsSectionHeader(title: t("BİLDİRİM TESTİ"))
+        SettingsGlassGroup {
+            // The status pill is one line: the card plan and the last refusal go in the subtitle.
+            let testLines = notificationTest?.components(separatedBy: "\n") ?? []
+            SettingsStatusRow(icon: .bell, title: t("Bildirim testi"), status: testLines.first ?? "", statusColor: Color(argb: 0xFF91B9FF),
+                              subtitle: testLines.count > 1 ? testLines.dropFirst().joined(separator: "\n")
+                                                            : t("10 saniye sonra deneme bildirimi gelir ve bekleyen bildirim sayısı görünür."),
+                              actionLabel: t("Dene")) {
+                Task { notificationTest = await NotificationScheduler.sendTest() }
+            }
+        }
         SettingsSectionHeader(title: t("VARINCA / AYRILINCA TESTİ"))
         SettingsGlassGroup {
             SettingsActionRow(icon: .pin, title: t("Varınca ekranını dene"), subtitle: t("Konumla hatırlatma kurulu kart, yoksa listeli kart, yoksa örnek liste")) {
@@ -828,6 +838,7 @@ struct AccountManageSheet: View {
     @State private var openConflicts: Set<String> = []
     @State private var bulkConfirm = false
     @State private var localSize = "…"
+    @State private var cloudData = CloudAccountData()
     @Environment(ReminderStore.self) private var store
     @Environment(LifeStore.self) private var life
 
@@ -1058,11 +1069,13 @@ struct AccountManageSheet: View {
             }
             .padding(16)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.05)))
+            CloudUsagePanel(data: cloudData)
+            CloudDataPanel(data: cloudData)
             Button(action: onRestore) {
                 Text(t("Kartları hesaptan yeniden yükle")).font(RealFont.inter(15)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white.opacity(0.08)))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).disabled(cloud.paused)
             Button(action: onSignOut) {
                 Text(t("Hesaptan çık")).font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFFFB4AB))
                     .frame(maxWidth: .infinity, minHeight: 48).background(Capsule().fill(.white.opacity(0.05)))

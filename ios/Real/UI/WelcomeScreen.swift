@@ -264,9 +264,9 @@ struct WelcomeScreen: View {
         } catch {
             authError = t("Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin.")
         }
-        // Then the name, prefilled with the account's first name; confirm() moves on to the greeting.
+        // The account's first name is enough for the greeting; only an account without a name is asked here.
         name = account.firstName ?? ""
-        withAnimation(.easeOut(duration: 0.25)) { nameStep = .account }
+        if name.isEmpty { withAnimation(.easeOut(duration: 0.25)) { nameStep = .account } } else { confirm() }
     }
 
     /// WelcomeAuthButton in its disabled state (sign-in not available in this build, or Apple for now).

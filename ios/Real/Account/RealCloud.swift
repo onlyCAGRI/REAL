@@ -20,6 +20,7 @@ enum RealBackend {
         AppUpdateGate.observe(status: status)
         guard (200..<300).contains(status) else {
             let code = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+            await ProAccess.shared.serverRefused(path: path, status: status, code: code)
             throw Failure(status: status, code: code)
         }
         return data

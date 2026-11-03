@@ -229,12 +229,18 @@ final class RealAuth {
     private var nameRevision = 0
     /// Hesap menüsü → Adın: opens the same window again.
     var nameEditRequested = false
-    /// Google gives the full name ("Ad Soyad"); once per account REAL asks which name others should see.
+    /// Google gives the full name ("Ad Soyad"); a new account is asked once which name others should see. An account
+    /// signing in again (a new phone, a reinstall) already chose, so only a missing name is asked.
     var needsNameChoice: Bool {
         _ = nameRevision
         guard let uid = account?.uid else { return false }
         if nameEditRequested { return true }
-        return !UserDefaults.standard.bool(forKey: "profile_name_confirmed_\(uid)")
+        guard !UserDefaults.standard.bool(forKey: "profile_name_confirmed_\(uid)") else { return false }
+        guard let user = Auth.auth().currentUser else { return false }
+        if user.displayName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true { return true }
+        guard user.providerData.contains(where: { $0.providerID == "google.com" }),
+              let created = user.metadata.creationDate, let last = user.metadata.lastSignInDate else { return false }
+        return abs(last.timeIntervalSince(created)) < 300
     }
     func confirmName() {
         guard let uid = account?.uid else { return }
@@ -272,7 +278,10 @@ final class RealAuth {
             throw AppCheckUnavailable(reason: (error as NSError).localizedDescription)
         }
         // X-REAL-Client: the server keeps each person's app version and may ask an old one to update.
-        return ["Authorization": "Bearer \(idToken)", "X-Firebase-AppCheck": appCheck.token, "X-REAL-Client": AppUpdateGate.clientTag]
+        var headers = ["Authorization": "Bearer \(idToken)", "X-Firebase-AppCheck": appCheck.token, "X-REAL-Client": AppUpdateGate.clientTag]
+        // A restarted cloud backup answers only the device that was approved for it (real_cloud_backup_epochs).
+        if let epoch = UserDefaults.standard.string(forKey: "real_cloud_epoch_\(user.uid)") { headers["X-REAL-Cloud-Epoch"] = epoch }
+        return headers
     }
 
     private static func topViewController() -> UIViewController? {

@@ -390,7 +390,7 @@ struct PlannerGoalScreen: View {
                 HStack {
                     Text("Goals (\(total))").font(RealType.editorialItem).kerning(-1).foregroundStyle(.white)
                     Spacer()
-                    Button { composing = true } label: {
+                    Button(action: newGoal) {
                         RealSymbol("plus", size: 17.2).foregroundStyle(.white)
                             .frame(width: 40, height: 40).overlay(Circle().strokeBorder(Self.faint, lineWidth: 1))
                     }
@@ -410,7 +410,7 @@ struct PlannerGoalScreen: View {
                     .opacity(intro ? 1 : 0)
                     .animation(.easeOut(duration: 0.38).delay(0.52 + Double(min(index, 6)) * 0.055), value: intro)
             }
-            Button { composing = true } label: {
+            Button(action: newGoal) {
                 HStack(spacing: 10) {
                     RealSymbol("plus", size: 16.1)
                     Text("Add goal").font(RealFont.inter(14))
@@ -579,6 +579,11 @@ struct PlannerGoalScreen: View {
                 dragId = nil
                 dragOrder = nil
             }
+    }
+
+    /// One active goal per category is free; more is Pro (the same rule as Android's PlannerScreen).
+    private func newGoal() {
+        if goals.contains(where: { !$0.done }) { ProAccess.shared.perform(.plannerGoals) { composing = true } } else { composing = true }
     }
 
     private var goalComposer: some View {

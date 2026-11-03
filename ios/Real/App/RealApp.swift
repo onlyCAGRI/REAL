@@ -63,6 +63,7 @@ struct RealApp: App {
                 .background(Color.black)
                 .overlay { RequiredUpdateHost(uid: RealAuth.shared.account?.uid) }
                 .overlay { RealToastHost() }
+                .onChange(of: RealAuth.shared.account?.uid) { _, _ in ProAccess.shared.clear() }
                 .onOpenURL { url in
                     if AppleMusicAccount.shared.handle(url) { return }
                     if RealDeepLinks.shared.handle(url) { return }

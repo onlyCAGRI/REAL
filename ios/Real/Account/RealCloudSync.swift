@@ -111,6 +111,17 @@ final class RealCloudSync {
     /// Starts over from the beginning of the feed (e.g. "Kartları hesaptan yeniden yükle").
     func reset() { if let url = stateURL { try? FileManager.default.removeItem(at: url) } }
 
+    /// Set before cloud data is erased and while this device waits for a restarted backup: nothing syncs (SyncLocal.pauseCloud).
+    var paused: Bool {
+        get { _ = pausedRevision; return RealAuth.shared.account.map { UserDefaults.standard.bool(forKey: "real_cloud_paused_\($0.uid)") } ?? false }
+        set {
+            guard let uid = RealAuth.shared.account?.uid else { return }
+            UserDefaults.standard.set(newValue, forKey: "real_cloud_paused_\(uid)")
+            pausedRevision += 1
+        }
+    }
+    private var pausedRevision = 0
+
     // MARK: Run
 
     /// Waits for a run already in progress, then runs once more (before sharing, so the server has the latest copy).
@@ -120,7 +131,7 @@ final class RealCloudSync {
     }
 
     func run(_ store: ReminderStore, _ life: LifeStore) async {
-        guard !running, RealAuth.shared.account != nil else { return }
+        guard !running, RealAuth.shared.account != nil, !paused else { return }
         running = true
         defer { running = false }
         var st = loadState()

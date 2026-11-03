@@ -80,7 +80,7 @@ struct CategoryEditorSheet: View {
                     }
                     if !memberMode { section(t("RENK")) {
                         CardColorsPanel(title: nil, start: $start, end: $end, blend: $blend, darkText: $dark,
-                                        allowNoneStart: isBuiltIn, showDarkText: false)
+                                        allowNoneStart: isBuiltIn, showDarkText: false, category: true)
                     } }
                     if !isBuiltIn && !memberMode {
                         section(t("İKON")) {
@@ -466,12 +466,19 @@ struct CardColorsPanel: View {
     var allowNoneStart = true
     var showDarkText = false
     var isStarred = false
+    /// A category's first colour is free in full; a card's is the 8 free ones. A second colour is Pro in both.
+    var category = false
+
+    private var feature: RealFeature { category ? .categoryGradients : .cardColors }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             if let title { Text(t(title)).font(RealFont.inter(13, .semibold)).foregroundStyle(Color(argb: 0xFFF0F0F4)) }
-            ColorChoiceRow(label: t("Ana renk"), selected: $start, allowNone: allowNoneStart)
-            ColorChoiceRow(label: t("Geçiş rengi"), selected: $end, allowNone: true)
+            let unlocked = ProAccess.shared.unlocked(feature)
+            ColorChoiceRow(label: t("Ana renk"), selected: $start, allowNone: allowNoneStart, feature: feature,
+                           locked: { !category && !unlocked && !freeCardColors.contains($0) })
+            ColorChoiceRow(label: unlocked ? t("Geçiş rengi") : t("Geçiş rengi") + " · Pro", selected: $end, allowNone: true, feature: feature,
+                           locked: { _ in !unlocked })
             if let s = paletteColor(start), let e = paletteColor(end) {
                 HStack(spacing: 0) {
                     Text(t("Geçiş")).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFFB7B7C0)).frame(width: 96, alignment: .leading)
@@ -510,6 +517,11 @@ private struct ColorChoiceRow: View {
     let label: String
     @Binding var selected: Int?
     var allowNone = true
+    let feature: RealFeature
+    let locked: (Int) -> Bool
+
+    /// The ones this account can use first, so the locked ones are not in the way.
+    private var ordered: [ReminderColorChoice] { pickerColorChoices.filter { !locked($0.index) } + pickerColorChoices.filter { locked($0.index) } }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -526,10 +538,14 @@ private struct ColorChoiceRow: View {
                         }
                         .accessibilityLabel(t("{0}: Renk yok (Varsayılan)", label))
                     }
-                    ForEach(pickerColorChoices) { choice in
+                    ForEach(ordered) { choice in
                         let on = selected == choice.index
-                        Button { selected = choice.index } label: {
+                        let closed = locked(choice.index)
+                        Button {
+                            if closed { let index = choice.index; ProAccess.shared.perform(feature) { selected = index } } else { selected = choice.index }
+                        } label: {
                             Circle().fill(choice.color).frame(width: 31, height: 31)
+                                .opacity(closed && !on ? 0.32 : 1)
                                 .overlay(Circle().strokeBorder(on ? .white : .white.opacity(0.16), lineWidth: on ? 2.2 : 0.8))
                         }
                         .accessibilityLabel("\(label): \(t(choice.label))")

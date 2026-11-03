@@ -59,6 +59,8 @@ struct ReminderDetailView: View {
     @State private var showSkyPoster = false
     @State private var showLinkEditor = false
     @State private var editingStackCard: CardStackCard?
+    /// Tapped a stack while reading: its text is typed right on the cards, "Bitti" (or leaving) stores it.
+    @State private var inlineStack: CardStackBlock?
     @State private var showMoodPicker = false
     @State private var previewPhoto: ReminderAttachment?
     @FocusState private var titleFocused: Bool
@@ -135,15 +137,20 @@ struct ReminderDetailView: View {
                             .foregroundStyle(Color(argb: 0xFF8C8C95))
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .padding(.top, heroKey == "text" && order.count == 1 ? 0 : 8).padding(.trailing, 6)
+                        if editing, !r.isCompleted, r.alertAt != nil || r.plannedDateEpochDay != nil {
+                            scheduleChips(r).padding(.top, 12)
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
-                    .padding(.bottom, editing ? (secondaryExpanded ? 520 : 300) : 130)
+                    .padding(.bottom, editing ? (secondaryExpanded ? 520 : 300) : (inlineStack != nil ? 300 : 130))
                     .background {
                         // isCardDetailBackgroundTap: while editing, a tap on empty space (not on a block, which
                         // takes its own taps first) saves and closes the editor quietly, without Kaydet's sweep.
                         if editing {
                             Color.clear.contentShape(Rectangle()).onTapGesture { saveFromBackgroundTap() }
+                        } else if inlineStack != nil {
+                            Color.clear.contentShape(Rectangle()).onTapGesture { finishInlineStack() }
                         }
                     }
                     .animation(.spring(duration: 0.3), value: blockOrder(r))
@@ -197,7 +204,7 @@ struct ReminderDetailView: View {
             LinkEditor(initial: draft?.referenceUrl ?? "") { draft?.referenceUrl = $0 }.presentationDetents([.height(220)])
         }
         .sheet(item: $editingStackCard) { card in
-            CardStackEditor(card: seededStackCard(card), isNew: shown?.cardStack?.cards.contains { $0.id == card.id } != true) { updated in
+            CardStackEditor(card: seededStackCard(card), isNew: (inlineStack ?? shown?.cardStack)?.cards.contains { $0.id == card.id } != true) { updated in
                 updateStack { stack in
                     if let updated {
                         if let i = stack.cards.firstIndex(where: { $0.id == updated.id }) { stack.cards[i] = updated } else { stack.cards.append(updated) }
@@ -275,8 +282,33 @@ struct ReminderDetailView: View {
     }
 
     /// A new stack card starts with the stack's writing settings ("Kart ekle" on Android copies them).
+    private func stackDeck(_ stack: CardStackBlock) -> some View {
+        CardStackDeck(stack: stack, editing: editing, inline: inlineStack != nil,
+                      onEdit: { editingStackCard = $0 },
+                      onAdd: addStackCard,
+                      onChange: { id, change in
+                          updateStack { s in
+                              if let i = s.cards.firstIndex(where: { $0.id == id }) { change(&s.cards[i]) }
+                          }
+                      },
+                      onStartTyping: { if !editing && inlineStack == nil { inlineStack = stored?.cardStack } })
+    }
+
+    /// A new card is an empty one on the deck, ready to type on; one left empty is dropped when stored.
+    private func addStackCard() {
+        let card = seededStackCard(CardStackCard())
+        updateStack { $0.cards.append(card) }
+    }
+
+    private func finishInlineStack() {
+        guard var stack = inlineStack else { return }
+        stack.cards.removeAll(where: \.isBlank)
+        inlineStack = nil
+        store.mutate(reminderId) { $0.cardStack = stack.cards.isEmpty ? nil : stack }
+    }
+
     private func seededStackCard(_ card: CardStackCard) -> CardStackCard {
-        guard let stack = shown?.cardStack, !stack.cards.contains(where: { $0.id == card.id }), let format = stack.cards.first?.bodyFormat else { return card }
+        guard let stack = inlineStack ?? shown?.cardStack, !stack.cards.contains(where: { $0.id == card.id }), let format = stack.cards.first?.bodyFormat else { return card }
         var seeded = card
         seeded.bodyFormat = format
         return seeded
@@ -328,16 +360,16 @@ struct ReminderDetailView: View {
         switch kind {
         case "text": textBlock(r, heroInset: heroInset)
         case "card_stack":
-            if let stack = r.cardStack {
+            if let stack = inlineStack ?? r.cardStack {
                 if heroInset > 0 {
                     // As the card's cover the stack sits below the status bar on a full-bleed dark ground.
-                    CardStackDeck(stack: stack, editing: editing, onEdit: { editingStackCard = $0 }, onAdd: { editingStackCard = CardStackCard() })
+                    stackDeck(stack)
                         .padding(.horizontal, 16).padding(.top, heroInset + 8).padding(.bottom, 16)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                         .background(LinearGradient(colors: [Color(argb: 0xFF16161A), Color(argb: 0xFF0D0D0F)], startPoint: .top, endPoint: .bottom))
                         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28, style: .continuous))
                 } else {
-                    CardStackDeck(stack: stack, editing: editing, onEdit: { editingStackCard = $0 }, onAdd: { editingStackCard = CardStackCard() })
+                    stackDeck(stack)
                 }
             }
         case "mood": if let mood = r.mood { moodBlock(mood) }
@@ -493,23 +525,16 @@ struct ReminderDetailView: View {
                     .frame(maxWidth: .infinity, alignment: frameAlign)
                     .modifier(DetailTextReveal(shown: !cover || titleShown))
             }
-            let chips = editing && !r.isCompleted && (r.alertAt != nil || r.plannedDateEpochDay != nil)
-            if !compact || chips {
-                // Laid out together, so the block is as tall as whichever needs more.
-                ZStack(alignment: .top) {
-                    if !compact {
-                        statusArea(r, hAlign: hAlign, frameAlign: frameAlign, textAlign: textAlign)
-                            .modifier(DetailTextReveal(shown: !editing))
-                            .animation(reduceMotion ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: editing ? 0.32 : 0.5), value: editing)
-                            .allowsHitTesting(!editing)
-                    }
-                    if chips { scheduleChips(r) }
-                }
+            if !compact {
+                statusArea(r, hAlign: hAlign, frameAlign: frameAlign, textAlign: textAlign)
+                    .modifier(DetailTextReveal(shown: !editing))
+                    .animation(reduceMotion ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: editing ? 0.32 : 0.5), value: editing)
+                    .allowsHitTesting(!editing)
             }
         }
         .padding(.horizontal, 22)
         .padding(.top, cover ? heroInset + 44 : 25)
-        .padding(.bottom, 25)
+        .padding(.bottom, cover && !alone ? 47 : 25)
         .frame(maxWidth: .infinity,
                minHeight: (cover && alone) ? UIScreen.main.bounds.height * 0.66 : nil,
                alignment: Alignment(horizontal: hAlign, vertical: (cover && alone) ? .center : .top))
@@ -1146,7 +1171,7 @@ struct ReminderDetailView: View {
     /// Tamamla · Düzenle · Share · Sil, or Geri al · … once completed. After Tamamla the Geri al set comes in as the
     /// mirrored sweep passes (from the left); after Kaydet as Kaydet's sweep passes (from the right).
     private func mainActions(_ r: ReminderItem, done: Bool) -> some View {
-        let visible = !editing && r.isCompleted == done && dockShown
+        let visible = !editing && inlineStack == nil && r.isCompleted == done && dockShown
         let fromLeft = done && completeSweepStart.map { Date().timeIntervalSince($0) < DetailDockMotion.duration } == true
         let start = fromLeft ? completeSweepStart : saveSweepStart
         func delay(_ i: Int) -> Double { DetailDockMotion.enterDelay(i, of: 4, sweepStart: start, fromLeft: fromLeft) }
@@ -1202,6 +1227,8 @@ struct ReminderDetailView: View {
                 }
                 .detailDockItem(visible: editing && dockShown, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
             }
+            DetailAction(label: t("Bitti"), symbol: "checkmark", color: Color(argb: 0xFF91B9FF)) { finishInlineStack() }
+                .detailDockItem(visible: inlineStack != nil && dockShown, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
             // Tamamla · … and Geri al · …: two sets on top of each other, so Tamamla swaps the whole dock like Kaydet.
             mainActions(r, done: false)
             mainActions(r, done: true)
@@ -1209,7 +1236,7 @@ struct ReminderDetailView: View {
         .padding(.horizontal, 6)
         .background {
             ZStack {
-                DetailDockDrops(slots: editing ? 2 : 4, sweepStart: saveSweepStart, completeStart: completeSweepStart)
+                DetailDockDrops(slots: inlineStack != nil ? 1 : editing ? 2 : 4, sweepStart: saveSweepStart, completeStart: completeSweepStart)
                 DetailDockSweep(start: saveSweepStart)
                 DetailDockSweep(start: completeSweepStart, fromLeft: true)
             }
@@ -1227,6 +1254,7 @@ struct ReminderDetailView: View {
             try? await Task.sleep(for: .milliseconds(160))
             withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.34)) { dockFormed = true }
         }
+        .onDisappear { finishInlineStack() }
     }
 
     /// DeleteReminderPrompt: plain delete, or "only this / this and future" for a repeating card.
@@ -1321,7 +1349,7 @@ struct ReminderDetailView: View {
                         draft?.isChecklist = true
                     }
                     QuickAction(symbol: "rectangle.stack", label: t("Kart Yığını"), active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
-                        editingStackCard = CardStackCard()
+                        addStackCard()
                     }
                     QuickAction(symbol: "mappin", label: t("Konum"), active: d?.location != nil) { withoutAnimation { showLocationGuide = true } }
                     QuickAction(symbol: "waveform", label: t("Ses kaydı"), active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
@@ -1401,6 +1429,10 @@ struct ReminderDetailView: View {
         if !d.isChecklist && !d.checklistItems.isEmpty { d.isChecklist = true }
         if d.checklistItems.isEmpty { d.isChecklist = false }
         if let j = d.journal, j.text.trimmingCharacters(in: .whitespaces).isEmpty, j.mood == nil { d.journal = nil }
+        if var stack = d.cardStack {
+            stack.cards.removeAll(where: \.isBlank)
+            d.cardStack = stack.cards.isEmpty ? nil : stack
+        }
         d.contentBlockOrder = d.resolvedBlockOrder(d.cardContentKeys())
         store.update(d)
         draft = nil
@@ -1476,10 +1508,17 @@ struct ReminderDetailView: View {
     }
 
     private func updateStack(_ change: (inout CardStackBlock) -> Void) {
-        var stack = shown?.cardStack ?? CardStackBlock()
+        var stack = inlineStack ?? shown?.cardStack ?? CardStackBlock()
         change(&stack)
         let value: CardStackBlock? = stack.cards.isEmpty ? nil : stack
-        if editing { draft?.cardStack = value } else { store.mutate(reminderId) { $0.cardStack = value } }
+        if editing {
+            draft?.cardStack = value
+        } else if inlineStack != nil, value != nil {
+            inlineStack = value
+        } else {
+            inlineStack = nil
+            store.mutate(reminderId) { $0.cardStack = value }
+        }
     }
 
     /// Completed card: "Nasıl geçti?" card added to the stack and opened for writing.
@@ -1580,12 +1619,30 @@ private struct QuickAction: View {
 }
 
 /// Production card stack deck: active card in front, neighbours peeking above and below; tap a peek to bring it forward.
+private extension CardStackCard {
+    var isBlank: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && imageUri == nil
+    }
+}
+
 struct CardStackDeck: View {
     let stack: CardStackBlock
     var editing = false
+    /// Typing on the cards without Düzenle.
+    var inline = false
     var onEdit: (CardStackCard) -> Void = { _ in }
     var onAdd: () -> Void = {}
+    /// Changes the latest copy of a card: the text editor stores its text and styles one right after the other.
+    var onChange: (String, (inout CardStackCard) -> Void) -> Void = { _, _ in }
+    var onStartTyping: () -> Void = {}
     @State private var active = 0
+    @State private var selection = NSRange(location: 0, length: 0)
+    @State private var pending: Set<BodyMark>?
+    /// The card just added: its text opens with the keyboard.
+    @State private var addedCard: String?
+
+    private var typing: Bool { editing || inline }
     /// Pinch on the front card's photo (Android CardPhotoZoomState): only the pixels move inside the card, never
     /// the card itself, and nothing is saved; it resets when another card comes to the front.
     @State private var photoScale: CGFloat = 1
@@ -1605,7 +1662,7 @@ struct CardStackDeck: View {
             if !cards.isEmpty {
                 card(cards[current], index: current, front: true)
                     .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
-                    .onTapGesture { onEdit(cards[current]) }
+                    .onTapGesture { if !typing { onStartTyping() } }
                     .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
                     .simultaneousGesture(photoPinch, including: cards[current].imageUri != nil ? .all : .subviews)
                     .zIndex(2)
@@ -1617,17 +1674,26 @@ struct CardStackDeck: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if editing {
+            if typing {
                 Button(action: onAdd) {
                     Text(t("+ Kart ekle")).font(RealFont.inter(12, .medium)).foregroundStyle(.white.opacity(0.8))
                         .padding(.horizontal, 14).padding(.vertical, 8).liquidGlass(Capsule(), role: .chrome)
                 }
-                .offset(y: 18)
+                // Inside the card: below it the grid's resize handle would take the tap.
+                .offset(y: -10)
             }
         }
         .padding(.bottom, editing ? 22 : 0)
         .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.28), value: deckHeight)
-        .onChange(of: active) { _, _ in photoScale = 1; photoOffset = .zero; pinchStart = nil }
+        .onChange(of: active) { _, _ in
+            photoScale = 1; photoOffset = .zero; pinchStart = nil
+            selection = NSRange(location: 0, length: 0); pending = nil
+        }
+        .onChange(of: stack.cards.count) { old, new in
+            guard new > old, let last = stack.cards.last else { return }
+            addedCard = last.id
+            withAnimation(.easeInOut(duration: 0.39)) { active = new - 1 }
+        }
     }
 
     private static let peek: CGFloat = 72
@@ -1636,10 +1702,11 @@ struct CardStackDeck: View {
     private var deckHeight: CGFloat {
         let tallest = stack.cards.map { c -> CGFloat in
             if c.imageUri != nil { return 390 }
-            if c.body.isEmpty { return 150 }
+            let room: CGFloat = typing ? 60 : 0
+            if c.body.isEmpty { return 150 + room }
             let lines = c.body.split(separator: "\n", omittingEmptySubsequences: false)
                 .reduce(0) { $0 + max(1, Int((Double($1.count) / 34).rounded(.up))) }
-            return 150 + CGFloat(lines) * c.bodyFormat.size.points * 1.4
+            return 150 + room + CGFloat(lines) * c.bodyFormat.size.points * 1.4
         }.max() ?? 190
         return min(max(tallest, 190), 780)
     }
@@ -1679,14 +1746,40 @@ struct CardStackDeck: View {
                 if stack.cards.count > 1 {
                     Text("\(index + 1)/\(stack.cards.count)").font(RealFont.inter(11)).foregroundStyle(fg.opacity(0.6))
                 }
+                // Colour, picture, writing settings and removing the card stay in the sheet.
+                if front && typing {
+                    Button { onEdit(c) } label: {
+                        Text("Aa").font(RealFont.inter(13, .medium)).foregroundStyle(fg)
+                            .frame(width: 36, height: 28)
+                            .overlay(Capsule().strokeBorder(fg.opacity(0.4), lineWidth: 0.8))
+                            .frame(width: 44, height: 40)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(t("Metin araçları"))
+                }
             }
             Spacer(minLength: 0)
-            if !c.title.isEmpty { Text(c.title).font(RealFont.inter(28)).kerning(-0.6).foregroundStyle(fg).lineLimit(3) }
-            if !c.body.isEmpty {
+            if front && typing {
+                TextField("", text: cardField(c, \.title), prompt: Text(t("Başlık")).foregroundStyle(fg.opacity(0.4)), axis: .vertical)
+                    .font(RealFont.inter(28)).kerning(-0.6).foregroundStyle(fg).tint(fg)
+                    .lineLimit(1...3)
+                ZStack(alignment: .topLeading) {
+                    if c.body.isEmpty {
+                        Text(t("Metin")).font(RealFont.inter(c.bodyFormat.size.points)).foregroundStyle(fg.opacity(0.4)).allowsHitTesting(false)
+                    }
+                    RichBodyEditor(text: cardField(c, \.body), styles: cardField(c, \.bodyStyles), selection: $selection, pending: $pending,
+                                   format: c.bodyFormat, foreground: fg.opacity(0.9), onDark: dark, minHeight: 44,
+                                   autoFocus: inline || addedCard == c.id)
+                        .id(c.id)
+                }
+            } else if !c.title.isEmpty { Text(c.title).font(RealFont.inter(28)).kerning(-0.6).foregroundStyle(fg).lineLimit(3) }
+            if !(front && typing) && !c.body.isEmpty {
                 StyledBodyText(text: c.body, styles: c.bodyStyles, format: c.bodyFormat, foreground: fg.opacity(0.9), onDark: dark, lineLimit: 10)
             }
         }
-        .padding(.horizontal, 24).padding(.vertical, 22)
+        .padding(.horizontal, 24).padding(.top, 22)
+        .padding(.bottom, front && typing ? 46 : 22)
         .frame(maxWidth: .infinity, minHeight: deckHeight, alignment: .topLeading)
         .background {
             ZStack {
@@ -1700,6 +1793,10 @@ struct CardStackDeck: View {
             .clipShape(shape)
         }
         .overlay(shape.strokeBorder(.white.opacity(0.24), lineWidth: 0.9))
+    }
+
+    private func cardField<Value>(_ c: CardStackCard, _ path: WritableKeyPath<CardStackCard, Value>) -> Binding<Value> {
+        Binding(get: { c[keyPath: path] }, set: { value in onChange(c.id) { $0[keyPath: path] = value } })
     }
 
     private func luminance(_ c: Color) -> Double {
