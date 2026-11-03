@@ -54,6 +54,8 @@ struct WelcomeScreen: View {
     @State private var auth = RealAuth.shared
     @State private var authError: String?
     @State private var showEmailAuth = false
+    /// Signed in, the account's cards are coming back: says so instead of leaving the screen idle.
+    @State private var restoring = false
     @State private var sound = WelcomeSound()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -112,6 +114,18 @@ struct WelcomeScreen: View {
         .onAppear(perform: startStory)
         .onDisappear { introTask?.cancel(); sound.fadeOut(0.6) }   // soften out, don't cut
         .onChange(of: scenePhase) { _, newPhase in if newPhase == .background { sound.stop() } }
+        .overlay {
+            if restoring {
+                ZStack {
+                    Color.black.opacity(0.86).ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        ProgressView().tint(.white).controlSize(.large)
+                        Text(t("Kartların getiriliyor…")).font(RealFont.inter(15, .medium)).foregroundStyle(.white.opacity(0.85))
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
         .alert(t("Veri kullanımı"), isPresented: $showDataUse) { Button(t("Tamam"), role: .cancel) {} } message: {
             Text(t("iOS sürümünde notların ve kayıtların yalnızca bu cihazda saklanıyor. AI özellikleri isteğe bağlıdır; kullanmadan önce ayrıca izin istenir."))
         }
@@ -258,6 +272,8 @@ struct WelcomeScreen: View {
 
     /// After Google, Apple or e-posta: the account's cards, categories and moods come back, then the name is asked.
     private func finishAfterAuthentication(_ account: RealAuth.Account) async {
+        withAnimation(.easeOut(duration: 0.2)) { restoring = true }
+        defer { withAnimation(.easeOut(duration: 0.2)) { restoring = false } }
         do {
             RealCloudSync.shared.reset()
             _ = try await RealCloudRestore.run(store: store, life: life)

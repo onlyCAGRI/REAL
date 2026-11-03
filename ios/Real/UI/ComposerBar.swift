@@ -473,7 +473,7 @@ struct ComposerBar: View {
     /// (Saat pushed right), so the bell has no alarm state.
     private var bellButton: some View {
         let on = schedule.alertAt != nil || sendImmediate
-        return Button { sendImmediate.toggle() } label: {
+        return Button { RealTips.shared.gate("composer_bell") { sendImmediate.toggle() } } label: {
             RealSymbol(on ? "bell" : "bell.slash", size: 20)
                 .foregroundStyle(on ? RealColors.accentBlue : Color(argb: 0xFFBABAC3))
                 .frame(width: 40, height: 40)
@@ -501,13 +501,13 @@ struct ComposerBar: View {
                 }
                 .accessibilityLabel(t("Tarihi kaldır"))
             } else {
-                toolButton("calendar", t("Tarih seç"), active: false) { withoutAnimation { showDateSheet = true } }
+                toolButton("calendar", t("Tarih seç"), active: false, tip: "composer_date") { withoutAnimation { showDateSheet = true } }
             }
             let cat = store.category(categoryId)
             toolButton(cat?.icon.symbol ?? "square.grid.2x2", t("Kategori seç"), active: cat != nil,
-                       tint: cat.map { paletteColor($0.accentStart) ?? RealColors.accentBlue }) { withoutAnimation { showCategoryPicker = true } }
+                       tint: cat.map { paletteColor($0.accentStart) ?? RealColors.accentBlue }, tip: "composer_category") { withoutAnimation { showCategoryPicker = true } }
             ZStack(alignment: .topTrailing) {
-                toolButton("plus", t("Fotoğraf ekle"), active: !attachments.isEmpty) { showPhotoPicker = true }
+                toolButton("plus", t("Fotoğraf ekle"), active: !attachments.isEmpty, tip: "composer_add") { showPhotoPicker = true }
                 if !attachments.isEmpty {
                     Text("\(attachments.count)").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 14, height: 14).background(Circle().fill(Color(argb: 0xFF3B82F6))).offset(x: -4, y: 4)
@@ -520,7 +520,7 @@ struct ComposerBar: View {
             // Konum: the card detail's map editor, or a reminder at the place; both are saved with the new card.
             // The green dot: some card is waiting for its place (iOS watches it).
             toolButton("mappin", placeTrigger.map(\.label) ?? location.map { t("Konum: {0}", $0.placeName) } ?? t("Konum ekle"),
-                       active: location != nil || placeTrigger != nil) {
+                       active: location != nil || placeTrigger != nil, tip: "composer_location") {
                 // Straight to the map; "Her zaman" is asked only when a place reminder is set there.
                 openPlace()
             }
@@ -531,7 +531,11 @@ struct ComposerBar: View {
             }
     }
 
-    private func toolButton(_ symbol: String, _ label: String, active: Bool, tint: Color? = nil, action: @escaping () -> Void) -> some View {
+    private func toolButton(_ symbol: String, _ label: String, active: Bool, tint: Color? = nil, tip: String? = nil, action: @escaping () -> Void) -> some View {
+        toolButtonBody(symbol, label, active: active, tint: tint, action: RealTips.gated(tip, action)).realTipAnchor(tip)
+    }
+
+    private func toolButtonBody(_ symbol: String, _ label: String, active: Bool, tint: Color?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             RealSymbol(symbol, size: 20)
                 .foregroundStyle(tint ?? (active ? RealColors.accentBlue : Color(argb: 0xFFBABAC3)))
@@ -952,7 +956,7 @@ extension ComposerBar {
                             categoryRows
                             fsDivider
                             fsRow("mappin", t("Konum"), placeTrigger.map(\.label) ?? location?.placeName,
-                                  active: location != nil || placeTrigger != nil) { openPlace() }
+                                  active: location != nil || placeTrigger != nil, tip: "composer_location") { openPlace() }
                         }
                         fsBar
                     }
@@ -1001,7 +1005,7 @@ extension ComposerBar {
                     fsRecorder.start()
                 }
             }
-            fsBarItem("play.rectangle", t("Medya"), t("Medya"), active: mediaCount > 0) {
+            fsBarItem("play.rectangle", t("Medya"), t("Medya"), active: mediaCount > 0, tip: "detail_media") {
                 focus = nil
                 fsPage = .media
             }
@@ -1011,8 +1015,9 @@ extension ComposerBar {
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.055)))
     }
 
-    private func fsBarItem(_ symbol: String, _ label: String, _ description: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { fsBarLabel(symbol, label, active: active) }
+    private func fsBarItem(_ symbol: String, _ label: String, _ description: String, active: Bool, tip: String? = nil, action: @escaping () -> Void) -> some View {
+        Button(action: RealTips.gated(tip, action)) { fsBarLabel(symbol, label, active: active) }
+            .realTipAnchor(tip)
             .buttonStyle(.plain)
             .accessibilityLabel(description)
     }
@@ -1028,7 +1033,7 @@ extension ComposerBar {
     }
 
     @ViewBuilder private var dateRows: some View {
-        fsRow("calendar", t("Tarih"), schedule.isEmpty ? nil : schedule.summary, active: !schedule.isEmpty) { toggleRow("date") }
+        fsRow("calendar", t("Tarih"), schedule.isEmpty ? nil : schedule.summary, active: !schedule.isEmpty, tip: "composer_date") { toggleRow("date") }
         if fsOpenRow == "date" {
             fsChips {
                 fsChip(t("Bugün"), on: isDay(0)) { applySuggestion(.today) }
@@ -1083,7 +1088,7 @@ extension ComposerBar {
     @ViewBuilder private var categoryRows: some View {
         let cat = store.category(categoryId)
         fsRow("square.grid.2x2", t("Kategori"), cat?.name, dot: cat.flatMap { paletteColor($0.accentStart) },
-              active: cat != nil) { toggleRow("category") }
+              active: cat != nil, tip: "composer_category") { toggleRow("category") }
         if fsOpenRow == "category" {
             fsChips {
                 fsChip(t("Yok"), on: categoryId == nil) { categoryId = nil; fsOpenRow = nil }
@@ -1258,8 +1263,9 @@ extension ComposerBar {
         .contentShape(Rectangle())
     }
 
-    private func fsRow(_ symbol: String, _ label: String, _ value: String?, dot: Color? = nil, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { fsRowLabel(symbol, label, value, dot: dot, active: active) }
+    private func fsRow(_ symbol: String, _ label: String, _ value: String?, dot: Color? = nil, active: Bool, tip: String? = nil, action: @escaping () -> Void) -> some View {
+        Button(action: RealTips.gated(tip, action)) { fsRowLabel(symbol, label, value, dot: dot, active: active) }
+            .realTipAnchor(tip)
             .buttonStyle(.plain)
             .disabled(fsRecorder.recording)
     }

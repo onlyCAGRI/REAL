@@ -378,7 +378,11 @@ struct SettingsScreen: View {
             SettingsChoiceRow(icon: .calendar, title: t("Ana ekranda takvim"),
                               value: calendarHomeDays > 0 ? t("Önümüzdeki {0} gün", calendarHomeDays) : t("Kapalı")) { sheet = .calendar }
             SettingsDivider()
-            SettingsChoiceRow(icon: .cat, title: "Vi", value: petMode == "kapali" ? t("Kapalı") : t("Açık")) { sheet = .vi }
+            if RealPet.available {
+                SettingsChoiceRow(icon: .cat, title: "Vi", value: petMode == "kapali" ? t("Kapalı") : t("Açık")) { sheet = .vi }
+            } else {
+                SettingsToggleRow(icon: .cat, title: "Vi", subtitle: t("Geçici olarak devre dışı bırakıldı"), isOn: .constant(false), enabled: false)
+            }
         }
         SettingsSectionHeader(title: t("DİL VE GÖRÜNÜM"))
         SettingsGlassGroup {
@@ -493,6 +497,19 @@ struct SettingsScreen: View {
     @ViewBuilder
     private var developerPage: some View {
         SettingsSectionHeader(title: t("GELİŞTİRİCİ ARAÇLARI"))
+        SettingsGlassGroup {
+            SettingsToggleRow(icon: .settings, title: t("Eğitim ipuçları hep açık"), subtitle: t("Geliştirirken her dokunuşta ipucu çıkar; kapalıyken her ipucu bir kez"),
+                              isOn: Binding(get: { RealTips.shared.alwaysOn }, set: { RealTips.shared.setAlwaysOn($0) }))
+            SettingsDivider()
+            SettingsActionRow(icon: .settings, title: t("Eğitimi sıfırla"), subtitle: t("Görülen ipuçları yeniden birer kez çıkar")) {
+                RealTips.shared.resetSeen()
+                RealToast.shared.show(t("Eğitim sıfırlandı"))
+            }
+            SettingsDivider()
+            SettingsActionRow(icon: .settings, title: t("İpucunu dene"), subtitle: t("Örnek eğitim ipucunu gösterir")) {
+                RealTips.shared.show("test")
+            }
+        }
         SettingsSectionHeader(title: t("BİLDİRİM TESTİ"))
         SettingsGlassGroup {
             // The status pill is one line: the card plan and the last refusal go in the subtitle.

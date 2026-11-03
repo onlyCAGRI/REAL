@@ -1192,11 +1192,12 @@ struct ReminderDetailView: View {
             DetailAction(label: t("Düzenle"), symbol: "pencil", enabled: !deleting) {
                 dockCollapsed = false   // every edit starts with the dock raised
                 draft = r
+                RealTips.shared.show("detail_edit_dock")
                 categorySelection = r.customCategoryId
                 checklistOpen = !r.checklistItems.isEmpty
             }
             .detailDockItem(visible: visible, enterDelay: delay(1), reduceMotion: reduceMotion)
-            Button { showCardShare = true } label: {
+            Button { RealTips.shared.gate("detail_share") { showCardShare = true } } label: {
                 VStack(spacing: 1) {
                     RealSymbol("square.and.arrow.up", size: 20.7)
                     Text("Share").font(RealFont.inter(10))
@@ -1348,15 +1349,16 @@ struct ReminderDetailView: View {
                         checklistOpen = true
                         draft?.isChecklist = true
                     }
-                    QuickAction(symbol: "rectangle.stack", label: t("Kart Yığını"), active: d?.cardStack != nil, count: d?.cardStack?.cards.count) {
+                    QuickAction(symbol: "rectangle.stack", label: t("Kart Yığını"), active: d?.cardStack != nil, count: d?.cardStack?.cards.count, tip: "detail_stack") {
                         addStackCard()
+                        RealTips.shared.show("detail_stack_use")
                     }
-                    QuickAction(symbol: "mappin", label: t("Konum"), active: d?.location != nil) { withoutAnimation { showLocationGuide = true } }
+                    QuickAction(symbol: "mappin", label: t("Konum"), active: d?.location != nil, tip: "detail_location") { withoutAnimation { showLocationGuide = true } }
                     QuickAction(symbol: "waveform", label: t("Ses kaydı"), active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
                                 count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
                     let mediaTotal = (d?.musicBlocks.count ?? 0) + (d?.mediaBlocks.count ?? 0) + (d?.gameBlocks.count ?? 0)
                     QuickAction(symbol: "music.note", label: t("Medya"), active: mediaTotal > 0,
-                                count: mediaTotal > 0 ? mediaTotal : nil) { showMusicSearch = true }
+                                count: mediaTotal > 0 ? mediaTotal : nil, tip: "detail_media") { showMusicSearch = true }
                     QuickAction(symbol: "doc", label: t("Dosya ekle"), active: false,
                                 count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
                     QuickAction(symbol: "face.smiling", label: t("Mood"), active: d?.mood != nil) { showMoodPicker = true }
@@ -1600,10 +1602,13 @@ private struct QuickAction: View {
     let label: String
     var active = false
     var count: Int? = nil
+    var tip: String? = nil
     let action: () -> Void
 
-    var body: some View {
-        Button(action: action) {
+    var body: some View { content.realTipAnchor(tip) }
+
+    private var content: some View {
+        Button(action: RealTips.gated(tip, action)) {
             RealSymbol(symbol, size: 20)
                 .foregroundStyle(active ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFBABAC3))
                 .frame(width: 40, height: 40)

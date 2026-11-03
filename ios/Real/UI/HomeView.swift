@@ -70,7 +70,7 @@ struct RootView: View {
             }
         }
         .overlay {
-            if !startupShown && !showWelcome { RealPetLayer().ignoresSafeArea() }
+            if RealPet.available && !startupShown && !showWelcome { RealPetLayer().ignoresSafeArea() }
         }
         .onChange(of: path, initial: true) { _, now in RealPet.shared.setHome(now.isEmpty) }
         .onChange(of: scenePhase) { _, now in RealPet.shared.scene(active: now == .active) }

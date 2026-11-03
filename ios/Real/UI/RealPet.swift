@@ -9,6 +9,8 @@ import UIKit
 final class RealPet {
     static let shared = RealPet()
     static let modeKey = "real_pet_mode"
+    /// Off on iOS until its touch reactions match Android: no cat, and Settings cannot turn it on.
+    static let available = false
 
     /// Envelope of the sprite, like Android's 114dp petSize.
     static let size: CGFloat = 114
@@ -43,7 +45,7 @@ final class RealPet {
     @ObservationIgnored private var scriptId = 0
     @ObservationIgnored private var lastMicVisit = Date.distantPast
 
-    private var enabled: Bool { UserDefaults.standard.string(forKey: Self.modeKey) != "kapali" }
+    private var enabled: Bool { Self.available && UserDefaults.standard.string(forKey: Self.modeKey) != "kapali" }
     private var onScreen: Bool { frame != nil }
     private var reduceMotion: Bool { UIAccessibility.isReduceMotionEnabled }
     private var ground: CGFloat { screen.height - 30 - Self.size }
@@ -620,10 +622,12 @@ extension View {
     /// Reports this view's place on screen as a spot the cat can sit on.
     func realPetPerch(_ id: String) -> some View {
         background {
-            GeometryReader { geo in
-                Color.clear
-                    .onChange(of: geo.frame(in: .global), initial: true) { _, frame in RealPet.shared.perches[id] = frame }
-                    .onDisappear { RealPet.shared.perches[id] = nil }
+            if RealPet.available {
+                GeometryReader { geo in
+                    Color.clear
+                        .onChange(of: geo.frame(in: .global), initial: true) { _, frame in RealPet.shared.perches[id] = frame }
+                        .onDisappear { RealPet.shared.perches[id] = nil }
+                }
             }
         }
     }
