@@ -20,6 +20,9 @@ struct ReminderAttachment: Codable, Identifiable, Hashable {
     /// Text snippet origin (Android SnippetSource): "WHATSAPP_TEXT", "EMAIL_TEXT", "PLAIN_TEXT". Kept so an edit here
     /// never drops what Android set.
     var source: String? = nil
+    var photoScale: Double? = nil
+    var photoX: Double? = nil
+    var photoY: Double? = nil
 }
 
 enum JournalMood: String, Codable, CaseIterable, Identifiable {
@@ -191,6 +194,24 @@ struct CardPerson: Codable, Hashable {
     var name: String
     var uid: String? = nil
     var pictureVersion: Int64? = nil
+}
+
+extension CardPerson {
+    enum CodingKeys: String, CodingKey { case name, personUid, uid, pictureVersion }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        uid = (try c.decodeIfPresent(String.self, forKey: .personUid)) ?? (try c.decodeIfPresent(String.self, forKey: .uid))
+        pictureVersion = try c.decodeIfPresent(Int64.self, forKey: .pictureVersion)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(name, forKey: .name)
+        try c.encodeIfPresent(uid, forKey: .personUid)
+        try c.encodeIfPresent(pictureVersion, forKey: .pictureVersion)
+    }
 }
 
 /// The REAL card. Field names and semantics mirror ReminderItem.kt.

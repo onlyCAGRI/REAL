@@ -32,7 +32,7 @@ struct RootView: View {
                     switch route {
                     case .category(let c): CategoryScreen(builtIn: c, customId: nil, path: $path).zoomDestination("cat-builtin:\(c.rawValue)", in: nav)
                     case .customCategory(let id): CategoryScreen(builtIn: nil, customId: id, path: $path).zoomDestination("cat-custom:\(id)", in: nav)
-                    case .detail(let id): ReminderDetailView(reminderId: id).zoomDestination("card-\(id)", in: nav)
+                    case .detail(let id): ReminderDetailView(reminderId: id, fromHome: path.count == 1).zoomDestination("card-\(id)", in: nav)
                     case .planner: PlannerScreen(path: $path)
                     case .goal(let id): PlannerGoalScreen(categoryId: id, path: $path).zoomDestination("goal-\(id)", in: nav)
                     case .module(let name):

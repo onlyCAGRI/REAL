@@ -31,7 +31,8 @@ final class KeyboardWatcher {
 /// Ayarlar → "Sade kartlar" (deneysel): Home cards without the circle; a right swipe completes them (or undoes).
 enum HomeCardStyle {
     static let plainKey = "home_plain_cards"
-    private static let movedKey = "home_plain_cards_moved_on"
+    // A new name forces plain cards on once more; to do it again in a later update, change it.
+    private static let movedKey = "home_plain_cards_moved_on_2"
 
     /// Once per device: everyone moves to plain cards with this update; turning it off later stays off.
     static func moveToPlainOnce() {

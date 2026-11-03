@@ -499,7 +499,7 @@ struct MusicBlockView: View {
         let playing = preview.playingId == block.id
         ZStack {
             Group {
-                if heroInset > 0 && !editing { heroFront(playing: playing) } else { front(playing: playing) }
+                if heroInset > 0 { heroFront(playing: playing) } else { front(playing: playing) }
             }
             .opacity(flipped ? 0 : 1)
             if flipped, let id = spotifyCodeId { back(id) }
@@ -583,7 +583,8 @@ struct MusicBlockView: View {
         return CatalogHeroCover(imageURL: block.artworkUrl.flatMap { URL(string: $0.replacingOccurrences(of: "100x100bb", with: "600x600bb")) },
                                 posterAspect: 1, title: block.title,
                                 subtitle: [block.artist, block.album ?? ""].filter { !$0.isEmpty }.joined(separator: " · "),
-                                placeholderSymbol: "music.note", inset: heroInset) {
+                                placeholderSymbol: "music.note", inset: heroInset,
+                                onRemove: editing ? onRemove : nil) {
             if block.previewUrl != nil {
                 HStack(spacing: 10) {
                     Button { preview.toggle(block) } label: {

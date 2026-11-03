@@ -855,7 +855,6 @@ extension ComposerBar {
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
-                if fsPage == nil && trayCount > 0 { fsTray }
             }
             .background(Color.black.ignoresSafeArea())
             .presentationBackground(.black),
@@ -887,6 +886,15 @@ extension ComposerBar {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(important ? t("Önemli işaretini kaldır") : t("Önemli olarak işaretle"))
+                    Button(action: submit) {
+                        RealSymbol("checkmark", size: 15).foregroundStyle(fsCanSave ? Color.black : Color(argb: 0xFF8E8E93))
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(fsCanSave ? Color.white : Color(argb: 0xFF3A3A3C)))
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!fsCanSave)
+                    .accessibilityLabel(t("Kaydet"))
                 }
             }
             .padding(.leading, 22).padding(.trailing, 10)
@@ -903,10 +911,16 @@ extension ComposerBar {
         if fsPage == .checklist { focus = .fsItem(0) } else { submit() }
     }
 
+    private var fsCanSave: Bool {
+        !stripComposerSlash(text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (!checklistMode || checklistItems.contains { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+    }
+
+    /// Title and note on top, the controls low under the thumb; on a short screen (keyboard up) it all scrolls.
     private var fsMain: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top, spacing: 10) {
+        GeometryReader { geo in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
                     TextField("", text: $text, prompt: Text(t("Aklında ne var?")).foregroundStyle(Color(argb: 0xFF8E8E96)), axis: .vertical)
                         .font(RealFont.inter(30)).foregroundStyle(Color(argb: 0xFFF7F7F8)).tint(Color(argb: 0xFF9AB9FF))
                         .lineLimit(1...5)
@@ -914,111 +928,165 @@ extension ComposerBar {
                         .submitLabel(.done)
                         .onChange(of: text) { _, new in fsTitleChanged(new) }
                         .accessibilityLabel(t("Hatırlatıcı metni"))
-                    // Small blue done key (keyboard enter): only there once something is written.
-                    if !text.trimmingCharacters(in: .whitespaces).isEmpty {
-                        Button(action: submit) {
-                            RealSymbol("checkmark", size: 13).foregroundStyle(.white)
-                                .frame(width: 26, height: 26).background(Circle().fill(Color(argb: 0xFF3A7BFF)))
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 9)
-                        .accessibilityLabel(t("Kaydet"))
-                        .transition(.opacity)
-                    }
-                }
-                .animation(.easeOut(duration: 0.16), value: text.isEmpty)
-                .padding(.leading, 22).padding(.trailing, 20).padding(.top, 12)
+                        .padding(.horizontal, 22).padding(.top, 12)
 
-                TextField("", text: $noteText, prompt: Text(t("Not ekle")).foregroundStyle(Color(argb: 0xFF6E6E78)), axis: .vertical)
-                    .font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFFD9D9E0)).tint(.white)
-                    .lineLimit(3...12)
-                    .focused($focus, equals: .fsNote)
-                    .padding(.horizontal, 22).padding(.top, 8).padding(.bottom, 26)
+                    TextField("", text: $noteText, prompt: Text(t("Not ekle")).foregroundStyle(Color(argb: 0xFF6E6E78)), axis: .vertical)
+                        .font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFFD9D9E0)).tint(.white)
+                        .lineLimit(3...12)
+                        .focused($focus, equals: .fsNote)
+                        .padding(.horizontal, 22).padding(.top, 8).padding(.bottom, 16)
 
-                VStack(spacing: 8) {
-                    dateBlock
-                    categoryBlock
-                    fsBlock {
-                        fsRow("mappin", t("Konum"), placeTrigger.map(\.label) ?? location?.placeName ?? t("Ekle"),
-                              active: location != nil || placeTrigger != nil) { openPlace() }
-                    }
-                    fsBlock {
-                        let filled = checklistItems.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
-                        fsRow("checklist", t("Liste"), checklistMode && filled > 0 ? t("{0} madde", filled) : t("Ekle"),
-                              active: checklistMode && filled > 0) {
-                            if !checklistMode { checklistMode = true; checklistItems = [""] }
-                            fsPage = .checklist
+                    Spacer(minLength: 0)
+
+                    if attachments.count + musicPicks.count + mediaPicks.count + gamePicks.count > 0 { fsTray }
+
+                    VStack(spacing: 8) {
+                        if fsRecorder.recording || fsRecorder.error != nil || !voiceNotes.isEmpty { voiceBlock }
+                        fsBlock {
+                            dateRows
+                            fsDivider
+                            categoryRows
+                            fsDivider
+                            fsRow("mappin", t("Konum"), placeTrigger.map(\.label) ?? location?.placeName,
+                                  active: location != nil || placeTrigger != nil) { openPlace() }
                         }
+                        fsBar
                     }
-                    // Ekler: photos and any file; camera, voice and media sit on their own rows.
-                    fsBlock {
-                        Menu {
-                            Button(t("Fotoğraf")) { showPhotoPicker = true }
-                            Button(t("Dosya")) { showFileImporter = true }
-                        } label: {
-                            fsRowLabel("plus", t("Ekler"), attachments.isEmpty ? t("Ekle") : t("{0} ek", attachments.count), active: !attachments.isEmpty)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    fsBlock { fsRow("camera", t("Kamera"), t("Çek"), active: false) { focus = nil; Task { if await PermissionPrompt.cameraReady() { showCamera = true } } } }
-                    voiceBlock
-                    fsBlock {
-                        let count = musicPicks.count + mediaPicks.count + gamePicks.count
-                        fsRow("music.note", t("Medya"), count == 0 ? t("Şarkı, film, dizi") : t("{0} ek", count), active: count > 0) {
-                            focus = nil
-                            fsPage = .media
-                        }
-                    }
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
                 }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .top)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
-        .scrollDismissesKeyboard(.interactively)
     }
 
-    private var dateBlock: some View {
-        fsBlock {
-            fsRow("calendar", t("Tarih ve saat"), schedule.isEmpty ? t("Yok") : schedule.summary, active: !schedule.isEmpty) { toggleRow("date") }
-            if fsOpenRow == "date" {
-                fsChips {
-                    fsChip(t("Bugün"), on: isDay(0)) { applySuggestion(.today) }
-                    fsChip(t("Yarın"), on: isDay(1)) { applySuggestion(.tomorrow) }
-                    fsChip(t("Seç…")) { fsOpenRow = nil; withoutAnimation { showDateSheet = true } }
-                    if !schedule.isEmpty { fsChip(t("Kaldır")) { fsOpenRow = nil; schedule = ScheduleDraft(); alarm = false } }
+    private var fsDivider: some View {
+        Rectangle().fill(Color.white.opacity(0.09)).frame(height: 0.5).padding(.leading, 50)
+    }
+
+    /// What goes into the card: one tap each, a blue icon once something is in.
+    private var fsBar: some View {
+        let filled = checklistItems.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
+        let mediaCount = musicPicks.count + mediaPicks.count + gamePicks.count
+        return HStack(spacing: 0) {
+            fsBarItem("checklist", checklistMode && filled > 0 ? "\(t("Liste")) \(filled)" : t("Liste"), t("Liste"), active: checklistMode && filled > 0) {
+                if !checklistMode { checklistMode = true; checklistItems = [""] }
+                fsPage = .checklist
+            }
+            .disabled(fsRecorder.recording)
+            Menu {
+                Button(t("Fotoğraf")) { showPhotoPicker = true }
+                Button(t("Dosya")) { showFileImporter = true }
+            } label: {
+                fsBarLabel("plus", t("Dosya"), active: !attachments.isEmpty)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(t("Ekler"))
+            .disabled(fsRecorder.recording)
+            fsBarItem("camera", t("Kamera"), t("Kamera"), active: false) {
+                focus = nil
+                Task { if await PermissionPrompt.cameraReady() { showCamera = true } }
+            }
+            .disabled(fsRecorder.recording)
+            fsBarItem("mic", t("Ses"), fsRecorder.recording ? t("Ses kaydını durdur") : t("Ses kaydı"), active: fsRecorder.recording || !voiceNotes.isEmpty) {
+                if fsRecorder.recording {
+                    if let r = fsRecorder.stop() { voiceNotes.append(r) }
+                } else {
+                    focus = nil
+                    fsRecorder.start()
                 }
-                // A day without a time: a few likely times for that day.
-                if let day = schedule.date, !schedule.hasTime {
-                    let hours = quickHours(day)
-                    if !hours.isEmpty {
-                        fsChips {
-                            ForEach(hours, id: \.self) { h in
-                                fsChip(String(format: "%02d:00", h)) {
-                                    schedule.date = Calendar.real.date(bySettingHour: h, minute: 0, second: 0, of: day)
-                                    schedule.hasTime = true
-                                    fsOpenRow = nil
-                                }
+            }
+            fsBarItem("play.rectangle", t("Medya"), t("Medya"), active: mediaCount > 0) {
+                focus = nil
+                fsPage = .media
+            }
+            .disabled(fsRecorder.recording)
+        }
+        .padding(.horizontal, 4).padding(.vertical, 2)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.055)))
+    }
+
+    private func fsBarItem(_ symbol: String, _ label: String, _ description: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) { fsBarLabel(symbol, label, active: active) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(description)
+    }
+
+    private func fsBarLabel(_ symbol: String, _ label: String, active: Bool) -> some View {
+        VStack(spacing: 4) {
+            RealSymbol(symbol, size: 21).foregroundStyle(active ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFBABAC3)).frame(height: 24)
+            Text(label).font(RealFont.inter(12)).foregroundStyle(active ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFD4D4DA)).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder private var dateRows: some View {
+        fsRow("calendar", t("Tarih"), schedule.isEmpty ? nil : schedule.summary, active: !schedule.isEmpty) { toggleRow("date") }
+        if fsOpenRow == "date" {
+            fsChips {
+                fsChip(t("Bugün"), on: isDay(0)) { applySuggestion(.today) }
+                fsChip(t("Yarın"), on: isDay(1)) { applySuggestion(.tomorrow) }
+                fsChip(t("Seç…")) { fsOpenRow = nil; withoutAnimation { showDateSheet = true } }
+                if !schedule.isEmpty { fsChip(t("Kaldır")) { fsOpenRow = nil; schedule = ScheduleDraft(); alarm = false } }
+            }
+            // A day without a time: a few likely times for that day.
+            if let day = schedule.date, !schedule.hasTime {
+                let hours = quickHours(day)
+                if !hours.isEmpty {
+                    fsChips {
+                        ForEach(hours, id: \.self) { h in
+                            fsChip(String(format: "%02d:00", h)) {
+                                schedule.date = Calendar.real.date(bySettingHour: h, minute: 0, second: 0, of: day)
+                                schedule.hasTime = true
+                                fsOpenRow = nil
                             }
                         }
                     }
                 }
             }
         }
+        // How long belongs to when: only a date with a time has one.
+        if schedule.alertAt != nil {
+            Button { toggleRow("duration") } label: {
+                HStack {
+                    Text(t("Süre")).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFBABAC3))
+                    Spacer()
+                    if let minutes = schedule.durationMinutes {
+                        Text(t("{0} dk", minutes)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF91B9FF))
+                    }
+                }
+                .padding(.leading, 50).padding(.trailing, 14).padding(.top, 2).padding(.bottom, 13)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(fsRecorder.recording)
+            if fsOpenRow == "duration" {
+                fsChips {
+                    ForEach([30, 45, 60, 90, 120, 150, 180], id: \.self) { minutes in
+                        fsChip(t("{0} dk", minutes), on: schedule.durationMinutes == minutes) {
+                            schedule.durationMinutes = schedule.durationMinutes == minutes ? nil : minutes
+                            fsOpenRow = nil
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    private var categoryBlock: some View {
-        fsBlock {
-            let cat = store.category(categoryId)
-            fsRow("square.grid.2x2", t("Kategori"), cat?.name ?? t("Yok"), dot: cat.flatMap { paletteColor($0.accentStart) },
-                  active: cat != nil) { toggleRow("category") }
-            if fsOpenRow == "category" {
-                fsChips {
-                    fsChip(t("Yok"), on: categoryId == nil) { categoryId = nil; fsOpenRow = nil }
-                    ForEach(store.categories) { c in
-                        fsChip(c.name, dot: paletteColor(c.accentStart), on: c.id == categoryId) { categoryId = c.id; fsOpenRow = nil }
-                    }
-                    fsChip(t("Yeni…")) { fsOpenRow = nil; showNewCategory = true }
+    @ViewBuilder private var categoryRows: some View {
+        let cat = store.category(categoryId)
+        fsRow("square.grid.2x2", t("Kategori"), cat?.name, dot: cat.flatMap { paletteColor($0.accentStart) },
+              active: cat != nil) { toggleRow("category") }
+        if fsOpenRow == "category" {
+            fsChips {
+                fsChip(t("Yok"), on: categoryId == nil) { categoryId = nil; fsOpenRow = nil }
+                ForEach(store.categories) { c in
+                    fsChip(c.name, dot: paletteColor(c.accentStart), on: c.id == categoryId) { categoryId = c.id; fsOpenRow = nil }
                 }
+                fsChip(t("Yeni…")) { fsOpenRow = nil; showNewCategory = true }
             }
         }
     }
@@ -1047,13 +1115,10 @@ extension ComposerBar {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(t("Ses kaydını durdur"))
-            } else {
-                fsRow("mic", t("Ses kaydı"), voiceNotes.isEmpty ? t("Kaydet") : t("{0} kayıt", voiceNotes.count),
-                      active: !voiceNotes.isEmpty) { focus = nil; fsRecorder.start() }
             }
             if let error = fsRecorder.error {
                 Text(error).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFE0B5A8))
-                    .padding(.leading, 50).padding(.trailing, 12).padding(.bottom, 10)
+                    .padding(.leading, 14).padding(.trailing, 12).padding(.vertical, 10)
             }
             ForEach(voiceNotes) { r in
                 HStack(spacing: 10) {
@@ -1071,7 +1136,7 @@ extension ComposerBar {
                     .buttonStyle(.plain)
                     .accessibilityLabel(t("Kaldır"))
                 }
-                .padding(.leading, 46).padding(.trailing, 10).padding(.bottom, 8)
+                .padding(.horizontal, 10).padding(.vertical, 4)
             }
         }
     }
@@ -1125,14 +1190,14 @@ extension ComposerBar {
     /// Everything added sits here as square tiles: photos, files, voice notes, songs, films, series and games.
     private var fsTray: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) { trayTiles(size: 58) }
+            HStack(spacing: 8) { trayTiles(size: 58, voice: false) }
                 .padding(.horizontal, 14).padding(.top, 6)
         }
         .padding(.bottom, 10)
     }
 
     /// One tile per thing added, whatever its type; [size] 58 full screen, 36 in the dock.
-    @ViewBuilder fileprivate func trayTiles(size: CGFloat) -> some View {
+    @ViewBuilder fileprivate func trayTiles(size: CGFloat, voice: Bool = true) -> some View {
         let glyph: CGFloat = size > 40 ? 22 : 18
         ForEach(attachments) { a in
             trayTile(size, { AttachmentStorage.remove(a); attachments.removeAll { $0.id == a.id } }) {
@@ -1140,7 +1205,7 @@ extension ComposerBar {
                 else { RealSymbol("doc", size: glyph).foregroundStyle(Color(argb: 0xFFD4D4DA)) }
             }
         }
-        ForEach(voiceNotes) { r in
+        ForEach(voice ? voiceNotes : []) { r in
             trayTile(size, { removeVoice(r) }) { RealSymbol("waveform", size: glyph).foregroundStyle(Color(argb: 0xFF91B9FF)) }
         }
         ForEach(musicPicks) { m in trayTile(size, { musicPicks.removeAll { $0.id == m.id } }) { MusicArtwork(url: m.artworkUrl) } }

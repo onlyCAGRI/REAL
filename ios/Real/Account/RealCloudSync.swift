@@ -576,6 +576,26 @@ final class RealCloudSync {
         for key in ["notifiedAlertAt", "durationMinutes", "people", "plannerColorIndex", "sharedCardId", "sharedAuthorUid", "sharedAuthorName"] {
             o.removeValue(forKey: key)
         }
+        return Self.sanitizeCardPayload(o)
+    }
+
+    private static func sanitizeCardPayload(_ raw: [String: Any]) -> [String: Any] {
+        var o = raw
+        o.removeValue(forKey: "uid")
+        if let people = o["cardPeople"] as? [[String: Any]] {
+            let cleaned = people.map { person -> [String: Any] in
+                var p = person
+                let legacy = p.removeValue(forKey: "uid")
+                if p["personUid"] == nil || p["personUid"] is NSNull, let uid = legacy as? String, !uid.isEmpty {
+                    p["personUid"] = uid
+                }
+                if p["personUid"] is NSNull || (p["personUid"] as? String)?.isEmpty == true {
+                    p.removeValue(forKey: "personUid")
+                }
+                return p
+            }
+            if cleaned.isEmpty { o.removeValue(forKey: "cardPeople") } else { o["cardPeople"] = cleaned }
+        }
         return o
     }
 

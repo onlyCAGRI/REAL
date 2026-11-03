@@ -956,10 +956,11 @@ struct MediaBlockView: View {
     var heroInset: CGFloat = 0
 
     var body: some View {
-        if heroInset > 0 && !editing {
+        if heroInset > 0 {
             CatalogHeroCover(imageURL: block.artworkUrl.flatMap(URL.init(string:)), posterAspect: 2.0 / 3.0, title: block.title,
                              subtitle: [block.year.map(String.init), block.type == .MOVIE ? t("Film") : t("Dizi"), block.genre].compactMap { $0 }.joined(separator: " • "),
-                             description: block.description, placeholderSymbol: "film", inset: heroInset) {
+                             description: block.description, placeholderSymbol: "film", inset: heroInset,
+                             onRemove: editing ? onRemove : nil) {
                 if let url = URL(string: block.providerUrl), ["http", "https"].contains(url.scheme ?? "") {
                     HeroOpenRow(label: openLabel, action: { UIApplication.shared.open(url) }) {
                         Text(providerName).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))

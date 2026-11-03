@@ -11,6 +11,7 @@ struct CatalogHeroCover<Content: View>: View {
     var description: String? = nil
     var placeholderSymbol = "photo"
     let inset: CGFloat
+    var onRemove: (() -> Void)? = nil
     @ViewBuilder var content: () -> Content
     @Environment(\.cardBlockHeight) private var total
     @State private var ambient: Color?
@@ -65,6 +66,19 @@ struct CatalogHeroCover<Content: View>: View {
         .frame(minHeight: total > 0 ? total : nil)
         .background(LinearGradient(colors: [base, Color(argb: 0xFF0D0D0F)], startPoint: .top, endPoint: .bottom))
         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28, style: .continuous))
+        .overlay(alignment: .topTrailing) {
+            if let onRemove {
+                Button(action: onRemove) {
+                    RealSymbol("xmark", size: 13.8).foregroundStyle(.white)
+                        .frame(width: 28, height: 28).background(Circle().fill(.black.opacity(0.55)))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t("İçeriği kaldır"))
+                .padding(.top, inset + 48)
+                .padding(.trailing, 16)
+            }
+        }
         .task(id: imageURL) {
             guard let imageURL, let (data, _) = try? await URLSession.shared.data(from: imageURL),
                   let img = UIImage(data: data), let c = CoverPalette.dominant(img) else { return }

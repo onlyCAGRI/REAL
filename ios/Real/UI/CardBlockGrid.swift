@@ -15,6 +15,10 @@ struct CardBlockPlacement: Codable, Hashable {
     static let units = 6
     static let maxPerRow = 3
 
+    enum CodingKeys: String, CodingKey {
+        case span, column, gapBefore, minHeight, top, hideActions, textAlignment, textBold, textItalic
+    }
+
     init() {}
 
     init(from decoder: Decoder) throws {
@@ -28,6 +32,19 @@ struct CardBlockPlacement: Codable, Hashable {
         textAlignment = try c.decodeIfPresent(String.self, forKey: .textAlignment) ?? "start"
         textBold = try c.decodeIfPresent(Bool.self, forKey: .textBold) ?? false
         textItalic = try c.decodeIfPresent(Bool.self, forKey: .textItalic) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(span, forKey: .span)
+        try c.encode(column, forKey: .column)
+        try c.encode(gapBefore, forKey: .gapBefore)
+        try c.encode(minHeight, forKey: .minHeight)
+        try c.encodeIfPresent(top, forKey: .top)
+        if hideActions { try c.encode(true, forKey: .hideActions) }
+        if textAlignment != "start" && !textAlignment.isEmpty { try c.encode(textAlignment, forKey: .textAlignment) }
+        if textBold { try c.encode(true, forKey: .textBold) }
+        if textItalic { try c.encode(true, forKey: .textItalic) }
     }
 
     var normalized: CardBlockPlacement {

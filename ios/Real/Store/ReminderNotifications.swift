@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UserNotifications
 import CoreLocation
 
@@ -82,12 +83,30 @@ enum NotificationScheduler {
     private static func content(for item: ReminderItem, alerting: Bool) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         let category = item.customCategoryId.flatMap { id in categories.first { $0.id == id } }
-        content.title = category?.name ?? "REAL"
+        let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if item.isChecklist {
             let open = item.checklistItems.filter { !$0.isCompleted }.count
-            content.body = item.text.isEmpty ? t("{0} madde kaldı", open) : t("{0} · {1} madde kaldı", item.text, open)
+            if text.isEmpty {
+                content.title = category?.name ?? "REAL"
+                content.body = t("{0} madde kaldı", open)
+            } else if hasShortText(item) {
+                content.title = text
+                content.body = t("{0} madde kaldı", open)
+            } else {
+                content.title = category?.name ?? ""
+                content.body = t("{0} · {1} madde kaldı", item.text, open)
+            }
         } else {
-            content.body = item.text
+            if text.isEmpty {
+                content.title = category?.name ?? "REAL"
+                content.body = ""
+            } else if hasShortText(item) {
+                content.title = text
+                content.body = category?.name ?? ""
+            } else {
+                content.title = category?.name ?? ""
+                content.body = item.text
+            }
         }
         if item.isImportant { content.subtitle = t("Önemli") }
         else if item.hasRepeat { content.subtitle = item.repeatRule.displayName }
@@ -96,8 +115,13 @@ enum NotificationScheduler {
         content.categoryIdentifier = alerting ? dueCategory : immediateCategory
         content.threadIdentifier = category.map { "category-\($0.id)" } ?? "real"
         content.interruptionLevel = item.isImportant ? .timeSensitive : .active
-        if let category, let attachment = categoryAttachment(category) { content.attachments = [attachment] }
+        content.attachments = notificationAttachments(for: item, category: category)
         return content
+    }
+
+    private static func hasShortText(_ item: ReminderItem) -> Bool {
+        let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !text.isEmpty && text.count <= 45 && !text.contains(where: { $0.isNewline })
     }
 
     static func schedule(_ item: ReminderItem) {
@@ -340,6 +364,103 @@ enum NotificationScheduler {
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         return renderer.uiImage?.pngData()
+    }
+
+    // MARK: Notification picture
+
+    /// A card photo, else the category icon, else the first person's initial; any failure falls through to the next.
+    private static func notificationAttachments(for item: ReminderItem, category: CustomCategory?) -> [UNNotificationAttachment] {
+        if let photo = item.attachments.first(where: { $0.type == .image }),
+           let attachment = photoNotificationAttachment(photo) {
+            return [attachment]
+        }
+        if let category, let attachment = categoryAttachment(category) { return [attachment] }
+        if let person = item.cardPeople.first, let attachment = personNotificationAttachment(person) {
+            return [attachment]
+        }
+        return []
+    }
+
+    private static func photoNotificationAttachment(_ attachment: ReminderAttachment) -> UNNotificationAttachment? {
+        guard !attachment.id.isEmpty, let dir = notificationPictureDirectory() else { return nil }
+        let cached = dir.appendingPathComponent("photo-\(notificationFileName(attachment.id)).jpg")
+        if !FileManager.default.fileExists(atPath: cached.path) {
+            guard let image = AttachmentStorage.image(attachment.localPath),
+                  let data = notificationPhotoData(image),
+                  (try? data.write(to: cached, options: .atomic)) != nil else { return nil }
+        }
+        return copyNotificationAttachment(cached)
+    }
+
+    private static func personNotificationAttachment(_ person: CardPerson) -> UNNotificationAttachment? {
+        let name = person.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = name.first else { return nil }
+        let letter = String(first).uppercased()
+        guard !letter.isEmpty, let dir = notificationPictureDirectory() else { return nil }
+        let cached = dir.appendingPathComponent("person-\(notificationFileName(letter)).png")
+        if !FileManager.default.fileExists(atPath: cached.path) {
+            guard let data = notificationPersonData(letter),
+                  (try? data.write(to: cached, options: .atomic)) != nil else { return nil }
+        }
+        return copyNotificationAttachment(cached)
+    }
+
+    private static func notificationPictureDirectory() -> URL? {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("notification-pictures", isDirectory: true)
+        return (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil ? dir : nil
+    }
+
+    /// Attachments are moved into the notification store, so iOS always gets a fresh copy, never the cache or original.
+    private static func copyNotificationAttachment(_ source: URL) -> UNNotificationAttachment? {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("notification-attachments", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let ext = source.pathExtension.isEmpty ? "png" : source.pathExtension
+        let copy = dir.appendingPathComponent(UUID().uuidString + "." + ext)
+        guard (try? FileManager.default.copyItem(at: source, to: copy)) != nil else { return nil }
+        return try? UNNotificationAttachment(identifier: "picture", url: copy, options: nil)
+    }
+
+    private static func notificationPhotoData(_ image: UIImage) -> Data? {
+        let maxEdge: CGFloat = 512
+        let longest = max(image.size.width, image.size.height)
+        guard longest > 0 else { return nil }
+        let factor = min(1, maxEdge / longest)
+        let size = CGSize(width: max(1, image.size.width * factor), height: max(1, image.size.height * factor))
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        return resized.jpegData(compressionQuality: 0.85)
+    }
+
+    private static func notificationPersonData(_ letter: String) -> Data? {
+        let size = CGSize(width: 128, height: 128)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            UIColor(argb: 0xFF2F5D50).setFill()
+            UIBezierPath(ovalIn: CGRect(origin: .zero, size: size)).fill()
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 64, weight: .semibold),
+                .foregroundColor: UIColor.white,
+                .paragraphStyle: paragraph,
+            ]
+            let text = letter as NSString
+            let textSize = text.size(withAttributes: attributes)
+            text.draw(in: CGRect(x: 0, y: (size.height - textSize.height) / 2,
+                                 width: size.width, height: textSize.height), withAttributes: attributes)
+        }
+        return image.pngData()
+    }
+
+    private static func notificationFileName(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let name = value.unicodeScalars.map { allowed.contains($0) ? String($0) : "_" }.joined()
+        return name.isEmpty ? "x" : String(name.prefix(80))
     }
 }
 

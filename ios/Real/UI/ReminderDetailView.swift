@@ -15,6 +15,9 @@ struct ReminderDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     let reminderId: Int64
+    /// Opened from home: the bar starts as home's capsule and takes the dock's shape.
+    var fromHome = false
+    @State private var dockFormed = false
 
     @State private var draft: ReminderItem?
     @State private var showClipboardTray = false
@@ -59,6 +62,9 @@ struct ReminderDetailView: View {
     @State private var showMoodPicker = false
     @State private var previewPhoto: ReminderAttachment?
     @FocusState private var titleFocused: Bool
+    /// The cover title comes back through Yaşam's blur whenever editing toggles or it changes size.
+    @State private var titleShown = true
+    @State private var showTitleTools = false
 
     private var stored: ReminderItem? { store.reminder(reminderId) }
     private var editing: Bool { draft != nil }
@@ -74,15 +80,17 @@ struct ReminderDetailView: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         let order = blockOrder(r)
-                        let heroKey = editing ? nil : order.first.flatMap { isHero(r.contentBlockLayout[$0]) ? $0 : nil }
+                        let heroKey = order.first.flatMap { isHero(r.contentBlockLayout[$0]) ? $0 : nil }
                         if let heroKey {
                             // The cover reaches the screen edges and up under the status bar, like a category's header;
                             // the column's side margins and top padding are undone here.
                             let hero = (r.contentBlockLayout[heroKey] ?? CardBlockPlacement()).normalized
                             let inset = windowTopInset + 10
+                            let isTextHero = heroKey == "text"
+                            let nonTextHeight = CGFloat(max(hero.minHeight, detailHeroMinHeight)) + inset
                             block(heroKey, r, heroInset: inset)
-                                .environment(\.cardBlockHeight, CGFloat(hero.minHeight) + inset)
-                                .frame(maxWidth: .infinity, minHeight: CGFloat(hero.minHeight) + inset, alignment: .top)
+                                .environment(\.cardBlockHeight, isTextHero ? 0 : nonTextHeight)
+                                .frame(maxWidth: .infinity, minHeight: isTextHero ? nil : nonTextHeight, alignment: .top)
                                 .overlay(alignment: .top) { header(r).padding(.horizontal, 22).padding(.top, inset - 4) }
                                 .padding(.horizontal, -16)
                                 .padding(.top, -inset)
@@ -91,8 +99,32 @@ struct ReminderDetailView: View {
                         CardBlockGrid(keys: heroKey == nil ? order : Array(order.dropFirst()),
                                       layout: heroKey.map { heroLiftedLayout(r.contentBlockLayout, hero: $0) } ?? r.contentBlockLayout,
                                       editing: editing,
-                                      onChange: { key, p in draft?.contentBlockLayout[key] = p },
-                                      onDrop: { keys, layout in draft?.contentBlockOrder = keys; draft?.contentBlockLayout = layout },
+                                      onChange: { key, p in
+                                          guard key != heroKey else { return }
+                                          var q = p
+                                          if let heroKey, let t = q.top {
+                                              q.top = min(t + heroSlot(r.contentBlockLayout, hero: heroKey), cardMaxTop)
+                                          }
+                                          draft?.contentBlockLayout[key] = q.normalized
+                                      },
+                                      onDrop: { keys, layout in
+                                          if let heroKey {
+                                              let slot = heroSlot(r.contentBlockLayout, hero: heroKey)
+                                              let storedHero = draft?.contentBlockLayout[heroKey]
+                                              var restored: [String: CardBlockPlacement] = [:]
+                                              for (k, p) in layout where k != heroKey {
+                                                  var q = p
+                                                  if let t = q.top { q.top = min(t + slot, cardMaxTop) }
+                                                  restored[k] = q.normalized
+                                              }
+                                              if let storedHero { restored[heroKey] = storedHero }
+                                              draft?.contentBlockOrder = [heroKey] + keys.filter { $0 != heroKey }
+                                              draft?.contentBlockLayout = restored
+                                          } else {
+                                              draft?.contentBlockOrder = keys
+                                              draft?.contentBlockLayout = layout
+                                          }
+                                      },
                                       onMovingChange: { lifted in
                                           withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: lifted ? 0.2 : 0.26)) { blockMoving = lifted }
                                       }) { key in
@@ -102,7 +134,7 @@ struct ReminderDetailView: View {
                             .font(RealFont.inter(14))
                             .foregroundStyle(Color(argb: 0xFF8C8C95))
                             .frame(maxWidth: .infinity, alignment: .trailing)
-                            .padding(.top, 4).padding(.trailing, 6)
+                            .padding(.top, heroKey == "text" && order.count == 1 ? 0 : 8).padding(.trailing, 6)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
@@ -219,16 +251,20 @@ struct ReminderDetailView: View {
         }
         .sheet(isPresented: $reordering) {
             if let r = shown {
-                BlockReorderSheet(keys: blockOrder(r), item: r, hero: blockOrder(r).first.map { isHero(r.contentBlockLayout[$0]) } ?? false) { keys, heroOn in
+                BlockReorderSheet(keys: blockOrder(r), item: r, hero: blockOrder(r).first.map { isHero(r.contentBlockLayout[$0]) } ?? true) { keys, heroOn in
                     guard var d = draft else { return }
-                    let oldHero = blockOrder(d).first { isHero(d.contentBlockLayout[$0]) }
+                    let oldHero = blockOrder(d).first.flatMap { isHero(d.contentBlockLayout[$0]) ? $0 : nil }
                     d.contentBlockOrder = keys
                     // A new order lets the blocks flow again (Android finishDrag clears the free tops).
                     for (k, var v) in d.contentBlockLayout { v.top = nil; d.contentBlockLayout[k] = v }
                     if let oldHero, var v = d.contentBlockLayout[oldHero] { v.minHeight = 0; d.contentBlockLayout[oldHero] = v.normalized }
-                    if heroOn, let top = keys.first {
+                    if let top = keys.first {
                         var v = (d.contentBlockLayout[top] ?? CardBlockPlacement()).normalized
-                        v.span = CardBlockPlacement.units; v.column = 0; v.minHeight = max(v.minHeight, detailHeroMinHeight)
+                        if heroOn {
+                            v.span = CardBlockPlacement.units; v.column = 0; v.minHeight = max(v.minHeight, detailHeroMinHeight)
+                        } else {
+                            v.minHeight = 0
+                        }
                         d.contentBlockLayout[top] = v.normalized
                     }
                     draft = d
@@ -257,17 +293,21 @@ struct ReminderDetailView: View {
 
     // MARK: Block order
 
-    /// "En üstteki içeriği büyüt" is stored in the existing layout fields: full width + at least 360pt tall.
+    /// "En üstteki içeriği büyüt": a block with no stored placement counts as hero; a stored placement needs full width + at least 360pt tall.
     private func isHero(_ p: CardBlockPlacement?) -> Bool {
-        guard let p = p?.normalized else { return false }
+        guard let p = p?.normalized else { return true }
         return p.span == CardBlockPlacement.units && p.minHeight >= detailHeroMinHeight
+    }
+
+    private func heroSlot(_ layout: [String: CardBlockPlacement], hero: String) -> Int {
+        let h = (layout[hero] ?? CardBlockPlacement()).normalized
+        return (h.top ?? 0) + h.minHeight + h.gapBefore
     }
 
     /// Blocks placed freely below the hero counted its slot in the grid; with the hero drawn above the grid they
     /// move up by that slot so no empty band opens.
     private func heroLiftedLayout(_ layout: [String: CardBlockPlacement], hero: String) -> [String: CardBlockPlacement] {
-        let h = (layout[hero] ?? CardBlockPlacement()).normalized
-        let slot = (h.top ?? 0) + h.minHeight + h.gapBefore
+        let slot = heroSlot(layout, hero: hero)
         return layout.mapValues { p in
             var q = p
             if let t = q.top { q.top = max(t - slot, 0) }
@@ -289,7 +329,7 @@ struct ReminderDetailView: View {
         case "text": textBlock(r, heroInset: heroInset)
         case "card_stack":
             if let stack = r.cardStack {
-                if heroInset > 0 && !editing {
+                if heroInset > 0 {
                     // As the card's cover the stack sits below the status bar on a full-bleed dark ground.
                     CardStackDeck(stack: stack, editing: editing, onEdit: { editingStackCard = $0 }, onAdd: { editingStackCard = CardStackCard() })
                         .padding(.horizontal, 16).padding(.top, heroInset + 8).padding(.bottom, 16)
@@ -302,7 +342,7 @@ struct ReminderDetailView: View {
             }
         case "mood": if let mood = r.mood { moodBlock(mood) }
         case "checklist": checklistBlock(r)
-        case "photos": if let a = r.attachments.first(where: { $0.id == id }) { photoBlock(a) }
+        case "photos": if let a = r.attachments.first(where: { $0.id == id }) { photoBlock(a, heroInset: heroInset) }
         case "files":
             if id == "reference", let url = r.referenceUrl { linkBlock(url) }
             else if let a = r.attachments.first(where: { $0.id == id }) {
@@ -342,7 +382,12 @@ struct ReminderDetailView: View {
 
     private func header(_ r: ReminderItem) -> some View {
         HStack {
-            Button { dismiss() } label: {
+            Button {
+                if fromHome && !reduceMotion {
+                    withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.26)) { dockFormed = false }
+                }
+                dismiss()
+            } label: {
                 RealSymbol("chevron.left", size: 20.7).foregroundStyle(.white)
                     .frame(width: 40, height: 40).liquidGlass(Circle())
                     .frame(width: 48, height: 48)
@@ -404,125 +449,286 @@ struct ReminderDetailView: View {
 
     // MARK: Text block (the card itself)
 
-    /// heroInset > 0: the text is the cover — centred in the block, below the status bar.
+    /// heroInset > 0: the text is the cover — below the status bar.
     private func textBlock(_ r: ReminderItem, heroInset: CGFloat = 0) -> some View {
-        let cover = heroInset > 0 && !editing
+        let cover = heroInset > 0
+        let alone = blockOrder(r).count == 1
+        let storedText = r.contentBlockLayout["text"]?.normalized
+        let compact = !cover && (storedText.map { $0.minHeight > 0 && $0.minHeight < 200 } ?? false)
+        let alignKey = storedText?.textAlignment ?? (cover ? "center" : "start")
+        let hAlign: HorizontalAlignment = alignKey == "center" ? .center : (alignKey == "end" ? .trailing : .leading)
+        let frameAlign: Alignment = alignKey == "center" ? .center : (alignKey == "end" ? .trailing : .leading)
+        let textAlign: TextAlignment = alignKey == "center" ? .center : (alignKey == "end" ? .trailing : .leading)
+        let italic = storedText?.textItalic == true
+        let fontSize: CGFloat = (cover && alone) ? 36 : 28
+        let titleFont = storedText?.textBold == true ? Font.custom("InterTight-Bold", size: fontSize) : RealFont.inter(fontSize)
         let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
         let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: r.isCompleted,
                                             blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
         let dark = r.autoDarkText
         let struck = r.isCompleted && !r.hasCompletionNote
         let ink: Color = dark ? (struck ? Color(argb: 0xFF55555A) : Color(argb: 0xFF101010)) : (struck ? Color(argb: 0xFF9999A2) : Color(argb: 0xFFF4F4F6))
-        return VStack(alignment: cover ? .center : .leading, spacing: 0) {
+        return VStack(alignment: hAlign, spacing: 0) {
             if editing {
                 TextField(t("Hatırlatıcı metni"), text: Binding(get: { draft?.text ?? "" }, set: { draft?.text = $0 }), axis: .vertical)
-                    .font(RealFont.inter(21))
-                    .lineSpacing(10)
-                    .foregroundStyle(dark ? Color(argb: 0xFF101010) : .white)
+                    .font(titleFont)
+                    .italic(italic)
+                    .lineSpacing(0)
+                    .foregroundStyle(dark ? Color(argb: 0xFF101010) : Color(argb: 0xFFF4F4F6))
                     .tint(dark ? Color(argb: 0xFF101010) : Color(argb: 0xFF82B3FF))
+                    .multilineTextAlignment(textAlign)
                     .focused($titleFocused)
-                    .frame(minHeight: 96, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: frameAlign)
+                    .modifier(DetailTextReveal(shown: !cover || titleShown))
                     .onChange(of: titleFocused) { _, f in if f { secondaryExpanded = false } }
-                if !r.isCompleted, r.alertAt != nil || r.plannedDateEpochDay != nil { scheduleChips(r) }
             } else {
                 Text(r.text.isEmpty ? t("Boş not") : r.text)
-                    .font(RealFont.inter(21))
-                    .lineSpacing(10)
+                    .font(titleFont)
+                    .italic(italic)
+                    .lineSpacing(0)
                     .foregroundStyle(ink)
                     .strikethrough(struck, color: ink)
                     .textSelection(.enabled)
-                    .multilineTextAlignment(cover ? .center : .leading)
-                    .frame(maxWidth: .infinity, alignment: cover ? .center : .leading)
-                if !r.cardPeople.isEmpty {
-                    CardDetailPeople(reminder: r, color: dark ? Color(argb: 0xFF101010) : Color(argb: 0xFFF4F4F6), session: shareSession)
+                    .multilineTextAlignment(textAlign)
+                    .frame(maxWidth: .infinity, alignment: frameAlign)
+                    .modifier(DetailTextReveal(shown: !cover || titleShown))
+            }
+            let chips = editing && !r.isCompleted && (r.alertAt != nil || r.plannedDateEpochDay != nil)
+            if !compact || chips {
+                // Laid out together, so the block is as tall as whichever needs more.
+                ZStack(alignment: .top) {
+                    if !compact {
+                        statusArea(r, hAlign: hAlign, frameAlign: frameAlign, textAlign: textAlign)
+                            .modifier(DetailTextReveal(shown: !editing))
+                            .animation(reduceMotion ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: editing ? 0.32 : 0.5), value: editing)
+                            .allowsHitTesting(!editing)
+                    }
+                    if chips { scheduleChips(r) }
                 }
-                Rectangle().fill(dark ? Color(argb: 0xFF101010).opacity(0.2) : Color(argb: 0xFF38383F)).frame(height: 1)
-                    .padding(.top, 24).padding(.bottom, 18)
-                statusArea(r)
             }
         }
         .padding(.horizontal, 22)
-        .padding(.vertical, 25)
-        .padding(.top, cover ? heroInset : 0)
-        .frame(maxWidth: .infinity, maxHeight: cover ? .infinity : nil, alignment: cover ? .center : .leading)
+        .padding(.top, cover ? heroInset + 44 : 25)
+        .padding(.bottom, 25)
+        .frame(maxWidth: .infinity,
+               minHeight: (cover && alone) ? UIScreen.main.bounds.height * 0.66 : nil,
+               alignment: Alignment(horizontal: hAlign, vertical: (cover && alone) ? .center : .top))
+        .animation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.28), value: alone)
         .background {
             if let accent { shape.fill(accent) }
             else { shape.fill(LinearGradient(colors: [Color(argb: 0xFF18181A), LiquidGlassTokens.contentColor], startPoint: .top, endPoint: .bottom)) }
         }
         .overlay { if r.isImportant { shape.strokeBorder(Color.white.opacity(0.85), lineWidth: 1.25) } }
+        .overlay(alignment: .bottomTrailing) { titleTools(stored: storedText, alignment: alignKey, cover: cover) }
+        .onChange(of: editing) { _, on in
+            if !on { showTitleTools = false }
+            replayTitle()
+        }
+        .onChange(of: alone) { _, _ in replayTitle() }
     }
 
-    /// Status line under the divider: "Planlı • Bugün, 10:00", duration / end, repeat summary, category.
+    /// Blank at once, then the way Yaşam's sentence opens; the size change happens while nothing shows.
+    private func replayTitle() {
+        guard !reduceMotion else { return }
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) { titleShown = false }
+        DispatchQueue.main.async {
+            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.5)) { titleShown = true }
+        }
+    }
+
+    /// Aa at the foot of the title block while editing; its pills float there and a tap elsewhere on the block closes them.
     @ViewBuilder
-    private func statusArea(_ r: ReminderItem) -> some View {
-        let category = store.category(r.customCategoryId)
-        let standaloneCategory = !r.isCompleted && r.alertAt == nil && r.plannedDateEpochDay == nil && !r.isQuick24HourActive() && category != nil
-        if standaloneCategory, let category {
-            HStack(spacing: 10) {
-                categoryBadge(category, size: 32)
-                Text(category.name).font(RealFont.inter(15, .medium)).foregroundStyle(Color(argb: 0xFFE2E2E8))
+    private func titleTools(stored: CardBlockPlacement?, alignment: String, cover: Bool) -> some View {
+        if editing {
+            if showTitleTools {
+                let row = HStack(spacing: 4) {
+                    titleTool(t("Sola"), active: alignment == "start") { setTitlePlacement(cover: cover) { $0.textAlignment = "start" } }
+                    titleTool(t("Ortala"), active: alignment == "center") { setTitlePlacement(cover: cover) { $0.textAlignment = "center" } }
+                    titleTool(t("Sağa"), active: alignment == "end") { setTitlePlacement(cover: cover) { $0.textAlignment = "end" } }
+                    titleTool(t("Kalın"), active: stored?.textBold == true, bold: true) { setTitlePlacement(cover: cover) { $0.textBold.toggle() } }
+                    titleTool(t("İtalik"), active: stored?.textItalic == true, italic: true) { setTitlePlacement(cover: cover) { $0.textItalic.toggle() } }
+                }
+                .padding(4)
+                .background(Capsule().fill(Color(argb: 0xFF171719)))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.8))
+                ZStack(alignment: .bottom) {
+                    Color.clear.contentShape(Rectangle()).onTapGesture { showTitleTools = false }
+                    ViewThatFits(in: .horizontal) {
+                        row
+                        ScrollView(.horizontal, showsIndicators: false) { row }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 10)
+                }
+            } else {
+                Button { showTitleTools = true } label: {
+                    Text("Aa").font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+                        .frame(width: 36, height: 28)
+                        .background(Capsule().fill(Color(argb: 0xFF343439)))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.8))
+                        .frame(width: 48, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t("Metin araçları"))
+                .padding(.bottom, 4)
+                .padding(.trailing, 4)
             }
-        } else {
-            HStack(alignment: .top, spacing: 12) {
-                ActionIcon(r.isCompleted ? .check : .note, size: 20)
-                    .foregroundStyle(RealColors.accentBlue)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 3) {
-                    let status = statusText(r, hasCategory: category != nil)
-                    if let status {
-                        if r.isCompleted {
-                            Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
-                        } else if let alert = r.alertAt {
-                            HStack(spacing: 6) {
-                                Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
-                                Text("•").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF6B6B75))
-                                Text(RealDates.reminder(alert)).font(RealFont.inter(14, .medium))
-                                    .foregroundStyle(alert < EpochMillis.now ? RealColors.overdue : RealColors.accentBlue)
-                            }
-                            if let dur = r.durationMinutes {
-                                HStack(spacing: 6) {
-                                    Text(t("Süre: {0} dk", dur))
-                                    Text("•").foregroundStyle(Color(argb: 0xFF6B6B75))
-                                    Text(t("Bitiş: {0}", RealDates.time((alert + Int64(dur) * 60_000).date)))
-                                }
-                                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 2)
-                            }
-                            if let repeatText = repeatSummary(r) {
-                                Text(repeatText).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
-                            }
-                            timingLines(r)
-                        } else if let day = r.plannedDateEpochDay {
-                            HStack(spacing: 6) {
-                                Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
-                                Text("•").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF6B6B75))
-                                Text(RealDates.planned(day)).font(RealFont.inter(14, .medium)).foregroundStyle(RealColors.accentBlue)
-                            }
-                            timingLines(r)
+        }
+    }
+
+    private func titleTool(_ label: String, active: Bool, bold: Bool = false, italic: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(RealFont.inter(12, bold ? .bold : (active ? .semibold : .regular)))
+                .italic(italic)
+                .foregroundStyle(active ? Color.white : Color(argb: 0xFFA5A5AD))
+                .padding(.horizontal, 11)
+                .frame(height: 36)
+                .background(Capsule().fill(Color(argb: active ? 0xFF343439 : 0xFF171719)))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(active ? 0.35 : 0.12), lineWidth: 0.8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
+    }
+
+    /// A title nobody has placed stays the cover when its first style is stored.
+    private func setTitlePlacement(cover: Bool, _ change: (inout CardBlockPlacement) -> Void) {
+        var placement = draft?.contentBlockLayout["text"] ?? { () -> CardBlockPlacement in
+            var fresh = CardBlockPlacement()
+            if cover {
+                fresh.minHeight = detailHeroMinHeight
+                fresh.textAlignment = "center"
+            }
+            return fresh
+        }()
+        change(&placement)
+        draft?.contentBlockLayout["text"] = placement.normalized
+    }
+
+    /// Status view for every non-compact title block in reading mode (kept with opacity 0 while editing).
+    @ViewBuilder
+    private func statusArea(_ r: ReminderItem, hAlign: HorizontalAlignment, frameAlign: Alignment, textAlign: TextAlignment) -> some View {
+        let category = store.category(r.customCategoryId)
+        let dark = r.autoDarkText
+        let grayColor = dark ? Color(argb: 0xFF101010).opacity(0.68) : Color(argb: 0xFFA5A5B0)
+        let blueColor = dark ? Color(argb: 0xFF101010) : Color(argb: 0xFF94B8F7)
+        let overdueColor = Color(argb: 0xFFF87171)
+        let dividerColor = dark ? Color(argb: 0xFF101010).opacity(0.20) : Color(argb: 0xFF38383F)
+        VStack(alignment: hAlign, spacing: 0) {
+            if !r.isCompleted, let alert = r.alertAt {
+                let d = alert.date
+                let lead = "\(t(Calendar.real.isoWeekday(of: d).full)) \(detailTime(d))"
+                let leadColor = alert < EpochMillis.now ? overdueColor : blueColor
+                let tail = detailPlannedTail(r, date: d)
+                (Text(lead).font(RealFont.inter(15, .medium)).foregroundColor(leadColor)
+                 + Text(" · " + tail).font(RealFont.inter(15)).foregroundColor(grayColor))
+                    .multilineTextAlignment(textAlign)
+                    .frame(maxWidth: .infinity, alignment: frameAlign)
+                    .padding(.top, 10)
+            } else if !r.isCompleted, let epochDay = r.plannedDateEpochDay {
+                let d = Calendar.real.date(fromEpochDay: epochDay)
+                let weekday = t(Calendar.real.isoWeekday(of: d).full)
+                let day = detailDay(d)
+                (Text(weekday).font(RealFont.inter(15, .medium)).foregroundColor(blueColor)
+                 + Text(" · " + day).font(RealFont.inter(15)).foregroundColor(grayColor))
+                    .multilineTextAlignment(textAlign)
+                    .frame(maxWidth: .infinity, alignment: frameAlign)
+                    .padding(.top, 10)
+            } else if let status = statusText(r, hasCategory: category != nil) {
+                Text(status)
+                    .font(RealFont.inter(13))
+                    .foregroundStyle(grayColor)
+                    .lineLimit(2)
+                    .multilineTextAlignment(textAlign)
+                    .frame(maxWidth: .infinity, alignment: frameAlign)
+                    .padding(.top, 4)
+            }
+            if let trigger = r.locationTrigger, !r.isCompleted {
+                let tone = trigger.onExit ? Color(argb: 0xFFFFB86F) : Color(argb: 0xFF5DCAA5)
+                HStack(spacing: 6) {
+                    PlaceTriggerGlyph(onExit: trigger.onExit).frame(width: 12, height: 12)
+                    Text((trigger.onExit ? t("Ayrılınca · ") : t("Varınca · ")) + trigger.placeName)
+                        .font(RealFont.inter(13, .medium))
+                        .lineLimit(1)
+                        .foregroundStyle(tone)
+                }
+                .frame(maxWidth: .infinity, alignment: frameAlign)
+                .padding(.top, 8)
+            }
+            if !r.cardPeople.isEmpty || category != nil {
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+                    .padding(.top, 14)
+                    .padding(.bottom, 10)
+                HStack(alignment: .center, spacing: 10) {
+                    Group {
+                        if !r.cardPeople.isEmpty {
+                            CardDetailPeople(reminder: r, color: dark ? Color(argb: 0xFF101010) : Color(argb: 0xFFF4F4F6), session: shareSession)
                         } else {
-                            Text(status).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFD3D3D9))
+                            Color.clear.frame(height: 1)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     if let category {
                         HStack(spacing: 6) {
                             categoryBadge(category, size: 16)
-                            Text(category.name).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFC4C4CE))
+                            Text(category.name)
+                                .font(RealFont.inter(13, .medium))
+                                .foregroundStyle(dark ? Color(argb: 0xFF101010) : Color(argb: 0xFFE2E2E8))
+                                .lineLimit(1)
                         }
-                        .padding(.top, 1)
-                    }
-                    // Varınca / Ayrılınca: the place and how close counts (same arrow as on Home).
-                    if let trigger = r.locationTrigger, !r.isCompleted {
-                        HStack(spacing: 6) {
-                            PlaceTriggerGlyph(onExit: trigger.onExit).frame(width: 12, height: 12)
-                            Text((trigger.onExit ? t("Ayrılınca · ") : t("Varınca · ")) + trigger.placeName
-                                 + (trigger.onExit ? t(" · {0} m dışına çıkınca", trigger.radiusMeters) : t(" · {0} m içinde", trigger.radiusMeters)))
-                                .font(RealFont.inter(12)).lineLimit(1)
-                                .foregroundStyle(PlaceTriggerGlyph.tone(trigger.onExit))
-                        }
-                        .padding(.top, 1)
+                        .frame(maxWidth: 170, alignment: .trailing)
                     }
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: frameAlign)
+    }
+
+    private func detailTime(_ d: Date) -> String {
+        if I18n.isEnglish {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.calendar = .real
+            f.dateFormat = "h:mm a"
+            return f.string(from: d).lowercased()
+        }
+        return RealDates.time(d)
+    }
+
+    private func detailDay(_ d: Date) -> String {
+        let cal = Calendar.real
+        let today = cal.epochDay(of: Date())
+        let target = cal.epochDay(of: d)
+        if target == today { return t("Bugün") }
+        if target == today + 1 { return t("Yarın") }
+        let dayNum = cal.component(.day, from: d)
+        let monthFormatter = DateFormatter()
+        monthFormatter.calendar = .real
+        monthFormatter.timeZone = Calendar.real.timeZone
+        monthFormatter.locale = I18n.locale
+        monthFormatter.setLocalizedDateFormatFromTemplate("MMM")
+        let month = monthFormatter.string(from: d)
+        let year = cal.component(.year, from: d)
+        let currentYear = cal.component(.year, from: Date())
+        return year == currentYear ? "\(dayNum) \(month)" : "\(dayNum) \(month) \(year)"
+    }
+
+    private func detailPlannedTail(_ r: ReminderItem, date: Date) -> String {
+        var parts = [detailDay(date)]
+        if let dur = r.durationMinutes, dur > 0 {
+            parts.append(t("{0} dk", dur))
+        } else if let end = r.endAt {
+            parts.append(t("Bitiş: {0}", detailTime(end.date)))
+        }
+        if let rep = repeatSummary(r) {
+            parts.append(rep)
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func statusText(_ r: ReminderItem, hasCategory: Bool) -> String? {
@@ -564,17 +770,6 @@ struct ReminderDetailView: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(Circle().fill(LinearGradient(colors: [start, end], startPoint: .topLeading, endPoint: .bottomTrailing)))
-    }
-
-    /// "Bitiş: 15 Eki 18:00" and "Erken uyarı: 15 dk önce" under the status.
-    @ViewBuilder
-    private func timingLines(_ r: ReminderItem) -> some View {
-        if let end = r.endAt {
-            Text(t("Bitiş: {0}", Self.shortDateTime(end))).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
-        }
-        if let early = r.earlyAlertMinutes {
-            Text(t("Erken uyarı: {0} önce", EarlyAlertScreen.label(early))).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).padding(.top, 1)
-        }
     }
 
     static func shortDateTime(_ millis: EpochMillis) -> String {
@@ -726,8 +921,24 @@ struct ReminderDetailView: View {
         .cardContentChrome(corners: 22)
     }
 
-    private func photoBlock(_ a: ReminderAttachment) -> some View {
-        PhotoBlockBody(attachment: a, editing: editing, onTap: { previewPhoto = a }, remove: { removeAttachment(a) })
+    private func photoBlock(_ a: ReminderAttachment, heroInset: CGFloat = 0) -> some View {
+        PhotoBlockBody(attachment: a, editing: editing, heroInset: heroInset, onTap: { previewPhoto = a }, remove: { removeAttachment(a) },
+                       onFrame: { scale, x, y in
+            if editing {
+                guard let i = draft?.attachments.firstIndex(where: { $0.id == a.id }) else { return }
+                draft?.attachments[i].photoScale = scale
+                draft?.attachments[i].photoX = x
+                draft?.attachments[i].photoY = y
+            } else {
+                guard var card = store.reminder(reminderId),
+                      let i = card.attachments.firstIndex(where: { $0.id == a.id }) else { return }
+                card.attachments[i].photoScale = scale
+                card.attachments[i].photoX = x
+                card.attachments[i].photoY = y
+                card.updatedAt = .now
+                store.update(card)
+            }
+        })
     }
 
     private func legacyPhotoBlock(_ a: ReminderAttachment) -> some View {
@@ -935,7 +1146,7 @@ struct ReminderDetailView: View {
     /// Tamamla · Düzenle · Share · Sil, or Geri al · … once completed. After Tamamla the Geri al set comes in as the
     /// mirrored sweep passes (from the left); after Kaydet as Kaydet's sweep passes (from the right).
     private func mainActions(_ r: ReminderItem, done: Bool) -> some View {
-        let visible = !editing && r.isCompleted == done
+        let visible = !editing && r.isCompleted == done && dockShown
         let fromLeft = done && completeSweepStart.map { Date().timeIntervalSince($0) < DetailDockMotion.duration } == true
         let start = fromLeft ? completeSweepStart : saveSweepStart
         func delay(_ i: Int) -> Double { DetailDockMotion.enterDelay(i, of: 4, sweepStart: start, fromLeft: fromLeft) }
@@ -976,18 +1187,20 @@ struct ReminderDetailView: View {
         }
     }
 
+    private var dockShown: Bool { dockFormed || !fromHome || reduceMotion }
+
     /// Both sets of actions stay laid out on top of each other; DetailDockMotion blurs one out and the other in.
     private func actionBar(_ r: ReminderItem) -> some View {
         ZStack {
             HStack(spacing: 0) {
                 DetailAction(label: t("Vazgeç"), symbol: "xmark") { draft = nil; secondaryExpanded = false; checklistOpen = false }
-                    .detailDockItem(visible: editing, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
+                    .detailDockItem(visible: editing && dockShown, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
                 DetailAction(label: t("Kaydet"), symbol: "checkmark", color: Color(argb: 0xFF91B9FF),
                              enabled: !(draft?.text.trimmingCharacters(in: .whitespaces).isEmpty ?? true)) {
                     if !reduceMotion { saveSweepStart = Date() }
                     saveDraft()
                 }
-                .detailDockItem(visible: editing, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
+                .detailDockItem(visible: editing && dockShown, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
             }
             // Tamamla · … and Geri al · …: two sets on top of each other, so Tamamla swaps the whole dock like Kaydet.
             mainActions(r, done: false)
@@ -1002,7 +1215,18 @@ struct ReminderDetailView: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         }
-        .liquidGlass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        // The capsule sits between home's two side circles; a beat after the card opens it widens, the buttons blur in.
+        .background {
+            Color.clear
+                .liquidGlass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .padding(.horizontal, dockShown ? 0 : 48)
+                .padding(.vertical, dockShown ? 0 : 5)
+        }
+        .task {
+            guard !dockShown else { return }
+            try? await Task.sleep(for: .milliseconds(160))
+            withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.34)) { dockFormed = true }
+        }
     }
 
     /// DeleteReminderPrompt: plain delete, or "only this / this and future" for a repeating card.
@@ -1372,7 +1596,7 @@ struct CardStackDeck: View {
     var body: some View {
         let cards = stack.cards
         let current = min(active, max(cards.count - 1, 0))
-        VStack(spacing: -318) {
+        VStack(spacing: Self.peek - deckHeight) {
             if current > 0 {
                 card(cards[current - 1], index: current - 1).scaleEffect(0.94).opacity(0.75)
                     .onTapGesture { withAnimation(.easeInOut(duration: 0.39)) { active = current - 1 } }
@@ -1402,7 +1626,22 @@ struct CardStackDeck: View {
             }
         }
         .padding(.bottom, editing ? 22 : 0)
+        .animation(.timingCurve(0.2, 0, 0, 1, duration: 0.28), value: deckHeight)
         .onChange(of: active) { _, _ in photoScale = 1; photoOffset = .zero; pinchStart = nil }
+    }
+
+    private static let peek: CGFloat = 72
+
+    /// Small until the text needs more; a picture keeps the full size. Every card shares it so the deck stays aligned.
+    private var deckHeight: CGFloat {
+        let tallest = stack.cards.map { c -> CGFloat in
+            if c.imageUri != nil { return 390 }
+            if c.body.isEmpty { return 150 }
+            let lines = c.body.split(separator: "\n", omittingEmptySubsequences: false)
+                .reduce(0) { $0 + max(1, Int((Double($1.count) / 34).rounded(.up))) }
+            return 150 + CGFloat(lines) * c.bodyFormat.size.points * 1.4
+        }.max() ?? 190
+        return min(max(tallest, 190), 780)
     }
 
     /// Two fingers zoom around the pinch point (1×–4×); one finger stays free to scroll or lift the block.
@@ -1448,7 +1687,7 @@ struct CardStackDeck: View {
             }
         }
         .padding(.horizontal, 24).padding(.vertical, 22)
-        .frame(maxWidth: .infinity, minHeight: 390, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: deckHeight, alignment: .topLeading)
         .background {
             ZStack {
                 shape.fill(color)
@@ -2021,13 +2260,45 @@ private struct BlockReorderSheet: View {
     }
 }
 
+/// Yaşam's sentence reveal (blur to sharp, a small rise, a fade) for text that comes and goes on the card.
+private struct DetailTextReveal: ViewModifier {
+    let shown: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: shown ? 0 : 8)
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 6)
+    }
+}
+
 /// Photo block: natural aspect, or the height chosen with the resize handle (cropped like ContentScale.Crop).
 private struct PhotoBlockBody: View {
     let attachment: ReminderAttachment
     let editing: Bool
+    var heroInset: CGFloat = 0
     let onTap: () -> Void
     let remove: () -> Void
+    var onFrame: (Double?, Double?, Double?) -> Void
     @Environment(\.cardBlockHeight) private var fixedHeight
+    @State private var scale: CGFloat
+    @State private var x: CGFloat
+    @State private var y: CGFloat
+
+    init(attachment: ReminderAttachment, editing: Bool, heroInset: CGFloat = 0,
+         onTap: @escaping () -> Void, remove: @escaping () -> Void,
+         onFrame: @escaping (Double?, Double?, Double?) -> Void) {
+        self.attachment = attachment
+        self.editing = editing
+        self.heroInset = heroInset
+        self.onTap = onTap
+        self.remove = remove
+        self.onFrame = onFrame
+        let scale = Self.clampScale(attachment.photoScale)
+        _scale = State(initialValue: scale)
+        _x = State(initialValue: Self.clampShift(attachment.photoX, scale: scale))
+        _y = State(initialValue: Self.clampShift(attachment.photoY, scale: scale))
+    }
 
     var body: some View {
         let image = AttachmentStorage.image(attachment.localPath)
@@ -2038,11 +2309,29 @@ private struct PhotoBlockBody: View {
                 else { Color.clear.frame(maxWidth: .infinity).aspectRatio(ratio, contentMode: .fit) }
             }
                 .overlay {
-                    if let image { Image(uiImage: image).resizable().scaledToFill() } else { RealColors.field }
+                    GeometryReader { geo in
+                        ZStack {
+                            if let image {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: geo.size.width, height: geo.size.height)
+                                    .clipped()
+                                    .scaleEffect(scale)
+                                    .offset(x: x * geo.size.width, y: y * geo.size.height)
+                            } else {
+                                RealColors.field
+                            }
+                            // While editing the grid needs these touches to drag and resize the block.
+                            PhotoGestureOverlay(scale: $scale, x: $x, y: $y, onTap: onTap, onFrame: onFrame)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .allowsHitTesting(!editing)
+                        }
+                    }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .contentShape(Rectangle())
-                .onTapGesture(perform: onTap)
+                .onTapGesture { if editing { onTap() } }
             if editing {
                 Button(action: remove) {
                     RealSymbol("xmark", size: 11.5).foregroundStyle(.white)
@@ -2050,7 +2339,148 @@ private struct PhotoBlockBody: View {
                         .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel(t("Kaldır"))
+                .padding(.top, heroInset > 0 ? heroInset + 48 : 0)
+                .padding(.trailing, heroInset > 0 ? 12 : 0)
             }
+        }
+        .onChange(of: attachment.photoScale) { _, _ in syncFromAttachment() }
+        .onChange(of: attachment.photoX) { _, _ in syncFromAttachment() }
+        .onChange(of: attachment.photoY) { _, _ in syncFromAttachment() }
+    }
+
+    private func syncFromAttachment() {
+        let scale = Self.clampScale(attachment.photoScale)
+        self.scale = scale
+        x = Self.clampShift(attachment.photoX, scale: scale)
+        y = Self.clampShift(attachment.photoY, scale: scale)
+    }
+
+    private static func clampScale(_ value: Double?) -> CGFloat {
+        min(max(CGFloat(value ?? 1), 1), 5)
+    }
+
+    private static func clampShift(_ value: Double?, scale: CGFloat) -> CGFloat {
+        let limit = max(0, (scale - 1) / 2)
+        return min(max(CGFloat(value ?? 0), -limit), limit)
+    }
+}
+
+/// UIKit gestures over the photo: SwiftUI gestures here would fight the page's scroll. One-finger drags stay free.
+private struct PhotoGestureOverlay: UIViewRepresentable {
+    @Binding var scale: CGFloat
+    @Binding var x: CGFloat
+    @Binding var y: CGFloat
+    let onTap: () -> Void
+    let onFrame: (Double?, Double?, Double?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isOpaque = false
+
+        let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pinch(_:)))
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pan(_:)))
+        pan.minimumNumberOfTouches = 2
+        pan.maximumNumberOfTouches = 2
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tap))
+        for gesture in [pinch, pan, tap] {
+            gesture.cancelsTouchesInView = false
+            gesture.delegate = context.coordinator
+            view.addGestureRecognizer(gesture)
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var parent: PhotoGestureOverlay
+        private var startScale: CGFloat = 1
+        private var startX: CGFloat = 0
+        private var startY: CGFloat = 0
+        private var pinching = false
+        private var panning = false
+
+        init(_ parent: PhotoGestureOverlay) { self.parent = parent }
+
+        @objc func tap() { parent.onTap() }
+
+        @objc func pinch(_ gesture: UIPinchGestureRecognizer) {
+            switch gesture.state {
+            case .began:
+                startScale = parent.scale
+                pinching = true
+            case .changed:
+                parent.scale = Self.clampScale(startScale * gesture.scale)
+                clampShift()
+            case .ended, .cancelled, .failed:
+                parent.scale = Self.clampScale(startScale * gesture.scale)
+                clampShift()
+                let wasPinching = pinching
+                pinching = false
+                if wasPinching { finish() }
+            default:
+                break
+            }
+        }
+
+        @objc func pan(_ gesture: UIPanGestureRecognizer) {
+            guard let view = gesture.view, view.bounds.width > 0, view.bounds.height > 0 else { return }
+            switch gesture.state {
+            case .began:
+                startX = parent.x
+                startY = parent.y
+                panning = true
+            case .changed, .ended, .cancelled, .failed:
+                let translation = gesture.translation(in: view)
+                parent.x = startX + translation.x / view.bounds.width
+                parent.y = startY + translation.y / view.bounds.height
+                clampShift()
+                if gesture.state != .changed {
+                    let wasPanning = panning
+                    panning = false
+                    if wasPanning { finish() }
+                }
+            default:
+                break
+            }
+        }
+
+        private func clampShift() {
+            let limit = max(0, (parent.scale - 1) / 2)
+            parent.x = min(max(parent.x, -limit), limit)
+            parent.y = min(max(parent.y, -limit), limit)
+            if parent.scale <= 1 {
+                parent.scale = 1
+                parent.x = 0
+                parent.y = 0
+            }
+        }
+
+        private func finish() {
+            guard !pinching, !panning else { return }
+            if parent.scale <= 1 {
+                parent.scale = 1
+                parent.x = 0
+                parent.y = 0
+                parent.onFrame(nil, nil, nil)
+            } else {
+                parent.onFrame(Double(parent.scale), Double(parent.x), Double(parent.y))
+            }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            let ours = { (g: UIGestureRecognizer) in g is UIPinchGestureRecognizer || g is UIPanGestureRecognizer }
+            return ours(gestureRecognizer) && ours(otherGestureRecognizer)
+        }
+
+        private static func clampScale(_ value: CGFloat) -> CGFloat {
+            min(max(value, 1), 5)
         }
     }
 }
@@ -2291,7 +2721,6 @@ private struct CardDetailPeople: View {
                 CardDetailPerson(reminder: reminder, person: person, connection: connectionFor(person: person, known: known), color: color, session: session)
             }
         }
-        .padding(.top, 8)
     }
 }
 
