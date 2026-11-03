@@ -24,6 +24,9 @@ struct ReminderDetailView: View {
     @State private var trayBusy = false
     @State private var secondaryExpanded = false
     @State private var dockCollapsed = false
+    /// Height of the cover title on screen, and where a drag on its handle started: (extra height, most it may reach).
+    @State private var coverTitleHeight: CGFloat = 0
+    @State private var coverDragStart: (extra: CGFloat, limit: CGFloat)?
     /// A block is lifted in the grid: the bottom docks slide away until the finger lifts.
     @State private var blockMoving = false
     @State private var showMusicSearch = false
@@ -127,6 +130,7 @@ struct ReminderDetailView: View {
                                               draft?.contentBlockLayout = layout
                                           }
                                       },
+                                      onResizeBegan: lowerEditDock,
                                       onMovingChange: { lifted in
                                           withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: lifted ? 0.2 : 0.26)) { blockMoving = lifted }
                                       }) { key in
@@ -333,7 +337,8 @@ struct ReminderDetailView: View {
 
     private func heroSlot(_ layout: [String: CardBlockPlacement], hero: String) -> Int {
         let h = (layout[hero] ?? CardBlockPlacement()).normalized
-        return (h.top ?? 0) + h.minHeight + h.gapBefore
+        // A taller cover title only pushes the grid down; the blocks' tops never counted that part.
+        return (h.top ?? 0) + (hero == "text" ? min(h.minHeight, detailHeroMinHeight) : h.minHeight) + h.gapBefore
     }
 
     /// Blocks placed freely below the hero counted its slot in the grid; with the hero drawn above the grid they
@@ -487,6 +492,8 @@ struct ReminderDetailView: View {
         let alone = blockOrder(r).count == 1
         let storedText = r.contentBlockLayout["text"]?.normalized
         let compact = !cover && (storedText.map { $0.minHeight > 0 && $0.minHeight < 200 } ?? false)
+        // Height dragged onto the cover title, stored above the cover's mark so a plain cover stays at 360.
+        let coverExtra = cover ? CGFloat(max((storedText?.minHeight ?? 0) - detailHeroMinHeight, 0)) : 0
         let alignKey = storedText?.textAlignment ?? (cover ? "center" : "start")
         let hAlign: HorizontalAlignment = alignKey == "center" ? .center : (alignKey == "end" ? .trailing : .leading)
         let frameAlign: Alignment = alignKey == "center" ? .center : (alignKey == "end" ? .trailing : .leading)
@@ -533,8 +540,8 @@ struct ReminderDetailView: View {
             }
         }
         .padding(.horizontal, 22)
-        .padding(.top, cover ? heroInset + 44 : 25)
-        .padding(.bottom, cover && !alone ? 47 : 25)
+        .padding(.top, (cover ? heroInset + 44 : 25) + coverExtra / 2)
+        .padding(.bottom, (cover && !alone ? 47 : 25) + coverExtra / 2)
         .frame(maxWidth: .infinity,
                minHeight: (cover && alone) ? UIScreen.main.bounds.height * 0.66 : nil,
                alignment: Alignment(horizontal: hAlign, vertical: (cover && alone) ? .center : .top))
@@ -544,12 +551,49 @@ struct ReminderDetailView: View {
             else { shape.fill(LinearGradient(colors: [Color(argb: 0xFF18181A), LiquidGlassTokens.contentColor], startPoint: .top, endPoint: .bottom)) }
         }
         .overlay { if r.isImportant { shape.strokeBorder(Color.white.opacity(0.85), lineWidth: 1.25) } }
+        .background { if cover { GeometryReader { g in Color.clear.onAppear { coverTitleHeight = g.size.height }.onChange(of: g.size.height) { _, h in coverTitleHeight = h } } } }
+        .overlay(alignment: .bottom) { if editing && cover && !alone { coverTitleHandle(dark: dark, extra: coverExtra) } }
         .overlay(alignment: .bottomTrailing) { titleTools(stored: storedText, alignment: alignKey, cover: cover) }
         .onChange(of: editing) { _, on in
             if !on { showTitleTools = false }
             replayTitle()
         }
         .onChange(of: alone) { _, _ in replayTitle() }
+    }
+
+    /// The cover sits outside the grid, so it has its own handle: from its natural height up to a lone title's.
+    private func coverTitleHandle(dark: Bool, extra: CGFloat) -> some View {
+        Capsule().fill(dark ? Color.black.opacity(0.85) : Color.white.opacity(0.85))
+            .frame(width: 36, height: 4)
+            .padding(4)
+            .frame(maxWidth: .infinity, alignment: .bottom)
+            .frame(height: 30, alignment: .bottom)
+            .contentShape(Rectangle())
+            .padding(.horizontal, 56)
+            .highPriorityGesture(DragGesture(minimumDistance: 2, coordinateSpace: .global).onChanged { v in
+                if coverDragStart == nil {
+                    lowerEditDock()
+                    let lone = UIScreen.main.bounds.height * 0.66
+                    coverDragStart = (extra, max(lone - (coverTitleHeight - extra), 0))
+                }
+                guard let start = coverDragStart else { return }
+                let height = detailHeroMinHeight + Int(min(max(start.extra + v.translation.height, 0), start.limit))
+                var p = (draft?.contentBlockLayout["text"] ?? CardBlockPlacement()).normalized
+                guard p.minHeight != height else { return }
+                p.span = CardBlockPlacement.units
+                p.column = 0
+                p.minHeight = height
+                draft?.contentBlockLayout["text"] = p.normalized
+            }.onEnded { _ in coverDragStart = nil })
+            .accessibilityLabel(t("Yüksekliği değiştir"))
+    }
+
+    /// Resizing needs the whole card in view: the dock and "Renk ve kategori" step aside.
+    private func lowerEditDock() {
+        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) {
+            secondaryExpanded = false
+            dockCollapsed = true
+        }
     }
 
     /// Blank at once, then the way Yaşam's sentence opens; the size change happens while nothing shows.

@@ -285,6 +285,8 @@ struct CardBlockGrid<Block: View>: View {
     let editing: Bool
     let onChange: (String, CardBlockPlacement) -> Void
     var onDrop: ([String], [String: CardBlockPlacement]) -> Void = { _, _ in }
+    /// A resize handle was grabbed, so the screen can lower its dock.
+    var onResizeBegan: () -> Void = {}
     /// True while a block is lifted, so the screen can slide its docks away.
     var onMovingChange: (Bool) -> Void = { _ in }
     @ViewBuilder let block: (String) -> Block
@@ -411,7 +413,7 @@ struct CardBlockGrid<Block: View>: View {
     }
 
     private func beginHandle(_ key: String) {
-        if handleStart == nil { handleStart = (placement(key), frames, layout); selected = key }
+        if handleStart == nil { handleStart = (placement(key), frames, layout); selected = key; onResizeBegan() }
     }
 
     /// Right edge: width in 1/6 steps, growing to the right (catalog cards snap to 2 / 3 / 4 / 6).
@@ -474,7 +476,8 @@ struct CardBlockGrid<Block: View>: View {
                     if hide != now.hideActions { now.hideActions = hide; onChange(key, now.normalized) }
                     return
                 }
-                let h = Int(min(max(startBox.height + v.translation.height, 80), 800).rounded())
+                // A title that reached 360 would turn into the cover mid-drag.
+                let h = Int(min(max(startBox.height + v.translation.height, 80), key == "text" ? CGFloat(detailHeroMinHeight - 1) : 800).rounded())
                 guard h != now.minHeight, let box = frames[key] else { return }
                 let candidate = CGRect(x: box.minX, y: box.minY, width: box.width, height: CGFloat(h))
                 guard cardDetailBoxFits(key, candidate, frames) else { return }

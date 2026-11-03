@@ -90,7 +90,7 @@ private let attributionFallback = "https://developer.apple.com/weatherkit/data-s
 
 struct CardWeatherBlock: View {
     let reminder: ReminderItem
-    /// Small slot (half width or a short height chosen in "Sırala"): icon, temperature and condition only.
+    /// Small slot when no height was chosen (half width): keeps the short layout. A chosen size decides by itself.
     var compact = false
     /// Long press → "Hava durumunu gizle"; off while the card is being edited (the grid owns the gestures then).
     var interactive = true
@@ -98,6 +98,8 @@ struct CardWeatherBlock: View {
     /// No forecast came (offline, not signed in, too far ahead…): the card drops the slot instead of an empty box.
     var onUnavailable: () -> Void = {}
     @State private var weather: CardWeather?
+    @State private var boxWidth: CGFloat = 0
+    @Environment(\.cardBlockHeight) private var slotHeight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var loadKey: String {
@@ -138,25 +140,76 @@ struct CardWeatherBlock: View {
         let (top, bottom) = weatherColors(w.kind)
         let when = whenText(target.at, target.allDay)
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        let width: CGFloat = boxWidth > 0 ? boxWidth : (compact ? 180 : 340)
+        let slotted = slotHeight > 0
+        let height: CGFloat = slotted ? slotHeight : (compact ? 100 : 200)
+        let pad: CGFloat = width < 150 || height < 96 ? 10 : (width < 300 || height < 190 ? 14 : 18)
+        let innerWidth = width - pad * 2
+        let innerHeight = height - pad * 2
+        let appleLink = Text("Apple Weather").font(RealFont.inter(10)).foregroundStyle(.white.opacity(0.4)).lineLimit(1)
+            .onTapGesture { openSources(w) }
         let body = Group {
-            if compact {
+            if width < 240 && height >= 150 {
+                // Narrow and tall: everything stacked, the icon takes what the text leaves.
+                let degrees = min(max(innerWidth / 3.2, 28), 48)
+                let showRange = height >= 240 && w.high != nil && w.low != nil
+                let glyphHeight = max(innerHeight - 44 - degrees * 1.15 - (showRange ? 18 : 0), 24)
+                let glyphWidth = min(innerWidth, glyphHeight * 192 / 168)
+                VStack(spacing: 0) {
+                    Text(when).font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.75)).lineLimit(1)
+                    Spacer(minLength: 2)
+                    WeatherGlyph(kind: w.kind, top: top, bottom: bottom, still: reduceMotion).frame(width: glyphWidth, height: glyphWidth * 168 / 192)
+                    Spacer(minLength: 2)
+                    if let temp = w.temperature {
+                        Text("\(temp)°").font(RealFont.inter(degrees, .light)).tracking(-1).foregroundStyle(.white).lineLimit(1)
+                    }
+                    Text(t(w.label)).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                    if showRange, let high = w.high, let low = w.low {
+                        Text("\(high)° / \(low)°").font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                    }
+                    Spacer(minLength: 2)
+                    appleLink
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(pad)
+            } else if width < 300 || height < 190 {
+                // Short or medium: one row, sized from the height, the stats come back when they fit under it.
+                let showStats = height >= 150 && width >= 280
+                let showText = width >= 170
+                let labelBelow = !showText && height >= 104
+                let room = max(innerHeight - 18 - (showStats ? 28 : 0) - (labelBelow ? 16 : 0), 22)
+                let glyphWidth = min(room * 192 / 168, innerWidth * 0.36)
+                let glyphHeight = glyphWidth * 168 / 192
+                let degrees = max(min(min(max(glyphHeight * 0.75, 20), 48), innerWidth * 0.24), 18)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 10) {
-                        WeatherGlyph(kind: w.kind, top: top, bottom: bottom, still: reduceMotion).frame(width: 52, height: 46)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(t(w.label)).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
-                            Text(when).font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
+                        WeatherGlyph(kind: w.kind, top: top, bottom: bottom, still: reduceMotion).frame(width: glyphWidth, height: glyphHeight)
+                        if showText {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(t(w.label)).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                                Text(when).font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
+                            }
                         }
                         Spacer(minLength: 0)
-                        if let t = w.temperature {
-                            Text("\(t)°").font(RealFont.inter(34, .light)).tracking(-1).foregroundStyle(.white).lineLimit(1)
+                        if let temp = w.temperature {
+                            Text("\(temp)°").font(RealFont.inter(degrees, .light)).tracking(-1).foregroundStyle(.white).lineLimit(1)
                         }
                     }
-                    Text("Apple Weather").font(RealFont.inter(10)).foregroundStyle(.white.opacity(0.4))
-                        .onTapGesture { openSources(w) }
+                    if labelBelow { Text(t(w.label)).font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.6)).lineLimit(1) }
+                    if showStats {
+                        HStack(spacing: 12) {
+                            if let v = w.windKmh { WeatherStat(icon: .wind, text: t("{0} km/s", v)) }
+                            if let v = w.precipitationChance { WeatherStat(icon: .drop, text: t("%{0}", v)) }
+                            if innerWidth >= 230, let h = w.high, let l = w.low { WeatherStat(icon: .thermo, text: "\(h)° / \(l)°") }
+                        }
+                    }
+                    if slotted { Spacer(minLength: 0) }
+                    appleLink
                 }
-                .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
+                .padding(pad)
             } else {
+                // Wide and tall enough for everything; a bigger slot grows the icon and the temperature with it.
+                let grow = min(max(min(innerWidth / 264, innerHeight / 160), 1), 1.4)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text(reminder.location?.placeName ?? "").font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
@@ -167,21 +220,22 @@ struct CardWeatherBlock: View {
                     }
                     HStack(spacing: 14) {
                         VStack(spacing: 4) {
-                            WeatherGlyph(kind: w.kind, top: top, bottom: bottom, still: reduceMotion).frame(width: 96, height: 84)
+                            WeatherGlyph(kind: w.kind, top: top, bottom: bottom, still: reduceMotion).frame(width: 96 * grow, height: 84 * grow)
                             Text(t(w.label)).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.55)).lineLimit(2)
                                 .multilineTextAlignment(.center)
                         }
-                        .frame(width: 96)
+                        .frame(width: 96 * grow)
                         VStack(alignment: .leading, spacing: 7) {
                             if let v = w.windKmh { WeatherStat(icon: .wind, text: t("{0} km/s", v)) }
                             if let v = w.precipitationChance { WeatherStat(icon: .drop, text: t("%{0}", v)) }
                             if let h = w.high, let l = w.low { WeatherStat(icon: .thermo, text: "\(h)° / \(l)°") }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        if let t = w.temperature {
-                            Text("\(t)°").font(RealFont.inter(52, .light)).tracking(-2).foregroundStyle(.white).lineLimit(1)
+                        if let temp = w.temperature {
+                            Text("\(temp)°").font(RealFont.inter(52 * grow, .light)).tracking(-2).foregroundStyle(.white).lineLimit(1)
                         }
                     }
+                    .frame(maxHeight: slotted ? .infinity : nil)
                     // Apple asks for its mark and the data sources link wherever WeatherKit data is shown.
                     HStack {
                         Text("Apple Weather")
@@ -190,11 +244,14 @@ struct CardWeatherBlock: View {
                     }
                     .font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.4))
                 }
-                .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 12)
+                .padding(.horizontal, pad).padding(.top, 16).padding(.bottom, 12)
             }
         }
         body
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: slotted ? height : nil, maxHeight: slotted ? height : nil, alignment: .topLeading)
+            .background(GeometryReader { g in
+                Color.clear.onAppear { boxWidth = g.size.width }.onChange(of: g.size.width) { _, w in boxWidth = w }
+            })
             .background {
                 // A soft light in the weather's colour behind the icon.
                 GeometryReader { g in
