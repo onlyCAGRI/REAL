@@ -93,6 +93,10 @@ func reminderAccentGradient(start: Int?, end: Int?, completed: Bool, blend: Doub
     let alpha = completed ? 0.38 : 0.76
     if let solidArgb {
         let c = Color(argbInt: solidArgb)
+        // Pure white stays opaque, so a white card really is white.
+        if solidArgb & 0xFFFFFFFF == 0xFFFFFFFF && !completed {
+            return LinearGradient(colors: [c, c], startPoint: .top, endPoint: .bottom)
+        }
         return LinearGradient(colors: [c.opacity(alpha), c.opacity(alpha * 0.55)], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
     let s = paletteColor(start), e = paletteColor(end)

@@ -162,6 +162,8 @@ struct ReminderCardView: View {
         .overlay {
             shape.strokeBorder(borderColor, lineWidth: (isSelected || reminder.isImportant) ? 1.25 : 0.75)
         }
+        .realPetPerch("card:\(reminder.id)")
+        .realPetCardMarks(reminder.id, lightCard: useDark, shape: shape)
         .contentShape(shape)
         .onTapGesture(perform: onOpen)
         .onLongPressGesture(minimumDuration: 0.4) {

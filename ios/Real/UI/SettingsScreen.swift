@@ -210,7 +210,7 @@ struct SettingsScreen: View {
     /// Home-screen icon: nil = white AppIcon, "AppIconDark" = black.
     @State private var iconDark = UIApplication.shared.alternateIconName != nil
 
-    private enum SettingsSheet { case language, appIcon, map, calendar, music, snooze, suggestionReset, ratingReset }
+    private enum SettingsSheet { case language, appIcon, map, calendar, vi, music, snooze, suggestionReset, ratingReset }
     /// Set after asking; nil = read AlarmKit's state.
     @State private var alarmAllowed: Bool?
     @State private var notificationTest: String?
@@ -276,6 +276,10 @@ struct SettingsScreen: View {
             ChoiceSheet(title: t("Ana ekranda takvim"),
                         choices: [0, 7, 14].map { SheetChoice(value: $0, label: $0 > 0 ? t("Önümüzdeki {0} gün", $0) : t("Kapalı")) },
                         selected: calendarHomeDays, onSelect: { calendarHomeDays = $0 }, onDismiss: close)
+        case .vi:
+            ChoiceSheet(title: "Vi",
+                        choices: [SheetChoice(value: "normal", label: t("Açık")), SheetChoice(value: "kapali", label: t("Kapalı"))],
+                        selected: petMode, onSelect: { petMode = $0; RealPet.shared.modeChanged() }, onDismiss: close)
         case .music:
             ChoiceSheet(title: t("Müzik uygulaması"),
                         choices: MusicSource.allCases.map { SheetChoice(value: $0, label: $0.label, detail: t("Şarkılar burada açılır")) },
@@ -306,6 +310,7 @@ struct SettingsScreen: View {
 
     @AppStorage(HomeCardStyle.plainKey) private var plainCards = true
     @AppStorage(CalendarCards.homeDaysKey) private var calendarHomeDays = 0
+    @AppStorage(RealPet.modeKey) private var petMode = "normal"
     @State private var musicSource = MusicSource.saved
 
     @ViewBuilder
@@ -373,7 +378,7 @@ struct SettingsScreen: View {
             SettingsChoiceRow(icon: .calendar, title: t("Ana ekranda takvim"),
                               value: calendarHomeDays > 0 ? t("Önümüzdeki {0} gün", calendarHomeDays) : t("Kapalı")) { sheet = .calendar }
             SettingsDivider()
-            SettingsToggleRow(icon: .cat, title: "REAL Pet", subtitle: t("Geçici olarak devre dışı bırakıldı"), isOn: .constant(false), enabled: false)
+            SettingsChoiceRow(icon: .cat, title: "Vi", value: petMode == "kapali" ? t("Kapalı") : t("Açık")) { sheet = .vi }
         }
         SettingsSectionHeader(title: t("DİL VE GÖRÜNÜM"))
         SettingsGlassGroup {

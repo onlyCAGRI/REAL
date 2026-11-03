@@ -20,6 +20,7 @@ struct RootView: View {
     @State private var startupShown = !ProcessInfo.processInfo.arguments.contains("-REALNoStartup")
     /// Varınca / Ayrılınca notification tapped (or the developer test): the arrival focus screen.
     @State private var arrival: ArrivalFocusContext?
+    @Environment(\.scenePhase) private var scenePhase
 
     init(initialPath: [Route] = []) {
         _path = State(initialValue: initialPath)
@@ -68,6 +69,11 @@ struct RootView: View {
                 StartupIntroOverlay { startupShown = false }
             }
         }
+        .overlay {
+            if !startupShown && !showWelcome { RealPetLayer().ignoresSafeArea() }
+        }
+        .onChange(of: path, initial: true) { _, now in RealPet.shared.setHome(now.isEmpty) }
+        .onChange(of: scenePhase) { _, now in RealPet.shared.scene(active: now == .active) }
         .overlay {
             // WelcomeScreen on first launch (no name yet), like MainActivity.
             if showWelcome {
@@ -273,6 +279,7 @@ struct HomeView: View {
                             onOpenPlanner: { path.append(.planner) },
                             onOpenYasam: { withoutAnimation { showYasam = true } },
                             onOpenPano: { showPano = true })
+                    .realPetPerch("composer")
                     .startupRise(5)
                     // The fade belongs to the dock: drawn above every card (stacked category cards included) and
                     // below the composer, from above the dock down to the screen edge.
@@ -407,6 +414,7 @@ struct HomeView: View {
                                      extendUnderNext: index < visible.count - 1,
                                      isSelected: customId.map(selectedCategoryIds.contains) ?? false,
                                      selectionMode: selecting && customId != nil)
+                        .realPetPerch("category:\(item.orderKey)")
                         .scaleEffect(pressedTile == item.orderKey ? 0.985 : 1)
                         .contentShape(Rectangle())
                         // CollectionCategoryCard: tap opens (or picks while picking); long press edits a built-in

@@ -210,7 +210,11 @@ struct ComposerBar: View {
             swapTask?.cancel()
             swapTask = Task { @MainActor in await swapPanel(to: want) }
         }
-        .onChange(of: expanded) { _, e in if e { navExpanded = false } }
+        .onChange(of: expanded) { _, e in
+            if e { navExpanded = false }
+            if isHome { RealPet.shared.composer(expanded: e) }
+        }
+        .onChange(of: voice.phase) { _, phase in if isHome { RealPet.shared.mic(active: phase != .idle) } }
         .onAppear(perform: reset)
         .onReceive(NotificationCenter.default.publisher(for: .realStartVoice)) { _ in if isHome { startVoiceIfIdle() } }
         // "Doğru mu anladım?": nothing was saved yet.
@@ -331,7 +335,7 @@ struct ComposerBar: View {
                     } else if expanded {
                         Text(t("Aklında ne var?")).font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFF8E8E96))
                     } else {
-                        ShimmerText(text: "Add to REAL")
+                        ShimmerText(text: RealPet.shared.placeholder ?? "Add to REAL")
                     }
                 }
                 TextField("", text: $text, axis: .vertical)
