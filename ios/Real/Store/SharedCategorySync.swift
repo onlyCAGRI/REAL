@@ -98,7 +98,7 @@ final class SharedCategorySync {
 
     /// Keys a shared card never carries (local bookkeeping and iOS-only planner fields).
     private static let localOnly = ["id", "customCategoryId", "notifiedAlertAt", "sentBy", "shareOrigin", "sharedCardId",
-                                    "sharedAuthorUid", "sharedAuthorName", "durationMinutes", "people", "plannerColorIndex"]
+                                    "sharedAuthorUid", "sharedAuthorName", "durationMinutes", "people", "plannerColorIndex", "cardPeople"]
 
     /// The server payload of a card. Files become blob ids; without [upload] a file that has no blob yet makes this
     /// return nil (= the card has changes to upload).

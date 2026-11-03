@@ -31,6 +31,15 @@ final class KeyboardWatcher {
 /// Ayarlar → "Sade kartlar" (deneysel): Home cards without the circle; a right swipe completes them (or undoes).
 enum HomeCardStyle {
     static let plainKey = "home_plain_cards"
+    private static let movedKey = "home_plain_cards_moved_on"
+
+    /// Once per device: everyone moves to plain cards with this update; turning it off later stays off.
+    static func moveToPlainOnce() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: movedKey) else { return }
+        defaults.set(true, forKey: plainKey)
+        defaults.set(true, forKey: movedKey)
+    }
 }
 
 /// The note after a category's card count: overdue cards first ("2 gecikmiş", shown as a warning), then what is on

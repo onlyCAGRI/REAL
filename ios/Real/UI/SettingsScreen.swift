@@ -75,8 +75,8 @@ struct AccountMenuOverlay: View {
                             .sheet(isPresented: $showAuthChoice) { AuthChoiceSheet { _ in restore(keepGuest: true) } }
                     } else {
                         item(.manage, t("Hesapları yönet")) { showManage = true }
-                        item(.person, t("Kişilerim")) { showPeople = true }
                     }
+                    item(.person, t("Kişilerim")) { showPeople = true }
                     item(.category, t("Kategori sıralaması")) { close(then: onCategoryOrder) }
                     item(.settings, t("Ayarlar")) { close(then: onSettings) }
                 }
@@ -199,10 +199,15 @@ struct SettingsScreen: View {
     @State private var alarmSnooze = RealAlarmSettings.snoozeMinutes
     /// The bottom sheet open over Settings (ChoiceSheet / ConfirmSheet), nil = none.
     @State private var sheet: SettingsSheet?
+    /// Ben ekranının sırala / gizle sayfası (Ben'deki "Düzenle" ile aynı).
+    @State private var showYasamLayout = false
     @AppStorage(MapAppearance.darkKey) private var mapDark = false
     @AppStorage(MapAppearance.plainKey) private var mapPlain = false
 
-    private enum SettingsSheet { case language, map, calendar, music, snooze, suggestionReset, ratingReset }
+    /// Home-screen icon: nil = white AppIcon, "AppIconDark" = black.
+    @State private var iconDark = UIApplication.shared.alternateIconName != nil
+
+    private enum SettingsSheet { case language, appIcon, map, calendar, music, snooze, suggestionReset, ratingReset }
     /// Set after asking; nil = read AlarmKit's state.
     @State private var alarmAllowed: Bool?
     @State private var notificationTest: String?
@@ -221,6 +226,7 @@ struct SettingsScreen: View {
         }
         .task { await refreshNotificationStatus() }
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
+        .sheet(isPresented: $showYasamLayout) { YasamLayoutSheet() }
         .sheet(isPresented: $showAiPrivacy) { AiPrivacySheet() }
         .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false }.liftedTopSafeArea() }
         .overlay { sheetOverlay }
@@ -246,6 +252,16 @@ struct SettingsScreen: View {
                                   SheetChoice(value: AppLanguage.turkish, label: t("Türkçe")),
                                   SheetChoice(value: AppLanguage.english, label: "English")],
                         selected: language.choice, onSelect: { language.set($0) }, onDismiss: close)
+        case .appIcon:
+            ChoiceSheet(title: t("Uygulama simgesi"),
+                        choices: [SheetChoice(value: false, label: t("Beyaz"), detail: t("Beyaz zemin, siyah yazı")),
+                                  SheetChoice(value: true, label: t("Siyah"), detail: t("Siyah zemin, beyaz yazı"))],
+                        selected: iconDark, onSelect: { dark in
+                            guard dark != iconDark else { return }
+                            UIApplication.shared.setAlternateIconName(dark ? "AppIconDark" : nil) { error in
+                                if error == nil { Task { @MainActor in iconDark = dark } }
+                            }
+                        }, onDismiss: close)
         case .map:
             ChoiceSheet(title: t("Harita görünümü"),
                         choices: [SheetChoice(value: false, label: t("Açık"), detail: t("Renkli: yeşil alanlar, mavi deniz")),
@@ -284,7 +300,7 @@ struct SettingsScreen: View {
         }
     }
 
-    @AppStorage(HomeCardStyle.plainKey) private var plainCards = false
+    @AppStorage(HomeCardStyle.plainKey) private var plainCards = true
     @AppStorage(CalendarCards.homeDaysKey) private var calendarHomeDays = 0
     @State private var musicSource = MusicSource.saved
 
@@ -292,7 +308,13 @@ struct SettingsScreen: View {
     private var mainPage: some View {
         SettingsSectionHeader(title: t("GÖRÜNÜM"))
         SettingsGlassGroup {
+            SettingsActionRow(icon: .cards, title: t("Ben ekranı"), subtitle: t("Bölümleri sırala ya da gizle")) {
+                showYasamLayout = true
+            }
+            SettingsDivider()
             SettingsChoiceRow(icon: .theme, title: t("Dil"), value: language.currentLabel) { sheet = .language }
+            SettingsDivider()
+            SettingsChoiceRow(icon: .theme, title: t("Uygulama simgesi"), value: iconDark ? t("Siyah") : t("Beyaz")) { sheet = .appIcon }
             SettingsDivider()
             SettingsChoiceRow(icon: .pin, title: t("Harita görünümü"),
                               value: (mapDark ? t("Koyu") : t("Açık")) + (mapPlain ? " · " + t("Sade") : "")) { sheet = .map }

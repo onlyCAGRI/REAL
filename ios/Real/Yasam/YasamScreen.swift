@@ -22,7 +22,7 @@ struct YasamScreen: View {
     @State private var revealed = false
     @State private var closing = false
     @State private var section: Section = .home
-    @State private var tab = 0
+    @State private var showLayout = false
     @State private var open: String?
     @State private var moodHistoryOpen = false
     @State private var waterHistoryOpen = false
@@ -48,7 +48,6 @@ struct YasamScreen: View {
                         if section == .journals {
                             journalList
                         } else {
-                            YasamIconTabs(tab: $tab).yasamEnter(revealed, delay: 0.38)
                             tiles
                         }
                         Color.clear.frame(height: 130)
@@ -109,6 +108,7 @@ struct YasamScreen: View {
                 return true
             }
         }
+        .sheet(isPresented: $showLayout) { YasamLayoutSheet() }
         .fullScreenCover(isPresented: $showMoodHistory) {
             MoodHistoryScreen(onAdd: { showMoodHistory = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showMoodAdd = true } })
                 .liftedTopSafeArea()
@@ -198,7 +198,7 @@ struct YasamScreen: View {
                     .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
             }
             .padding(.leading, 22).padding(.top, 8)
-            .accessibilityLabel(journalsMode ? t("Yaşam'a dön") : t("Geri"))
+            .accessibilityLabel(journalsMode ? t("Ben ekranına dön") : t("Geri"))
         }
         .scaleEffect(revealed ? 1 : 0.96)
         .opacity(revealed ? 1 : 0)
@@ -207,91 +207,150 @@ struct YasamScreen: View {
 
     // MARK: Tiles
 
+    /// Ben ekranının blokları: kayıtlı sıradaki görünen bölümler; art arda gelen keşif bölümleri tek ızgara.
+    private enum TileBlock: Identifiable {
+        case row(YasamPart)
+        case discover([YasamPart])
+        var id: String {
+            switch self {
+            case .row(let p): return p.rawValue
+            case .discover(let ps): return ps.map(\.rawValue).joined(separator: ",")
+            }
+        }
+    }
+
+    private var tileBlocks: [TileBlock] {
+        var blocks: [TileBlock] = []
+        for part in YasamLayout.shared.visible {
+            if part.discover, case .discover(let ps)? = blocks.last {
+                blocks[blocks.count - 1] = .discover(ps + [part])
+            } else {
+                blocks.append(part.discover ? .discover([part]) : .row(part))
+            }
+        }
+        return blocks
+    }
+
     private var tiles: some View {
-        let w = water
-        let progress = min(Double(w.today) / Double(max(w.goal, 1)), 1)
+        let blocks = tileBlocks
+        let firstDiscover = blocks.firstIndex { if case .discover = $0 { return true } else { return false } }
         return VStack(alignment: .leading, spacing: 0) {
-            if tab != 2 {
-                YasamWaterHero(todayMl: w.today, progress: progress, revealed: revealed)
-                YasamRow(label: t("SU"), value: "/ \(YasamText.litres(w.goal)) L", expanded: open == "water", index: 0, revealed: revealed,
-                         toggle: { toggle("water") }) {
-                    Text(progress >= 1 ? t("Günlük hedefi tamamladın") : t("Hedefe {0} L kaldı", YasamText.litres(max(w.goal - w.today, 0))))
-                        .font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
-                } content: {
-                    Text(t("BUGÜN {0}% · 250 ML", Int((progress * 100).rounded()))).font(.system(size: 11, design: .monospaced)).kerning(1).foregroundStyle(YasamTone.muted)
-                    Color.clear.frame(height: 12)
-                    YasamSlideToAdd(label: t("Kaydır · 250 ml su ekle")) { life.addDrink(250) }
-                    YasamTextAction(text: t("SU EKRANINI AÇ  ›"), tone: YasamTone.water) { showWater = true }
-                    YasamTextAction(text: waterHistoryOpen ? t("GEÇMİŞİ GİZLE  ‹") : t("GEÇMİŞİ AÇ  ›"), tone: YasamTone.muted) {
-                        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { waterHistoryOpen.toggle() }
+            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+                switch block {
+                case .row(let part):
+                    partRow(part, index: index)
+                case .discover(let parts):
+                    if index > 0, case .row = blocks[index - 1] {
+                        Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
                     }
-                    if waterHistoryOpen { YasamWaterHistory().transition(.opacity.combined(with: .move(edge: .top))) }
-                }
-                YasamRow(label: "MOOD", value: lastMood?.label ?? t("Henüz yok"), expanded: open == "mood", index: 1, revealed: revealed,
-                         toggle: { toggle("mood") }) {
-                    YasamSpark(points: life.moods.sorted { $0.details.loggedAt < $1.details.loggedAt }.suffix(7).map { YasamText.moodScore($0.mood) },
-                               tone: YasamTone.moodDefault)
-                } content: {
-                    YasamTextAction(text: t("MOOD EKLE  +"), tone: YasamTone.moodDefault) { showMoodAdd = true }
-                    YasamTextAction(text: moodHistoryOpen ? t("GEÇMİŞİ GİZLE  ‹") : t("GEÇMİŞİ AÇ  ›"), tone: YasamTone.muted) {
-                        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { moodHistoryOpen.toggle() }
-                    }
-                    if moodHistoryOpen { YasamMoodHistory(onAdd: { showMoodAdd = true }, onMore: { showMoodHistory = true }).transition(.opacity.combined(with: .move(edge: .top))) }
-                }
-                YasamRow(label: t("GÜNLÜKLERİM"), value: t("Bugün yaz"), expanded: open == "journal", index: 2, revealed: revealed,
-                         toggle: { toggle("journal") }) {
-                    if let p = journalPreview {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(p.when).font(.system(size: 10, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted)
-                            Text(p.line).font(.system(size: 14, weight: .light)).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
-                        }
-                    } else {
-                        Text(t("Bugün ne düşünüyorsun?")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
-                    }
-                } content: {
-                    YasamTextAction(text: t("BUGÜN YAZ  +"), tone: YasamTone.journal, action: newJournal)
-                    YasamTextAction(text: t("GÜNLÜKLERİ AÇ  ›"), tone: YasamTone.muted) { switchSection(.journals) }
+                    discoverGrid(parts, header: index == firstDiscover, index: index)
                 }
             }
-            if tab != 1 {
-                let last = books.lastRead
-                YasamRow(label: t("KİTAP"), value: last?.percent.map { "%\($0)" } ?? last?.book.title ?? t("Rafını aç"),
-                         expanded: open == "book", index: 3, revealed: revealed, toggle: { toggle("book") }) {
-                    if let last { YasamBookPreview(book: last.book, percent: last.percent) }
-                    else { Text(t("Rafını aç")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7)) }
-                } content: {
-                    if let last {
-                        YasamTextAction(text: t("OKUMAYA DEVAM ET  ›"), tone: YasamTone.book) { resumeBook = last.book.id; showBooks = true }
-                        YasamTextAction(text: t("RAFI AÇ  ›"), tone: YasamTone.muted) { resumeBook = nil; showBooks = true }
-                    } else {
-                        YasamTextAction(text: t("RAFINI AÇ  ›"), tone: YasamTone.book) { resumeBook = nil; showBooks = true }
-                    }
-                }
-                Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
-                YasamDiscoverGrid(
-                    watchCount: discovery.snapshot(.film).later.count, playCount: discovery.snapshot(.game).later.count,
-                    listenCount: MusicDiscoveryStore.shared.snapshot.list.count,
-                    watchArt: discovery.snapshot(.film).later.compactMap(\.media.artworkUrl),
-                    playArt: discovery.snapshot(.game).later.compactMap(\.media.artworkUrl),
-                    listenArt: MusicDiscoveryStore.shared.snapshot.list.reversed().compactMap(\.music.artworkUrl),
-                    ratings: MediaRatingStore.shared.entries,
-                    open: { kind, list in
-                        switch kind {
-                        case 0: openDiscovery(.film, list: list)
-                        case 1: openDiscovery(.game, list: list)
-                        case 2: withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = list }
-                        default: withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { showRatings = true }
-                        }
-                    })
-                .yasamEnter(revealed, delay: 0.48 + 4 * 0.055, y: 14)
-            }
-            if tab == 1 {
+            if case .row? = blocks.last {
                 Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
             }
+            if blocks.isEmpty {
+                Text(t("Tüm bölümler gizli.")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
+            }
+            // Sırala / gizle: altta küçük bir yazı; kategori sıralama sayfasıyla aynı sayfayı açar.
+            Button { showLayout = true } label: {
+                Text(t("DÜZENLE")).font(.system(size: 11, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 18)
         }
         .padding(.horizontal, 22).padding(.top, 20)
         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32), value: open)
-        .animation(.easeOut(duration: 0.22), value: tab)
+        .animation(.easeOut(duration: 0.22), value: YasamLayout.shared.visible)
+    }
+
+    @ViewBuilder
+    private func partRow(_ part: YasamPart, index: Int) -> some View {
+        let w = water
+        let progress = min(Double(w.today) / Double(max(w.goal, 1)), 1)
+        switch part {
+        case .water:
+            YasamWaterHero(todayMl: w.today, progress: progress, revealed: revealed)
+            YasamRow(label: t("SU"), value: "/ \(YasamText.litres(w.goal)) L", expanded: open == "water", index: index, revealed: revealed,
+                     toggle: { toggle("water") }) {
+                Text(progress >= 1 ? t("Günlük hedefi tamamladın") : t("Hedefe {0} L kaldı", YasamText.litres(max(w.goal - w.today, 0))))
+                    .font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
+            } content: {
+                Text(t("BUGÜN {0}% · 250 ML", Int((progress * 100).rounded()))).font(.system(size: 11, design: .monospaced)).kerning(1).foregroundStyle(YasamTone.muted)
+                Color.clear.frame(height: 12)
+                YasamSlideToAdd(label: t("Kaydır · 250 ml su ekle")) { life.addDrink(250) }
+                YasamTextAction(text: t("SU EKRANINI AÇ  ›"), tone: YasamTone.water) { showWater = true }
+                YasamTextAction(text: waterHistoryOpen ? t("GEÇMİŞİ GİZLE  ‹") : t("GEÇMİŞİ AÇ  ›"), tone: YasamTone.muted) {
+                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { waterHistoryOpen.toggle() }
+                }
+                if waterHistoryOpen { YasamWaterHistory().transition(.opacity.combined(with: .move(edge: .top))) }
+            }
+        case .mood:
+            YasamRow(label: "MOOD", value: lastMood?.label ?? t("Henüz yok"), expanded: open == "mood", index: index, revealed: revealed,
+                     toggle: { toggle("mood") }) {
+                YasamSpark(points: life.moods.sorted { $0.details.loggedAt < $1.details.loggedAt }.suffix(7).map { YasamText.moodScore($0.mood) },
+                           tone: YasamTone.moodDefault)
+            } content: {
+                YasamTextAction(text: t("MOOD EKLE  +"), tone: YasamTone.moodDefault) { showMoodAdd = true }
+                YasamTextAction(text: moodHistoryOpen ? t("GEÇMİŞİ GİZLE  ‹") : t("GEÇMİŞİ AÇ  ›"), tone: YasamTone.muted) {
+                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { moodHistoryOpen.toggle() }
+                }
+                if moodHistoryOpen { YasamMoodHistory(onAdd: { showMoodAdd = true }, onMore: { showMoodHistory = true }).transition(.opacity.combined(with: .move(edge: .top))) }
+            }
+        case .journal:
+            YasamRow(label: t("GÜNLÜKLERİM"), value: t("Bugün yaz"), expanded: open == "journal", index: index, revealed: revealed,
+                     toggle: { toggle("journal") }) {
+                if let p = journalPreview {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(p.when).font(.system(size: 10, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted)
+                        Text(p.line).font(.system(size: 14, weight: .light)).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
+                    }
+                } else {
+                    Text(t("Bugün ne düşünüyorsun?")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
+                }
+            } content: {
+                YasamTextAction(text: t("BUGÜN YAZ  +"), tone: YasamTone.journal, action: newJournal)
+                YasamTextAction(text: t("GÜNLÜKLERİ AÇ  ›"), tone: YasamTone.muted) { switchSection(.journals) }
+            }
+        case .book:
+            let last = books.lastRead
+            YasamRow(label: t("KİTAP"), value: last?.percent.map { "%\($0)" } ?? last?.book.title ?? t("Rafını aç"),
+                     expanded: open == "book", index: index, revealed: revealed, toggle: { toggle("book") }) {
+                if let last { YasamBookPreview(book: last.book, percent: last.percent) }
+                else { Text(t("Rafını aç")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7)) }
+            } content: {
+                if let last {
+                    YasamTextAction(text: t("OKUMAYA DEVAM ET  ›"), tone: YasamTone.book) { resumeBook = last.book.id; showBooks = true }
+                    YasamTextAction(text: t("RAFI AÇ  ›"), tone: YasamTone.muted) { resumeBook = nil; showBooks = true }
+                } else {
+                    YasamTextAction(text: t("RAFINI AÇ  ›"), tone: YasamTone.book) { resumeBook = nil; showBooks = true }
+                }
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func discoverGrid(_ parts: [YasamPart], header: Bool, index: Int) -> some View {
+        YasamDiscoverGrid(
+            parts: parts, header: header,
+            watchCount: discovery.snapshot(.film).later.count, playCount: discovery.snapshot(.game).later.count,
+            listenCount: MusicDiscoveryStore.shared.snapshot.list.count,
+            watchArt: discovery.snapshot(.film).later.compactMap(\.media.artworkUrl),
+            playArt: discovery.snapshot(.game).later.compactMap(\.media.artworkUrl),
+            listenArt: MusicDiscoveryStore.shared.snapshot.list.reversed().compactMap(\.music.artworkUrl),
+            ratings: MediaRatingStore.shared.entries,
+            open: { kind, list in
+                switch kind {
+                case 0: openDiscovery(.film, list: list)
+                case 1: openDiscovery(.game, list: list)
+                case 2: withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = list }
+                default: withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { showRatings = true }
+                }
+            })
+        .yasamEnter(revealed, delay: 0.48 + Double(index) * 0.055, y: 14)
     }
 
     private func openDiscovery(_ kind: DiscoveryKind, list: Bool) {
@@ -582,54 +641,6 @@ struct WordFlow: Layout {
             rows[rows.count - 1] = row
         }
         return rows
-    }
-}
-
-/// Three icon tabs (Hepsi · Kayıtlar · Keşfet) with a sliding 28pt underline.
-struct YasamIconTabs: View {
-    @Binding var tab: Int
-    var body: some View {
-        GeometryReader { geo in
-            let cell = geo.size.width / 3
-            ZStack(alignment: .bottomLeading) {
-                HStack(spacing: 0) {
-                    ForEach(0..<3, id: \.self) { i in
-                        Button { tab = i } label: {
-                            glyph(i).opacity(i == tab ? 1 : 0.4).frame(maxWidth: .infinity, minHeight: 48)
-                        }
-                        .accessibilityLabel([t("Hepsi"), t("Kayıtlar"), t("Keşfet")][i])
-                        .accessibilityAddTraits(i == tab ? .isSelected : [])
-                    }
-                }
-                Rectangle().fill(.white).frame(width: 28, height: 1.5)
-                    .offset(x: cell * CGFloat(tab) + (cell - 28) / 2)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: tab)
-            }
-        }
-        .frame(height: 50)
-        .padding(.top, 14).padding(.bottom, 4)
-    }
-
-    @ViewBuilder
-    private func glyph(_ i: Int) -> some View {
-        switch i {
-        case 0:
-            VStack(spacing: 6) {
-                HStack(spacing: 6) { Circle().frame(width: 4.4, height: 4.4); Circle().frame(width: 4.4, height: 4.4) }
-                HStack(spacing: 6) { Circle().frame(width: 4.4, height: 4.4); Circle().frame(width: 4.4, height: 4.4) }
-            }
-            .foregroundStyle(.white).frame(width: 20, height: 20)
-        case 1:
-            HStack(alignment: .bottom, spacing: 4.5) {
-                Capsule().frame(width: 1.5, height: 9)
-                Capsule().frame(width: 1.5, height: 19)
-                Capsule().frame(width: 1.5, height: 13)
-            }
-            .foregroundStyle(.white).frame(width: 20, height: 20, alignment: .bottom)
-        default:
-            ZStack { Circle().stroke(.white, lineWidth: 1.5).frame(width: 17, height: 17); Circle().fill(.white).frame(width: 4, height: 4) }
-                .frame(width: 20, height: 20)
-        }
     }
 }
 

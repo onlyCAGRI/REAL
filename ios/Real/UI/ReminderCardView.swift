@@ -124,6 +124,7 @@ struct ReminderCardView: View {
                     .strikethrough(strike, color: textColor)
                     .lineLimit(3)
                     .animation(.easeOut(duration: 0.18), value: strike)
+                peopleLine
                 meta
             }
             .padding(.top, 11)
@@ -218,6 +219,24 @@ struct ReminderCardView: View {
             }
         }
         .frame(width: 22, height: 22)
+    }
+
+    @ViewBuilder private var peopleLine: some View {
+        if !reminder.cardPeople.isEmpty {
+            HStack(spacing: 6) {
+                HStack(spacing: -5) {
+                    ForEach(Array(reminder.cardPeople.prefix(3).enumerated()), id: \.offset) { _, person in
+                        ConnectionAvatar(name: person.name, key: person.uid ?? person.name, size: 20, pictureVersion: person.pictureVersion)
+                    }
+                }
+                Text(t("{0} ile", reminder.cardPeople.map(\.name).joined(separator: ", ")))
+                    .font(RealFont.inter(12))
+                    .foregroundStyle(subtext)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.top, 6)
+        }
     }
 
     @ViewBuilder private var meta: some View {

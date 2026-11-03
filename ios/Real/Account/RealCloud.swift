@@ -159,7 +159,7 @@ enum RealCloudRestore {
             }
         }
         if let card = decode(ReminderItem.self, p, decoder) { return card }
-        for key in ["gameBlocks", "musicBlocks", "mediaBlocks", "cardStack", "voiceRecordings", "contentBlockLayout", "attachments"] {
+        for key in ["gameBlocks", "cardPeople", "musicBlocks", "mediaBlocks", "cardStack", "voiceRecordings", "contentBlockLayout", "attachments"] {
             p[key] = nil
             if let card = decode(ReminderItem.self, p, decoder) { return card }
         }

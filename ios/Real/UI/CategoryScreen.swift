@@ -12,7 +12,7 @@ struct CategoryScreen: View {
     let customId: Int64?
     @Binding var path: [Route]
 
-    @AppStorage(HomeCardStyle.plainKey) private var plainSetting = false
+    @AppStorage(HomeCardStyle.plainKey) private var plainSetting = true
     @AppStorage("category_sort_order") private var sortRaw = ReminderSortOrder.recentlyAdded.rawValue
     @State private var colorFilter: Int?
     @State private var filterMode = false

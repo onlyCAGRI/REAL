@@ -23,6 +23,9 @@ packages:
   MapLibre:
     url: https://github.com/maplibre/maplibre-gl-native-distribution
     from: 6.0.0
+  Lottie:
+    url: https://github.com/airbnb/lottie-ios
+    from: 4.4.0
 targets:
   Real:
     type: application
@@ -50,6 +53,8 @@ targets:
         product: GoogleSignIn
       - package: MapLibre
         product: MapLibre
+      - package: Lottie
+        product: Lottie
       # Share → REAL (App Groups), push, Sign in with Apple, time-sensitive alerts and share links: paid team only.
       - target: RealShare
     settings:
@@ -62,6 +67,8 @@ targets:
         PROVISIONING_PROFILE_SPECIFIER: "$(REAL_PROFILE)"
         CODE_SIGN_ENTITLEMENTS: Real/Real.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Settings > Uygulama simgesi (setAlternateIconName).
+        ASSETCATALOG_COMPILER_ALTERNATE_APP_ICON_NAMES: AppIconDark
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_PREVIEWS: YES

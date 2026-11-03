@@ -3,6 +3,7 @@ import UIKit
 import PhotosUI
 import MapKit
 import UniformTypeIdentifiers
+import Lottie
 
 /// Card detail (ReminderDetailScreen.kt). View mode: the card itself as the top block (text, divider,
 /// status / schedule / category), the content blocks under it in their saved order, and the glass bottom bar
@@ -30,6 +31,7 @@ struct ReminderDetailView: View {
     @State private var showMediaSearch = false
     @State private var showGameSearch = false
     @State private var showCardShare = false
+    @State private var shareSession = CardDetailShareSession()
     @State private var deleting = false
     /// When Kaydet sent the sweep through the dock; the normal dock's buttons appear as it passes them.
     @State private var saveSweepStart: Date?
@@ -431,6 +433,9 @@ struct ReminderDetailView: View {
                     .textSelection(.enabled)
                     .multilineTextAlignment(cover ? .center : .leading)
                     .frame(maxWidth: .infinity, alignment: cover ? .center : .leading)
+                if !r.cardPeople.isEmpty {
+                    CardDetailPeople(reminder: r, color: dark ? Color(argb: 0xFF101010) : Color(argb: 0xFFF4F4F6), session: shareSession)
+                }
                 Rectangle().fill(dark ? Color(argb: 0xFF101010).opacity(0.2) : Color(argb: 0xFF38383F)).frame(height: 1)
                     .padding(.top, 24).padding(.bottom, 18)
                 statusArea(r)
@@ -2153,4 +2158,230 @@ func reminderLocationLabel(_ l: ReminderLocation) -> String? {
     if !name.isEmpty, name != "Seçilen yer", name != t("Seçilen yer"), name != l.address.trimmingCharacters(in: .whitespaces), name.contains(where: \.isLetter) { return name }
     if let street { return street }
     return name.isEmpty ? nil : name
+}
+
+
+/// The paper plane flies off and a check lands (SendCheckMark.kt). The check only comes with `done`, so it never claims too early.
+struct SendCheckMark: View {
+    let done: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        SendCheckMarkRepresentable(done: done, reduceMotion: reduceMotion)
+    }
+}
+
+private struct SendCheckMarkRepresentable: UIViewRepresentable {
+    private static let beforeCheck: CGFloat = 0.58
+    let done: Bool
+    let reduceMotion: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> UIView {
+        let container = UIView()
+        container.backgroundColor = .clear
+        let lottie = LottieAnimationView(animation: LottieAnimation.named("send_check"))
+        lottie.translatesAutoresizingMaskIntoConstraints = false
+        lottie.contentMode = .scaleAspectFit
+        lottie.loopMode = .playOnce
+        lottie.backgroundBehavior = .pauseAndRestore
+        lottie.currentProgress = 0
+        container.addSubview(lottie)
+        NSLayoutConstraint.activate([
+            lottie.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            lottie.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            lottie.topAnchor.constraint(equalTo: container.topAnchor),
+            lottie.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        context.coordinator.animationView = lottie
+        context.coordinator.update(done: done, reduceMotion: reduceMotion)
+        return container
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.update(done: done, reduceMotion: reduceMotion)
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.stop()
+    }
+
+    final class Coordinator: NSObject {
+        weak var animationView: LottieAnimationView?
+        private var displayLink: CADisplayLink?
+        private var currentProgress: CGFloat = 0
+        private var startProgress: CGFloat = 0
+        private var targetProgress: CGFloat = 0
+        private var startTime: CFTimeInterval = 0
+        private var duration: CFTimeInterval = 0
+        private var lastDone: Bool?
+
+        func update(done: Bool, reduceMotion: Bool) {
+            guard lastDone != done else { return }
+            lastDone = done
+            let target: CGFloat = done ? 1.0 : SendCheckMarkRepresentable.beforeCheck
+            if reduceMotion {
+                stop()
+                currentProgress = target
+                animationView?.currentProgress = target
+                return
+            }
+            startProgress = currentProgress
+            targetProgress = target
+            duration = done ? 1.0 : 1.3
+            startTime = CACurrentMediaTime()
+            if displayLink == nil {
+                let link = CADisplayLink(target: self, selector: #selector(step))
+                link.add(to: .main, forMode: .common)
+                displayLink = link
+            }
+        }
+
+        @objc private func step() {
+            let elapsed = CACurrentMediaTime() - startTime
+            let t = duration > 0 ? min(1.0, max(0.0, elapsed / duration)) : 1.0
+            currentProgress = startProgress + (targetProgress - startProgress) * CGFloat(t)
+            animationView?.currentProgress = currentProgress
+            if t >= 1.0 { stop() }
+        }
+
+        func stop() {
+            displayLink?.invalidate()
+            displayLink = nil
+        }
+
+        deinit {
+            displayLink?.invalidate()
+        }
+    }
+}
+
+/// Reuses one share link per detail screen for repeated sends across people on the card.
+@MainActor
+final class CardDetailShareSession {
+    private var cachedLink: CardShareClient.Link?
+    private var creatingTask: Task<CardShareClient.Link, Error>?
+
+    func link(for card: ReminderItem, options: CardShareClient.Options, store: ReminderStore, life: LifeStore) async throws -> CardShareClient.Link {
+        if let cachedLink { return cachedLink }
+        if let creatingTask { return try await creatingTask.value }
+        let task = Task { @MainActor in
+            try await CardShareClient.create(card, options: options, store: store, life: life)
+        }
+        creatingTask = task
+        defer { creatingTask = nil }
+        let created = try await task.value
+        cachedLink = created
+        return created
+    }
+}
+
+/// In the card detail (CardDetailPeople.kt): who the card is with. Tapping the avatar of someone in Kişilerim brings out
+/// a send button; someone who is only a name on the card has none.
+private struct CardDetailPeople: View {
+    let reminder: ReminderItem
+    let color: Color
+    let session: CardDetailShareSession
+
+    var body: some View {
+        let known = composerKnownPeople()
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(reminder.cardPeople.enumerated()), id: \.offset) { _, person in
+                CardDetailPerson(reminder: reminder, person: person, connection: connectionFor(person: person, known: known), color: color, session: session)
+            }
+        }
+        .padding(.top, 8)
+    }
+}
+
+private struct CardDetailPerson: View {
+    let reminder: ReminderItem
+    let person: CardPerson
+    let connection: ComposerKnownPerson?
+    let color: Color
+    let session: CardDetailShareSession
+
+    @Environment(ReminderStore.self) private var store
+    @Environment(LifeStore.self) private var life
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var open = false
+    @State private var sending = false
+    @State private var sent = false
+
+    var body: some View {
+        let uid = connection?.uid
+        let avatarKey = uid ?? person.uid ?? person.name
+        let avatarPic = connection?.pictureVersion ?? person.pictureVersion
+        HStack(spacing: 8) {
+            if uid != nil {
+                Button {
+                    guard !sending && !sent else { return }
+                    withAnimation(reduceMotion ? .easeInOut(duration: 0.12) : .spring(response: 0.3, dampingFraction: 0.6)) {
+                        open.toggle()
+                    }
+                } label: {
+                    ConnectionAvatar(name: person.name, key: avatarKey, size: 28, pictureVersion: avatarPic)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t("{0} kişisine gönder", person.name))
+            } else {
+                ConnectionAvatar(name: person.name, key: avatarKey, size: 28, pictureVersion: avatarPic)
+            }
+            Text(t("{0} ile", person.name))
+                .font(RealFont.inter(14))
+                .foregroundStyle(color)
+                .lineLimit(1)
+            if let uid, open || sending || sent {
+                Group {
+                    if sending || sent {
+                        SendCheckMark(done: sent)
+                            .frame(width: 36, height: 36)
+                    } else {
+                        Button {
+                            send(to: uid)
+                        } label: {
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 32, height: 32)
+                                .overlay {
+                                    ActionIcon(.share, color: Color(argb: 0xFF0B0B0D), size: 16)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(t("{0} kişisine gönder", person.name))
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .scale(scale: 0.5).combined(with: .opacity))
+            }
+        }
+        .frame(minHeight: 40)
+    }
+
+    private func send(to uid: String) {
+        guard !sending && !sent else { return }
+        sending = true
+        Task {
+            do {
+                let link = try await session.link(for: reminder, options: shareOptionsFor(reminder), store: store, life: life)
+                try await CardShareClient.sendToConnection(link.id, uid: uid)
+                sent = true
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } catch is CancellationError {
+            } catch {
+                let msg = (error as? LocalizedError)?.errorDescription ?? RealBackend.message(for: error)
+                RealToast.shared.show(msg)
+            }
+            sending = false
+        }
+    }
+
+    private func shareOptionsFor(_ reminder: ReminderItem) -> CardShareClient.Options {
+        CardShareClient.Options(
+            attachments: reminder.attachments.contains { $0.type != .textSnippet } || !(reminder.cardStack?.cards.isEmpty ?? true),
+            location: reminder.location != nil,
+            voice: !reminder.voiceRecordings.isEmpty,
+            journal: reminder.journal != nil || reminder.mood != nil
+        )
+    }
 }

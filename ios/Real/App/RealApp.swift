@@ -13,6 +13,7 @@ struct RealApp: App {
     private let initialPath: [Route]
 
     init() {
+        HomeCardStyle.moveToPlainOnce()
         // No scroll indicator bars anywhere (Android shows none): every SwiftUI ScrollView / List is a UIScrollView.
         UIScrollView.appearance().showsVerticalScrollIndicator = false
         UIScrollView.appearance().showsHorizontalScrollIndicator = false

@@ -292,7 +292,7 @@ struct MusicDiscoveryScreen: View {
                 YasamHeroSentence(greeting: "", sentence: t("Ne dinlesek"), tone: musicTone,
                                   hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
                     .padding(.top, 4)
-                BackCircle(action: back).padding(.leading, 22).padding(.top, 12).accessibilityLabel(t("Yaşam'a dön"))
+                BackCircle(action: back).padding(.leading, 22).padding(.top, 12).accessibilityLabel(t("Ben ekranına dön"))
             }
             if let error { errorLine(error) }
             // One question at a time: 2 genres at most, then (optional) one era; "Hepsi" = every era; then, with Apple

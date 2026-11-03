@@ -63,24 +63,9 @@ struct ScheduleDraft: Equatable {
     }
 }
 
-/// "bugün / yarın" in the draft offers a one-tap date chip (ComposerDateSuggestions.kt).
+/// The full screen's Bugün / Yarın chips.
 enum DateSuggestion {
     case today, tomorrow
-    var label: String { self == .today ? t("Bugün'e ekle") : t("Yarına ekle") }
-
-    static func detect(_ text: String) -> DateSuggestion? {
-        let t = " " + text.lowercased(with: Locale(identifier: "tr_TR")) + " "
-        func has(_ words: [String]) -> Bool {
-            words.contains { w in
-                guard let r = t.range(of: w) else { return false }
-                let before = t[t.index(before: r.lowerBound)], after = t[r.upperBound]
-                return !before.isLetter && !before.isNumber && !after.isLetter && !after.isNumber
-            }
-        }
-        if has(["yarın", "yarin"]) { return .tomorrow }
-        if has(["bugün", "bugun", "bu akşam", "bu aksam", "bu gece"]) { return .today }
-        return nil
-    }
 }
 
 /// HomeLiquidDock + GlassComposer. Collapsed: calendar circle · "Add to REAL" capsule · mic circle.
@@ -127,6 +112,7 @@ struct ComposerBar: View {
     @State var musicPicks: [MusicBlock] = []
     @State var mediaPicks: [MediaBlock] = []
     @State var gamePicks: [CardGameBlock] = []
+    @State private var draftPeople: [CardPerson] = []
     @State var fsRecorder = VoiceRecorderEngine()
     @State var showCamera = false
     @State var showFileImporter = false
@@ -147,7 +133,7 @@ struct ComposerBar: View {
     @State private var swapIn: Double = 1
     @State private var swapTask: Task<Void, Never>?
 
-    private var otherExpanded: Bool { !text.isEmpty || checklistMode || voice.phase != .idle }
+    private var otherExpanded: Bool { !text.isEmpty || !draftPeople.isEmpty || trayCount > 0 || checklistMode || voice.phase != .idle }
     private var wantsExpanded: Bool { focus != nil || otherExpanded }
     private var showChrome: Bool { isHome && !expanded }
 
@@ -282,7 +268,7 @@ struct ComposerBar: View {
     /// HomeDockExpandedNavigation: Yaşam · Pano · Takvim, Takvim selected.
     private var navigationBar: some View {
         HStack(spacing: 0) {
-            navItem(t("Yaşam"), "rectangle.stack", selected: false) { navExpanded = false; onOpenYasam?() }
+            navItem(t("Ben"), "rectangle.stack", selected: false) { navExpanded = false; onOpenYasam?() }
             navItem(t("Pano"), "square.grid.2x2", selected: false) { navExpanded = false; onOpenPano?() }
             navItem(t("Takvim"), "calendar", selected: true) { navExpanded = false; onOpenPlanner?() }
         }
@@ -312,19 +298,12 @@ struct ComposerBar: View {
         return VStack(alignment: .leading, spacing: 0) {
             inputRow
             if expanded {
-                if let s = DateSuggestion.detect(text), suggestionNeeded(s) {
-                    Button { applySuggestion(s) } label: {
-                        Label(s.label, systemImage: "calendar.badge.plus")
-                            .font(RealFont.inter(12, .medium))
-                            .foregroundStyle(Color(argb: 0xFFDCE8FF))
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(Capsule().fill(RealColors.accentBlue.opacity(0.16)))
-                    }
-                    .padding(.horizontal, 14).padding(.bottom, 4)
-                }
+                typedDateRow
+                ComposerSlashRow(text: text, onPick: pickSlashResult)
+                peopleRow
                 toolRow
                 if schedule.alertAt != nil { durationRow }
-                if !attachments.isEmpty { attachmentRow }
+                if trayCount > 0 { dockTray }
                 if checklistMode { checklistEditor }
             }
         }
@@ -361,6 +340,9 @@ struct ComposerBar: View {
                     .tint(Color(argb: 0xFF9AB9FF))
                     .lineLimit(1...4)
                     .focused($focus, equals: .title)
+                    // Closed, the field keeps no touches of its own: a swipe up anywhere on the bar reaches the dock's
+                    // gesture, and a tap still focuses it through the row's onTapGesture.
+                    .allowsHitTesting(expanded)
                     .submitLabel(checklistMode ? .next : .done)
                     .onChange(of: text) { _, new in
                         // Return submits (the Android field strips newlines and submits on Done).
@@ -410,6 +392,68 @@ struct ComposerBar: View {
         .frame(minHeight: expanded ? 48 : 54)
         .contentShape(Rectangle())
         .onTapGesture { if focus == nil { focus = .title } }
+    }
+
+    /// "yarın 9'da" typed: each reading as a chip (09:00 and 21:00); picking one also takes the words out.
+    @ViewBuilder private var typedDateRow: some View {
+        let found = composerDateSuggestions(text, alertAt: schedule.hasTime ? schedule.date : nil,
+                                            dateHint: schedule.hasTime ? nil : schedule.date)
+        if !found.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(found, id: \.self) { suggestion in
+                        ComposerSuggestionChip(symbol: "calendar", label: suggestion.label) { applyTypedDate(suggestion) }
+                    }
+                }
+                .padding(.horizontal, 14)
+            }
+            .padding(.bottom, 4)
+        }
+    }
+
+    /// Under the composer (ComposerPeopleRow): the people on the draft (tap takes one off), then the ones found in the typed words.
+    @ViewBuilder private var peopleRow: some View {
+        let known = composerKnownPeople()
+        let found = composerPersonSuggestions(text, known: known, chosen: draftPeople, limit: 3)
+        if !draftPeople.isEmpty || !found.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(draftPeople, id: \.self) { person in
+                        personChip(person, removable: true) {
+                            draftPeople.removeAll { $0 == person }
+                        }
+                    }
+                    ForEach(found, id: \.self) { suggestion in
+                        personChip(suggestion.person, removable: false) {
+                            if suggestion.isNew { RealContacts.shared.addTyped(suggestion.person.name) }
+                            draftPeople.append(suggestion.person)
+                            if suggestion.text != text { text = suggestion.text }
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+            }
+            .padding(.bottom, 4)
+        }
+    }
+
+    private func personChip(_ person: CardPerson, removable: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                ConnectionAvatar(name: person.name, key: person.uid ?? person.name, size: 20, pictureVersion: person.pictureVersion)
+                Text(person.name)
+                    .font(RealFont.inter(13))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                if removable {
+                    ActionIcon(.close, color: Color(argb: 0xFFBABAC3), size: 12)
+                }
+            }
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(Capsule().fill(RealColors.accentBlue.opacity(0.16)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(removable ? t("{0} kişisini kaldır", person.name) : t("{0} kişisini ekle", person.name))
     }
 
     /// Calendar / category / attachment / checklist / bell, Android icon order.
@@ -512,28 +556,13 @@ struct ComposerBar: View {
         .padding(.bottom, 4)
     }
 
-    private var attachmentRow: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(attachments.enumerated()), id: \.element.id) { index, a in
-                ZStack(alignment: .topTrailing) {
-                    Group {
-                        if let img = AttachmentStorage.image(a.localPath) { Image(uiImage: img).resizable().scaledToFill() } else { Color.gray }
-                    }
-                    .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(argb: 0x33FFFFFF), lineWidth: 0.8))
-                    .frame(width: 40, height: 40, alignment: .bottomLeading)
-                    Button {
-                        AttachmentStorage.remove(a)
-                        attachments.remove(at: index)
-                    } label: {
-                        RealSymbol("xmark", size: 8).foregroundStyle(Color(argb: 0xFFEEEEF2))
-                            .frame(width: 16, height: 16).background(Circle().fill(Color(argb: 0xE61E1E24)))
-                    }
-                }
-            }
+    /// The dock's tray: the same tiles as full screen, smaller.
+    private var dockTray: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) { trayTiles(size: 36) }
+                .padding(.horizontal, 14)
         }
-        .padding(.horizontal, 14).padding(.bottom, 4)
+        .padding(.bottom, 4)
     }
 
     private var checklistEditor: some View {
@@ -575,10 +604,47 @@ struct ComposerBar: View {
 
     // MARK: Actions
 
-    private func suggestionNeeded(_ s: DateSuggestion) -> Bool {
+    /// A daypart without a clock gets the same starting hour as voice; the person adjusts it in the composer.
+    private func applyTypedDate(_ s: ComposerDateSuggestion) {
         let cal = Calendar.real
-        let target = cal.date(byAdding: .day, value: s == .today ? 0 : 1, to: cal.startOfDay(for: Date()))!
-        return !(schedule.date.map { cal.isDate($0, inSameDayAs: target) } ?? false)
+        var draft = ScheduleDraft()
+        if let at = s.alertAt {
+            draft.date = at
+            draft.hasTime = true
+        } else if let day = s.dateHint {
+            if let part = s.timeOfDay {
+                let hour: Int
+                switch part {
+                case .morning: hour = 9
+                case .noon: hour = 12
+                case .evening: hour = 19
+                case .night: hour = 21
+                }
+                var at = cal.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
+                if at <= Date(), s.repeatRule == .daily { at = cal.date(byAdding: .day, value: 1, to: at) ?? at }
+                // That hour has passed and nothing repeats: the card stays on the day without a time.
+                draft.date = at > Date() ? at : day
+                draft.hasTime = at > Date()
+            } else {
+                draft.date = day
+                draft.hasTime = false
+            }
+        }
+        draft.repeatRule = s.repeatRule
+        schedule = draft
+        text = s.text
+        // A repeat needs a clock ("her cuma"): no hour is made up, the date sheet asks for it.
+        if !draft.hasTime && s.repeatRule != .none { withoutAnimation { showDateSheet = true } }
+    }
+
+    private func pickSlashResult(_ result: ComposerSlashResult) {
+        switch result.kind {
+        case .media(let block): mediaPicks.append(block)
+        case .music(let block): musicPicks.append(block)
+        case .game(let block):
+            if !gamePicks.contains(where: { $0.providerId == block.providerId }) { gamePicks.append(block) }
+        }
+        text = replaceComposerSlashQuery(text, result.title)
     }
 
     private func applySuggestion(_ s: DateSuggestion) {
@@ -644,7 +710,8 @@ struct ComposerBar: View {
 
     private func submit() {
         if voice.phase != .idle { voice.finish(); return }
-        let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Saved without picking a "/" result: the words stay, only the search mark goes.
+        let title = stripComposerSlash(text)
         let items = checklistMode ? checklistItems.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } : []
         guard !title.isEmpty, !checklistMode || !items.isEmpty else { return }
         let draft = schedule
@@ -654,7 +721,7 @@ struct ComposerBar: View {
         let trigger = placeTrigger
         let rings = alarm && draft.alertAt != nil
         let note = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let voices = voiceNotes, songs = musicPicks, titles = mediaPicks, games = gamePicks
+        let voices = voiceNotes, songs = musicPicks, titles = mediaPicks, games = gamePicks, people = draftPeople
         store.addReminder(text: title, alertAt: draft.alertAt, plannedDay: draft.plannedDay, repeatRule: draft.repeatRule,
                           categoryId: categoryId, isImportant: important, checklist: items) { item in
             draft.apply(to: &item)
@@ -668,6 +735,7 @@ struct ComposerBar: View {
             item.musicBlocks = songs
             item.mediaBlocks = titles
             item.gameBlocks = games
+            item.cardPeople = people
             ComposerBar.applyHeroDefault(&item)
         }
         if draft.alertAt != nil || trigger != nil { NotificationScheduler.requestAuthorization() }
@@ -698,6 +766,7 @@ struct ComposerBar: View {
         musicPicks = []
         mediaPicks = []
         gamePicks = []
+        draftPeople = []
         fsPage = nil
         fsOpenRow = nil
     }
@@ -1056,35 +1125,41 @@ extension ComposerBar {
     /// Everything added sits here as square tiles: photos, files, voice notes, songs, films, series and games.
     private var fsTray: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(attachments) { a in
-                    trayTile({ AttachmentStorage.remove(a); attachments.removeAll { $0.id == a.id } }) {
-                        if a.type == .image, let img = AttachmentStorage.image(a.localPath) { Image(uiImage: img).resizable().scaledToFill() }
-                        else { RealSymbol("doc", size: 22).foregroundStyle(Color(argb: 0xFFD4D4DA)) }
-                    }
-                }
-                ForEach(voiceNotes) { r in
-                    trayTile({ removeVoice(r) }) { RealSymbol("waveform", size: 22).foregroundStyle(Color(argb: 0xFF91B9FF)) }
-                }
-                ForEach(musicPicks) { m in trayTile({ musicPicks.removeAll { $0.id == m.id } }) { MusicArtwork(url: m.artworkUrl) } }
-                ForEach(mediaPicks) { m in trayTile({ mediaPicks.removeAll { $0.id == m.id } }) { PosterArtwork(media: m, titleSize: 6) } }
-                ForEach(gamePicks) { g in trayTile({ gamePicks.removeAll { $0.id == g.id } }) { GameCover(block: g) } }
-            }
-            .padding(.horizontal, 14).padding(.top, 6)
+            HStack(spacing: 8) { trayTiles(size: 58) }
+                .padding(.horizontal, 14).padding(.top, 6)
         }
         .padding(.bottom, 10)
     }
 
-    private func trayTile<C: View>(_ remove: @escaping () -> Void, @ViewBuilder _ content: () -> C) -> some View {
-        ZStack(alignment: .topTrailing) {
+    /// One tile per thing added, whatever its type; [size] 58 full screen, 36 in the dock.
+    @ViewBuilder fileprivate func trayTiles(size: CGFloat) -> some View {
+        let glyph: CGFloat = size > 40 ? 22 : 18
+        ForEach(attachments) { a in
+            trayTile(size, { AttachmentStorage.remove(a); attachments.removeAll { $0.id == a.id } }) {
+                if a.type == .image, let img = AttachmentStorage.image(a.localPath) { Image(uiImage: img).resizable().scaledToFill() }
+                else { RealSymbol("doc", size: glyph).foregroundStyle(Color(argb: 0xFFD4D4DA)) }
+            }
+        }
+        ForEach(voiceNotes) { r in
+            trayTile(size, { removeVoice(r) }) { RealSymbol("waveform", size: glyph).foregroundStyle(Color(argb: 0xFF91B9FF)) }
+        }
+        ForEach(musicPicks) { m in trayTile(size, { musicPicks.removeAll { $0.id == m.id } }) { MusicArtwork(url: m.artworkUrl) } }
+        ForEach(mediaPicks) { m in trayTile(size, { mediaPicks.removeAll { $0.id == m.id } }) { PosterArtwork(media: m, titleSize: size > 40 ? 6 : 4) } }
+        ForEach(gamePicks) { g in trayTile(size, { gamePicks.removeAll { $0.id == g.id } }) { GameCover(block: g) } }
+    }
+
+    private func trayTile<C: View>(_ size: CGFloat, _ remove: @escaping () -> Void, @ViewBuilder _ content: () -> C) -> some View {
+        let large = size > 40
+        let corner: CGFloat = large ? 12 : 8
+        return ZStack(alignment: .topTrailing) {
             ZStack { Color.white.opacity(0.08); content() }
-                .frame(width: 58, height: 58)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(argb: 0x33FFFFFF), lineWidth: 0.8))
-                .frame(width: 62, height: 62, alignment: .bottomLeading)
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: corner, style: .continuous).strokeBorder(Color(argb: 0x33FFFFFF), lineWidth: 0.8))
+                .frame(width: size + 4, height: size + 4, alignment: .bottomLeading)
             Button(action: remove) {
-                RealSymbol("xmark", size: 9).foregroundStyle(Color(argb: 0xFFEEEEF2))
-                    .frame(width: 20, height: 20).background(Circle().fill(Color(argb: 0xE61E1E24)))
+                RealSymbol("xmark", size: large ? 9 : 8).foregroundStyle(Color(argb: 0xFFEEEEF2))
+                    .frame(width: large ? 20 : 16, height: large ? 20 : 16).background(Circle().fill(Color(argb: 0xE61E1E24)))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(t("Kaldır"))

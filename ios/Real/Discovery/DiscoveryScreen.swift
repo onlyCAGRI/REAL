@@ -84,7 +84,7 @@ struct DiscoveryScreen: View {
                                   hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
                     .padding(.top, 4)
                 BackCircle(action: back).padding(.leading, 22).padding(.top, 12)
-                    .accessibilityLabel(t("Yaşam'a dön"))
+                    .accessibilityLabel(t("Ben ekranına dön"))
             }
             if let error { errorLine(error) }
             // One question at a time (DiscoveryStepper): 2 genres at most, then optional extras.

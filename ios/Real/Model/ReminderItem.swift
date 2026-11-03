@@ -184,6 +184,15 @@ struct CardStackBlock: Codable, Hashable {
     var createdAt: EpochMillis = .now
 }
 
+/// Who the card is with ("Annem ile", CardPerson.kt). A label on the card, it shares nothing by itself. `uid` and
+/// `pictureVersion` are set when the person is one of the user's connections; without them the avatar is the name's
+/// first letter.
+struct CardPerson: Codable, Hashable {
+    var name: String
+    var uid: String? = nil
+    var pictureVersion: Int64? = nil
+}
+
 /// The REAL card. Field names and semantics mirror ReminderItem.kt.
 struct ReminderItem: Codable, Identifiable, Hashable {
     var id: Int64
@@ -220,6 +229,8 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     var mediaBlocks: [MediaBlock] = []
     /// Oyun bloğu (own field; see CardGameBlock).
     var gameBlocks: [CardGameBlock] = []
+    /// Who the card is with (JSON key "cardPeople"; distinct from planner `people`).
+    var cardPeople: [CardPerson] = []
     var contentBlockLayout: [String: CardBlockPlacement] = [:]
     /// PlannerEventDetails.colorIndex (Takvim card pastel).
     var plannerColorIndex: Int?
@@ -365,7 +376,7 @@ extension ReminderItem {
              quick24HourUntilAt, notifiedAlertAt, accentStart, accentEnd, repeatRule, anchorAlertAt,
              customCategoryId, isChecklist, checklistItems, sendImmediateNotification, referenceUrl,
              gradientBlendFraction, customSolidColorArgb, useDarkText, attachments, journal, mood, location,
-             cardStack, voiceRecordings, musicBlocks, mediaBlocks, gameBlocks, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex,
+             cardStack, voiceRecordings, musicBlocks, mediaBlocks, gameBlocks, cardPeople, repeatWeekdaysMask, repeatUntilEpochDay, repeatSkippedEpochDays, durationMinutes, people, contentBlockOrder, contentBlockLayout, plannerColorIndex,
              endAt, earlyAlertMinutes, isAlarm, locationTrigger, sharedCardId, sharedAuthorUid, sharedAuthorName, isDivider, completionNote, checkRequest
     }
 
@@ -402,6 +413,7 @@ extension ReminderItem {
         musicBlocks = try c.decodeIfPresent([MusicBlock].self, forKey: .musicBlocks) ?? []
         mediaBlocks = try c.decodeIfPresent([MediaBlock].self, forKey: .mediaBlocks) ?? []
         gameBlocks = (try? c.decodeIfPresent([CardGameBlock].self, forKey: .gameBlocks)) ?? []
+        cardPeople = (try? c.decodeIfPresent([CardPerson].self, forKey: .cardPeople)) ?? []
         repeatWeekdaysMask = try c.decodeIfPresent(Int.self, forKey: .repeatWeekdaysMask) ?? 0
         repeatUntilEpochDay = try c.decodeIfPresent(EpochDay.self, forKey: .repeatUntilEpochDay)
         repeatSkippedEpochDays = try c.decodeIfPresent([EpochDay].self, forKey: .repeatSkippedEpochDays) ?? []

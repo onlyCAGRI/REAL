@@ -136,7 +136,7 @@ struct HomeView: View {
     @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
     /// What the sort arrow now does, under it on the right; it fades after a moment.
     @State private var sortHint: (id: Int, text: String)?
-    @AppStorage(HomeCardStyle.plainKey) private var plainCards = false
+    @AppStorage(HomeCardStyle.plainKey) private var plainCards = true
     @AppStorage(CalendarCards.homeDaysKey) private var calendarDays = 0
     @State private var externalDetail: CalendarOccurrence?
     /// "Kartlarım" swiped left: search the cards (hidden-from-Home categories too); the categories step aside meanwhile.

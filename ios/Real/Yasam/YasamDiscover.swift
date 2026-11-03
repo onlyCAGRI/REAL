@@ -3,6 +3,10 @@ import SwiftUI
 /// YasamDiscover.kt: "KEŞFET", four verbs in a 2×2 grid. The tile opens suggestions; its small line
 /// ("Listende 12 ›") opens the saved list. Puanla opens Puanlarım and shows the latest scores as coloured squares.
 struct YasamDiscoverGrid: View {
+    /// Ben ekranında görünen keşif kutuları, kayıtlı sırayla.
+    var parts: [YasamPart] = [.watch, .play, .listen, .rate]
+    /// Başlık yalnız ilk keşif grubunda; araya başka bölüm girerse sonraki grup başlıksız.
+    var header = true
     let watchCount: Int
     let playCount: Int
     let listenCount: Int
@@ -23,32 +27,42 @@ struct YasamDiscoverGrid: View {
         let values = ratings.compactMap(\.value)
         let avg = values.isEmpty ? nil : (values.reduce(0, +) / Double(values.count) * 10).rounded() / 10
         let recent = ratings.sorted { ($0.addedAt ?? .min, $0.order) > ($1.addedAt ?? .min, $1.order) }.compactMap(\.value).prefix(6)
+        // İkişerli satırlar; tek kalan kutu satırı doldurur.
+        let rows = stride(from: 0, to: parts.count, by: 2).map { Array(parts[$0..<min($0 + 2, parts.count)]) }
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .lastTextBaseline) {
-                Text("KEŞFET").font(.system(size: 12, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted)
-                Spacer()
-                Text("bugün ne yapsak").font(.system(size: 12, weight: .light)).foregroundStyle(.white.opacity(0.4))
+            if header {
+                HStack(alignment: .lastTextBaseline) {
+                    Text(t("KEŞFET")).font(.system(size: 12, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted)
+                    Spacer()
+                    Text(t("bugün ne yapsak")).font(.system(size: 12, weight: .light)).foregroundStyle(.white.opacity(0.4))
+                }
+                .padding(.bottom, 2)
             }
-            .padding(.bottom, 2)
-            HStack(spacing: 10) {
-                tile("İzle", watch, line(watchCount), kind: 0) { stack(watchArt, circle: false) }
-                tile("Oyna", play, line(playCount), kind: 1) { stack(playArt, circle: false) }
-            }
-            HStack(spacing: 10) {
-                tile("Dinle", listen, line(listenCount), kind: 2) { stack(listenArt, circle: true) }
-                tile("Puanla", rate, avg.map { "ort. \(scoreText($0))" } ?? "Henüz yok", kind: 3, hasList: false) {
-                    HStack(spacing: 3) {
-                        ForEach(Array(recent.enumerated()), id: \.offset) { _, v in
-                            RoundedRectangle(cornerRadius: 3).fill(ratingColors(v).bg).frame(width: 10, height: 10)
+            ForEach(rows, id: \.self) { row in
+                HStack(spacing: 10) {
+                    ForEach(row) { part in
+                        switch part {
+                        case .watch: tile(t("İzle"), watch, line(watchCount), kind: 0) { stack(watchArt, circle: false) }
+                        case .play: tile(t("Oyna"), play, line(playCount), kind: 1) { stack(playArt, circle: false) }
+                        case .listen: tile(t("Dinle"), listen, line(listenCount), kind: 2) { stack(listenArt, circle: true) }
+                        case .rate:
+                            tile(t("Puanla"), rate, avg.map { t("ort. {0}", scoreText($0)) } ?? t("Henüz yok"), kind: 3, hasList: false) {
+                                HStack(spacing: 3) {
+                                    ForEach(Array(recent.enumerated()), id: \.offset) { _, v in
+                                        RoundedRectangle(cornerRadius: 3).fill(ratingColors(v).bg).frame(width: 10, height: 10)
+                                    }
+                                }
+                            }
+                        default: EmptyView()
                         }
                     }
                 }
             }
         }
-        .padding(.top, 22).padding(.bottom, 8)
+        .padding(.top, header ? 22 : 12).padding(.bottom, 8)
     }
 
-    private func line(_ n: Int) -> String { n == 0 ? "Listen boş" : "Listende \(n)" }
+    private func line(_ n: Int) -> String { n == 0 ? t("Listen boş") : t("Listende {0}", n) }
 
     private func tile<V: View>(_ verb: String, _ tone: Tone, _ line: String, kind: Int, hasList: Bool = true,
                                @ViewBuilder visual: () -> V) -> some View {

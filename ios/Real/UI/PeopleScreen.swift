@@ -192,12 +192,22 @@ struct InviteAcceptSheet: View {
     }
 }
 
+private struct ContactDraft: Identifiable {
+    let id = UUID()
+    let contactId: String?
+    let name: String
+    let nickname: String
+    let connectionUid: String?
+}
+
 /// Kişilerim screen.
 struct PeopleScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var connections = RealConnections.shared
+    @State private var contacts = RealContacts.shared
     @State private var inviteURL: URL?
     @State private var confirm: RealConnections.Person?
+    @State private var editing: ContactDraft?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -206,9 +216,7 @@ struct PeopleScreen: View {
                 Spacer()
                 Button(t("Bitti")) { dismiss() }.font(RealFont.inter(15, .medium)).foregroundStyle(.white)
             }
-            if RealAuth.shared.account == nil {
-                SignInRequiredPrompt(reason: .people)
-            } else {
+            if RealAuth.shared.account != nil {
                 Button {
                     Task { inviteURL = try? await connections.createInvite() }
                 } label: {
@@ -222,16 +230,29 @@ struct PeopleScreen: View {
                             .frame(maxWidth: .infinity, minHeight: 44).background(Capsule().fill(.white.opacity(0.08)))
                     }
                 }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    if RealAuth.shared.account == nil {
+                        SignInRequiredPrompt(reason: .people)
+                    } else {
                         if connections.people.isEmpty && !connections.loading {
                             Text(t("Henüz kimse yok. Bir davet linki gönder.")).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.5))
                         }
                         ForEach(connections.people) { p in
+                            let nick = contacts.list.first { $0.uid == p.uid }?.nickname
                             HStack(spacing: 12) {
                                 ConnectionAvatar(name: p.name, key: p.uid, size: 40, pictureVersion: p.pictureVersion)
-                                Text(p.name).font(RealFont.inter(16)).foregroundStyle(.white).lineLimit(1)
+                                Text(nick.map { "\(p.name) · \($0)" } ?? p.name).font(RealFont.inter(16)).foregroundStyle(.white).lineLimit(1)
                                 Spacer()
+                                Button {
+                                    editing = ContactDraft(contactId: nil, name: p.name, nickname: nick ?? "", connectionUid: p.uid)
+                                } label: {
+                                    Text(t("Takma ad")).font(RealFont.inter(13, .medium)).foregroundStyle(.black)
+                                        .padding(.horizontal, 14).padding(.vertical, 8)
+                                        .background(Capsule().fill(.white))
+                                }
+                                .buttonStyle(.plain)
                                 Button { confirm = p } label: {
                                     Image(systemName: "ellipsis").foregroundStyle(.white.opacity(0.6)).frame(width: 36, height: 36)
                                 }
@@ -264,6 +285,35 @@ struct PeopleScreen: View {
                             }
                         }
                     }
+                    Text(t("Diğer kişiler")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF9A9AA2)).padding(.top, 8)
+                    ForEach(contacts.list.filter { $0.uid == nil }) { contact in
+                        Button {
+                            editing = ContactDraft(contactId: contact.id, name: contact.name, nickname: contact.nickname ?? "", connectionUid: nil)
+                        } label: {
+                            HStack(spacing: 12) {
+                                ConnectionAvatar(name: contact.nickname ?? contact.name, key: contact.id, size: 40)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(contact.name).font(RealFont.inter(16, .medium)).foregroundStyle(.white).lineLimit(1)
+                                    if let nick = contact.nickname {
+                                        Text(nick).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9A9AA2)).lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(12)
+                            .background(RoundedRectangle(cornerRadius: 18).fill(.white.opacity(0.06)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Button {
+                        editing = ContactDraft(contactId: nil, name: "", nickname: "", connectionUid: nil)
+                    } label: {
+                        Text(t("+  Kişi ekle")).font(RealFont.inter(15, .medium)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .background(Capsule().fill(.white.opacity(0.06)))
+                            .overlay(Capsule().strokeBorder(.white.opacity(0.10)))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             if let e = connections.error { Text(e).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)) }
@@ -271,6 +321,9 @@ struct PeopleScreen: View {
         .padding(20)
         .background(Color.black.ignoresSafeArea())
         .task { await connections.refresh() }
+        .sheet(item: $editing) { draft in
+            ContactEditorSheet(draft: draft)
+        }
         .confirmationDialog(confirm?.name ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible) {
             if let p = confirm {
                 Button(t("Kişilerden çıkar"), role: .destructive) { Task { await connections.remove(p.uid, block: false) } }
@@ -278,6 +331,72 @@ struct PeopleScreen: View {
                 Button(t("Vazgeç"), role: .cancel) {}
             }
         }
+    }
+}
+
+private struct ContactEditorSheet: View {
+    let draft: ContactDraft
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var nickname: String
+
+    init(draft: ContactDraft) {
+        self.draft = draft
+        _name = State(initialValue: draft.name)
+        _nickname = State(initialValue: draft.nickname)
+    }
+
+    private var isConnection: Bool { draft.connectionUid != nil }
+    private var canSave: Bool { isConnection || !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var title: String {
+        if isConnection { return draft.name }
+        return draft.contactId == nil ? t("Kişi ekle") : draft.name
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Capsule().fill(Color(argb: 0xFF666669)).frame(width: 34, height: 3).frame(maxWidth: .infinity)
+            Text(title).font(RealFont.inter(22, .semibold)).foregroundStyle(.white)
+            if !isConnection {
+                TextField(t("Ad"), text: $name)
+                    .font(RealFont.inter(16)).foregroundStyle(.white).tint(.white)
+                    .onChange(of: name) { _, v in if v.count > 60 { name = String(v.prefix(60)) } }
+                    .padding(.horizontal, 18).frame(height: 52)
+                    .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.06)))
+            }
+            TextField(t("Takma ad (örn. annem)"), text: $nickname)
+                .font(RealFont.inter(16)).foregroundStyle(.white).tint(.white)
+                .onChange(of: nickname) { _, v in if v.count > 60 { nickname = String(v.prefix(60)) } }
+                .padding(.horizontal, 18).frame(height: 52)
+                .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.06)))
+            Button {
+                if let uid = draft.connectionUid {
+                    RealContacts.shared.setNickname(uid: uid, name: draft.name, nickname: nickname)
+                } else if canSave {
+                    RealContacts.shared.saveLocal(id: draft.contactId, name: name, nickname: nickname)
+                }
+                dismiss()
+            } label: {
+                Text(t("Kaydet")).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSave)
+            .opacity(canSave ? 1 : 0.4)
+            if let contactId = draft.contactId {
+                Button {
+                    RealContacts.shared.delete(id: contactId)
+                    dismiss()
+                } label: {
+                    Text(t("Sil")).font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.75))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(22)
+        .presentationDetents([.height(isConnection ? 250 : (draft.contactId != nil ? 360 : 310))])
+        .presentationBackground(Color(argb: 0xFF111113))
     }
 }
 
