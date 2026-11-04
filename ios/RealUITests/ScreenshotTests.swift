@@ -20,6 +20,19 @@ final class ScreenshotTests: XCTestCase {
         app.terminate()
     }
 
+    func test0Tip() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "home", "-REALTipTest"]
+        app.launch()
+        _ = app.wait(for: .runningForeground, timeout: 20)
+        Thread.sleep(forTimeInterval: 7)
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "tip"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        app.terminate()
+    }
+
     func test1Home() { capture("home") }
     func test2CustomCategory() { capture("category") }
     func test3BuiltInCategory() { capture("builtin") }

@@ -117,6 +117,12 @@ struct RootView: View {
             .presentationBackground(.clear)
         }
         .onAppear { ReminderStore.current = store }
+        .task {
+            // CI screenshot of a tip (RealUITests).
+            guard ProcessInfo.processInfo.arguments.contains("-REALTipTest") else { return }
+            try? await Task.sleep(for: .seconds(3))
+            RealTips.shared.show("test", force: true)
+        }
         .onAppear { if store.ownerName.trimmingCharacters(in: .whitespaces).isEmpty || ProcessInfo.processInfo.arguments.contains("-REALWelcome") { showWelcome = true } }
     }
 

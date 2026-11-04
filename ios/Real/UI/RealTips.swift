@@ -36,13 +36,6 @@ final class RealTips {
     private(set) var alwaysOn = UserDefaults.standard.bool(forKey: alwaysOnKey)
     @ObservationIgnored var anchors: [String: CGRect] = [:]
     @ObservationIgnored private var token = 0
-    /// What the tip's window last reported, for "İpucunu dene" in Geliştirici araçları.
-    @ObservationIgnored var hostAppeared = false
-    @ObservationIgnored var hostHeight: CGFloat = 0
-
-    var diagnostic: String {
-        "Pencere: \(RealTipWindow.window == nil ? "yok" : "var") · sahne: \(RealTipWindow.sceneCount) · görünüm: \(hostAppeared ? "açıldı" : "açılmadı") · yükseklik: \(Int(hostHeight))"
-    }
 
     func setAlwaysOn(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: Self.alwaysOnKey)
@@ -72,8 +65,6 @@ final class RealTips {
         if !alwaysOn && !force {
             guard !UserDefaults.standard.bool(forKey: Self.seenKey(key)) else { return false }
         }
-        hostAppeared = false
-        hostHeight = 0
         token += 1
         closing = false
         shown = Shown(key: key, tip: tip, anchor: "tip:\(key)", token: token, onGotIt: onGotIt)
@@ -111,7 +102,6 @@ final class RealTips {
 private enum RealTipWindow {
     static var window: UIWindow?
     private static var scenes: [UIWindowScene] { UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene } }
-    static var sceneCount: Int { scenes.count }
 
     static func show() -> Bool {
         if window != nil { return true }
@@ -149,7 +139,8 @@ private struct RealTipHost: View {
                     card(current)
                         .padding(.horizontal, 16)
                         .offset(y: placement(current, screen: geo.size.height))
-                        .opacity(!appeared || tips.closing ? 0 : 1)
+                        // Always drawn; the landing below only moves it, so a missed start cannot leave a blank screen.
+                        .opacity(tips.closing ? 0 : 1)
                         .scaleEffect(reduceMotion || appeared && !tips.closing ? 1 : (tips.closing ? 0.94 : 0.86))
                         .offset(y: reduceMotion || (appeared && !tips.closing) ? 0 : tipHeight / (tips.closing ? 5 : 2))
                         .animation(tips.closing ? .easeOut(duration: 0.17) : .spring(response: 0.5, dampingFraction: 0.65), value: appeared)
@@ -157,7 +148,6 @@ private struct RealTipHost: View {
                         .task(id: current.token) {
                             appeared = false
                             shine = 0
-                            tips.hostAppeared = true
                             try? await Task.sleep(for: .milliseconds(30))
                             appeared = true
                             if !reduceMotion { withAnimation(.linear(duration: 1)) { shine = 1 } }
@@ -210,7 +200,7 @@ private struct RealTipHost: View {
             .allowsHitTesting(false)
         }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .background { GeometryReader { g in Color.clear.onChange(of: g.size.height, initial: true) { _, h in tipHeight = h; tips.hostHeight = h } } }
+        .background { GeometryReader { g in Color.clear.onChange(of: g.size.height, initial: true) { _, h in tipHeight = h } } }
         .shadow(color: .black.opacity(0.28), radius: 18, y: 6)
         // Taps on the tip itself do not close it; only "Anladım" or a tap outside do.
         .contentShape(Rectangle())
