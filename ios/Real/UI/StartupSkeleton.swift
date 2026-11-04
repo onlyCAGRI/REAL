@@ -1,8 +1,36 @@
 import SwiftUI
 
+/// The account's cards coming back after sign-in. It runs behind the greeting; the home waits under the skeleton.
+@MainActor
+@Observable
+final class AccountRestore {
+    static let shared = AccountRestore()
+    private(set) var running = false
+    /// Signed in on the welcome screen: the home opens under the skeleton.
+    var coverPending = false
+    var failed = false
+
+    func start(store: ReminderStore, life: LifeStore) {
+        coverPending = true
+        failed = false
+        running = true
+        Task {
+            do {
+                RealCloudSync.shared.reset()
+                _ = try await RealCloudRestore.run(store: store, life: life)
+            } catch {
+                failed = true
+            }
+            running = false
+        }
+    }
+}
+
 /// StartupLoadingScreen.kt: on a cold start, the home screen's shape (avatar, category cards, card list) as soft
 /// placeholders with a light band sweeping across, then a feathered left-to-right wipe uncovers the real home.
 struct StartupSkeletonReveal: View {
+    /// The placeholders stay until this is true.
+    var ready: @MainActor () -> Bool = { true }
     let onDone: () -> Void
     @AppStorage("home_category_preview_count_v1") private var categoryCount = 4
     @AppStorage("reduce_animations") private var reduceAnimations = false
@@ -35,6 +63,7 @@ struct StartupSkeletonReveal: View {
         .accessibilityLabel(t("Kartlar yükleniyor"))
         .task {
             try? await Task.sleep(for: .seconds(shown))
+            while !ready(), !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
             if reduceAnimations { onDone(); return }
             wipeStart = Date()
             try? await Task.sleep(for: .seconds(wipe))

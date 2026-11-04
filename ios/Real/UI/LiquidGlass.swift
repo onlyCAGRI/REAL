@@ -112,8 +112,10 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
     @AppStorage("reduce_dynamic_blur") private var reduceDynamicBlur = false
 
     func body(content: Content) -> some View {
-        if reduceDynamicBlur && role == .dock { content.flatDock(shape, dim: dim) }
-        else { content.systemOrFallbackGlass(shape, role: role, dim: dim) }
+        // The glass itself takes no touches: without this only the icon on it was tappable, and a tap beside the icon
+        // went through to whatever lies below (the map under the back button zoomed in).
+        if reduceDynamicBlur && role == .dock { content.flatDock(shape, dim: dim).contentShape(shape) }
+        else { content.systemOrFallbackGlass(shape, role: role, dim: dim).contentShape(shape) }
     }
 }
 

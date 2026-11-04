@@ -55,7 +55,8 @@ struct WelcomeScreen: View {
     @State private var authError: String?
     @State private var showEmailAuth = false
     /// Signed in, the account's cards are coming back: says so instead of leaving the screen idle.
-    @State private var restoring = false
+    /// Signed in rather than typing a name: the greeting says welcome, the person may well be coming back.
+    @State private var signedIn = false
     @State private var sound = WelcomeSound()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -94,7 +95,8 @@ struct WelcomeScreen: View {
 
                 Group {
                     if phase == .greeting {
-                        Text(t("Tanıştığımıza memnun oldum,\n{0}.", name.trimmingCharacters(in: .whitespaces)))
+                        Text(signedIn ? t("Hoş geldin,\n{0}.", name.trimmingCharacters(in: .whitespaces))
+                                      : t("Tanıştığımıza memnun oldum,\n{0}.", name.trimmingCharacters(in: .whitespaces)))
                             .font(RealFont.inter(22, .semibold)).kerning(-0.3).lineSpacing(8).multilineTextAlignment(.center)
                             .foregroundStyle(.white)
                             .opacity(greetingAlpha).offset(y: (1 - greetingAlpha) * 12)
@@ -114,18 +116,6 @@ struct WelcomeScreen: View {
         .onAppear(perform: startStory)
         .onDisappear { introTask?.cancel(); sound.fadeOut(0.6) }   // soften out, don't cut
         .onChange(of: scenePhase) { _, newPhase in if newPhase == .background { sound.stop() } }
-        .overlay {
-            if restoring {
-                ZStack {
-                    Color.black.opacity(0.86).ignoresSafeArea()
-                    VStack(spacing: 14) {
-                        ProgressView().tint(.white).controlSize(.large)
-                        Text(t("Kartların getiriliyor…")).font(RealFont.inter(15, .medium)).foregroundStyle(.white.opacity(0.85))
-                    }
-                }
-                .transition(.opacity)
-            }
-        }
         .alert(t("Veri kullanımı"), isPresented: $showDataUse) { Button(t("Tamam"), role: .cancel) {} } message: {
             Text(t("iOS sürümünde notların ve kayıtların yalnızca bu cihazda saklanıyor. AI özellikleri isteğe bağlıdır; kullanmadan önce ayrıca izin istenir."))
         }
@@ -270,16 +260,11 @@ struct WelcomeScreen: View {
         }
     }
 
-    /// After Google, Apple or e-posta: the account's cards, categories and moods come back, then the name is asked.
+    /// After Google, Apple or e-posta: the welcome comes at once, the account's cards, categories and moods come back
+    /// behind it and the home shows the skeleton until they are in.
     private func finishAfterAuthentication(_ account: RealAuth.Account) async {
-        withAnimation(.easeOut(duration: 0.2)) { restoring = true }
-        defer { withAnimation(.easeOut(duration: 0.2)) { restoring = false } }
-        do {
-            RealCloudSync.shared.reset()
-            _ = try await RealCloudRestore.run(store: store, life: life)
-        } catch {
-            authError = t("Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin.")
-        }
+        AccountRestore.shared.start(store: store, life: life)
+        signedIn = true
         // The account's first name is enough for the greeting; only an account without a name is asked here.
         name = account.firstName ?? ""
         if name.isEmpty { withAnimation(.easeOut(duration: 0.25)) { nameStep = .account } } else { confirm() }

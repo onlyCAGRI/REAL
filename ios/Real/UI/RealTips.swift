@@ -126,7 +126,8 @@ private struct RealTipHost: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
-                Color.black.opacity(0.001).onTapGesture { tips.dismiss() }
+                // A tap outside closes the tip and still carries on with what was tapped, so no press is lost.
+                Color.black.opacity(0.001).onTapGesture { tips.gotIt() }
                 if let current = tips.shown {
                     card(current)
                         .padding(.horizontal, 16)

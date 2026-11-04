@@ -40,7 +40,9 @@ struct VoiceListeningWindow: View {
             .accessibilityLabel(listening ? t("Dinlemeyi bitir") : t("REAL düşünüyor"))
         }
         .padding(.leading, 22).padding(.trailing, 9).padding(.top, 16).padding(.bottom, 8)
-        .frame(maxWidth: .infinity, minHeight: 118, maxHeight: 230, alignment: .bottom)
+        // Android's height: 118 for one line, 27 more per line up to four. Without fixedSize it always took the maximum.
+        .frame(maxWidth: .infinity, minHeight: 118, maxHeight: 199, alignment: .bottom)
+        .fixedSize(horizontal: false, vertical: true)
         .background {
             ZStack {
                 shape.fill(Color.black.opacity(0.26))

@@ -16,6 +16,8 @@ struct RootView: View {
     @State private var path: [Route]
     @Namespace private var nav
     @State private var showWelcome = false
+    /// Just signed in: the skeleton holds the home until the account's cards are back.
+    @State private var restoreCover = false
     /// Cold start: the launch screen's "Real" slides into the header and the rows rise (StartupIntroOverlay).
     @State private var startupShown = !ProcessInfo.processInfo.arguments.contains("-REALNoStartup")
     /// Varınca / Ayrılınca notification tapped (or the developer test): the arrival focus screen.
@@ -75,10 +77,21 @@ struct RootView: View {
         .onChange(of: path, initial: true) { _, now in RealPet.shared.setHome(now.isEmpty) }
         .onChange(of: scenePhase) { _, now in RealPet.shared.scene(active: now == .active) }
         .overlay {
+            if restoreCover {
+                StartupSkeletonReveal(ready: { !AccountRestore.shared.running }) { restoreCover = false }
+            }
+        }
+        .alert(t("Giriş yapıldı ama kartlar alınamadı. Hesap menüsünden yeniden deneyebilirsin."),
+               isPresented: Binding(get: { AccountRestore.shared.failed && !restoreCover }, set: { AccountRestore.shared.failed = $0 })) {
+            Button(t("Tamam"), role: .cancel) {}
+        }
+        .overlay {
             // WelcomeScreen on first launch (no name yet), like MainActivity.
             if showWelcome {
                 WelcomeScreen { name in
                     store.setOwnerName(name)
+                    restoreCover = AccountRestore.shared.coverPending
+                    AccountRestore.shared.coverPending = false
                     withAnimation(.easeOut(duration: 0.35)) { showWelcome = false }
                 }
                 .transition(.opacity)

@@ -174,6 +174,8 @@ struct ComposerBar: View {
                     navigationBar
                     micCircle
                 }
+                // The buttons here hold on to the touch, so the swipe back down is watched on them too.
+                .simultaneousGesture(dockSwipe)
                 .transition(.opacity)
             }
         }
@@ -200,12 +202,7 @@ struct ComposerBar: View {
             }
             hintLift = 0
         }
-        .highPriorityGesture(
-            DragGesture(minimumDistance: 20).onEnded { value in
-                guard showChrome else { return }
-                if value.translation.height < -28 { navExpanded = true } else if value.translation.height > 28 { navExpanded = false }
-            }
-        )
+        .highPriorityGesture(dockSwipe)
         .onChange(of: wantsExpanded) { _, want in
             swapTask?.cancel()
             swapTask = Task { @MainActor in await swapPanel(to: want) }
@@ -253,6 +250,14 @@ struct ComposerBar: View {
     }
 
     // MARK: Dock chrome
+
+    /// Up shows Yaşam · Pano · Takvim, down puts them away.
+    private var dockSwipe: some Gesture {
+        DragGesture(minimumDistance: 20).onEnded { value in
+            guard showChrome else { return }
+            if value.translation.height < -28 { navExpanded = true } else if value.translation.height > 28 { navExpanded = false }
+        }
+    }
 
     private func dockCircle(symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -315,7 +320,8 @@ struct ComposerBar: View {
         .padding(.bottom, expanded ? 6 : 0)
         .frame(minHeight: expanded ? 118 : 54)
         .liquidGlass(shape, dim: expanded ? 0.26 : 0)
-        // Only the open panel grows: a swipe up on the closed bar still belongs to the home (Yaşam).
+        // A swipe on the closed bar moves the dock (Yaşam, Pano); only the open panel grows.
+        .simultaneousGesture(dockSwipe)
         .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { v in
             guard expanded, voice.phase == .idle, v.translation.height < -40,
                   abs(v.translation.height) > abs(v.translation.width) * 1.5 else { return }
@@ -891,6 +897,7 @@ extension ComposerBar {
                         RealSymbol(important ? "star.fill" : "star", size: 18)
                             .foregroundStyle(important ? Color(argb: 0xFFEACB75) : Color(argb: 0xFFBABAC3))
                             .frame(width: 40, height: 40)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(important ? t("Önemli işaretini kaldır") : t("Önemli olarak işaretle"))
@@ -899,6 +906,7 @@ extension ComposerBar {
                             .frame(width: 30, height: 30)
                             .background(Circle().fill(fsCanSave ? Color.white : Color(argb: 0xFF3A3A3C)))
                             .frame(width: 40, height: 40)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(!fsCanSave)
