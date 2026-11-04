@@ -36,6 +36,13 @@ final class RealTips {
     private(set) var alwaysOn = UserDefaults.standard.bool(forKey: alwaysOnKey)
     @ObservationIgnored var anchors: [String: CGRect] = [:]
     @ObservationIgnored private var token = 0
+    /// What the tip's window last reported, for "İpucunu dene" in Geliştirici araçları.
+    @ObservationIgnored var hostAppeared = false
+    @ObservationIgnored var hostHeight: CGFloat = 0
+
+    var diagnostic: String {
+        "Pencere: \(RealTipWindow.window == nil ? "yok" : "var") · sahne: \(RealTipWindow.sceneCount) · görünüm: \(hostAppeared ? "açıldı" : "açılmadı") · yükseklik: \(Int(hostHeight))"
+    }
 
     func setAlwaysOn(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: Self.alwaysOnKey)
@@ -57,18 +64,24 @@ final class RealTips {
         if !show(key, onGotIt: action) { action() }
     }
 
-    /// Shows [key]'s tip next to its anchor. False when it was already seen.
+    /// Shows [key]'s tip next to its anchor. False when it was already seen or could not open; a tip counts as seen
+    /// only once it is up, so the action behind it runs at once and the tip gets another chance. [force]: even if seen.
     @discardableResult
-    func show(_ key: String, onGotIt: (() -> Void)? = nil) -> Bool {
+    func show(_ key: String, onGotIt: (() -> Void)? = nil, force: Bool = false) -> Bool {
         guard let tip = Self.tips[key] else { return false }
-        if !alwaysOn {
+        if !alwaysOn && !force {
             guard !UserDefaults.standard.bool(forKey: Self.seenKey(key)) else { return false }
-            UserDefaults.standard.set(true, forKey: Self.seenKey(key))
         }
+        hostAppeared = false
+        hostHeight = 0
         token += 1
         closing = false
         shown = Shown(key: key, tip: tip, anchor: "tip:\(key)", token: token, onGotIt: onGotIt)
-        RealTipWindow.show()
+        guard RealTipWindow.show() else {
+            shown = nil
+            return false
+        }
+        UserDefaults.standard.set(true, forKey: Self.seenKey(key))
         return true
     }
 
@@ -97,17 +110,21 @@ final class RealTips {
 @MainActor
 private enum RealTipWindow {
     static var window: UIWindow?
+    private static var scenes: [UIWindowScene] { UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene } }
+    static var sceneCount: Int { scenes.count }
 
-    static func show() {
-        guard window == nil, let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive }) else { return }
+    static func show() -> Bool {
+        if window != nil { return true }
+        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else { return false }
         let new = UIWindow(windowScene: scene)
         new.windowLevel = .alert + 1
+        new.backgroundColor = .clear
         let host = UIHostingController(rootView: RealTipHost())
         host.view.backgroundColor = .clear
         new.rootViewController = host
         new.isHidden = false
         window = new
+        return true
     }
 
     static func hide() {
@@ -132,7 +149,7 @@ private struct RealTipHost: View {
                     card(current)
                         .padding(.horizontal, 16)
                         .offset(y: placement(current, screen: geo.size.height))
-                        .opacity(tipHeight == 0 || !appeared || tips.closing ? 0 : 1)
+                        .opacity(!appeared || tips.closing ? 0 : 1)
                         .scaleEffect(reduceMotion || appeared && !tips.closing ? 1 : (tips.closing ? 0.94 : 0.86))
                         .offset(y: reduceMotion || (appeared && !tips.closing) ? 0 : tipHeight / (tips.closing ? 5 : 2))
                         .animation(tips.closing ? .easeOut(duration: 0.17) : .spring(response: 0.5, dampingFraction: 0.65), value: appeared)
@@ -140,6 +157,7 @@ private struct RealTipHost: View {
                         .task(id: current.token) {
                             appeared = false
                             shine = 0
+                            tips.hostAppeared = true
                             try? await Task.sleep(for: .milliseconds(30))
                             appeared = true
                             if !reduceMotion { withAnimation(.linear(duration: 1)) { shine = 1 } }
@@ -192,7 +210,7 @@ private struct RealTipHost: View {
             .allowsHitTesting(false)
         }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .background { GeometryReader { g in Color.clear.onChange(of: g.size.height, initial: true) { _, h in tipHeight = h } } }
+        .background { GeometryReader { g in Color.clear.onChange(of: g.size.height, initial: true) { _, h in tipHeight = h; tips.hostHeight = h } } }
         .shadow(color: .black.opacity(0.28), radius: 18, y: 6)
         // Taps on the tip itself do not close it; only "Anladım" or a tap outside do.
         .contentShape(Rectangle())

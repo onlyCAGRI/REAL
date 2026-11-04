@@ -507,7 +507,11 @@ struct SettingsScreen: View {
             }
             SettingsDivider()
             SettingsActionRow(icon: .settings, title: t("İpucunu dene"), subtitle: t("Örnek eğitim ipucunu gösterir")) {
-                RealTips.shared.show("test")
+                let opened = RealTips.shared.show("test", force: true)
+                Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    RealToast.shared.show((opened ? "Açıldı · " : "Açılamadı · ") + RealTips.shared.diagnostic)
+                }
             }
         }
         SettingsSectionHeader(title: t("BİLDİRİM TESTİ"))
