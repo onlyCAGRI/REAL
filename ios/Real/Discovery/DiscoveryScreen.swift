@@ -447,6 +447,8 @@ struct DiscoveryHeadline: View {
 struct PosterEdgeGlow: View {
     let url: String?
     var playing: Bool = false
+    /// The song's real bass, read on each frame; without it, the even pulse below.
+    var pulse: (() -> Double)? = nil
     @State private var colors: [Color] = []
 
     /// MusicDiscoveryScreen.kt's sound pulse: a quick beat on a slow swell, 0…1.
@@ -460,7 +462,7 @@ struct PosterEdgeGlow: View {
             let w = geo.size.width, h = geo.size.height
             let pad = max(w, h) * 0.8
             TimelineView(.animation(paused: !playing)) { t in
-                let beat = playing ? Self.beat(t.date.timeIntervalSinceReferenceDate) : 0
+                let beat = playing ? (pulse?() ?? Self.beat(t.date.timeIntervalSinceReferenceDate)) : 0
                 Canvas { ctx, _ in
                     let radius = w * (0.47 + 0.14 * beat)
                     let boost = 1 + 1.3 * beat

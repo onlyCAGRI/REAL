@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Kontrol ettir (CheckGlow.kt): a card someone asked you to look at glows from its right edge, breathing slowly
-/// (2.8 s), until you open it. "Seen" is kept on this phone per request, so a new request lights the card again.
+/// (2.8 s), until you open it. "Seen" is kept per request and per account, so opening a card on one device puts its light
+/// out on the others and a new request lights it again. Someone else's light on a shared card stays theirs.
 @MainActor
 @Observable
 final class CheckRequests {
@@ -9,16 +10,40 @@ final class CheckRequests {
     static let selfColor = Color(argb: 0xFF6FD6FF)
     static let otherColor = Color(argb: 0xFFFFB86F)
     private static let key = "real_check_seen"
+    /// Travels as a category description record: older app versions and the Worker accept those and leave this one alone.
+    static let syncRecord = "description/builtin_check_seen_v1"
+    private static let keep = 400
 
     private(set) var seen: Set<String> = Set(UserDefaults.standard.stringArray(forKey: CheckRequests.key) ?? [])
 
+    /// Written by older versions: a shared card's local id differs per device, so it only works on this phone.
     private static func id(_ r: ReminderItem) -> String { "\(r.id):\(r.checkRequest?.at ?? 0)" }
+    private static func syncId(_ r: ReminderItem) -> String { "\(r.sharedCardId ?? String(r.id)):\(r.checkRequest?.at ?? 0)" }
+
+    /// The newest requests, in an order every device agrees on.
+    private static func newest(_ keys: Set<String>) -> [String] {
+        func at(_ key: String) -> Int64 { key.split(separator: ":").last.flatMap { Int64($0) } ?? 0 }
+        return Array(keys.sorted { at($0) != at($1) ? at($0) > at($1) : $0 < $1 }.prefix(keep))
+    }
+
+    /// The account's record, nil while nothing was seen.
+    var syncValue: String? { seen.isEmpty ? nil : Self.newest(seen).joined(separator: "|") }
+
+    /// Another device opened cards. Added to what this phone knows, so neither loses a card.
+    func merge(fromSync value: String) {
+        let incoming = value.split(separator: "|").map(String.init)
+        let next = Set(Self.newest(seen.union(incoming)))
+        guard next != seen else { return }
+        seen = next
+        UserDefaults.standard.set(Array(next), forKey: Self.key)
+    }
 
     /// Opening the card puts its light out (on this phone).
     func markSeen(_ r: ReminderItem) {
-        guard r.checkRequest != nil, !seen.contains(Self.id(r)) else { return }
-        seen.insert(Self.id(r))
-        UserDefaults.standard.set(Array(seen.suffix(400)), forKey: Self.key)
+        guard r.checkRequest != nil, !seen.contains(Self.syncId(r)) else { return }
+        seen.insert(Self.syncId(r))
+        seen = Set(Self.newest(seen))
+        UserDefaults.standard.set(Array(seen), forKey: Self.key)
     }
 
     /// The light this viewer should see on `r`, or nil: the card's category colour, else blue / amber.
@@ -31,7 +56,7 @@ final class CheckRequests {
         } else if let me {
             forMe = c.to.contains(me) || (c.to.contains(CheckRequest.everyone) && c.from != me) || (c.to.contains(CheckRequest.me) && c.from == me)
         } else { forMe = false }
-        guard forMe, !seen.contains(Self.id(r)) else { return nil }
+        guard forMe, !seen.contains(Self.id(r)), !seen.contains(Self.syncId(r)) else { return nil }
         // The light blinks in the card's category colour (a colour picked in older versions is ignored).
         if let categoryColor { return categoryColor }
         let mine = c.from == nil || c.from == me || (r.sharedCardId == nil && c.to.contains(CheckRequest.me))

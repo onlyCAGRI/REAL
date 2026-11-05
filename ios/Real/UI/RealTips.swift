@@ -137,11 +137,12 @@ private struct RealTipHost: View {
                 Color.black.opacity(0.001).onTapGesture { tips.gotIt() }
                 if let current = tips.shown {
                     card(current)
+                        .frame(width: max(0, geo.size.width - 32))
                         .padding(.horizontal, 16)
                         .offset(y: placement(current, screen: geo.size.height))
                         // Always drawn; the landing below only moves it, so a missed start cannot leave a blank screen.
                         .opacity(tips.closing ? 0 : 1)
-                        .scaleEffect(reduceMotion || appeared && !tips.closing ? 1 : (tips.closing ? 0.94 : 0.86))
+                        .scaleEffect(reduceMotion || appeared && !tips.closing ? 1 : (tips.closing ? 0.96 : 0.92))
                         .offset(y: reduceMotion || (appeared && !tips.closing) ? 0 : tipHeight / (tips.closing ? 5 : 2))
                         .animation(tips.closing ? .easeOut(duration: 0.17) : .spring(response: 0.5, dampingFraction: 0.65), value: appeared)
                         .animation(.easeOut(duration: 0.17), value: tips.closing)
@@ -173,21 +174,23 @@ private struct RealTipHost: View {
     }
 
     private func card(_ current: RealTips.Shown) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(t(current.tip.title)).font(RealFont.inter(15, .bold)).foregroundStyle(Color(argb: 0xFF0B0B0D))
-                Text(t(current.tip.body)).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF3A3A42))
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(t(current.tip.title)).font(RealFont.inter(18, .bold)).foregroundStyle(Color(argb: 0xFF0B0B0D))
+                Text(t(current.tip.body)).font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFF3A3A42))
+                    .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button { tips.gotIt() } label: {
-                Text(t("Anladım")).font(RealFont.inter(14, .semibold)).foregroundStyle(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(argb: 0xFF0B0B0D)))
+                Text(t("Anladım")).font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 18).padding(.vertical, 11)
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(argb: 0xFF0B0B0D)))
             }
             .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(.leading, 18).padding(.vertical, 14).padding(.trailing, 12)
+        .padding(20)
         .background(Color(argb: 0xFFF5F5F7))
         // One soft light passes over the card as it lands.
         .overlay {

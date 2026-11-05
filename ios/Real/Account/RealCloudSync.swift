@@ -397,6 +397,7 @@ final class RealCloudSync {
         }
         let preview = UserDefaults.standard.integer(forKey: "home_category_preview_count_v1")
         if preview > 0 { docs["PREFERENCE/ui/home_category_preview_count_v1"] = ["value": preview] }
+        if let seen = CheckRequests.shared.syncValue { docs["PREFERENCE/\(CheckRequests.syncRecord)"] = ["value": seen] }
 
         // Everything this account had that is gone here is deleted (only kinds this iPhone writes).
         let written: Set<String> = ["CARD", "CATEGORY", "PLANNER", "MOOD", "DRINK"]
@@ -701,6 +702,7 @@ final class RealCloudSync {
                 return n > 0 ? ["value": n] : nil
             }
             if key == "water/goal" { return ["value": life.goalMl] }
+            if key == CheckRequests.syncRecord, let seen = CheckRequests.shared.syncValue { return ["value": seen] }
             if key.hasPrefix("description/custom_"), let c = store.categories.first(where: { "description/custom_\($0.id)_\($0.createdAt)" == key }) {
                 return c.description.isEmpty ? nil : ["value": c.description]
             }
@@ -780,7 +782,9 @@ final class RealCloudSync {
                 life.replaceAll(goal: ml, entries: life.entries, moods: life.moods)
                 return
             }
-            if key == "ui/category_order_v1" {
+            if key == CheckRequests.syncRecord {
+                if let seen = value as? String { CheckRequests.shared.merge(fromSync: seen) }
+            } else if key == "ui/category_order_v1" {
                 store.setCategoryOrderFromSync(((value as? String) ?? "").split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
             } else if key == "ui/home_category_preview_count_v1", let n = (value as? NSNumber)?.intValue, n > 0 {
                 UserDefaults.standard.set(n, forKey: "home_category_preview_count_v1")

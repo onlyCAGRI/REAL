@@ -394,6 +394,7 @@ private struct MusicDeck: View {
     @State private var playingId: String?
     /// Next previews already loading, so a swipe starts the sound at once.
     @State private var prepared: [String: AVPlayer] = [:]
+    @State private var beats: BeatTrack?
     /// The covers behind wait until the front one is on screen.
     @State private var frontReady = false
     @Environment(\.scenePhase) private var scenePhase
@@ -407,8 +408,9 @@ private struct MusicDeck: View {
             let top = max(0, (avail - side) / 2)
             let visible = Array(cards.prefix(4))
             ZStack(alignment: .top) {
-                // PosterEdgeGlow.kt: the cover's own colours behind the deck, growing with the beat while the preview plays.
-                PosterEdgeGlow(url: cards.first?.music.artworkUrl, playing: playingId != nil)
+                // PosterEdgeGlow.kt: the cover's own colours behind the deck, growing with the song's bass.
+                PosterEdgeGlow(url: cards.first?.music.artworkUrl, playing: playingId != nil,
+                               pulse: { Double(beats?.level(player?.positionMillis ?? 0) ?? 0.16) * 0.45 })
                     .frame(width: geo.size.width + 28, height: side)
                     .frame(width: geo.size.width)
                     .offset(y: top)
@@ -420,7 +422,21 @@ private struct MusicDeck: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 34)
         }
+        .background {
+            MusicSmoke(previewUrl: cards.first?.music.previewUrl,
+                       artworkUrl: cards.first?.music.artworkUrl?.replacingOccurrences(of: "100x100bb", with: "600x600bb"),
+                       fallback: Color(argb: 0xFF2D6FD6), active: playingId != nil, strength: 1.25) { player?.positionMillis ?? 0 }
+        }
         .task(id: "\(cards.first?.id ?? "")|\(paused)|\(scenePhase == .active)|\(busy)") { await play() }
+        .task(id: cards.first?.music.previewUrl) {
+            beats = nil
+            guard let url = cards.first?.music.previewUrl else { return }
+            beats = await MusicBeats.shared.track(url)
+        }
+        // While one song plays, the next ones' smoke is readied, so a swipe finds it waiting.
+        .task(id: cards.prefix(10).map(\.id).joined(separator: "|")) {
+            MusicBeats.shared.prepare(cards.prefix(10).compactMap { $0.music.previewUrl })
+        }
         .task(id: cards.first?.music.artworkUrl) {
             if !frontReady, let s = cards.first?.music.artworkUrl { _ = await PosterImageCache.load(s) }
             frontReady = true

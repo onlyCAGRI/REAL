@@ -424,6 +424,8 @@ final class MusicPreviewPlayer {
     @ObservationIgnored private var player: AVPlayer?
     @ObservationIgnored private var observer: Any?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
+    /// Read on each frame by the smoke, so it stays out of observation.
+    var positionMillis: Int64 { player?.positionMillis ?? 0 }
 
     func toggle(_ block: MusicBlock) {
         if playingId == block.id { stop(); return }
@@ -507,21 +509,29 @@ struct MusicBlockView: View {
         .rotation3DEffect(.degrees(flipped ? 180 : 0), axis: (x: 0, y: 1, z: 0), perspective: 0.6)
         .animation(.easeInOut(duration: 0.45), value: flipped)
         .background(
-            TimelineView(.animation(paused: !playing)) { t in
-                // While the preview plays, the cover colour washes through the whole block, softly pulsing.
-                let wave = playing ? (sin(t.date.timeIntervalSinceReferenceDate * 3.2) * 0.5 + 0.5) : 0
-                LinearGradient(colors: [ambient.opacity(0.55 + 0.25 * wave), Color(argb: 0xFF17171B)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .overlay(RadialGradient(colors: [ambient.opacity(playing ? 0.18 + 0.22 * wave : 0), .clear],
-                                            center: .bottomTrailing, startRadius: 0, endRadius: 320))
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            LinearGradient(colors: [ambient.opacity(0.55), Color(argb: 0xFF17171B)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .overlay { if heroInset == 0 { smoke(strength: 1) } }
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         )
+        // On a cover the smoke drifts over the picture, lighter than what is under it, so the words stay readable.
+        .overlay {
+            if heroInset > 0 && !flipped {
+                smoke(strength: 0.8)
+                    .blendMode(.screen)
+                    .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28, style: .continuous))
+            }
+        }
         .task(id: block.artworkUrl) {
             guard let s = block.artworkUrl, let u = URL(string: s),
                   let result = try? await URLSession.shared.data(from: u), let img = UIImage(data: result.0),
                   let c = CoverPalette.dominant(img) else { return }
             withAnimation(.easeOut(duration: 0.3)) { ambient = c }
         }
+    }
+
+    private func smoke(strength: Double) -> some View {
+        MusicSmoke(previewUrl: block.previewUrl, artworkUrl: block.artworkUrl, fallback: ambient,
+                   active: preview.playingId == block.id, strength: strength) { preview.positionMillis }
     }
 
     private func front(playing: Bool) -> some View {

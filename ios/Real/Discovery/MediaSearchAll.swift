@@ -66,6 +66,8 @@ struct MediaSearchAll: View {
                         ForEach(songs.prefix(songsShown)) { m in
                             resultRow(m.title, m.artist, spotify: spotifyFlash == m.id, add: {
                                 guard spotifyFlash == nil else { return }
+                                // Ready before the card is even saved: the smoke is there from the first press.
+                                if let url = m.previewUrl { MusicBeats.shared.prepare([url]) }
                                 onAddMusic(m); query = ""
                             }, longPress: { addAsSpotify(m) }) {
                                 MusicArtwork(url: m.artworkUrl).frame(width: 44, height: 44)
@@ -112,6 +114,7 @@ struct MediaSearchAll: View {
     /// Spotify has no open catalog for apps: the block opens as a Spotify search for the song.
     private func addAsSpotify(_ song: MusicBlock) {
         guard spotifyFlash == nil else { return }
+        if let url = song.previewUrl { MusicBeats.shared.prepare([url]) }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) { spotifyFlash = song.id }
         Task {

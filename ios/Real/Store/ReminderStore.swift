@@ -48,6 +48,7 @@ final class ReminderStore {
     // MARK: Persistence
 
     private func load() {
+        defer { if persist { syncSmoke() } }
         guard persist, let data = try? Data(contentsOf: fileURL),
               let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         reminders = snap.reminders
@@ -69,10 +70,16 @@ final class ReminderStore {
     /// True while SharedCategorySync writes, so its own writes do not schedule another round.
     @ObservationIgnored var syncWriting = false
 
+    /// Every song on a card keeps its smoke ready; a deleted card's goes with it.
+    private func syncSmoke() {
+        MusicBeats.shared.cardsChanged(reminders.flatMap(\.musicBlocks).compactMap(\.previewUrl))
+    }
+
     private func save() {
         NotificationScheduler.categories = categories
         if !syncWriting { onSaved?() }
         guard persist else { return }
+        syncSmoke()
         let snap = Snapshot(reminders: reminders, categories: categories,
                             builtInColors: Dictionary(uniqueKeysWithValues: builtInColors.map { ($0.key.rawValue, $0.value) }),
                             categoryOrderKeys: categoryOrderKeys, ownerName: ownerName,
