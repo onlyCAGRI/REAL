@@ -529,6 +529,28 @@ struct MusicBlockView: View {
         }
     }
 
+    /// Small pill at the end of the play row. The logo keeps its own tap on Spotify, where it turns the card to its code.
+    private func openPill(playing: Bool) -> some View {
+        let opensIn = musicOpensIn(block)
+        return HStack(spacing: 0) {
+            if spotifyCodeId != nil {
+                Button { flipped = true } label: { MusicSourceLogo(provider: opensIn, size: 18).frame(width: 32, height: 32) }
+                    .buttonStyle(.plain).accessibilityLabel(t("Spotify kodunu göster"))
+            } else {
+                MusicSourceLogo(provider: opensIn, size: 18).frame(width: 32, height: 32)
+            }
+            Text(t("Aç ↗")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFE2E2E8)).lineLimit(1)
+                .accessibilityLabel(opensIn == "Spotify" ? t("{0}'da aç ↗", musicProviderLabel(opensIn)) : t("{0}'te aç ↗", musicProviderLabel(opensIn)))
+                .accessibilityAddTraits(.isButton)
+        }
+        .padding(.leading, 2).padding(.trailing, 12)
+        .frame(height: 34)
+        .background(Capsule().fill(Color.white.opacity(0.10)))
+        .contentShape(Capsule())
+        .onTapGesture { if playing { preview.toggle(block) }; openMusicBlock(block) }
+        .fixedSize()
+    }
+
     private func smoke(strength: Double) -> some View {
         MusicSmoke(previewUrl: block.previewUrl, artworkUrl: block.artworkUrl, fallback: ambient,
                    active: preview.playingId == block.id, strength: strength) { preview.positionMillis }
@@ -550,13 +572,6 @@ struct MusicBlockView: View {
                     MusicArtistLine(block: block, color: Color(argb: 0xFFB1B1BC), size: 13)
                 }
                 Spacer(minLength: 4)
-                // Source logo top-right; on Spotify it turns the card over to its Spotify Code.
-                if spotifyCodeId != nil {
-                    Button { flipped = true } label: { MusicSourceLogo(provider: block.provider, size: 18).frame(width: 30, height: 30) }
-                        .buttonStyle(.plain).accessibilityLabel(t("Spotify kodunu göster"))
-                } else {
-                    MusicSourceLogo(provider: musicOpensIn(block), size: 18)
-                }
             }
             if block.previewUrl != nil {
                 HStack {
@@ -568,18 +583,15 @@ struct MusicBlockView: View {
                         .foregroundStyle(.white).frame(width: 36, height: 36)
                     }
                     .accessibilityLabel(playing ? t("Önizlemeyi durdur") : t("Önizlemeyi çal"))
-                    Spacer()
                     Text(playing && !preview.loading ? String(format: "0:%02d", Int(preview.elapsed)) : t("Önizleme"))
                         .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFB1B1BC)).monospacedDigit()
+                    Spacer(minLength: 8)
+                    openPill(playing: playing)
                 }
+            } else {
+                HStack { Spacer(); openPill(playing: playing) }
             }
-            Button { if playing { preview.toggle(block) }; openMusicBlock(block) } label: {
-                Text(musicOpensIn(block) == "Spotify" ? t("{0}'da aç ↗", musicProviderLabel(musicOpensIn(block))) : t("{0}'te aç ↗", musicProviderLabel(musicOpensIn(block)))).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFD0D0D8))
-                    .frame(maxWidth: .infinity).frame(height: 40)
-                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 24))
-            }
-            .buttonStyle(.plain)
-            if block.provider == "iTunes", block.previewUrl != nil {
+            if block.showsITunesCredit {
                 Text("Preview provided courtesy of iTunes").font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF868690))
             }
         }
@@ -589,7 +601,6 @@ struct MusicBlockView: View {
     /// The card's cover: large artwork, title, preview, "…'da aç" with the source logo at the bottom right (on Spotify
     /// the logo turns the cover over to its Spotify Code).
     private func heroFront(playing: Bool) -> some View {
-        let opensIn = musicOpensIn(block)
         return CatalogHeroCover(imageURL: block.artworkUrl.flatMap { URL(string: $0.replacingOccurrences(of: "100x100bb", with: "600x600bb")) },
                                 posterAspect: 1, title: block.title,
                                 subtitle: [block.artist, block.album ?? ""].filter { !$0.isEmpty }.joined(separator: " · "),
@@ -609,18 +620,13 @@ struct MusicBlockView: View {
                     .accessibilityLabel(playing ? t("Önizlemeyi durdur") : t("Önizlemeyi çal"))
                     Text(playing && !preview.loading ? String(format: "0:%02d", Int(preview.elapsed)) : t("Önizleme"))
                         .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFB1B1BC)).monospacedDigit()
+                    Spacer(minLength: 8)
+                    openPill(playing: playing)
                 }
+            } else {
+                openPill(playing: playing)
             }
-            HeroOpenRow(label: opensIn == "Spotify" ? t("{0}'da aç ↗", musicProviderLabel(opensIn)) : t("{0}'te aç ↗", musicProviderLabel(opensIn)),
-                        action: { if playing { preview.toggle(block) }; openMusicBlock(block) }) {
-                if spotifyCodeId != nil {
-                    Button { flipped = true } label: { MusicSourceLogo(provider: opensIn, size: 22).frame(width: 38, height: 38) }
-                        .buttonStyle(.plain).accessibilityLabel(t("Spotify kodunu göster"))
-                } else {
-                    MusicSourceLogo(provider: opensIn, size: 22).padding(8)
-                }
-            }
-            if block.provider == "iTunes", block.previewUrl != nil {
+            if block.showsITunesCredit {
                 Text("Preview provided courtesy of iTunes").font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF868690))
             }
         }

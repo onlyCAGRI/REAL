@@ -120,7 +120,8 @@ final class CalendarCardPublisher {
         do {
             r = try await RealBackend.post("/api/share/v1/calendar-shares", [
                 "id": requestId, "cardKey": key, "version": latest.updatedAt,
-                "options": ["includeAttachments": true, "includeLocation": false, "includeVoice": false, "includeJournal": false]
+                // The card page shows where it is, like the card itself.
+                "options": ["includeAttachments": true, "includeLocation": true, "includeVoice": false, "includeJournal": false]
             ])
         } catch let f as RealBackend.Failure where f.code == "SYNC_CARD_FIRST" {
             throw Failure(errorDescription: t("Kart henüz buluta ulaşmadı. Birkaç saniye sonra yeniden dene."))
@@ -129,7 +130,9 @@ final class CalendarCardPublisher {
             throw Failure(errorDescription: t("Paylaşım linki doğrulanamadı. Lütfen tekrar dene."))
         }
         all = receipts
-        all[key] = Receipt(requestId: requestId, cardVersion: latest.updatedAt, url: url, applied: false, expiresAt: now + 86_400_000)
+        // The server's end date, so an unchanged card keeps the same link instead of getting a new one each day.
+        let expires = (r["expiresAt"] as? NSNumber)?.int64Value ?? now + 86_400_000
+        all[key] = Receipt(requestId: requestId, cardVersion: latest.updatedAt, url: url, applied: false, expiresAt: expires)
         receipts = all
         return url
     }

@@ -2952,5 +2952,20 @@
   "Doğrulanıyor…": "Verifying…",
   "Bulut verileri silindi.": "Cloud data deleted.",
   "Yedekleme yeniden başladı.": "Backup restarted.",
-  "Hesap yönetimine şu anda ulaşılamıyor.": "Account management is unavailable right now."
+  "Hesap yönetimine şu anda ulaşılamıyor.": "Account management is unavailable right now.",
+  "İngilizce": "English",
+  "İspanyolca": "Spanish",
+  "Almanca": "German",
+  "Portekizce": "Portuguese",
+  "Fransızca": "French",
+  "İtalyanca": "Italian",
+  "Korece": "Korean",
+  "Japonca": "Japanese",
+  "Hangi dilde?": "In which language?",
+  "En fazla 2 dil": "Up to 2 languages",
+  "İstersen bir dönem": "A period, if you like",
+  "Paylaşım açılamadı. Yeniden dene.": "Could not open the share. Try again.",
+  "Takvime bağlı": "Linked to your calendar",
+  "Bu kartlar telefon takviminden açılabilsin diye paylaşılıyor. Kapatmak için: Ayarlar › Takvim bağlantısı › REAL planlarını takvime gönder.": "These cards are shared so your phone's calendar can open them. To turn this off: Settings › Calendar connection › Send REAL plans to the calendar.",
+  "Aç ↗": "Open ↗"
 }

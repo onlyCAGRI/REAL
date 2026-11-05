@@ -47,8 +47,29 @@ final class ReminderStore {
 
     // MARK: Persistence
 
+    /// Cards made before Apple's preview: Apple's now, or none if Apple lacks the song. No connection waits for the next start.
+    @MainActor private func replaceSpotifyPreviews() async {
+        try? await Task.sleep(for: .seconds(5))
+        var seen = Set<String>()
+        for block in reminders.flatMap(\.musicBlocks) where block.hasSpotifyPreview && seen.insert(block.id).inserted {
+            let preview: String?
+            do { preview = try await LinkResolver.applePreview(title: block.title, artist: block.artist) } catch { return }
+            for card in reminders where card.musicBlocks.contains(where: { $0.id == block.id && $0.hasSpotifyPreview }) {
+                mutate(card.id) { item in
+                    item.musicBlocks = item.musicBlocks.map { old in
+                        guard old.id == block.id, old.hasSpotifyPreview else { return old }
+                        var new = old
+                        new.previewUrl = preview
+                        new.previewDurationMillis = preview == nil ? nil : 30_000
+                        return new
+                    }
+                }
+            }
+        }
+    }
+
     private func load() {
-        defer { if persist { syncSmoke() } }
+        defer { if persist { syncSmoke(); Task { @MainActor in await replaceSpotifyPreviews() } } }
         guard persist, let data = try? Data(contentsOf: fileURL),
               let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         reminders = snap.reminders

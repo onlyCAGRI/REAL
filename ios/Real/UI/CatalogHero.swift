@@ -94,14 +94,17 @@ struct HeroOpenRow<Source: View>: View {
     @ViewBuilder var source: () -> Source
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: action) {
-                Text(label).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFE2E2E8))
-                    .frame(maxWidth: .infinity).frame(height: 46)
-                    .background(Capsule().fill(Color.white.opacity(0.10)))
-            }
-            .buttonStyle(.plain)
+        // A small pill as wide as its words: opening is second to playing. The source keeps its own tap (Spotify Code).
+        HStack(spacing: 0) {
             source()
+            Text(label).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFE2E2E8)).lineLimit(1)
+                .accessibilityAddTraits(.isButton)
         }
+        .padding(.leading, 4).padding(.trailing, 14)
+        .frame(height: 36)
+        .background(Capsule().fill(Color.white.opacity(0.10)))
+        .contentShape(Capsule())
+        .onTapGesture(perform: action)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

@@ -82,7 +82,7 @@ struct GameBlockView: View {
                              onRemove: editing ? onRemove : nil) {
                 if let url = URL(string: block.providerUrl), url.scheme == "https" {
                     HeroOpenRow(label: t("Oyun sayfasını aç ↗"), action: { UIApplication.shared.open(url) }) {
-                        Text(block.provider).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                        Text(block.provider).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98)).padding(.leading, 10).padding(.trailing, 8)
                     }
                 }
             }

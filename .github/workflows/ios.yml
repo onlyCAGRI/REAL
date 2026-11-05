@@ -71,7 +71,8 @@ jobs:
 
       # Pushes and "compile" runs only check that the app builds: no tests, screenshots or app package.
       - name: Compile check
-        if: (github.event_name == 'push' && env.SHOWCASE != 'true') || inputs.mode == 'compile'
+        # An [appetize] push builds below anyway; compiling here too doubled its time.
+        if: (github.event_name == 'push' && env.SHOWCASE != 'true' && !contains(github.event.head_commit.message, '[appetize]')) || inputs.mode == 'compile'
         run: |
           mkdir -p build
           set +e
@@ -213,6 +214,7 @@ jobs:
           xcodebuild build -project Real.xcodeproj -scheme Real -configuration Release \
             -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
             -derivedDataPath build-appetize ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            SWIFT_OPTIMIZATION_LEVEL=-Onone SWIFT_COMPILATION_MODE=singlefile GCC_OPTIMIZATION_LEVEL=0 \
             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/appetize.log 2>&1 || { grep -E ": error: " build/appetize.log | sort -u | head -60; tail -20 build/appetize.log; exit 1; }
           cd build-appetize/Build/Products/Release-iphonesimulator
           lipo -info REAL.app/REAL

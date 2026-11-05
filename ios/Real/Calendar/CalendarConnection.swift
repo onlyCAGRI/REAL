@@ -193,6 +193,8 @@ struct CalendarConnectionScreen: View {
     @State private var connection = CalendarConnection.shared
     @State private var draft = CalendarConnection.shared.options
     @State private var confirm = false
+    /// Titles of the cards shared so the phone's calendar can open them.
+    @State private var calendarLinked: [String] = []
     @State private var error: String?
     @State private var howOpen = false
     @Environment(\.openURL) private var openURL
@@ -262,6 +264,16 @@ struct CalendarConnectionScreen: View {
                 section(t("Takvime gönder"), footer: draft.exportEnabled ? nil : t("Kapatınca takvimdeki mevcut kayıtlar silinmez.")) {
                     SettingsToggleRow(icon: .calendar, title: t("REAL planlarını takvime gönder"), subtitle: "", isOn: $draft.exportEnabled)
                 }
+                .task { await loadCalendarLinked() }
+                if !calendarLinked.isEmpty {
+                    section(t("Takvime bağlı"), footer: t("Bu kartlar telefon takviminden açılabilsin diye paylaşılıyor. Kapatmak için: Ayarlar › Takvim bağlantısı › REAL planlarını takvime gönder.")) {
+                        ForEach(Array(calendarLinked.enumerated()), id: \.offset) { i, title in
+                            if i > 0 { SettingsDivider() }
+                            Text(title.isEmpty ? t("Adsız kart") : title).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 13)
+                        }
+                    }
+                }
                 if draft.exportEnabled {
                     section(t("Hangi takvime?"), footer: connection.hasLinks ? t("Gönderilmiş planlar varken hedef takvim değiştirilemez.") : nil) {
                         if connection.writableCalendars.isEmpty {
@@ -325,6 +337,13 @@ struct CalendarConnectionScreen: View {
         error = nil
         connection.save(draft)
         connection.reconcile(reminders.reminders)
+    }
+
+    private func loadCalendarLinked() async {
+        guard let data = try? await RealBackend.request("/api/share/v1/shares"),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let shares = json["shares"] as? [[String: Any]] else { return }
+        calendarLinked = shares.filter { $0["calendar"] as? Bool == true }.map { ($0["title"] as? String) ?? "" }
     }
 
     private func section<C: View>(_ title: String, footer: String? = nil, @ViewBuilder content: @escaping () -> C) -> some View {

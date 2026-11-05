@@ -105,13 +105,49 @@ enum LinkResolver {
            let r = final.path.range(of: #"/track/([A-Za-z0-9]{22})"#, options: .regularExpression), let title {
             let id = String(final.path[r].dropFirst("/track/".count))
             let parts = (tags["og:description"].map(decodeEntities) ?? "").components(separatedBy: " · ").map { $0.trimmingCharacters(in: .whitespaces) }
-            let preview = tags["og:audio"].flatMap { $0.hasPrefix("https://p.scdn.co/") ? $0 : nil }
+            // The audio is Apple's: we have no right to Spotify's preview.
+            let preview = (try? await applePreview(title: title, artist: parts.first ?? "")) ?? nil
             return ResolvedLink(title: title, imageUrl: image, music: MusicBlock(
                 title: String(title.prefix(300)), artist: String((parts.first ?? "").prefix(200)),
                 album: parts.count >= 3 ? parts[1] : nil, artworkUrl: image, provider: "Spotify", providerTrackId: id,
                 providerUrl: "https://open.spotify.com/track/\(id)", previewUrl: preview, previewDurationMillis: preview == nil ? nil : 30_000))
         }
         return ResolvedLink(title: title.map { String($0.prefix(300)) }, imageUrl: image)
+    }
+
+    /// Apple's 30 s preview of exactly this song and artist. Nil: Apple has no such song, and a wrong song is worse than none. Throws: no answer.
+    static func applePreview(title: String, artist: String) async throws -> String? {
+        let song = songWords(title), singer = words(artist)
+        guard !song.isEmpty, !singer.isEmpty,
+              let term = String("\(artist) \(title)".prefix(200)).addingPercentEncoding(
+                withAllowedCharacters: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")) else { return nil }
+        guard let o = await json("https://itunes.apple.com/search?term=\(term)&entity=song&media=music&limit=25&country=\(MusicStorefront.code)") else {
+            throw URLError(.cannotLoadFromNetwork)
+        }
+        for item in (o["results"] as? [[String: Any]]) ?? [] {
+            guard let preview = item["previewUrl"] as? String, preview.hasPrefix("https://") else { continue }
+            let apple = words((item["artistName"] as? String) ?? "")
+            if !apple.isEmpty, songWords((item["trackName"] as? String) ?? "") == song,
+               " \(apple) ".contains(" \(singer) ") || " \(singer) ".contains(" \(apple) ") { return preview }
+        }
+        return nil
+    }
+
+    /// "Song (feat. X) - Remastered 2011" and "Song" are one song; "Song - Live" stays another.
+    private static func songWords(_ title: String) -> String {
+        var s = title.lowercased()
+        for pattern in [#"[(\[]\s*(feat|ft|with)\b[^)\]]*[)\]]"#, #"[(\[][^)\]]*remaster[^)\]]*[)\]]"#, #"\s-\s*(feat|ft|with)\b.*$"#, #"\s-\s[^-]*remaster[^-]*$"#] {
+            s = s.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
+        }
+        return words(s)
+    }
+
+    private static func words(_ text: String) -> String {
+        let folded = text.lowercased().replacingOccurrences(of: "ı", with: "i")
+            .folding(options: .diacriticInsensitive, locale: Locale(identifier: "en_US"))
+            .replacingOccurrences(of: "['’]", with: "", options: .regularExpression)
+        return folded.map { $0.isLetter || $0.isNumber ? String($0) : " " }.joined()
+            .split(separator: " ").joined(separator: " ")
     }
 
     static func itunes(_ id: String, link: String) async -> MusicBlock? {

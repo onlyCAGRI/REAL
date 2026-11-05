@@ -16,6 +16,8 @@ struct DiscoveryStep {
     let optional: Bool
     let groups: [(String?, [StepOption])]
     var top: AnyView? = nil
+    /// "Tümü": can always be tapped, even with the step full, because it clears the others.
+    var clearKey: String? = nil
     var keys: Set<String> { Set(groups.flatMap { $0.1.map(\.key) }) }
 }
 
@@ -85,7 +87,7 @@ struct DiscoveryStepper: View {
                 ChipFlow(spacing: 8) {
                     ForEach(group.1) { o in
                         let on = chosen.contains(o.key)
-                        let full = !on && chosen.count >= s.max && s.max > 1
+                        let full = !on && o.key != s.clearKey && chosen.count >= s.max && s.max > 1
                         let isRare = !on && rare(selection, o.key)
                         DiscoveryChip(label: t(o.label), selected: on, enabled: !loading, accent: accent) { tap(o, s, on: on, full: full, isRare: isRare) }
                             .opacity(full || isRare ? 0.32 : 1)

@@ -965,7 +965,7 @@ struct MediaBlockView: View {
                              onRemove: editing ? onRemove : nil) {
                 if let url = URL(string: block.providerUrl), ["http", "https"].contains(url.scheme ?? "") {
                     HeroOpenRow(label: openLabel, action: { UIApplication.shared.open(url) }) {
-                        Text(providerName).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98))
+                        Text(providerName).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8E8E98)).padding(.leading, 10).padding(.trailing, 8)
                     }
                 }
             }

@@ -43,6 +43,60 @@ struct MusicCard: Codable, Hashable, Identifiable {
 }
 
 /// Local, per device. Right swipe saves to "Müzik listem", left passes; passed and saved songs never come back.
+/// "Hangi dilde?" (MusicDiscovery.kt): Apple does not say what language a song is in, so a language is read from its
+/// country's lists: a song stays when its title or artist is written that way, its artist is known to sing in it, or its
+/// artist is not one of the American list's (those are the global hits every country's list carries). Mostly right, not
+/// perfect. The order follows how much is listened to in each language, Korean and Japanese last by choice.
+enum MusicLanguage: String, CaseIterable, Sendable {
+    case english = "lang_en", spanish = "lang_es", german = "lang_de", portuguese = "lang_pt", french = "lang_fr",
+         italian = "lang_it", turkish = "lang_tr", korean = "lang_ko", japanese = "lang_ja"
+
+    private var info: (label: String, code: String, storefront: String, marks: String?, artists: [String]) {
+        switch self {
+        case .english: return ("İngilizce", "en", "us", nil, [])
+        case .spanish: return ("İspanyolca", "es", "es", "[ñ¿¡áíóú]", ["Bad Bunny", "Karol G", "J Balvin", "Rosalía", "Shakira",
+            "Peso Pluma", "Feid", "Rauw Alejandro", "Ozuna", "Daddy Yankee", "Maluma", "Enrique Iglesias"])
+        case .german: return ("Almanca", "de", "de", "[äöüß]", ["Apache 207", "Nina Chuba", "Rammstein", "Peter Fox", "Luciano", "Herbert Grönemeyer"])
+        case .portuguese: return ("Portekizce", "pt", "br", "[ãõçáâêó]", ["Anitta", "Ludmilla", "Marília Mendonça", "Jorge & Mateus", "Henrique & Juliano"])
+        case .french: return ("Fransızca", "fr", "fr", "[àâçéèêëîïôùûœ]", ["Aya Nakamura", "Stromae", "Jul", "Ninho", "Indila", "Gims", "Angèle", "Édith Piaf"])
+        case .italian: return ("İtalyanca", "it", "it", "[àèìòù]", ["Laura Pausini", "Eros Ramazzotti", "Annalisa", "Sfera Ebbasta", "Andrea Bocelli"])
+        case .turkish: return ("Türkçe", "tr", "tr", "[şğıİ]", ["Tarkan", "Sezen Aksu", "Mabel Matiz", "Hadise", "Edis", "Duman", "maNga", "Teoman",
+            "Barış Manço", "Cem Karaca", "Ezhel", "UZI", "Lvbel C5", "BLOK3", "Ceza", "Sagopa Kajmer", "Ben Fero", "Adamlar", "Neşet Ertaş"])
+        case .korean: return ("Korece", "ko", "kr", #"[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7A3]"#, ["BTS", "EXO", "BLACKPINK", "TWICE", "Stray Kids",
+            "SEVENTEEN", "NewJeans", "aespa", "IVE", "LE SSERAFIM", "ATEEZ", "ENHYPEN", "TOMORROW X TOGETHER", "NCT 127", "NCT DREAM", "Red Velvet",
+            "ITZY", "(G)I-DLE", "BIGBANG", "IU", "PSY", "Jung Kook", "Jimin", "RM", "SUGA", "j-hope", "JENNIE", "LISA", "ROSÉ", "TAEYEON", "SHINee"])
+        case .japanese: return ("Japonca", "ja", "jp", #"[\u3040-\u30FF\u4E00-\u9FFF]"#, ["YOASOBI", "Kenshi Yonezu", "Ado", "Fujii Kaze", "King Gnu",
+            "Official HIGE DANdism", "Mrs. GREEN APPLE", "Hikaru Utada", "ONE OK ROCK", "BABYMETAL"])
+        }
+    }
+
+    var label: String { info.label }
+    var storefront: String { info.storefront }
+
+    func belongs(_ card: MusicCard, global: Set<String>) -> Bool {
+        let artist = card.music.artist, text = "\(card.music.title) \(artist)"
+        if self == .english {
+            return text.range(of: #"[ñ¿¡şğıİ\u0400-\u04FF\u0600-\u06FF\u1100-\u11FF\u3040-\u30FF\u3130-\u318F\u4E00-\u9FFF\uAC00-\uD7A3]"#, options: .regularExpression) == nil
+        }
+        if let marks = info.marks, text.range(of: marks, options: [.regularExpression, .caseInsensitive]) != nil { return true }
+        let names = Self.artistNames(artist), known = Set(info.artists.map { $0.lowercased() })
+        return names.contains { known.contains($0) } || !names.contains { global.contains($0) }
+    }
+
+    static func artistNames(_ artist: String) -> [String] {
+        artist.replacingOccurrences(of: #"\s*(,|&|\sfeat\.?\s|\sft\.?\s)\s*"#, with: "\n", options: [.regularExpression, .caseInsensitive])
+            .components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+    }
+
+    static func of(_ selection: Set<String>) -> [MusicLanguage] { allCases.filter { selection.contains($0.rawValue) } }
+
+    /// The list's order with the phone's own language first, whatever language the app is in.
+    static func ordered() -> [MusicLanguage] {
+        let phone = String((Locale.preferredLanguages.first ?? "").prefix(2)).lowercased()
+        return allCases.filter { $0.info.code == phone } + allCases.filter { $0.info.code != phone }
+    }
+}
+
 @MainActor
 @Observable
 final class MusicDiscoveryStore {
@@ -86,6 +140,7 @@ final class MusicDiscoveryStore {
     func fetch(_ selection: Set<String>) async throws {
         let list = Array((genres(selection).isEmpty ? [MusicGenre.all[0]] : genres(selection)).prefix(6))
         let era = MusicEra.of(selection)
+        let languages = MusicLanguage.of(selection)
         let country = MusicStorefront.code.lowercased()
         let known = Set(snapshot.excluded + snapshot.list.map(\.id) + snapshot.cards.map(\.id))
         let budget = MusicLookupBudget(12)
@@ -98,8 +153,10 @@ final class MusicDiscoveryStore {
                 group.addTask {
                     // Apple Music charts + Apple's own playlists through the REAL Worker (explicit originals too); the
                     // iTunes charts + artist songs below only when the Worker fails.
-                    let apple = await Self.appleMusic(country, g, era).filter { !known.contains($0.id) && MusicSources.inEra($0, era) }
-                    if !apple.isEmpty { return (i, Self.windows(apple)) }
+                    let songs = await (languages.isEmpty ? Self.appleMusic(country, g, era) : Self.languageSongs(languages, g, era))
+                    let apple = songs.filter { !known.contains($0.id) && MusicSources.inEra($0, era) }
+                    // With a language chosen the fallback below would bring this country's songs instead.
+                    if !apple.isEmpty || !languages.isEmpty { return (i, Self.windows(apple)) }
                     async let local = Self.chart(country, g, when: withCharts)
                     async let us = Self.chart("us", g, when: withCharts && country != "us")
                     async let seeds = MusicSources.seedSongs(country: country, genre: g, known: known, budget: budget, era: era)
@@ -183,6 +240,21 @@ final class MusicDiscoveryStore {
     }
 
     /// The Worker's song objects (music-discover, music-me) as deck cards.
+    /// The genre's songs in each chosen language, taken in turn. One language failing leaves the others.
+    nonisolated static func languageSongs(_ languages: [MusicLanguage], _ genre: MusicGenre, _ era: MusicEra?) async -> [MusicCard] {
+        let onlyEnglish = languages.allSatisfy { $0 == .english }
+        let hits: [MusicCard] = onlyEnglish ? [] : await Self.appleMusic("us", genre, era)
+        let global = Set(hits.flatMap { MusicLanguage.artistNames($0.music.artist) })
+        var lists = Array(repeating: [MusicCard](), count: languages.count)
+        await withTaskGroup(of: (Int, [MusicCard]).self) { group in
+            for (i, language) in languages.enumerated() {
+                group.addTask { (i, await Self.appleMusic(language.storefront, genre, era).filter { language.belongs($0, global: global) }) }
+            }
+            for await (i, cards) in group { lists[i] = cards }
+        }
+        return lists.reduce([MusicCard]()) { $0.isEmpty ? $1 : Self.interleave($0, $1) }
+    }
+
     nonisolated static func workerCards(_ songs: [[String: Any]], _ genreKey: String) -> [MusicCard] {
         func https(_ v: Any?) -> String? { (v as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil } }
         return songs.compactMap { o in
@@ -295,24 +367,33 @@ struct MusicDiscoveryScreen: View {
                 BackCircle(action: back).padding(.leading, 22).padding(.top, 12).accessibilityLabel(t("Ben ekranına dön"))
             }
             if let error { errorLine(error) }
-            // One question at a time: 2 genres at most, then (optional) one era; "Hepsi" = every era; then, with Apple
-            // Music connected, (optional) "Sana özel".
-            let allEras = "era_all", noPersonal = "personal_none"
+            // One question at a time: 2 genres at most, then up to 2 languages ("Tümü" = no filter), then (optional) one era;
+            // "Hepsi" = every era; then, with Apple Music connected, (optional) "Sana özel".
+            let allEras = "era_all", noPersonal = "personal_none", allLanguages = "lang_all"
             let linked = AppleMusicAccount.shared.isConnected
             DiscoveryStepper(steps: [
                 DiscoveryStep(title: t("Hangi türde müzik?"), subtitle: t("En fazla 2 tür"), max: 2, optional: false,
                               groups: [(nil, MusicGenre.all.map { StepOption(key: $0.key, label: t($0.label)) })]),
-                DiscoveryStep(title: t("Hangi dönemden?"), subtitle: t("İstersen bir dönem · Apple Music {0} listeleri", MusicStorefront.name), max: 1, optional: true,
+                DiscoveryStep(title: t("Hangi dilde?"), subtitle: t("En fazla 2 dil"), max: 2, optional: true,
+                              groups: [(nil, [StepOption(key: allLanguages, label: "Tümü")] + MusicLanguage.ordered().map { StepOption(key: $0.rawValue, label: $0.label) })],
+                              clearKey: allLanguages),
+                DiscoveryStep(title: t("Hangi dönemden?"), subtitle: MusicLanguage.of(selection).isEmpty ? t("İstersen bir dönem · Apple Music {0} listeleri", MusicStorefront.name) : t("İstersen bir dönem"), max: 1, optional: true,
                               groups: [(nil, [StepOption(key: allEras, label: t("Hepsi"))] + MusicEra.allCases.map { StepOption(key: $0.rawValue, label: $0.label) })]),
             ] + (linked ? [
                 DiscoveryStep(title: t("Sana özel de olsun mu?"), subtitle: t("Apple Music'te dinlediklerine göre seçilenler karışır"), max: 1, optional: true,
                               groups: [(nil, [StepOption(key: noPersonal, label: "Hayır"), StepOption(key: MusicPersonalKey, label: "Evet, sana özel")])]),
             ] : []), selection: Binding(
                 get: {
-                    let s = MusicEra.of(selection) == nil ? selection.union([allEras]) : selection
+                    var s = MusicEra.of(selection) == nil ? selection.union([allEras]) : selection
+                    if MusicLanguage.of(s).isEmpty { s.insert(allLanguages) }
                     return linked && !s.contains(MusicPersonalKey) ? s.union([noPersonal]) : s
                 },
-                set: { selection = $0.subtracting([allEras, noPersonal]) }),
+                set: { next in
+                    // "Tümü" only arrives beside a language when it was tapped: it clears them.
+                    let tappedAll = next.contains(allLanguages) && !MusicLanguage.of(selection).isEmpty
+                    let kept = tappedAll ? next.subtracting(MusicLanguage.of(next).map(\.rawValue)) : next
+                    selection = kept.subtracting([allEras, noPersonal, allLanguages])
+                }),
                 accent: musicTone, loading: loading, enabled: true, doneLabel: t("şarkıları getir"), step: $pickerStep,
                 rare: { chosen, key in DiscoveryRarePairs.rare(DiscoveryRarePairs.music, chosen, key) },
                 onDone: fetch)
