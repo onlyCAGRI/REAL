@@ -178,13 +178,14 @@ jobs:
           sys.exit("no LC_MAIN")
           PY
           fail=0
-          for run in "home 1024" "detail 8192" "detail 2048" "detail 1536" "detail 1024" "detail 768" "detail 512" "checklist 1024" "media 1024" "stack 1024"; do
+          for run in "home 1024" "detail 8192" "detail 2048" "detail 1536" "detail 1024" "detail 768" "detail 512" "checklist 1024" "media 1024" "stack 1024" "edit 1024" "edit 512"; do
             set -- $run
             python3 /tmp/stacksize.py "$APP/REAL" "$2"
             codesign -f -s - --preserve-metadata=entitlements "$APP" 2>/dev/null
             xcrun simctl uninstall "$UDID" com.cagri.real 2>/dev/null || true
             xcrun simctl install "$UDID" "$APP"
-            PID=$(xcrun simctl launch "$UDID" com.cagri.real -REALDemo -REALNoStartup -REALScreen "$1" | awk '{print $NF}')
+            if [ "$1" = edit ]; then ARGS="-REALScreen detail -REALDetailEdit"; else ARGS="-REALScreen $1"; fi
+            PID=$(xcrun simctl launch "$UDID" com.cagri.real -REALDemo -REALNoStartup $ARGS | awk '{print $NF}')
             sleep 25
             if kill -0 "$PID" 2>/dev/null; then state=alive; else state=CRASHED; fi
             echo "$1 at $2 KB: $state"
@@ -205,8 +206,8 @@ jobs:
           retention-days: 3
 
       - name: Package simulator app (Appetize)
-        # "appetize" runs only.
-        if: success() && (inputs.mode == 'appetize' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[appetize]')))
+        # "appetize" runs, and "stackcheck" runs that pass.
+        if: success() && (inputs.mode == 'appetize' || inputs.mode == 'stackcheck' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[appetize]')))
         run: |
           mkdir -p build   # the test step that used to create it is skipped on manual runs
           xcodebuild build -project Real.xcodeproj -scheme Real -configuration Release \
@@ -218,7 +219,7 @@ jobs:
           zip -qry "$GITHUB_WORKSPACE/REAL-simulator.zip" REAL.app
 
       - name: Upload simulator app
-        if: success() && (inputs.mode == 'appetize' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[appetize]')))
+        if: success() && (inputs.mode == 'appetize' || inputs.mode == 'stackcheck' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[appetize]')))
         uses: actions/upload-artifact@v4
         with:
           name: REAL-simulator-app

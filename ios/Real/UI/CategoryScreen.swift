@@ -306,7 +306,9 @@ struct CategoryScreen: View {
         let todayCount = base.active.filter { r in
             r.alertAt.map { Calendar.real.epochDay(ofMillis: $0) == today } ?? (r.plannedDateEpochDay == today)
         }.count
-        return (base.active.filter(matches), base.completed.filter(matches), base.active.count + base.completed.count, todayCount)
+        // The header's number: active cards, like the category on Home. Tamamlananlar and Günlüklerim count what they hold.
+        let countAll = builtIn == .completed || builtIn == .journalEntries
+        return (base.active.filter(matches), base.completed.filter(matches), base.active.count + (countAll ? base.completed.count : 0), todayCount)
     }
 
     private var baseProjection: (active: [ReminderItem], completed: [ReminderItem]) {

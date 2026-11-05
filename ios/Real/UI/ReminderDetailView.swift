@@ -5,6 +5,13 @@ import MapKit
 import UniformTypeIdentifiers
 import Lottie
 
+private extension View {
+    /// Ends a SwiftUI type here. A phone's main thread has about 1 MB of stack and the runtime walks a view's whole
+    /// generic type on it when the view first appears; this screen's type grew deep enough to overflow it, so opening
+    /// any card crashed (build 189). Simulators have 8 MB and never show it: CI's "stackcheck" mode tests a small stack.
+    func erased() -> AnyView { AnyView(self) }
+}
+
 /// Card detail (ReminderDetailScreen.kt). View mode: the card itself as the top block (text, divider,
 /// status / schedule / category), the content blocks under it in their saved order, and the glass bottom bar
 /// (Tamamla · Düzenle · Share · Sil). Edit mode: everything edits a draft; the edit dock adds blocks one by one
@@ -96,11 +103,11 @@ struct ReminderDetailView: View {
                             block(heroKey, r, heroInset: inset)
                                 .environment(\.cardBlockHeight, isTextHero ? 0 : nonTextHeight)
                                 .frame(maxWidth: .infinity, minHeight: isTextHero ? nil : nonTextHeight, alignment: .top)
-                                .overlay(alignment: .top) { header(r).padding(.horizontal, 22).padding(.top, inset - 4) }
+                                .overlay(alignment: .top) { header(r).padding(.horizontal, 22).padding(.top, inset - 4).erased() }
                                 .padding(.horizontal, -16)
                                 .padding(.top, -inset)
                                 .padding(.bottom, 2)
-                        } else if !editing { header(r) } else { Color.clear.frame(height: 4) }
+                        } else if !editing { header(r).erased() } else { Color.clear.frame(height: 4) }
                         CardBlockGrid(keys: heroKey == nil ? order : Array(order.dropFirst()),
                                       layout: heroKey.map { heroLiftedLayout(r.contentBlockLayout, hero: $0) } ?? r.contentBlockLayout,
                                       editing: editing,
@@ -142,7 +149,7 @@ struct ReminderDetailView: View {
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .padding(.top, heroKey == "text" && order.count == 1 ? 0 : 8).padding(.trailing, 6)
                         if editing, !r.isCompleted, r.alertAt != nil || r.plannedDateEpochDay != nil {
-                            scheduleChips(r).padding(.top, 12)
+                            scheduleChips(r).padding(.top, 12).erased()
                         }
                     }
                     .padding(.horizontal, 16)
@@ -162,12 +169,20 @@ struct ReminderDetailView: View {
                 .scrollDismissesKeyboard(.interactively)
                 // A lifted block owns the finger: the page does not scroll under it.
                 .scrollDisabled(blockMoving)
-                bottomColumn(r)
+                .erased()
+                bottomColumn(r).erased()
             } else {
                 Color.clear.onAppear { dismiss() }
             }
         }
+        .erased()
         .toolbar(.hidden, for: .navigationBar)
+        .task {
+            // CI stack check: the edit mode's views too.
+            guard ProcessInfo.processInfo.arguments.contains("-REALDetailEdit"), let stored else { return }
+            draft = stored
+            secondaryExpanded = true
+        }
         .realOverlay(isPresented: $showDateSheet) { ScheduleSheet(draft: $schedule) }
         .onChange(of: schedule) { _, new in
             if editing { new.apply(to: &draft!) } else { store.mutate(reminderId) { new.apply(to: &$0) } }
@@ -190,6 +205,7 @@ struct ReminderDetailView: View {
                                 onAttach: { image in addPoster(image) }, onClose: { showSkyPoster = false })
             }
         }
+        .erased()
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { urls.forEach { addAttachment(AttachmentStorage.saveFile($0)) } }
         }
@@ -221,6 +237,7 @@ struct ReminderDetailView: View {
             }
         }
         // Medya: one search for songs, films, series and games (the full-screen composer's page, Android MediaSearchAllSheet).
+        .erased()
         .sheet(isPresented: $showMusicSearch) {
             let d = draft ?? store.reminder(reminderId)
             MediaSearchAllSheet(search: MediaSearchAll(
@@ -260,6 +277,7 @@ struct ReminderDetailView: View {
             })
             .liftedTopSafeArea()
         }
+        .erased()
         .sheet(isPresented: $reordering) {
             if let r = shown {
                 BlockReorderSheet(keys: blockOrder(r), item: r, hero: blockOrder(r).first.map { isHero(r.contentBlockLayout[$0]) } ?? true) { keys, heroOn in
@@ -358,12 +376,17 @@ struct ReminderDetailView: View {
         return r.resolvedBlockOrder(active)
     }
 
+    /// Erased: see `erased()`.
+    private func block(_ key: String, _ r: ReminderItem, heroInset: CGFloat = 0) -> AnyView {
+        blockContent(key, r, heroInset: heroInset).erased()
+    }
+
     @ViewBuilder
-    private func block(_ key: String, _ r: ReminderItem, heroInset: CGFloat = 0) -> some View {
+    private func blockContent(_ key: String, _ r: ReminderItem, heroInset: CGFloat) -> some View {
         let kind = key.split(separator: ":").first.map(String.init) ?? key
         let id = key.contains(":") ? String(key.split(separator: ":", maxSplits: 1)[1]) : ""
         switch kind {
-        case "text": textBlock(r, heroInset: heroInset)
+        case "text": textBlock(r, heroInset: heroInset).erased()
         case "card_stack":
             if let stack = inlineStack ?? r.cardStack {
                 if heroInset > 0 {
@@ -373,22 +396,23 @@ struct ReminderDetailView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                         .background(LinearGradient(colors: [Color(argb: 0xFF16161A), Color(argb: 0xFF0D0D0F)], startPoint: .top, endPoint: .bottom))
                         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28, style: .continuous))
+                        .erased()
                 } else {
-                    stackDeck(stack)
+                    stackDeck(stack).erased()
                 }
             }
-        case "mood": if let mood = r.mood { moodBlock(mood) }
-        case "checklist": checklistBlock(r)
-        case "photos": if let a = r.attachments.first(where: { $0.id == id }) { photoBlock(a, heroInset: heroInset) }
+        case "mood": if let mood = r.mood { moodBlock(mood).erased() }
+        case "checklist": checklistBlock(r).erased()
+        case "photos": if let a = r.attachments.first(where: { $0.id == id }) { photoBlock(a, heroInset: heroInset).erased() }
         case "files":
-            if id == "reference", let url = r.referenceUrl { linkBlock(url) }
+            if id == "reference", let url = r.referenceUrl { linkBlock(url).erased() }
             else if let a = r.attachments.first(where: { $0.id == id }) {
                 if a.type == .textSnippet {
                     SnippetBlockView(attachment: a, editing: editing, onSave: { updateSnippet(a.id, $0) }, onRemove: { removeAttachment(a) })
-                } else { fileBlock(a) }
+                } else { fileBlock(a).erased() }
             }
-        case "location": if let l = r.location { locationBlock(l, card: r) }
-        case "journal": if let j = r.journal { journalBlock(j) }
+        case "location": if let l = r.location { locationBlock(l, card: r).erased() }
+        case "journal": if let j = r.journal { journalBlock(j).erased() }
         case "voice":
             VoiceRecordingBlock(recordings: r.voiceRecordings, editing: editing,
                                 onRecorded: { rec in draft?.voiceRecordings.append(rec) },
@@ -1174,9 +1198,9 @@ struct ReminderDetailView: View {
 
     private func bottomColumn(_ r: ReminderItem) -> some View {
         VStack(spacing: 0) {
-            if deleting { deletePrompt(r).padding(.bottom, 12).transition(.move(edge: .bottom).combined(with: .opacity)) }
+            if deleting { deletePrompt(r).erased().padding(.bottom, 12).transition(.move(edge: .bottom).combined(with: .opacity)) }
             if editing {
-                if secondaryExpanded { secondaryPanels.padding(.bottom, 12).transition(.opacity.combined(with: .scale(scale: 0.97))) }
+                if secondaryExpanded { secondaryPanels.erased().padding(.bottom, 12).transition(.opacity.combined(with: .scale(scale: 0.97))) }
                 Group {
                     if dockCollapsed {
                         // Lowered dock: a slim glass bar that still holds the handle.
@@ -1185,7 +1209,7 @@ struct ReminderDetailView: View {
                             .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous))
                             .transition(.opacity)
                     } else {
-                        editDock.transition(.move(edge: .bottom).combined(with: .opacity))
+                        editDock.erased().transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
                 .padding(.bottom, 10)
@@ -1401,7 +1425,7 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "waveform", label: t("Ses kaydı"), active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
                                 count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
                     let mediaTotal = (d?.musicBlocks.count ?? 0) + (d?.mediaBlocks.count ?? 0) + (d?.gameBlocks.count ?? 0)
-                    QuickAction(symbol: "music.note", label: t("Medya"), active: mediaTotal > 0,
+                    QuickAction(symbol: "play.rectangle", label: t("Medya"), active: mediaTotal > 0,
                                 count: mediaTotal > 0 ? mediaTotal : nil, tip: "detail_media") { showMusicSearch = true }
                     QuickAction(symbol: "doc", label: t("Dosya ekle"), active: false,
                                 count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }

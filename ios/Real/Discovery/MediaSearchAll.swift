@@ -18,7 +18,18 @@ struct MediaSearchAll: View {
     @State private var gameResults: [CardGameBlock] = []
     @State private var searching = false
     @State private var message: String?
+    /// How many of each section's results show; "Daha fazla" opens more.
+    @State private var songsShown = Self.songsFirst
+    @State private var titlesShown = Self.titlesFirst
+    @State private var gamesShown = Self.gamesFirst
+    /// Long press on a song: its Spotify logo shows for a moment, then it goes in as Spotify.
+    @State private var spotifyFlash: String?
     @FocusState private var focused: Bool
+
+    private static let songsFirst = 6
+    private static let titlesFirst = 8
+    private static let gamesFirst = 5
+    private static let moreStep = 10
 
     private let block = RoundedRectangle(cornerRadius: 18, style: .continuous)
 
@@ -26,7 +37,7 @@ struct MediaSearchAll: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
-                    RealSymbol("music.note", size: 17).foregroundStyle(Color(argb: 0xFFBABAC3))
+                    RealSymbol("play.rectangle", size: 17).foregroundStyle(Color(argb: 0xFFBABAC3))
                     TextField("", text: $query, prompt: Text(onAddGame != nil ? t("Şarkı, film, dizi veya oyun ara") : t("Şarkı, film veya dizi ara"))
                         .foregroundStyle(Color(argb: 0xFF7C7C86)))
                         .font(RealFont.inter(15)).foregroundStyle(.white).tint(.white)
@@ -52,35 +63,41 @@ struct MediaSearchAll: View {
                 if !songs.isEmpty {
                     section(t("Müzik"))
                     VStack(spacing: 0) {
-                        ForEach(songs) { m in
-                            resultRow(m.title, m.artist, add: { onAddMusic(m); query = "" }) {
+                        ForEach(songs.prefix(songsShown)) { m in
+                            resultRow(m.title, m.artist, spotify: spotifyFlash == m.id, add: {
+                                guard spotifyFlash == nil else { return }
+                                onAddMusic(m); query = ""
+                            }, longPress: { addAsSpotify(m) }) {
                                 MusicArtwork(url: m.artworkUrl).frame(width: 44, height: 44)
                             }
                         }
+                        if songs.count > songsShown { moreRow { songsShown += Self.moreStep } }
                     }
                     .padding(4).background(block.fill(Color.white.opacity(0.055)))
                 }
                 if !titles.isEmpty {
                     section(t("Film & Dizi"))
                     VStack(spacing: 0) {
-                        ForEach(titles) { m in
+                        ForEach(titles.prefix(titlesShown)) { m in
                             resultRow(m.title, [m.year.map(String.init), m.type == .MOVIE ? "Film" : "Dizi", m.genre].compactMap { $0 }.joined(separator: " • "),
                                       add: { onAddMedia(m); query = "" }) {
                                 PosterArtwork(media: m, titleSize: 6).frame(width: 34, height: 48).clipShape(RoundedRectangle(cornerRadius: 7))
                             }
                         }
+                        if titles.count > titlesShown { moreRow { titlesShown += Self.moreStep } }
                     }
                     .padding(4).background(block.fill(Color.white.opacity(0.055)))
                 }
                 if !gameResults.isEmpty, let onAddGame {
                     section(t("Oyun"))
                     VStack(spacing: 0) {
-                        ForEach(gameResults, id: \.providerId) { g in
+                        ForEach(gameResults.prefix(gamesShown), id: \.providerId) { g in
                             resultRow(g.title, [g.year.map(String.init), g.platforms.prefix(3).joined(separator: " · ").nilIfEmpty].compactMap { $0 }.joined(separator: " · "),
                                       add: { var p = g; p.id = UUID().uuidString.lowercased(); onAddGame(p); query = "" }) {
                                 GameCover(block: g).frame(width: 34, height: 45)
                             }
                         }
+                        if gameResults.count > gamesShown { moreRow { gamesShown += Self.moreStep } }
                     }
                     .padding(4).background(block.fill(Color.white.opacity(0.055)))
                 }
@@ -90,6 +107,36 @@ struct MediaSearchAll: View {
         .scrollDismissesKeyboard(.interactively)
         .onAppear { focused = true }
         .task(id: query) { await search(query) }
+    }
+
+    /// Spotify has no open catalog for apps: the block opens as a Spotify search for the song.
+    private func addAsSpotify(_ song: MusicBlock) {
+        guard spotifyFlash == nil else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) { spotifyFlash = song.id }
+        Task {
+            try? await Task.sleep(for: .milliseconds(650))
+            let term = [song.title, song.artist].filter { !$0.isEmpty }.joined(separator: " ")
+            var block = song
+            block.provider = "Spotify"
+            block.providerTrackId = nil
+            block.providerUrl = "https://open.spotify.com/search/" + (term.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? term)
+            spotifyFlash = nil
+            onAddMusic(block)
+            query = ""
+        }
+    }
+
+    private func moreRow(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(t("Daha fazla")).font(RealFont.inter(13, .medium))
+                RealSymbol("chevron.right", size: 11).rotationEffect(.degrees(90))
+            }
+            .foregroundStyle(Color(argb: 0xFFBCBCC5))
+            .frame(maxWidth: .infinity).padding(.vertical, 10).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func section(_ label: String) -> some View {
@@ -109,7 +156,8 @@ struct MediaSearchAll: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
     }
 
-    private func resultRow<Art: View>(_ title: String, _ meta: String, add: @escaping () -> Void, @ViewBuilder art: () -> Art) -> some View {
+    private func resultRow<Art: View>(_ title: String, _ meta: String, spotify: Bool = false, add: @escaping () -> Void,
+                                      longPress: (() -> Void)? = nil, @ViewBuilder art: () -> Art) -> some View {
         Button(action: add) {
             HStack(spacing: 12) {
                 art()
@@ -118,15 +166,22 @@ struct MediaSearchAll: View {
                     Text(meta).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).lineLimit(1)
                 }
                 Spacer()
-                RealSymbol("plus", size: 17.2).foregroundStyle(.white)
+                if spotify {
+                    MusicSourceLogo(provider: "Spotify", size: 28).frame(width: 28, height: 28)
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                } else {
+                    RealSymbol("plus", size: 17.2).foregroundStyle(.white)
+                }
             }
             .padding(8).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in longPress?() })
     }
 
     private func search(_ raw: String) async {
         let q = raw.trimmingCharacters(in: .whitespaces)
+        songsShown = Self.songsFirst; titlesShown = Self.titlesFirst; gamesShown = Self.gamesFirst
         guard q.count >= 2 else { songs = []; titles = []; gameResults = []; message = nil; searching = false; return }
         try? await Task.sleep(for: .milliseconds(350))
         guard !Task.isCancelled else { return }
@@ -140,9 +195,9 @@ struct MediaSearchAll: View {
         let (songsFound, movies, shows, gamesFound) = await (s, m, tv, g)
         guard !Task.isCancelled else { return }
         searching = false
-        songs = Array((songsFound ?? []).prefix(6))
-        titles = Array(MediaSearchSheet.merge(q, movies ?? [], shows ?? []).prefix(8))
-        gameResults = Array((gamesFound ?? []).prefix(5))
+        songs = songsFound ?? []
+        titles = MediaSearchSheet.merge(q, movies ?? [], shows ?? [])
+        gameResults = gamesFound ?? []
         if songsFound == nil && movies == nil && shows == nil { message = t("Arama yapılamadı. Bağlantını kontrol edip yeniden dene.") }
         else if songs.isEmpty && titles.isEmpty && gameResults.isEmpty { message = t("Sonuç bulunamadı.") }
     }

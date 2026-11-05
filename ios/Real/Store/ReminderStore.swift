@@ -187,10 +187,13 @@ final class ReminderStore {
         return category == .journalEntries ? list : list.filter { !($0.customCategoryId.map(hidden.contains) ?? false) }
     }
 
+    /// The number on a category: its active cards. Tamamlananlar and Günlüklerim count what they hold.
     func count(for item: OrderedCategory) -> Int {
         switch item {
-        case .builtIn(let c): return items(in: c).count
-        case .custom(let c): return cards.filter { $0.customCategoryId == c.id }.count
+        case .builtIn(let c):
+            let list = items(in: c)
+            return c == .completed || c == .journalEntries ? list.count : list.filter { !$0.isCompleted }.count
+        case .custom(let c): return cards.filter { $0.customCategoryId == c.id && !$0.isCompleted }.count
         }
     }
 
