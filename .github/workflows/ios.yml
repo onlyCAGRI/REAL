@@ -14,7 +14,7 @@ on:
       mode:
         description: "compile = only check that it builds; appetize = simulator app zip; test = UI tests + screenshots; showcase = presentation screenshots; testflight = signed build to TestFlight"
         type: choice
-        options: [compile, appetize, test, showcase, testflight]
+        options: [compile, appetize, test, showcase, testflight, stackcheck]
         default: compile
 
 concurrency:
@@ -84,7 +84,7 @@ jobs:
 
       - name: Pick simulator
         id: sim
-        if: env.SHOTS == 'true'
+        if: env.SHOTS == 'true' || inputs.mode == 'stackcheck'
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
@@ -144,6 +144,65 @@ jobs:
           name: ${{ env.SHOWCASE == 'true' && 'showcase-screenshots' || 'screenshots' }}
           path: ios/screenshots
           if-no-files-found: ignore
+
+      - name: Card screen on a device-sized stack
+        # "stackcheck" runs only. A phone's main thread has about 1 MB of stack, a simulator app 8 MB, so a stack overflow
+        # (build 189's card crash) never shows on a simulator. This sets the Release binary's stack size (LC_MAIN) and
+        # opens a card at each size; it fails if the card does not survive 1 MB.
+        if: inputs.mode == 'stackcheck'
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          mkdir -p build stackcheck
+          xcodebuild build -project Real.xcodeproj -scheme Real -configuration Release \
+            -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build-stack ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= > build/stack.log 2>&1 || { grep -E ": error: " build/stack.log | sort -u | head -60; tail -20 build/stack.log; exit 1; }
+          APP=build-stack/Build/Products/Release-iphonesimulator/REAL.app
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b > /dev/null
+          cat > /tmp/stacksize.py <<'PY'
+          import struct, sys
+          path, kb = sys.argv[1], int(sys.argv[2])
+          data = bytearray(open(path, "rb").read())
+          assert struct.unpack_from("<I", data, 0)[0] == 0xfeedfacf, "expected a thin 64-bit binary"
+          count = struct.unpack_from("<I", data, 16)[0]
+          at = 32
+          for _ in range(count):
+              cmd, size = struct.unpack_from("<II", data, at)
+              if cmd == 0x80000028:  # LC_MAIN: cmd, cmdsize, entryoff, stacksize
+                  struct.pack_into("<Q", data, at + 16, kb * 1024)
+                  open(path, "wb").write(data)
+                  sys.exit(0)
+              at += size
+          sys.exit("no LC_MAIN")
+          PY
+          fail=0
+          for run in "home 1024" "detail 8192" "detail 2048" "detail 1536" "detail 1024" "detail 768" "detail 512" "checklist 1024" "media 1024" "stack 1024"; do
+            set -- $run
+            python3 /tmp/stacksize.py "$APP/REAL" "$2"
+            codesign -f -s - --preserve-metadata=entitlements "$APP" 2>/dev/null
+            xcrun simctl uninstall "$UDID" com.cagri.real 2>/dev/null || true
+            xcrun simctl install "$UDID" "$APP"
+            PID=$(xcrun simctl launch "$UDID" com.cagri.real -REALDemo -REALNoStartup -REALScreen "$1" | awk '{print $NF}')
+            sleep 25
+            if kill -0 "$PID" 2>/dev/null; then state=alive; else state=CRASHED; fi
+            echo "$1 at $2 KB: $state"
+            xcrun simctl io "$UDID" screenshot "stackcheck/$1_$2.png" > /dev/null 2>&1 || true
+            if [ "$state" = CRASHED ] && [ "$2" -ge 1024 ]; then fail=1; fi
+            xcrun simctl terminate "$UDID" com.cagri.real 2>/dev/null || true
+          done
+          cp ~/Library/Logs/DiagnosticReports/REAL*.ips stackcheck/ 2>/dev/null || true
+          exit $fail
+
+      - name: Upload stack check
+        if: always() && inputs.mode == 'stackcheck'
+        uses: actions/upload-artifact@v4
+        with:
+          name: stackcheck
+          path: ios/stackcheck
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Package simulator app (Appetize)
         # "appetize" runs only.
