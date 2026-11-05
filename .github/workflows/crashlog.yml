@@ -1,0 +1,74 @@
+# Fetches TestFlight crash logs shared by testers, for working without a Mac (Xcode Organizer).
+# The logs go only into a one-day artifact, never into the run's output.
+name: TestFlight crash log
+
+on:
+  workflow_dispatch:
+    inputs:
+      feedback_id:
+        description: "feedbackId from the App Store Connect crash link (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch crash logs
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          FEEDBACK_ID: ${{ inputs.feedback_id }}
+          APP_ID: "6825478037"
+        run: |
+          pip install --quiet "pyjwt[crypto]"
+          mkdir -p crashlogs
+          python3 - <<'PY'
+          import json, os, time, urllib.error, urllib.request
+          import jwt
+
+          token = jwt.encode(
+              {"iss": os.environ["ASC_ISSUER_ID"], "iat": int(time.time()), "exp": int(time.time()) + 900,
+               "aud": "appstoreconnect-v1"},
+              os.environ["ASC_KEY_P8"], algorithm="ES256",
+              headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
+
+          def get(path):
+              request = urllib.request.Request("https://api.appstoreconnect.apple.com" + path,
+                                               headers={"Authorization": "Bearer " + token})
+              try:
+                  with urllib.request.urlopen(request) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  print(path.split("?")[0], "->", error.code)
+                  return None
+
+          ids = [os.environ["FEEDBACK_ID"]] if os.environ.get("FEEDBACK_ID") else []
+          listing = get(f"/v1/apps/{os.environ['APP_ID']}/betaFeedbackCrashSubmissions?limit=5&sort=-createdDate")
+          if listing:
+              ids += [item["id"] for item in listing.get("data", [])]
+              with open("crashlogs/submissions.json", "w", encoding="utf-8") as out:
+                  json.dump(listing, out, indent=1)
+
+          saved = 0
+          for index, submission in enumerate(dict.fromkeys(ids)):
+              log = get(f"/v1/betaFeedbackCrashSubmissions/{submission}/crashLog")
+              text = ((log or {}).get("data") or {}).get("attributes", {}).get("logText")
+              if text:
+                  with open(f"crashlogs/crash_{index}.txt", "w", encoding="utf-8") as out:
+                      out.write(text)
+                  saved += 1
+          print("logs saved:", saved)
+          PY
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: crashlogs
+          path: crashlogs
+          if-no-files-found: ignore
+          retention-days: 1
