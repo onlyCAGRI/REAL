@@ -3,7 +3,7 @@ import Foundation
 /// Store screenshot content (-REALDemo -REALShowcase -REALScreen <screen>), one story per language:
 /// TR is a twenty-something in İstanbul (Ece's birthday, a Kapadokya trip), EN the same life in New York (Emma, Lisbon).
 /// The app language (-app_language tr|en) picks the story. Cards stay plain on purpose: only the birthday dinner is
-/// coloured (orange → pink-red) and starred, so the eye lands there first; categories keep calm tones.
+/// coloured (salmon orange → rose) and starred, so the eye lands there first; categories keep calm tones.
 /// Song and book titles are invented (no real titles in store art). Ids line up with DemoData.path:
 /// category 1, detail 1 (hero card), 2 (shared trip notes), 4 (checklist), 6 (stack), 7 (reading).
 extension DemoData {
@@ -56,7 +56,7 @@ extension DemoData {
         // The hero card: place, weather (date + place), music, people, checklist and a note.
         add(1, L("Ece'nin doğum günü yemeği", "Emma's birthday dinner"), {
             $0.alertAt = at(20, dayOffset: saturday); $0.durationMinutes = 150; $0.customCategoryId = 4; $0.isImportant = true
-            $0.accentStart = 10; $0.accentEnd = 11; $0.gradientBlendFraction = 0.5
+            $0.accentStart = 12; $0.accentEnd = 14; $0.gradientBlendFraction = 0.5
             $0.people = guests
             $0.location = en
                 ? ReminderLocation(placeName: "Brooklyn Bridge Park", address: "Brooklyn, New York", latitude: 40.7003, longitude: -73.9967)

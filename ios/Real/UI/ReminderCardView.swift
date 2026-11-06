@@ -514,7 +514,7 @@ struct CategoryTileView: View {
             if hero, let heroActions {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 8) {
-                        if showCount { CategoryPill(text: t("{0} kart", count), foreground: visual.foreground) }
+                        if showCount { CategoryPill(text: cardCountText(count), foreground: visual.foreground) }
                         if !description.isEmpty { CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading) }
                     }
                     Spacer()
@@ -522,7 +522,7 @@ struct CategoryTileView: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    if showCount { CategoryPill(text: t("{0} kart", count), foreground: visual.foreground) }
+                    if showCount { CategoryPill(text: cardCountText(count), foreground: visual.foreground) }
                     if !description.isEmpty {
                         CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading)
                     }

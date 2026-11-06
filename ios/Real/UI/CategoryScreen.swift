@@ -565,7 +565,7 @@ private struct CategoryHero: View {
             HStack(spacing: 4) {
                 // Overdue reads in a soft red that still shows on light and dark category colours.
                 let alertColor = fg == .white ? Color(argb: 0xFFFFB4AB) : Color(argb: 0xFF9C1C1C)
-                (Text(t("{0} kart", count)) + (detail.map { d in Text("  •  ") + Text(d.text).foregroundColor(d.alert ? alertColor : fg.opacity(0.9)) } ?? Text("")))
+                (Text(cardCountText(count)) + (detail.map { d in Text("  •  ") + Text(d.text).foregroundColor(d.alert ? alertColor : fg.opacity(0.9)) } ?? Text("")))
                     .font(RealFont.inter(13, .semibold)).foregroundStyle(fg.opacity(0.9)).lineLimit(1)
                 Spacer()
                 if shared {

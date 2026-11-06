@@ -107,3 +107,8 @@ final class LanguageSettings {
         }
     }
 }
+
+/// "1 kart" / "{0} kart": Turkish has no plural, English does ("1 card", "3 cards").
+func cardCountText(_ count: Int) -> String {
+    count == 1 ? t("1 kart") : t("{0} kart", count)
+}

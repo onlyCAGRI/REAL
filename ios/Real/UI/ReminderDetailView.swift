@@ -1268,7 +1268,7 @@ struct ReminderDetailView: View {
             Button { RealTips.shared.gate("detail_share") { showCardShare = true } } label: {
                 VStack(spacing: 1) {
                     RealSymbol("square.and.arrow.up", size: 20.7)
-                    Text("Share").font(RealFont.inter(10))
+                    Text(t("Paylaş")).font(RealFont.inter(10))
                 }
                 .foregroundStyle(Color(argb: 0xFFF0F0F4))
                 .frame(maxWidth: .infinity, minHeight: 56)
@@ -2413,7 +2413,7 @@ private struct BlockReorderSheet: View {
         let kind = key.split(separator: ":").first.map(String.init) ?? key
         switch kind {
         case "text": return (t("Not Metni"), item.text.isEmpty ? t("Boş not") : item.text, "note.text")
-        case "card_stack": return (t("Kart Yığını"), t("{0} kart", item.cardStack?.cards.count ?? 0), "rectangle.stack")
+        case "card_stack": return (t("Kart Yığını"), cardCountText(item.cardStack?.cards.count ?? 0), "rectangle.stack")
         case "checklist": return (t("Checklist"), t("{0} madde", item.checklistItems.count), "checklist")
         case "photos": return (t("Fotoğraf"), "", "photo")
         case "files": return (key == "files:reference" ? t("Bağlantı") : t("Dosya"), "", "doc")

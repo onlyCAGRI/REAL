@@ -229,7 +229,7 @@ struct HomeView: View {
                 }
                 if selectedIds.isEmpty && !searching {
                     HomeContextCard(onOpen: openContext)
-                    GuestBackupNudge(cardCount: store.reminders.count)
+                    if !ProcessInfo.processInfo.arguments.contains("-REALShowcase") { GuestBackupNudge(cardCount: store.reminders.count) }
                 }
                 ForEach(Array(active.enumerated()), id: \.element.id) { index, reminder in
                     card(reminder, swipe: true, label: searching).startupRise(2 + index)

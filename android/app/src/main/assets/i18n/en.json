@@ -139,6 +139,7 @@
   "Boş not": "Empty note",
   "Kart Yığını": "Card stack",
   "{0} kart": "{0} cards",
+  "1 kart": "1 card",
   "Checklist": "Checklist",
   "{0} madde": "{0} items",
   "Fotoğraflar": "Photos",
@@ -2987,5 +2988,17 @@
   "Hakların": "Your rights",
   "Verilerine erişme, kopyasını alma, düzeltme, silme, taşıma ve işlemeye itiraz etme hakkın var. Talebin için cagrigull@outlook.com adresine yaz; en geç 30 gün içinde, ücretsiz yanıt veririz. Yaşadığın ülkenin veri koruma kurumuna şikâyet hakkın her zaman saklıdır.": "You can access, copy, correct, delete and move your data and object to processing. Write to cagrigull@outlook.com; we reply free of charge within 30 days. You can always complain to the data protection authority where you live.",
   "Kısa özet. Tam metin Gizlilik Politikası’nda.": "A short summary. The full text is in the Privacy Policy.",
-  "Hakların ve talepler": "Your rights and requests"
+  "Hakların ve talepler": "Your rights and requests",
+  "Devam ediyor": "In progress",
+  "{0} sa kaldı": "{0} h left",
+  "{0} sa {1} dk kaldı": "{0} h {1} min left",
+  "{0} gün kaldı": "{0} days left",
+  "Bitti · işaretle": "Ended · mark done",
+  "Başladı": "Started",
+  "Bitti mi?": "Done?",
+  "+15 dk uzat": "+15 min",
+  "Cam yoğunluğu": "Glass intensity",
+  "Camların ne kadar şeffaf görüneceği": "How clear the glass looks",
+  "Şeffaf": "Clear",
+  "Düz": "Solid"
 }

@@ -105,6 +105,13 @@ jobs:
           print(best, file=sys.stderr)
           ')
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          # Store screenshots: Apple's 9:41, full battery and full bars instead of the runner's clock.
+          if [ "$SHOWCASE" = "true" ]; then
+            xcrun simctl boot "$UDID" || true
+            xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
+              --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+          fi
 
       - name: Build and test
         # "test" runs: UI tests and screenshots; "showcase" runs: only the presentation screenshots.
