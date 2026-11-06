@@ -33,6 +33,8 @@ targets:
     sources:
       - path: Real
       - path: Shared
+      - path: Privacy/PrivacyInfo.xcprivacy
+        buildPhase: resources
       - path: ../android/app/src/main/assets/i18n/en.json
         buildPhase: resources
       # Sky poster catalogue: Yale Bright Star Catalog stars and d3-celestial figures (shared with Android).

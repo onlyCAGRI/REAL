@@ -283,6 +283,7 @@ enum DemoData {
     }
 
     static func seedPano(_ pano: PanoStore, store: ReminderStore) {
+        if ProcessInfo.processInfo.arguments.contains("-REALShowcase") { return seedShowcasePano(pano) }
         let a = PanoBoard(title: "Olmuyo (Genel)", shared: true)
         let b = PanoBoard(title: "Okkk", shared: false)
         var c = PanoBoard(title: "Djfkfkggl", shared: true)

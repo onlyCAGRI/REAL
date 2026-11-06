@@ -116,9 +116,7 @@ struct WelcomeScreen: View {
         .onAppear(perform: startStory)
         .onDisappear { introTask?.cancel(); sound.fadeOut(0.6) }   // soften out, don't cut
         .onChange(of: scenePhase) { _, newPhase in if newPhase == .background { sound.stop() } }
-        .alert(t("Veri kullanımı"), isPresented: $showDataUse) { Button(t("Tamam"), role: .cancel) {} } message: {
-            Text(t("iOS sürümünde notların ve kayıtların yalnızca bu cihazda saklanıyor. AI özellikleri isteğe bağlıdır; kullanmadan önce ayrıca izin istenir."))
-        }
+        .sheet(isPresented: $showDataUse) { DataUseSheet() }
     }
 
     private var prompt: some View {
@@ -184,12 +182,19 @@ struct WelcomeScreen: View {
                 Color.clear.frame(height: 6)
                 link(t("Hesap olmadan devam et")) { authError = nil; withAnimation(.easeOut(duration: 0.25)) { nameStep = .guest } }
                 Color.clear.frame(height: 16)
-                // Kept quiet on purpose: the three documents in one small row. The longer explanations live behind
-                // "Veri kullanımı" and AI asks for its own consent before it is first used.
+                // Kept quiet on purpose: one global line for every region, the usual "by continuing" notice.
+                // KVKK and the other regional notices live inside the privacy pages; AI asks for its own consent.
+                let docLang = I18n.isEnglish ? "en" : "tr"
+                Text(t("Devam ederek Kullanım koşulları’nı kabul etmiş olursun."))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.32))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 300)
+                    .padding(.bottom, 4)
                 HStack(spacing: 0) {
-                    link(t("Gizlilik politikası")) { if let u = URL(string: privacyOrigin + "/privacy?lang=tr") { openURL(u) } }
+                    link(t("Kullanım koşulları")) { if let u = URL(string: privacyOrigin + "/terms?lang=" + docLang) { openURL(u) } }
                     linkDot
-                    link(t("KVKK aydınlatma")) { if let u = URL(string: privacyOrigin + "/kvkk?lang=tr") { openURL(u) } }
+                    link(t("Gizlilik politikası")) { if let u = URL(string: privacyOrigin + "/privacy?lang=" + docLang) { openURL(u) } }
                     linkDot
                     link(t("Veri kullanımı")) { focused = false; showDataUse = true }
                 }
