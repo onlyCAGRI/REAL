@@ -107,7 +107,7 @@ struct PanoScreen: View {
     private var header: some View {
         let today = Date()
         let cal = Calendar.real
-        let day = cal.isoWeekday(of: today).full.uppercased(with: Locale(identifier: "tr_TR"))
+        let day = cal.isoWeekday(of: today).full.uppercased(with: I18n.locale)
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Button { dismiss() } label: {
@@ -144,14 +144,14 @@ struct PanoScreen: View {
     }
 
     private func sectionLabel(_ text: String) -> some View {
-        Text(text.uppercased()).font(.system(size: 11, weight: .semibold)).kerning(1).foregroundStyle(PanoColors.muted)
+        Text(text.uppercased(with: I18n.locale)).font(.system(size: 11, weight: .semibold)).kerning(1).foregroundStyle(PanoColors.muted)
             .padding(.leading, 6).padding(.top, 10)
     }
 
     private func card(_ board: PanoBoard, color: Color) -> some View {
         let d = board.updatedAt.date
         let cal = Calendar.real
-        let title = board.title.uppercased(with: Locale(identifier: "tr_TR"))
+        let title = board.title.uppercased(with: I18n.locale)
         return Button { openBoard = board } label: {
             HStack(alignment: .top, spacing: 14) {
                 VStack(spacing: 0) {
@@ -190,7 +190,7 @@ struct PanoBoardPeek: View {
 
     var body: some View {
         let accent = color == PanoColors.sand ? PanoColors.sage : PanoColors.sand
-        let title = board.title.uppercased(with: Locale(identifier: "tr_TR"))
+        let title = board.title.uppercased(with: I18n.locale)
         ZStack(alignment: .bottom) {
             color.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {

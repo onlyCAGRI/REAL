@@ -13,7 +13,9 @@ final class ShowcaseTests: XCTestCase {
 
     private func launch(_ screen: String, _ lang: String) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-REALDemo", "-REALShowcase", "-REALScreen", screen, "-app_language", lang]
+        app.launchArguments = ["-REALDemo", "-REALShowcase", "-REALScreen", screen, "-app_language", lang,
+                               // System language too, so MapKit, Look Around and the keyboard match the story.
+                               "-AppleLanguages", "(\(lang))", "-AppleLocale", lang == "en" ? "en_US" : "tr_TR"]
         app.launch()
         _ = app.wait(for: .runningForeground, timeout: 20)
         return app

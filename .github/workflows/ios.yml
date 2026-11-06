@@ -111,6 +111,8 @@ jobs:
             xcrun simctl bootstatus "$UDID" -b
             xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
               --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+            # Skip the keyboard's one-time "slide to type" introduction, which would cover the composer shot.
+            xcrun simctl spawn "$UDID" defaults write com.apple.Preferences DidShowContinuousPathIntroduction -bool true
           fi
 
       - name: Build and test

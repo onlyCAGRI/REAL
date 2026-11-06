@@ -22,7 +22,7 @@ struct SnippetBlockView: View {
             HStack(spacing: 8) {
                 RealSymbol(attachment.source == SnippetSourceDetector.whatsapp ? "message" : (attachment.source == SnippetSourceDetector.email ? "envelope" : "note.text"), size: 16)
                     .foregroundStyle(Color(argb: 0xFFC2C6CB))
-                Text(SnippetSourceDetector.label(attachment.source)).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFD1D1D8))
+                Text(t(SnippetSourceDetector.label(attachment.source))).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFD1D1D8))
                 Spacer()
                 if inline {
                     Button(t("Bitti")) { save() }.font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFE6E6EC))

@@ -272,11 +272,11 @@ enum DemoData {
         try? text.data(using: .utf8)?.write(to: books.directory.appendingPathComponent("\(id).txt"))
         let list: [Book] = [
             Book(id: id, title: "Limandaki Defter", author: "Deniz Arda", category: "Roman", fileName: "\(id).txt", format: "txt"),
-            Book(id: "demo_2", title: "Akhilleus'un Şarkısı", author: "Madeline Miller", category: "Roman", pageCount: 412),
-            Book(id: "demo_3", title: "Sefiller", author: "Victor Hugo", category: "Roman", pageCount: 1460),
-            Book(id: "demo_4", title: "Küçük Prens", author: "Antoine de Saint-Exupéry", category: "Roman", pageCount: 96),
-            Book(id: "demo_5", title: "Atomik Alışkanlıklar", author: "James Clear", category: "Kişisel Gelişim", pageCount: 320),
-            Book(id: "demo_6", title: "Derin Çalışma", author: "Cal Newport", category: "Kişisel Gelişim", pageCount: 296),
+            Book(id: "demo_2", title: t("Sessiz Şehir"), author: "Lale Ekin", category: "Roman", pageCount: 412),
+            Book(id: "demo_3", title: t("Uzak Sinyal"), author: "Mira Sol", category: "Roman", pageCount: 1460),
+            Book(id: "demo_4", title: t("Kuzey Işığı"), author: "Aras Doğan", category: "Roman", pageCount: 96),
+            Book(id: "demo_5", title: t("Küçük Adımlar"), author: "Selin Ay", category: "Kişisel Gelişim", pageCount: 320),
+            Book(id: "demo_6", title: t("Odak Saati"), author: "Emre Taş", category: "Kişisel Gelişim", pageCount: 296),
         ]
         for b in list { try? books.add(b) }
         books.savePosition(list[1], page: 8)
