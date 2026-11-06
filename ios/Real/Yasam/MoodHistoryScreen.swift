@@ -17,7 +17,7 @@ struct MoodHistoryScreen: View {
                 HStack {
                     BackCircle { dismiss() }.accessibilityLabel("Geri")
                     Spacer()
-                    Text("Moods").font(RealFont.inter(18, .semibold)).foregroundStyle(Color(argb: 0xFFF4F4F6))
+                    Text(t("Moodlar")).font(RealFont.inter(18, .semibold)).foregroundStyle(Color(argb: 0xFFF4F4F6))
                     Spacer()
                     Color.clear.frame(width: 40, height: 40)
                 }

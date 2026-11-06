@@ -165,7 +165,7 @@ struct PanoBoardScreen: View {
                 }
                 .accessibilityLabel("Edit")
                 HStack(spacing: 6) {
-                    Text("ME").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
+                    Text(t("BEN")).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
                         .frame(width: 28, height: 28).background(Circle().fill(Color(argb: 0xFF0C0C0E)))
                     RealSymbol("plus", size: 12.6).foregroundStyle(.white.opacity(0.8))
                 }

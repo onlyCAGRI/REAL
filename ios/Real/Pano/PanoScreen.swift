@@ -63,12 +63,12 @@ struct PanoScreen: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     PullToCloseMarker()
                     if pano.boards.isEmpty { emptyState.yasamEnter(revealed, delay: 0.08, y: 16) }
-                    if !mine.isEmpty { sectionLabel("My boards").yasamEnter(revealed, delay: 0.12, y: 0) }
+                    if !mine.isEmpty { sectionLabel(t("Panolarım")).yasamEnter(revealed, delay: 0.12, y: 0) }
                     ForEach(Array(mine.enumerated()), id: \.element.id) { index, board in
                         card(board, color: colors[board.id] ?? PanoColors.sand)
                             .yasamEnter(revealed, delay: 0.2 + Double(min(index, 5)) * 0.055, y: 14, scale: 0.96)
                     }
-                    if !others.isEmpty { sectionLabel("Shared with me").yasamEnter(revealed, delay: 0.18, y: 0) }
+                    if !others.isEmpty { sectionLabel(t("Benimle paylaşılanlar")).yasamEnter(revealed, delay: 0.18, y: 0) }
                     ForEach(Array(others.enumerated()), id: \.element.id) { index, board in
                         card(board, color: colors[board.id] ?? PanoColors.sand)
                             .yasamEnter(revealed, delay: 0.28 + Double(min(index, 5)) * 0.055, y: 14, scale: 0.96)
@@ -162,7 +162,7 @@ struct PanoScreen: View {
                 .frame(width: 30).padding(.top, 4)
                 VStack(alignment: .leading, spacing: 18) {
                     panoBig(title, title.count > 14 ? 30 : 40)
-                    Text("ME").font(.system(size: 11, weight: .semibold)).kerning(0.3).foregroundStyle(PanoColors.ink)
+                    Text(t("BEN")).font(.system(size: 11, weight: .semibold)).kerning(0.3).foregroundStyle(PanoColors.ink)
                 }
                 Spacer(minLength: 0)
             }

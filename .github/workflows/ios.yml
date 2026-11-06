@@ -25,9 +25,9 @@ jobs:
   build:
     # Intel runner: the arm64 macOS pool is capacity-constrained (jobs were dropped unstarted).
     # macos-26 (Apple Silicon) is faster, but on 2026-10-13 and 2026-10-14 its jobs sat queued without a runner;
-    # the Intel image always picks up. 80 minutes leaves room for the Appetize package on manual runs.
+    # the Intel image always picks up. 100 minutes leaves room for the Appetize package and slow Intel runners.
     runs-on: macos-15-intel
-    timeout-minutes: 80
+    timeout-minutes: 100
     env:
       # Showcase: only ShowcaseTests, on the calm presentation dataset. SHOTS: any run that takes screenshots.
       SHOWCASE: ${{ inputs.mode == 'showcase' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[showcase]')) }}

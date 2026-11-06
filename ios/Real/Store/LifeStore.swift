@@ -4,7 +4,7 @@ import Observation
 enum BeverageType: String, Codable, CaseIterable, Identifiable {
     case water, coffee, beer
     var id: String { rawValue }
-    var label: String { self == .water ? t("Su") : (self == .coffee ? "Coffee" : "Beer") }
+    var label: String { self == .water ? t("Su") : (self == .coffee ? t("Kahve") : t("Bira")) }
     var quickAmounts: [Int] { self == .water ? [150, 250] : (self == .coffee ? [100, 200] : [330, 500]) }
 }
 

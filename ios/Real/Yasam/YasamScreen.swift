@@ -700,7 +700,7 @@ struct YasamBookPreview: View {
                 .fill(LinearGradient(colors: [tone, tone.blend(.black, by: 0.2)], startPoint: .top, endPoint: .bottom))
                 .frame(width: 34, height: 48)
             VStack(alignment: .leading, spacing: 8) {
-                Text(book.author.isEmpty ? book.title : "\(book.title) by \(book.author)")
+                Text(book.author.isEmpty ? book.title : t("{0} · {1}", book.title, book.author))
                     .font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
                 if let percent {
                     GeometryReader { g in

@@ -85,6 +85,11 @@ final class ShowcaseTests: XCTestCase {
             let field = app.textFields.firstMatch.exists ? app.textFields.firstMatch : app.textViews.firstMatch
             if field.waitForExistence(timeout: 10) {
                 field.tap()
+                // The slide-to-type intro can sit over the keyboard on a fresh simulator; close it first.
+                for label in ["Continue", "Devam"] where app.buttons[label].waitForExistence(timeout: 1.5) {
+                    app.buttons[label].tap()
+                    break
+                }
                 field.typeText(lang == "en" ? "Dentist tomorrow at three" : "Yarın üçte dişçi")
             }
             Thread.sleep(forTimeInterval: 1.5)

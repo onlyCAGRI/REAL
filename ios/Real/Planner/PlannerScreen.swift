@@ -181,7 +181,7 @@ struct PlannerScreen: View {
                 PlannerTodayHeader(now: now)
                 Color.clear.frame(height: 10)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Next 24 hours").font(RealType.editorialItem).kerning(-1).foregroundStyle(Color(argb: 0xFFF3F1F4))
+                    Text(t("Sonraki 24 saat")).font(RealType.editorialItem).kerning(-1).foregroundStyle(Color(argb: 0xFFF3F1F4))
                     Text(next24Summary(count: items.count, next: next)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8C8C95))
                 }
                 .padding(.horizontal, 6).padding(.vertical, 8)
@@ -216,12 +216,13 @@ struct PlannerScreen: View {
     }
 
     private func next24Summary(count: Int, next: EpochMillis?) -> String {
-        if count == 0 { return "Nothing planned" }
-        let plans = "\(count) \(count == 1 ? "plan" : "plans")"
+        if count == 0 { return t("Plan yok") }
+        let plans = count == 1 ? t("1 plan") : t("{0} plan", count)
         guard let next else { return plans }
         let minutes = max(0, (next - now.epochMillis) / 60_000)
-        let countdown = minutes < 1 ? "now" : (minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h \(String(format: "%02d", minutes % 60))m")
-        return "\(plans)  ·  next in \(countdown)"
+        let countdown = minutes < 1 ? t("şimdi")
+            : (minutes < 60 ? t("{0} dk", minutes) : t("{0} sa {1} dk", minutes / 60, String(format: "%02d", minutes % 60)))
+        return "\(plans)  ·  " + t("sıradaki {0} sonra", countdown)
     }
 
     /// Glass back · "24 hour | Takvim" segmented · + (PlannerScreen.kt chrome).
@@ -835,6 +836,7 @@ struct PlannerNext24Card: View {
         let c = Calendar.real.dateComponents([.hour, .minute], from: millis.date)
         let hour = c.hour ?? 0
         let h = hour == 0 ? 12 : (hour <= 12 ? hour : hour - 12)
+        if !I18n.isEnglish { return String(format: "%02d:%02d", hour, c.minute ?? 0) }
         return String(format: "%d:%02d %@", h, c.minute ?? 0, hour < 12 ? "am" : "pm")
     }
 
@@ -856,8 +858,8 @@ struct PlannerNext24Card: View {
             }
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(event.isDateOnly ? "All Day" : Self.amPm(event.startMillis)).font(RealFont.inter(22)).kerning(-0.6).foregroundStyle(ink).lineLimit(1)
-                    Text("Start").font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.55))
+                    Text(event.isDateOnly ? t("Tüm gün") : Self.amPm(event.startMillis)).font(RealFont.inter(22)).kerning(-0.6).foregroundStyle(ink).lineLimit(1)
+                    Text(t("Başlangıç")).font(RealFont.inter(12)).foregroundStyle(ink.opacity(0.55))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Text(event.isDateOnly ? "24h" : (event.reminder.durationMinutes.map { t("{0} min", $0) } ?? t("Süre ekle")))
