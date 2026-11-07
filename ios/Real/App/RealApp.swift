@@ -104,8 +104,10 @@ struct RealApp: App {
                     ShareImport.run(store)
                     ShareImport.writeSnapshot(store)
                     _ = ClipboardWatcher.shared
+                    // Achievements: a day counts towards the "gün üst üste" streak when REAL is opened on it.
+                    Achievements.recordOpen()
                     NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
-                        Task { @MainActor in ShareImport.run(store); await store.clearFiredPlaces() }
+                        Task { @MainActor in ShareImport.run(store); await store.clearFiredPlaces(); Achievements.recordOpen() }
                     }
                     // Two-way cloud sync, shared categories and Pano, every minute while the app is open.
                     pano.reminders = store

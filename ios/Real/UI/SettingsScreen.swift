@@ -18,6 +18,7 @@ struct AccountMenuOverlay: View {
     @State private var showPhotoPicker = false
     @State private var showPhotoChoice = false
     @State private var showAvatarEditor = false
+    @State private var showProfile = false
     @State private var showAuthChoice = false
     @State private var notice: String?
     @State private var showPeople = false
@@ -62,14 +63,21 @@ struct AccountMenuOverlay: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(t("Hesap")).font(RealFont.inter(21, .bold)).foregroundStyle(Color(argb: 0xFFF7F7F8))
                 Text(auth.account?.email ?? t("Bu cihazdaki notlar")).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFA4A4AD)).padding(.top, 12)
-                HStack(spacing: 12) {
-                    ProfileAvatar(name: store.ownerName, size: 44)
-                    Text(store.ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? t("Kullanıcı") : store.ownerName)
-                        .font(RealFont.inter(16, .medium)).foregroundStyle(Color(argb: 0xFFF7F7F8))
+                // The avatar and name open the profile too.
+                Button { showProfile = true } label: {
+                    HStack(spacing: 12) {
+                        ProfileAvatar(name: store.ownerName, size: 44)
+                        Text(store.ownerName.trimmingCharacters(in: .whitespaces).isEmpty ? t("Kullanıcı") : store.ownerName)
+                            .font(RealFont.inter(16, .medium)).foregroundStyle(Color(argb: 0xFFF7F7F8))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t("Profilini aç"))
                 .padding(.top, 13)
                 VStack(spacing: 3) {
-                    item(.person, t("Fotoğrafın veya avatarın")) { showPhotoChoice = true }
+                    item(.person, t("Profilin")) { showProfile = true }
                     item(.star, "REAL Pro") { showPro = true }
                     if auth.account == nil {
                         item(.add, auth.busy ? t("Google açılıyor…") : t("Hesap ekle")) { signInAndRestore() }
@@ -100,6 +108,7 @@ struct AccountMenuOverlay: View {
             Button(t("Vazgeç"), role: .cancel) {}
         } message: { Text(t("Avatar kişilerinde her zaman görünür; fotoğraf yalnız Ayarlar'da paylaşmayı açarsan.")) }
         .fullScreenCover(isPresented: $showAvatarEditor) { AvatarEditorView() }
+        .fullScreenCover(isPresented: $showProfile) { ProfileScreen().environment(store) }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
@@ -509,6 +518,10 @@ struct SettingsScreen: View {
             SettingsActionRow(icon: .settings, title: t("İpucunu dene"), subtitle: t("Örnek eğitim ipucunu gösterir")) {
                 RealTips.shared.show("test", force: true)
             }
+            SettingsDivider()
+            SettingsToggleRow(icon: .person, title: t("Tüm avatar parçaları açık"),
+                              subtitle: t("Deneme için: başarım ödülü olan kilitli parçalar da seçilebilir."),
+                              isOn: Binding(get: { AvatarUnlocks.allOpen }, set: { AvatarUnlocks.allOpen = $0 }))
         }
         SettingsSectionHeader(title: t("BİLDİRİM TESTİ"))
         SettingsGlassGroup {

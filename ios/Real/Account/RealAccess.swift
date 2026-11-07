@@ -13,6 +13,8 @@ let freeCardColors: Set<Int> = [0, 1, 2, 4, 8, 10, 13, 18]
 struct RealAccessSnapshot {
     let uid: String
     let isPro: Bool
+    /// Admin panel's tester grant (member card: Tester kartı).
+    var tester: Bool = false
     let effectiveFeatures: Set<String>
     let validUntil: Date
 
@@ -59,6 +61,7 @@ final class ProAccess {
               let flags = body["effectiveFeatures"] as? [String: Any] else { throw RealBackend.Failure(status: -1) }
         let ttl = (((body["cacheUntil"] as? NSNumber)?.doubleValue ?? 0) - ((body["serverTime"] as? NSNumber)?.doubleValue ?? 0)) / 1000
         let value = RealAccessSnapshot(uid: uid, isPro: body["plan"] as? String == "PRO",
+                                       tester: body["tester"] as? Bool == true,
                                        effectiveFeatures: Set(flags.compactMap { ($0.value as? Bool) == true ? $0.key : nil }),
                                        validUntil: Date().addingTimeInterval(min(max(ttl, 0), 15 * 60)))
         snapshot = value

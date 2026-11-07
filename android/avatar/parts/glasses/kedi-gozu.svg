@@ -1,0 +1,9 @@
+<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g transform="rotate(3.5 31.46 37.22)">
+<path d="M22.17,33.84 Q26.87,33.64 30.47,34.94 Q30.97,40.14 27.07,39.94 Q23.27,39.74 22.17,33.84 Z" fill="#FFFFFF" stroke="var(--hm-stroke, #000000)" stroke-width="1.6" stroke-linejoin="round"/>
+<path d="M22.17,33.84 l-0.90,-1.1" stroke="var(--hm-stroke, #000000)" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M40.75,33.84 Q36.05,33.64 32.45,34.94 Q31.95,40.14 35.85,39.94 Q39.65,39.74 40.75,33.84 Z" fill="#FFFFFF" stroke="var(--hm-stroke, #000000)" stroke-width="1.6" stroke-linejoin="round"/>
+<path d="M40.75,33.84 l0.90,-1.1" stroke="var(--hm-stroke, #000000)" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M30.6,35.9 q1,0.8 1.9,0.2" stroke="var(--hm-stroke, #000000)" stroke-width="1.5" stroke-linecap="round"/>
+</g>
+</svg>

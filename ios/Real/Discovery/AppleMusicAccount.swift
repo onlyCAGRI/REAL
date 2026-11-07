@@ -12,9 +12,40 @@ final class AppleMusicAccount {
 
     private(set) var isConnected: Bool
 
-    private init() { isConnected = (defaults.string(forKey: "real_apple_music_token") ?? "").isEmpty == false }
+    private init() {
+        // Earlier builds kept the token in UserDefaults (part of device backups); move it to the Keychain once.
+        if let old = defaults.string(forKey: "real_apple_music_token") {
+            if !old.isEmpty, TokenKeychain.read() == nil { TokenKeychain.write(old) }
+            defaults.removeObject(forKey: "real_apple_music_token")
+        }
+        isConnected = TokenKeychain.read() != nil
+    }
 
-    private var token: String? { defaults.string(forKey: "real_apple_music_token").flatMap { $0.isEmpty ? nil : $0 } }
+    private var token: String? { TokenKeychain.read() }
+
+    /// The Music User Token lives in the Keychain, this device only: not in backups, not moved to a new phone.
+    private enum TokenKeychain {
+        private static var query: [String: Any] { [kSecClass as String: kSecClassGenericPassword,
+                                                   kSecAttrService as String: "real.apple-music",
+                                                   kSecAttrAccount as String: "music-user-token"] }
+        static func read() -> String? {
+            var q = query
+            q[kSecReturnData as String] = true
+            q[kSecMatchLimit as String] = kSecMatchLimitOne
+            var out: AnyObject?
+            guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let data = out as? Data,
+                  let value = String(data: data, encoding: .utf8), !value.isEmpty else { return nil }
+            return value
+        }
+        @discardableResult static func write(_ value: String) -> Bool {
+            delete()
+            var q = query
+            q[kSecValueData as String] = Data(value.utf8)
+            q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
+        }
+        static func delete() { SecItemDelete(query as CFDictionary) }
+    }
 
     /// The sign-in page in Safari; a fresh state ties the answer to this request.
     func connect() {
@@ -33,8 +64,7 @@ final class AppleMusicAccount {
         let token = url.fragment?.split(separator: "&").first { $0.hasPrefix("token=") }
             .map { String($0.dropFirst(6)).removingPercentEncoding ?? "" }
         if let expected = defaults.string(forKey: "real_apple_music_state"), state == expected,
-           let token, !token.isEmpty, token.count <= 4096 {
-            defaults.set(token, forKey: "real_apple_music_token")
+           let token, !token.isEmpty, token.count <= 4096, TokenKeychain.write(token) {
             defaults.removeObject(forKey: "real_apple_music_state")
             isConnected = true
             RealToast.shared.show(t("Apple Music bağlandı"))
@@ -45,7 +75,7 @@ final class AppleMusicAccount {
     }
 
     func disconnect() {
-        defaults.removeObject(forKey: "real_apple_music_token")
+        TokenKeychain.delete()
         defaults.removeObject(forKey: "real_apple_music_state")
         defaults.removeObject(forKey: "real_apple_music_playlist")
         defaults.removeObject(forKey: "real_apple_music_list_copied")

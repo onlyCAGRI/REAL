@@ -57,8 +57,12 @@ private struct AvatarWebView: UIViewRepresentable {
         if let url = Bundle.main.url(forResource: "avatar-editor", withExtension: "html"),
            let html = try? String(contentsOf: url, encoding: .utf8) {
             let saved = Data(AvatarStore.stateJSON.utf8).base64EncodedString()
-            // Same base URL as Android's WebView; the page loads Humation from jsDelivr.
-            web.loadHTMLString(html.replacingOccurrences(of: "__SAVED_STATE__", with: saved).replacingOccurrences(of: "__TOP_INSET__", with: "0"), baseURL: URL(string: "https://humation.app/"))
+            // Same base URL as Android's WebView; Humation's code is inlined in the page (android/avatar/build.mjs).
+            // __UNLOCKED__: the reward parts earned (or "*" with Settings → "Tüm avatar parçaları açık").
+            let page = html.replacingOccurrences(of: "__SAVED_STATE__", with: saved)
+                .replacingOccurrences(of: "__TOP_INSET__", with: "0")
+                .replacingOccurrences(of: "__UNLOCKED__", with: AvatarUnlocks.pageValue())
+            web.loadHTMLString(page, baseURL: URL(string: "https://humation.app/"))
         }
         return web
     }
@@ -90,8 +94,15 @@ private struct AvatarWebView: UIViewRepresentable {
                   let comma = png.firstIndex(of: ","), let data = Data(base64Encoded: String(png[png.index(after: comma)...])),
                   data.count <= 2 * 1024 * 1024, data.starts(with: [0x89, 0x50, 0x4E, 0x47]),
                   let image = UIImage(data: data), image.size.width <= 512, image.size.height <= 512 else { onFailed(); return }
+            // The whole figure for the profile screen (560 × 1020, transparent); a bad one never blocks the avatar.
+            var fullPNG: Data?
+            if let full = body["full"] as? String, full.count <= 3 * 1024 * 1024, let comma = full.firstIndex(of: ","),
+               let data = Data(base64Encoded: String(full[full.index(after: comma)...])), data.count <= 2 * 1024 * 1024,
+               data.starts(with: [0x89, 0x50, 0x4E, 0x47]), let check = UIImage(data: data),
+               check.size.width <= 600, check.size.height <= 1100 { fullPNG = data }
             Task { @MainActor in
                 AvatarStore.stateJSON = state
+                if let fullPNG { ProfileFullFigure.save(fullPNG) }
                 ProfilePhotoStore.save(image, kind: "avatar")
                 await ProfilePictures.push()
                 RealToast.shared.show("Avatar kaydedildi")
