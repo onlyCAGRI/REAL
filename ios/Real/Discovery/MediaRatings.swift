@@ -194,7 +194,7 @@ final class MediaRatingStore {
 
     /// A film's reminder in Turkish: TheTVDB's own Turkish first, otherwise AI once (kept). Nil = no description.
     func filmSummary(_ media: MediaBlock) async -> String? {
-        let key = "real_film_tr_" + ratingKey(media)
+        let key = "real_film_desc_" + ratingKey(media)
         if let saved = UserDefaults.standard.string(forKey: key) { return saved.isEmpty ? nil : saved }
         var text = media.description.flatMap { $0.isEmpty ? nil : $0 }
         var turkish = false
@@ -209,9 +209,9 @@ final class MediaRatingStore {
             turkish = (d["language"] as? String) == "tur"
         }
         guard let source = text else { if answered { UserDefaults.standard.set("", forKey: key) }; return nil }
-        if turkish { UserDefaults.standard.set(source, forKey: key); return source }
-        guard let out = await Self.aiTranslate([String(source.prefix(1500))])?.first, !out.isEmpty else { return source } // Not saved: retry later.
-        UserDefaults.standard.set(out, forKey: key)
-        return out
+        // Shown as it comes (no translation), like Android.
+        _ = turkish
+        UserDefaults.standard.set(source, forKey: key)
+        return source
     }
 }

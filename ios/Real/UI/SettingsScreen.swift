@@ -212,6 +212,7 @@ struct SettingsScreen: View {
     @State private var sheet: SettingsSheet?
     /// Ben ekranının sırala / gizle sayfası (Ben'deki "Düzenle" ile aynı).
     @State private var showYasamLayout = false
+    @State private var showMeRename = false
     @State private var showPro = false
     @AppStorage(MapAppearance.darkKey) private var mapDark = false
     @AppStorage(MapAppearance.plainKey) private var mapPlain = false
@@ -239,6 +240,7 @@ struct SettingsScreen: View {
         .task { await refreshNotificationStatus() }
         .sheet(isPresented: $showLicenses) { LicensesSheet() }
         .sheet(isPresented: $showYasamLayout) { YasamLayoutSheet() }
+        .sheet(isPresented: $showMeRename) { YasamRenameSheet() }
         .sheet(isPresented: $showAiPrivacy) { AiPrivacySheet() }
         .fullScreenCover(isPresented: $showPro) { RealProScreen() }
         .fullScreenCover(isPresented: $showCalendar) { CalendarConnectionScreen { showCalendar = false }.liftedTopSafeArea() }
@@ -380,8 +382,19 @@ struct SettingsScreen: View {
         }
         SettingsSectionHeader(title: t("ANA EKRAN VE KARTLAR"))
         SettingsGlassGroup {
-            SettingsActionRow(icon: .cards, title: t("Ben ekranı"), subtitle: t("Bölümleri sırala ya da gizle")) {
-                showYasamLayout = true
+            // Me: on/off, its name (the person picks it) and its cards.
+            SettingsToggleRow(icon: .cards, title: YasamLayout.shared.name,
+                              subtitle: t("Logonun yanında. Kapatınca ana ekrandan kalkar; verilerin silinmez."),
+                              isOn: Binding(get: { YasamLayout.shared.enabled }, set: { YasamLayout.shared.setEnabled($0) }))
+            if YasamLayout.shared.enabled {
+                SettingsDivider()
+                SettingsActionRow(icon: .edit, title: t("Adını değiştir"), subtitle: t("Şu an: {0}", YasamLayout.shared.name)) {
+                    showMeRename = true
+                }
+                SettingsDivider()
+                SettingsActionRow(icon: .cards, title: t("Kartlar"), subtitle: t("Sırala, göster ya da gizle")) {
+                    showYasamLayout = true
+                }
             }
             SettingsDivider()
             SettingsToggleRow(icon: .check, title: t("Sade kartlar (Deneysel)"),

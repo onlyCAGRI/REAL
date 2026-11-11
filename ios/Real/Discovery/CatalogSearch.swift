@@ -219,6 +219,82 @@ struct MediaSearchSheet: View {
     }
 }
 
+/// Puanla > Ekle (RatingsAddSheet): the same film & series search, but several can be picked (✓ toggles) and "Ekle (n)"
+/// adds them all at once.
+struct RatingsAddSheet: View {
+    let onDone: ([MediaBlock]) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var results: [MediaBlock] = []
+    @State private var searching = false
+    @State private var message: String?
+    @State private var picked: [MediaBlock] = []
+
+    var body: some View {
+        CatalogPanel(title: t("Film & dizi ekle"), placeholder: t("Film veya dizi ara"), query: $query, searching: searching, message: message,
+                     attribution: t("Filmler {0} • Diziler TVmaze", MediaCatalog.attribution(.MOVIE)), onClose: { dismiss() },
+                     header: AnyView(addBar)) {
+            ForEach(results) { m in
+                let on = picked.contains { $0.id == m.id }
+                Button {
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    if on { picked.removeAll { $0.id == m.id } } else { picked.append(m) }
+                } label: {
+                    HStack(spacing: 12) {
+                        PosterArtwork(media: m, titleSize: 6).frame(width: 38, height: 54).clipShape(RoundedRectangle(cornerRadius: 8))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(m.title).font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(1)
+                            Text([m.year.map(String.init), m.type == .MOVIE ? t("Film") : t("Dizi"), m.genre].compactMap { $0 }.joined(separator: " • "))
+                                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B0)).lineLimit(1)
+                        }
+                        Spacer()
+                        RealSymbol(on ? "checkmark" : "plus", size: 17.2).foregroundStyle(on ? .black : .white)
+                            .frame(width: 30, height: 30).background(Circle().fill(on ? Color.white : .clear))
+                    }
+                    .padding(8).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .task(id: query) { await search(query) }
+    }
+
+    @ViewBuilder private var addBar: some View {
+        if !picked.isEmpty {
+            HStack {
+                Text(picked.map(\.title).joined(separator: ", ")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFBCBCC5)).lineLimit(1)
+                Spacer()
+                Button {
+                    onDone(picked)
+                    dismiss()
+                } label: {
+                    Text(t("Ekle ({0})", picked.count)).font(RealFont.inter(15, .semibold)).foregroundStyle(.black)
+                        .padding(.horizontal, 14).padding(.vertical, 7).background(Capsule().fill(.white))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func search(_ raw: String) async {
+        let q = raw.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 2 else { results = []; message = nil; searching = false; return }
+        try? await Task.sleep(for: .milliseconds(350))
+        guard !Task.isCancelled else { return }
+        searching = true
+        message = nil
+        async let movies = try? MediaCatalog.search(q, type: .MOVIE)
+        async let series = try? MediaCatalog.search(q, type: .TV)
+        let (m, shows) = await (movies, series)
+        guard !Task.isCancelled else { return }
+        searching = false
+        if m == nil && shows == nil { results = []; message = t("İçerik kataloğuna şu anda ulaşılamadı."); return }
+        results = MediaSearchSheet.merge(q, m ?? [], shows ?? [])
+        if results.isEmpty { message = t("Sonuç bulunamadı.") }
+    }
+}
+
 /// MusicSearchSheet: "Müzik" over the iTunes Türkiye catalog, searching while typing.
 struct MusicSearchSheet: View {
     let onSelect: (MusicBlock) -> Void

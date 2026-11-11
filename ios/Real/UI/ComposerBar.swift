@@ -277,7 +277,7 @@ struct ComposerBar: View {
     /// HomeDockExpandedNavigation: Yaşam · Pano · Takvim, Takvim selected.
     private var navigationBar: some View {
         HStack(spacing: 0) {
-            navItem(t("Ben"), "rectangle.stack", selected: false) { navExpanded = false; onOpenYasam?() }
+            navItem(YasamLayout.shared.name, "rectangle.stack", selected: false) { navExpanded = false; onOpenYasam?() }
             navItem(t("Pano"), "square.grid.2x2", selected: false) { navExpanded = false; onOpenPano?() }
             navItem(t("Takvim"), "calendar", selected: true) { navExpanded = false; onOpenPlanner?() }
         }

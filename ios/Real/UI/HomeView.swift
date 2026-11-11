@@ -153,6 +153,7 @@ struct HomeView: View {
     @State private var showAccountMenu = false
     @State private var showCategoryOrder = false
     @State private var showYasam = false
+    @State private var showMeRename = false
     /// Custom categories picked with a long press on the deck (Android: selectedCategoryIds).
     @State private var selectedCategoryIds: Set<Int64> = []
     @State private var pressedTile: String?
@@ -377,6 +378,7 @@ struct HomeView: View {
             .pullToClose { showYasam = false }
         }
         .sheet(item: $externalDetail) { ExternalCalendarEventDetail(event: $0) }
+        .sheet(isPresented: $showMeRename) { YasamRenameSheet() }
         .sheet(isPresented: Binding(get: { checkTargets != nil }, set: { if !$0 { checkTargets = nil } })) {
             CheckRequestSheet(targets: checkTargets ?? [], canClear: checkIds.contains { store.reminder($0)?.checkRequest != nil },
                               onSave: { target, day, color in store.setCheckRequest(checkIds, target: target, startEpochDay: day, color: color) },
@@ -414,6 +416,22 @@ struct HomeView: View {
                             if !StartupIntro.shared.landed { StartupIntro.shared.headerFrame = f }
                         }
                 })
+                // Me beside the brand: small and grey so Real stays the focus, its baseline on the bottom of the
+                // letters. Tap opens Me, long press renames it.
+                .overlay(alignment: .bottomLeading) {
+                    if YasamLayout.shared.enabled {
+                        Text(YasamLayout.shared.name).font(RealFont.inter(20, .bold)).kerning(-0.4)
+                            .foregroundStyle(Color(argb: 0xFF55545E)).lineLimit(1).fixedSize()
+                            .padding(.horizontal, 4).padding(.vertical, 2)
+                            .contentShape(Rectangle())
+                            .onTapGesture { withoutAnimation { showYasam = true } }
+                            .onLongPressGesture { showMeRename = true }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction(named: t("Adını değiştir")) { showMeRename = true }
+                            .offset(x: 77, y: 3)
+                            .opacity(StartupIntro.shared.landed ? 1 : 0)
+                    }
+                }
             Spacer()
             Button { withoutAnimation { showAccountMenu = true } } label: {
                 ProfileAvatar(name: store.ownerName, size: 44).startupAvatar()

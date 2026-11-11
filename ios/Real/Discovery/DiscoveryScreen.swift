@@ -60,11 +60,19 @@ struct DiscoveryScreen: View {
         .alert(t("Öneriyi bildir"), isPresented: $reportNotice) { Button(t("Tamam"), role: .cancel) {} } message: {
             Text(t("Bildirim göndermek için REAL'e giriş yapman gerekiyor."))
         }
-        .sheet(item: $rateWatched) { media in
-            FilmRatingSheet(media: media, meta: [media.year.map(String.init), t("İzledim")].compactMap { $0 }.joined(separator: " · "), initial: nil) {
-                MediaRatingStore.shared.rate(media, $0, past: true)
-            }
+        .fullScreenCover(item: $rateWatched) { media in
+            // İzledim opens the same full-screen rater as Puanla.
+            RateFullScreen(media: media, meta: [media.year.map(String.init), t("İzledim")].compactMap { $0 }.joined(separator: " · "),
+                           initial: nil, avg: Self.ratingAverage, progress: nil,
+                           skipLabel: t("Vazgeç"), onSkip: { rateWatched = nil },
+                           onSave: { v in rateWatched = nil; MediaRatingStore.shared.rate(media, v, past: true) },
+                           onClose: { rateWatched = nil }, loadSummary: true)
         }
+    }
+
+    @MainActor private static var ratingAverage: Double? {
+        let values = MediaRatingStore.shared.entries.compactMap(\.value)
+        return values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
     }
 
     private func back() {
@@ -79,13 +87,9 @@ struct DiscoveryScreen: View {
 
     private var filterPage: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                YasamHeroSentence(greeting: "", sentence: kind == .film ? t("Ne izlesek") : t("Ne oynasak"), tone: accent,
-                                  hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
-                    .padding(.top, 4)
-                BackCircle(action: back).padding(.leading, 22).padding(.top, 12)
-                    .accessibilityLabel(t("Ben ekranına dön"))
-            }
+            // The same edge-to-edge glow top as the Me tile it came from.
+            YasamDiscoveryHero(title: kind == .film ? t("Ne izlesek") : t("Ne oynasak"), tone: (kind == .film ? YasamPart.watch : .play).glow,
+                               subtitle: t("Birlikte uyanlar önce gelir."), onBack: back)
             if let error { errorLine(error) }
             // One question at a time (DiscoveryStepper): 2 genres at most, then optional extras.
             DiscoveryStepper(steps: kind == .film ? filmSteps : gameSteps, selection: Binding(

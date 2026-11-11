@@ -360,12 +360,7 @@ struct MusicDiscoveryScreen: View {
 
     private var filterPage: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                YasamHeroSentence(greeting: "", sentence: t("Ne dinlesek"), tone: musicTone,
-                                  hour: Calendar.real.component(.hour, from: Date()), revealed: true, compact: true)
-                    .padding(.top, 4)
-                BackCircle(action: back).padding(.leading, 22).padding(.top, 12).accessibilityLabel(t("Ben ekranına dön"))
-            }
+            YasamDiscoveryHero(title: t("Ne dinlesek"), tone: YasamPart.listen.glow, subtitle: t("Birlikte uyanlar önce gelir."), onBack: back)
             if let error { errorLine(error) }
             // One question at a time: 2 genres at most, then up to 2 languages ("Tümü" = no filter), then (optional) one era;
             // "Hepsi" = every era; then, with Apple Music connected, (optional) "Sana özel".

@@ -12,25 +12,16 @@ func ratingColors(_ v: Double?) -> (bg: Color, fg: Color) {
     default: return (Color(argb: 0xFFD9F27A), Color(argb: 0xFF1C2A05))
     }
 }
-private let ratingScale: [Color] = [0xFF5A1A1F, 0xFF8A3A1C, 0xFF9A6A1A, 0xFF5D7A22, 0xFF9CC63A, 0xFFD9F27A].map { Color(argb: $0) }
-private let faded = Color(argb: 0xFF5C5C5C)
-private let screenBg = Color(argb: 0xFF0C0C0C)
 
 func scoreText(_ v: Double) -> String {
     let s = v.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(v)) : String(format: "%.1f", v)
     return I18n.isEnglish ? s : s.replacingOccurrences(of: ".", with: ",")
 }
 private func round1(_ v: Double) -> Double { (v * 10).rounded() / 10 }
+private func f1(_ v: Double) -> String { scoreText(round1(v)) }
 private func verdict(_ v: Double) -> String { v >= 9 ? t("Efsane") : v >= 7 ? t("İyi") : v >= 5 ? t("İdare eder") : t("Beğenmedim") }
-
-private struct Period { let short: String; let long: String; let days: Int? }
-private var periods: [Period] { [Period(short: "7", long: t("Son 7 gün"), days: 7), Period(short: "30", long: t("Son 30 gün"), days: 30),
-                                 Period(short: t("3 ay"), long: t("Son 3 ay"), days: 90), Period(short: t("6 ay"), long: t("Son 6 ay"), days: 180),
-                                 Period(short: t("1 yıl"), long: t("Son 1 yıl"), days: 365), Period(short: t("Tümü"), long: t("Tümü"), days: nil)] }
-
-private var periodLabels: [String] { periods.map { p in p.days.map { $0 <= 30 ? t("{0} gün", p.short) : p.short } ?? p.short } }
-/// Picker order: "Tümü" at the edge, then 7 gün, 30 gün, 3 ay… as they come in from the right (nearest first).
-private let periodOrder = Array(periods.indices.filter { periods[$0].days != nil }.reversed()) + [periods.count - 1]
+private let rateCard = Color.white.opacity(0.05)
+private func mean(_ values: [Double]) -> Double? { values.isEmpty ? nil : values.reduce(0, +) / Double(values.count) }
 
 private func genresOf(_ e: RatingEntry) -> [String] {
     var seen = Set<String>()
@@ -51,92 +42,88 @@ private enum RateTarget: Identifiable {
     }
 }
 
-/// "Puanlarım": watched films and series in one list, newest first, each against the person's own average.
+/// Puanla (RatingsScreen.kt + RatingsParts.kt): the glow hero with the average, "N tanesi puan bekliyor", category
+/// chips, Zevkin and Zirve, then every title grouped by month against the person's own average.
 struct RatingsScreen: View {
     let onClose: () -> Void
     @Environment(DiscoveryStore.self) private var discovery
     @State private var ratings = MediaRatingStore.shared
-    @State private var period = periods.count - 1
     @State private var genre: String?
     @State private var seriesKey: String?
     @State private var target: RateTarget?
     @State private var searching = false
-    @State private var addPast = true
+    @State private var quick = false
 
     var body: some View {
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        let days = periods[period].days
-        let inPeriod = ratings.entries.filter { e in
-            guard let days else { return true }
-            guard let at = e.addedAt else { return false }
-            return now - at <= Int64(days) * 86_400_000
-        }.sorted { ($0.addedAt ?? .min, $0.order) > ($1.addedAt ?? .min, $1.order) }
-        // Genres of the whole list: the row stays the same when the period changes, so both can be chosen together.
+        let all = ratings.entries.sorted { ($0.addedAt ?? .min, $0.order) > ($1.addedAt ?? .min, $1.order) }
         var counts: [String: Int] = [:]
-        for g in ratings.entries.flatMap(genresOf) { counts[g, default: 0] += 1 }
-        var genres = counts.sorted { $0.value > $1.value }.map(\.key)
+        for g in all.flatMap(genresOf) { counts[g, default: 0] += 1 }
+        var genres = counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
         if let genre, !genres.contains(genre) { genres.append(genre) }
-        let shown = genre.map { g in inPeriod.filter { genresOf($0).contains(g) } } ?? inPeriod
-        let values = shown.compactMap(\.value)
-        let avg = values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+        let shown = genre.map { g in all.filter { genresOf($0).contains(g) } } ?? all
+        let rated = shown.filter { $0.value != nil }
+        let avg = mean(rated.compactMap(\.value))
+        let waiting = all.filter { $0.value == nil && !$0.series }
+        let months = Self.months(shown)
         return ZStack(alignment: .topLeading) {
-            screenBg.ignoresSafeArea()
+            Color.black.ignoresSafeArea()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    Color.clear.frame(height: 54)
-                    Text(avg.map { scoreText(round1($0)) } ?? "–").font(RealFont.inter(56, .medium)).foregroundStyle(.white)
-                        .contentTransition(.numericText()).frame(maxWidth: .infinity).padding(.top, 6)
-                    Text(t("ortalaman")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF888888)).frame(maxWidth: .infinity).padding(.top, 2)
-                    // One row: genres pull in from the left of "Hepsi", periods from the right of "Tümü".
-                    let genreLabels = genres.reversed() + [t("Hepsi")]
-                    HStack(spacing: 0) {
-                        AnchoredPicker(labels: genreLabels, selected: Binding(
-                            get: { genre.flatMap { genreLabels.firstIndex(of: $0) } ?? genreLabels.count - 1 },
-                            set: { i in withAnimation(.easeOut(duration: 0.2)) { genre = i == genreLabels.count - 1 ? nil : genreLabels[i] } }),
-                                       rtl: false)
-                        AnchoredPicker(labels: periodOrder.map { periodLabels[$0] }, selected: Binding(
-                            get: { periodOrder.firstIndex(of: period) ?? periodOrder.count - 1 },
-                            set: { i in withAnimation(.easeOut(duration: 0.2)) { period = periodOrder[i] } }), rtl: true)
-                    }
-                    .padding(.top, 14).padding(.bottom, 16)
-                    if !shown.isEmpty {
-                        HStack { ForEach([t("altında"), t("ortalama"), t("üstünde")], id: \.self) { Text($0); if $0 != t("üstünde") { Spacer() } } }
-                            .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF555555)).padding(.leading, 46).padding(.bottom, 2)
-                    } else {
-                        Text(days == nil ? t("Keşifte İzledim dediğin film ve diziler burada puanlanır. İzlediklerini aşağıdan da ekleyebilirsin.")
-                             : t("Bu aralıkta eklenen yok."))
-                            .font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF777777)).padding(.vertical, 20)
-                    }
-                    ForEach(shown) { e in
-                        RatingRow(entry: e, avg: avg, now: now) {
-                            if e.series { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.38)) { seriesKey = e.key } }
-                            else { target = .film(e.media, initial: e.score, past: false, inList: true) }
-                        }
-                    }
-                    if let line = tasteLine(inPeriod) {
-                        Text(line).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8A8A8A)).padding(.top, 18)
-                    }
-                    // "Ekle": watched now (today's date); "Geçmişten ekle": no date ("eskiden").
-                    HStack(spacing: 10) {
-                        ForEach([(false, t("Ekle")), (true, t("Geçmişten ekle"))], id: \.1) { past, label in
-                            Button { addPast = past; searching = true } label: {
-                                HStack(spacing: 8) { RealSymbol("plus", size: 15); Text(label).font(RealFont.inter(14)) }
-                                    .foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 48)
-                                    .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color(argb: 0xFF2E2E2E), lineWidth: 1))
+                    YasamDiscoveryHero(title: t("Puanla"), tone: YasamPart.rate.glow, caption: t("{0} puan", rated.count), onBack: onClose) {
+                        if let avg {
+                            VStack(alignment: .trailing, spacing: 0) {
+                                Text(f1(avg)).font(RealFont.inter(40, .heavy)).foregroundStyle(.white).contentTransition(.numericText())
+                                Text(t("ortalaman")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7))
                             }
-                            .buttonStyle(.plain)
+                            .animation(.easeOut(duration: 0.5), value: avg)
                         }
                     }
-                    .padding(.top, 14).padding(.bottom, 40)
+                    VStack(alignment: .leading, spacing: 14) {
+                        if !waiting.isEmpty { RatingsWaitingCard(waiting: waiting) { quick = true } }
+                        // Category only: Hepsi + the genres of the list, most common first.
+                        if !genres.isEmpty {
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 6) {
+                                    RateChip(label: t("Hepsi"), on: genre == nil) { genre = nil }
+                                    ForEach(genres, id: \.self) { g in RateChip(label: g, on: genre == g) { genre = genre == g ? nil : g } }
+                                }
+                            }
+                            .scrollIndicators(.hidden)
+                        }
+                        if rated.count >= 3 {
+                            RatingsTasteCard(rated: rated)
+                            RatingsTopThree(top: Array(rated.sorted { ($0.value ?? 0) > ($1.value ?? 0) }.prefix(3)), onOpen: open)
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.top, 16)
+                    if shown.isEmpty {
+                        Text(t("Keşifte İzledim dediğin film ve diziler burada puanlanır. İzlediklerini aşağıdan da ekleyebilirsin."))
+                            .font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFF777777)).lineSpacing(4)
+                            .padding(.horizontal, 20).padding(.vertical, 20)
+                    }
+                    ForEach(months, id: \.key) { month in
+                        YasamCaps(text: month.label).padding(.leading, 20).padding(.top, 22).padding(.bottom, 8)
+                        ForEach(month.list) { e in
+                            RatingCardRow(entry: e, avg: avg) { open(e) }.padding(.horizontal, 16).padding(.vertical, 4)
+                        }
+                    }
+                    Button { searching = true } label: {
+                        HStack(spacing: 8) {
+                            RealSymbol("plus", size: 16)
+                            Text(t("Film ya da dizi ekle")).font(RealFont.inter(14))
+                        }
+                        .foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 48)
+                        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Color(argb: 0xFF2E2E2E), lineWidth: 1))
+                        .contentShape(RoundedRectangle(cornerRadius: 22))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 40)
                 }
-                .padding(.horizontal, 20)
                 .animation(.easeOut(duration: 0.25), value: genre)
-                .animation(.easeOut(duration: 0.25), value: period)
             }
             .scrollIndicators(.hidden)
-            BackCircle(action: onClose).padding(.leading, 20).padding(.top, 10)
             if let s = ratings.entries.first(where: { $0.key == seriesKey }) {
-                SeriesGrid(entry: s, onBack: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32)) { seriesKey = nil } },
+                SeriesPage(entry: s, onBack: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32)) { seriesKey = nil } },
                            onRate: { target = $0 },
                            onRemove: { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32)) { seriesKey = nil }; ratings.remove(s.key) })
                     .transition(.move(edge: .trailing).combined(with: .opacity)).zIndex(2)
@@ -144,145 +131,515 @@ struct RatingsScreen: View {
         }
         .onAppear { ratings.importWatched(discovery.film.watched) }
         .sheet(isPresented: $searching) {
-            MediaSearchSheet { media in
-                let past = addPast
-                if media.type == .TV { ratings.add(media, past: past); seriesKey = ratingKey(media) }
-                else {
-                    let existing = ratings.entries.first { $0.key == ratingKey(media) }?.score
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { target = .film(media, initial: existing, past: past, inList: false) }
+            RatingsAddSheet { picked in
+                // Everything picked joins the list unscored; films then go straight to quick rating, one series alone
+                // opens its episodes.
+                picked.forEach { ratings.add($0, past: false) }
+                if picked.contains(where: { $0.type != .TV }) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { quick = true }
+                } else if picked.count == 1 {
+                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.38)) { seriesKey = ratingKey(picked[0]) }
                 }
             }
         }
-        .sheet(item: $target) { t in sheet(for: t) }
+        .fullScreenCover(item: $target) { rater(for: $0) }
+        .fullScreenCover(isPresented: $quick) {
+            QuickRateScreen(waiting: ratings.entries.filter { $0.value == nil && !$0.series }.sorted { ($0.addedAt ?? .min, $0.order) > ($1.addedAt ?? .min, $1.order) },
+                            avg: mean(ratings.entries.compactMap(\.value))) { quick = false }
+        }
     }
 
-    @ViewBuilder private func sheet(for target: RateTarget) -> some View {
+    private func open(_ e: RatingEntry) {
+        if e.series { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.38)) { seriesKey = e.key } }
+        else { target = .film(e.media, initial: e.score, past: false, inList: true) }
+    }
+
+    private struct Month { let key: String; let label: String; let list: [RatingEntry] }
+
+    private static func months(_ list: [RatingEntry]) -> [Month] {
+        let cal = Calendar.real
+        let f = DateFormatter()
+        f.locale = I18n.locale
+        f.dateFormat = "LLLL yyyy"
+        var out: [Month] = []
+        for e in list {
+            let key: String
+            let label: String
+            if let at = e.addedAt {
+                let c = cal.dateComponents([.year, .month], from: at.date)
+                key = "\(c.year ?? 0)-\(c.month ?? 0)"
+                label = f.string(from: at.date).uppercased(with: I18n.locale)
+            } else {
+                key = "old"
+                label = t("Eskiden").uppercased(with: I18n.locale)
+            }
+            if let last = out.last, last.key == key { out[out.count - 1] = Month(key: key, label: label, list: last.list + [e]) }
+            else { out.append(Month(key: key, label: label, list: [e])) }
+        }
+        return out
+    }
+
+    @ViewBuilder private func rater(for target: RateTarget) -> some View {
+        let close = { self.target = nil }
         switch target {
         case let .film(media, initial, past, inList):
-            FilmRatingSheet(media: media, meta: [media.year.map(String.init), t("Film")].compactMap { $0 }.joined(separator: " · "), initial: initial,
-                            onRemove: inList ? { ratings.remove(ratingKey(media)) } : nil, removeLabel: t("Listeden çıkar")) { ratings.rate(media, $0, past: past) }
+            RateFullScreen(media: media, meta: [media.year.map(String.init), t("Film")].compactMap { $0 }.joined(separator: " · "),
+                           initial: initial, avg: mean(ratings.entries.compactMap(\.value)), progress: nil,
+                           skipLabel: inList ? t("Listeden çıkar") : t("Vazgeç"),
+                           onSkip: { close(); if inList { ratings.remove(ratingKey(media)) } },
+                           onSave: { v in close(); ratings.rate(media, v, past: past) }, onClose: close, loadSummary: true)
         case let .episode(media, ep, initial):
-            EpisodeRatingSheet(media: media, episode: ep, initial: initial,
-                               onRemove: initial != nil ? { ratings.rateEpisodes(media, [ep.key: nil]) } : nil) { ratings.rateEpisodes(media, [ep.key: $0]) }
+            // Episodes and whole seasons use the same full-screen rater as films (the series poster on top).
+            RateFullScreen(media: media, meta: "S\(ep.season) · B\(ep.number)" + (ep.name.isEmpty ? "" : " · \(ep.name)"),
+                           initial: initial, avg: nil, progress: media.title,
+                           skipLabel: initial != nil ? t("Puanı kaldır") : t("Vazgeç"),
+                           onSkip: { close(); if initial != nil { ratings.rateEpisodes(media, [ep.key: nil]) } },
+                           onSave: { v in close(); ratings.rateEpisodes(media, [ep.key: v]) }, onClose: close, summary: ep.summary)
         case let .season(media, season, eps):
-            RatingSheet(title: t("{0}. sezonun tamamı", season), meta: media.title,
-                        reminder: t("Bütün bölümlere aynı puan verilir. Sonra istediğin bölümü tek tek değiştirebilirsin."), initial: nil) { v in
-                ratings.rateEpisodes(media, Dictionary(uniqueKeysWithValues: eps.map { ($0.key, Optional(v)) }))
-            }
+            RateFullScreen(media: media, meta: t("{0}. sezonun tamamı · bütün bölümlere aynı puan", season),
+                           initial: nil, avg: nil, progress: media.title, skipLabel: t("Vazgeç"),
+                           onSkip: close,
+                           onSave: { v in close(); ratings.rateEpisodes(media, Dictionary(uniqueKeysWithValues: eps.map { ($0.key, Optional(v)) })) },
+                           onClose: close)
         }
-    }
-
-    /// "En sevdiğin tür …": genres with at least two scores; nil until there are two such genres.
-    private func tasteLine(_ list: [RatingEntry]) -> String? {
-        var byGenre: [String: [Double]] = [:]
-        for e in list { if let v = e.value { for g in genresOf(e) { byGenre[g, default: []].append(v) } } }
-        let avgs = byGenre.filter { $0.value.count >= 2 }.mapValues { $0.reduce(0, +) / Double($0.count) }
-        guard avgs.count >= 2, let best = avgs.max(by: { $0.value < $1.value }), let worst = avgs.min(by: { $0.value < $1.value }) else { return nil }
-        return t("En sevdiğin tür {0} ({1}), en az sevdiğin {2} ({3}).", best.key, scoreText(round1(best.value)), worst.key, scoreText(round1(worst.value)))
     }
 }
 
-/// A picker with its default ("Hepsi" / "Tümü", the last label) at one edge and the other options waiting off screen
-/// beyond it (left of "Hepsi"; right of "Tümü" when `rtl`). Pulling the row brings them in; whichever word reaches the
-/// edge is chosen while scrolling, and the row snaps to it. Right-to-left layout makes the right edge the leading one,
-/// so the system's view-aligned snapping lands there.
-private struct AnchoredPicker: View {
-    let labels: [String]
-    @Binding var selected: Int
-    let rtl: Bool
-    @State private var position: Int?
-    var body: some View {
-        GeometryReader { geo in
-            ScrollView(.horizontal) {
-                HStack(spacing: 14) {
-                    ForEach(Array(labels.enumerated()), id: \.offset) { i, label in
-                        item(label, at: i)
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .contentMargins(.trailing, geo.size.width, for: .scrollContent)
-            .scrollTargetBehavior(.viewAligned)
-            .scrollPosition(id: $position)
-            .scrollIndicators(.hidden)
-            .environment(\.layoutDirection, rtl ? .rightToLeft : .leftToRight)
-        }
-        .frame(height: 30)
-        .onAppear { position = selected }
-        .onChange(of: labels) { _, _ in position = selected }
-        .onChange(of: position) { _, p in if let p, p != selected { selected = p } }
-    }
+// MARK: Parts
 
-    /// One word of the row (split out so the compiler type-checks it quickly).
-    private func item(_ label: String, at i: Int) -> some View {
-        let on = (position ?? labels.count - 1) == i
-        let color: Color = on ? .white : faded
-        return Text(label).font(RealFont.inter(on ? 14 : 12)).foregroundStyle(color).lineLimit(1)
-            .environment(\.layoutDirection, .leftToRight)
-            .padding(.vertical, 6).contentShape(Rectangle())
-            .visualEffect { content, proxy in
-                // Only the chosen word stays; the others fade out as they move away from the edge.
-                let x: CGFloat = proxy.frame(in: .scrollView).minX
-                let fade = Double(max(0, 1 - abs(x) / 90))
-                return content.opacity(fade)
-            }
-            .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { position = i } }
-            .id(i)
+struct RateChip: View {
+    let label: String
+    let on: Bool
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Text(label).font(RealFont.inter(13, on ? .semibold : .regular)).foregroundStyle(on ? .black : .white).lineLimit(1).fixedSize()
+                .padding(.horizontal, 14).frame(height: 34)
+                .background(Capsule().fill(on ? Color.white : .clear))
+                .overlay(Capsule().strokeBorder(on ? .clear : .white.opacity(0.18), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
-private struct RatingRow: View {
-    let entry: RatingEntry
-    let avg: Double?
-    let now: Int64
-    let onTap: () -> Void
+/// "N tanesi puan bekliyor": watched films with no score yet, three covers fanned out.
+private struct RatingsWaitingCard: View {
+    let waiting: [RatingEntry]
+    var action: () -> Void
     var body: some View {
-        let v = entry.value
-        let tone = ratingColors(v).bg
-        let diff = v.flatMap { v in avg.map { v - $0 } }
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                PosterArtwork(media: entry.media, titleSize: 6).frame(width: 36, height: 52).clipShape(RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
-                        Text(entry.media.title).font(RealFont.inter(14)).foregroundStyle(.white).lineLimit(1)
-                        if entry.series {
-                            Text(t("dizi")).font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF9A9A9A)).padding(.horizontal, 5).padding(.vertical, 1)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(argb: 0xFF333333), lineWidth: 1))
-                        }
-                        Spacer(minLength: 4)
-                        Text(v.map(scoreText) ?? (entry.series ? t("Bölümleri puanla") : t("Puan ver")))
-                            .font(RealFont.inter(v != nil ? 15 : 12, .medium)).foregroundStyle(v != nil ? tone : Color(argb: 0xFF9A9A9A))
+        let tone = YasamPart.rate.glow
+        let n = min(waiting.count, 3)
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ZStack(alignment: .leading) {
+                    ForEach(Array(waiting.prefix(3).enumerated()), id: \.offset) { i, e in
+                        PosterArtwork(media: e.media, titleSize: 6).frame(width: 40, height: 56)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(argb: 0xFF0D0D0D), lineWidth: 2))
+                            .offset(x: CGFloat(26 * i))
                     }
-                    GeometryReader { geo in
-                        let half = geo.size.width / 2
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color(argb: 0xFF161616))
-                            if let diff {
-                                let w = half * min(abs(diff) / 4.6, 1)
-                                Capsule().fill(tone).frame(width: w).offset(x: diff >= 0 ? half : half - w)
-                            }
-                            Rectangle().fill(Color(argb: 0xFF444444)).frame(width: 1).offset(x: half)
-                        }
-                    }
-                    .frame(height: 6).padding(.top, 7)
-                    let when: String = entry.addedAt.map { at in
-                        let f = DateFormatter(); f.dateFormat = "dd.MM"
-                        return f.string(from: Date(timeIntervalSince1970: Double(at) / 1000))
-                    } ?? t("eskiden")
-                    Text([diff.map { ($0 >= 0 ? "+" : "−") + scoreText(round1(abs($0))) }, when].compactMap { $0 }.joined(separator: " · "))
-                        .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF666666)).padding(.top, 3)
                 }
+                .frame(width: CGFloat(40 + 26 * (n - 1)), height: 56, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t("{0} tanesi puan bekliyor", waiting.count)).font(RealFont.inter(17, .semibold)).foregroundStyle(.white)
+                    Text(t("İzledim dediklerin · hızlıca puanla")).font(RealFont.inter(13)).foregroundStyle(YasamTone.muted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("›").font(RealFont.inter(24, .bold)).foregroundStyle(.black).frame(width: 40, height: 40).background(Circle().fill(.white))
             }
-            .padding(.vertical, 7).contentShape(Rectangle())
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(rateCard))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(tone.light.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
 }
 
-/// Series page: big poster, the poster's light behind, then seasons × episodes. Tap an episode to rate it, a season
-/// label to rate all of it.
-private struct SeriesGrid: View {
+/// "ZEVKİN": how the scores spread over 1–10, the best genre and where the person is most generous.
+private struct RatingsTasteCard: View {
+    let rated: [RatingEntry]
+    var body: some View {
+        let values = rated.compactMap(\.value)
+        let avg = mean(values) ?? 0
+        let counts = (1...10).map { n in values.filter { min(max(Int($0.rounded()), 1), 10) == n }.count }
+        let maxC = max(counts.max() ?? 1, 1)
+        let mine = min(max(Int(avg.rounded()), 1), 10)
+        var byGenre: [String: [Double]] = [:]
+        for e in rated { if let v = e.value { for g in genresOf(e) { byGenre[g, default: []].append(v) } } }
+        let best = byGenre.filter { $0.value.count >= 2 }.mapValues { $0.reduce(0, +) / Double($0.count) }.max { $0.value < $1.value }
+        let films = rated.filter { !$0.series }.compactMap(\.value)
+        let series = rated.filter(\.series).compactMap(\.value)
+        let generous: String? = {
+            guard let fa = mean(films), let sa = mean(series) else { return nil }
+            let d = sa - fa
+            return d >= 0 ? t("Diziler") + " · +" + f1(d) : t("Filmler") + " · +" + f1(-d)
+        }()
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .lastTextBaseline) {
+                YasamCaps(text: t("ZEVKİN"))
+                Spacer()
+                Text(t("puan dağılımı")).font(RealFont.inter(12)).foregroundStyle(YasamTone.muted)
+            }
+            HStack(alignment: .bottom, spacing: 5) {
+                ForEach(0..<10, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 6, style: .continuous).fill(ratingColors(Double(i + 1)).bg)
+                        .frame(height: 4 + 88 * CGFloat(counts[i]) / CGFloat(maxC)).frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 96, alignment: .bottom).padding(.top, 12)
+            HStack(spacing: 5) {
+                ForEach(1...10, id: \.self) { n in
+                    Text("\(n)").font(RealFont.inter(11, n == mine ? .bold : .regular)).foregroundStyle(n == mine ? .white : YasamTone.muted)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.top, 6)
+            if best != nil || generous != nil {
+                HStack(spacing: 8) {
+                    if let best { fact(t("En sevdiğin tür"), "\(best.key) · \(f1(best.value))") }
+                    if let generous { fact(t("En cömert olduğun"), generous) }
+                }
+                .padding(.top, 14)
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(rateCard))
+    }
+
+    private func fact(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(RealFont.inter(11)).foregroundStyle(YasamTone.muted)
+            Text(value).font(RealFont.inter(15, .semibold)).foregroundStyle(.white).lineLimit(1)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(rateCard))
+    }
+}
+
+/// "ZİRVE": the three highest scores, the first one in the middle and taller.
+private struct RatingsTopThree: View {
+    let top: [RatingEntry]
+    var onOpen: (RatingEntry) -> Void
+    var body: some View {
+        let order = top.count == 3 ? [top[1], top[0], top[2]] : top
+        VStack(alignment: .leading, spacing: 0) {
+            YasamCaps(text: t("ZİRVE")).padding(.leading, 4).padding(.bottom, 8)
+            HStack(alignment: .bottom, spacing: 10) {
+                ForEach(order) { e in
+                    let first = e.key == top.first?.key
+                    let c = ratingColors(e.value)
+                    Button { onOpen(e) } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Color.clear.frame(height: first ? 180 : 150)
+                                .overlay { PosterArtwork(media: e.media, titleSize: 8) }
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay(alignment: .bottomLeading) {
+                                    Text(e.value.map(scoreText) ?? "").font(RealFont.inter(13, .heavy)).foregroundStyle(c.fg)
+                                        .padding(.horizontal, 8).padding(.vertical, 3)
+                                        .background(RoundedRectangle(cornerRadius: 10).fill(c.bg)).padding(8)
+                                }
+                            Text(e.media.title).font(RealFont.inter(12, .semibold)).foregroundStyle(.white).lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+}
+
+/// One title in the list: poster, title and when, how it stands against the person's average, and the score.
+private struct RatingCardRow: View {
+    let entry: RatingEntry
+    let avg: Double?
+    var action: () -> Void
+    var body: some View {
+        let v = entry.value
+        let c = ratingColors(v)
+        let when: String = entry.addedAt.map { at in
+            let f = DateFormatter()
+            f.locale = I18n.locale
+            f.dateFormat = "d MMMM"
+            return f.string(from: at.date)
+        } ?? t("eskiden")
+        Button(action: action) {
+            HStack(spacing: 0) {
+                PosterArtwork(media: entry.media, titleSize: 6).frame(width: 44, height: 62).clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.media.title).font(RealFont.inter(15, .semibold)).foregroundStyle(.white).lineLimit(1)
+                    Text((entry.series ? t("Dizi") : t("Film")) + " · " + when).font(RealFont.inter(12)).foregroundStyle(YasamTone.muted)
+                    if let v, let avg {
+                        let diff = round1(v - avg)
+                        Text((diff >= 0 ? "+" : "−") + scoreText(abs(diff)) + " " + t("ortalamana göre")).font(RealFont.inter(12))
+                            .foregroundStyle(diff >= 0 ? Color(argb: 0xFFC9E27A) : Color(argb: 0xFFF3A7AB)).padding(.top, 2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                if let v {
+                    Text(scoreText(v)).font(RealFont.inter(20, .heavy)).foregroundStyle(c.fg)
+                        .frame(width: 54, height: 44).background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(c.bg))
+                } else {
+                    Text(entry.series ? t("Bölümleri puanla") : t("Puan ver")).font(RealFont.inter(12)).foregroundStyle(YasamTone.muted)
+                }
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(rateCard))
+            .contentShape(RoundedRectangle(cornerRadius: 20))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Hızlı puanla: one waiting title at a time on the full-screen rater. Atla goes to the next, Kaydet saves.
+private struct QuickRateScreen: View {
+    let waiting: [RatingEntry]
+    let avg: Double?
+    var onClose: () -> Void
+    @State private var skipped: Set<String> = []
+    @State private var done: Set<String> = []
+
+    var body: some View {
+        let queue = waiting.filter { !skipped.contains($0.key) && !done.contains($0.key) }
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if let current = queue.first {
+                RateFullScreen(media: current.media, meta: [current.media.year.map(String.init), t("Film")].compactMap { $0 }.joined(separator: " · "),
+                               initial: nil, avg: avg, progress: t("{0} kaldı", queue.count), skipLabel: t("Atla"),
+                               onSkip: { withAnimation(.easeOut(duration: 0.25)) { _ = skipped.insert(current.key) } },
+                               onSave: { v in
+                                   MediaRatingStore.shared.rate(current.media, v, past: current.addedAt == nil)
+                                   withAnimation(.easeOut(duration: 0.25)) { _ = done.insert(current.key) }
+                               },
+                               onClose: onClose, loadSummary: true)
+                    .id(current.key)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity)))
+            } else {
+                Color.clear.onAppear { onClose() }
+            }
+        }
+    }
+}
+
+/// The full-screen rater: big cover (tap it for the description, as it comes), the score and its verdict, a sliding
+/// ruler of 0,1 steps in the score colours and a background that takes the score's colour. Used by Hızlı puanla,
+/// "İzledim" in Keşfet and a title tapped in Puanla. [onSkip] is the left button (Atla / Vazgeç / Puanı kaldır).
+struct RateFullScreen: View {
+    let media: MediaBlock
+    let meta: String
+    let initial: Double?
+    let avg: Double?
+    let progress: String?
+    let skipLabel: String
+    var onSkip: () -> Void
+    var onSave: (Double) -> Void
+    var onClose: () -> Void
+    var summary: String? = nil
+    var loadSummary = false
+    @State private var score: Double?
+    @State private var reading = false
+    @State private var loaded: String?
+
+    var body: some View {
+        let s = score ?? initial ?? 8
+        let c = ratingColors(s)
+        let about = (loaded ?? summary).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        let numberColor: Color = s >= 9 ? Color(argb: 0xFFD9F27A) : s > 8 ? Color(argb: 0xFFC9E27A) : c.fg
+        ZStack {
+            Color.black.ignoresSafeArea()
+            RadialGradient(colors: [c.bg.opacity(0.8), .black], center: .center, startRadius: 0, endRadius: 560)
+                .ignoresSafeArea().animation(.easeOut(duration: 0.22), value: s)
+            VStack(spacing: 0) {
+                HStack {
+                    YasamBackButton(label: t("Kapat"), action: onClose)
+                    Spacer()
+                    if let progress { Text(progress).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.7)).lineLimit(1) }
+                    Spacer()
+                    Color.clear.frame(width: 40, height: 40)
+                }
+                .padding(.horizontal, 20)
+                // The poster takes all the height that is left (2 : 3), so tall phones get a big cover.
+                ZStack(alignment: .bottomLeading) {
+                    PosterArtwork(media: media, titleSize: 16)
+                    LinearGradient(stops: [.init(color: .clear, location: 0.6), .init(color: .black.opacity(0.85), location: 1)], startPoint: .top, endPoint: .bottom)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(media.title).font(RealFont.inter(24, .bold)).foregroundStyle(.white).lineLimit(2)
+                        Text(meta).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
+                    }
+                    .padding(16)
+                    if about != nil && !reading {
+                        Text("i").font(RealFont.inter(14, .bold)).foregroundStyle(.white).frame(width: 28, height: 28)
+                            .background(Circle().fill(.black.opacity(0.45))).padding(12)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .accessibilityLabel(t("Açıklama"))
+                    }
+                    if reading, let about {
+                        ScrollView {
+                            Text(about).font(RealFont.inter(14)).foregroundStyle(.white.opacity(0.92)).lineSpacing(4)
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(18)
+                        }
+                        .background(Color.black.opacity(0.86))
+                        .transition(.opacity)
+                    }
+                }
+                .aspectRatio(2 / 3, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .shadow(color: .black.opacity(0.5), radius: 24, y: 10)
+                .contentShape(RoundedRectangle(cornerRadius: 26))
+                .onTapGesture { if about != nil { withAnimation(.easeInOut(duration: 0.18)) { reading.toggle() } } }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 28).padding(.vertical, 12)
+                HStack(alignment: .lastTextBaseline, spacing: 0) {
+                    Text(scoreText(s)).font(RealFont.inter(64, .heavy)).foregroundStyle(numberColor).contentTransition(.numericText())
+                    Text("  " + verdict(s)).font(RealFont.inter(16, .semibold)).foregroundStyle(.white.opacity(0.85))
+                }
+                .animation(.snappy(duration: 0.2), value: s)
+                ScoreRuler(score: Binding(get: { s }, set: { score = $0 })).padding(.top, 10)
+                HStack {
+                    Text(t("Beğenmedim")).frame(maxWidth: .infinity, alignment: .leading)
+                    if let avg { Text(t("Ortalaman {0}", f1(avg))) }
+                    Text(t("Efsane")).frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.6))
+                .padding(.horizontal, 20).padding(.top, 8)
+                HStack(spacing: 10) {
+                    Button(action: onSkip) {
+                        Text(skipLabel).font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).frame(height: 52)
+                            .background(Capsule().fill(.black.opacity(0.25)))
+                            .overlay(Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        onSave(s)
+                    } label: {
+                        Text(t("Kaydet")).font(RealFont.inter(15, .bold)).foregroundStyle(.black)
+                            .frame(maxWidth: .infinity).frame(height: 52).background(Capsule().fill(.white))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 8)
+            }
+            .padding(.vertical, 8)
+        }
+        .task(id: media.id) {
+            guard loadSummary, media.type == .MOVIE else { return }
+            loaded = await MediaRatingStore.shared.filmSummary(media)
+        }
+    }
+}
+
+/// The score as a ruler, like the sky poster's clock: 1–10 slides under a fixed centre line, a tick every 0,1, taller on
+/// the halves and tallest with a number on the whole points, each tick in its score colour. Ticks swell near the
+/// centre; a fling glides and lands on the nearest 0,1, and every 0,1 passed ticks under the thumb.
+struct ScoreRuler: View {
+    @Binding var score: Double
+    @State private var position: Double?
+    @State private var dragStart: Double?
+    private let pxPerTenth: CGFloat = 11
+
+    var body: some View {
+        let pos = position ?? score * 10
+        RulerTicks(position: pos, pxPerTenth: pxPerTenth)
+            .frame(maxWidth: .infinity).frame(height: 86)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 2)
+                    .onChanged { g in
+                        if dragStart == nil { dragStart = pos }
+                        let next = min(max(dragStart! - Double(g.translation.width / pxPerTenth), 10), 100)
+                        position = next
+                        report(next)
+                    }
+                    .onEnded { g in
+                        let fling = Double((g.predictedEndTranslation.width - g.translation.width) / pxPerTenth) * 0.6
+                        let target = min(max((pos - fling).rounded(), 10), 100)
+                        dragStart = nil
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.9)) { position = target }
+                        report(target)
+                    }
+            )
+            .onTapGesture(coordinateSpace: .local) { p in
+                // A tap jumps to the tick under the finger.
+                let width = UIScreen.main.bounds.width
+                let target = min(max((pos + Double((p.x - width / 2) / pxPerTenth)).rounded(), 10), 100)
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) { position = target }
+                report(target)
+            }
+            .onChange(of: score) { _, v in
+                if dragStart == nil, abs((position ?? v * 10) - v * 10) > 0.5 { position = v * 10 }
+            }
+            .accessibilityElement()
+            .accessibilityLabel(t("Puan {0}", scoreText(score)))
+            .accessibilityAdjustableAction { dir in
+                let next = min(max(score * 10 + (dir == .increment ? 1 : -1), 10), 100)
+                position = next
+                score = next / 10
+            }
+    }
+
+    private func report(_ v: Double) {
+        let tenth = min(max(Int(v.rounded()), 10), 100)
+        if tenth != Int((score * 10).rounded()) {
+            UISelectionFeedbackGenerator().selectionChanged()
+            score = Double(tenth) / 10
+        }
+    }
+}
+
+/// The ruler's drawing; Animatable so a fling's glide is drawn frame by frame.
+private struct RulerTicks: View, Animatable {
+    var position: Double
+    let pxPerTenth: CGFloat
+    var animatableData: Double {
+        get { position }
+        set { position = newValue }
+    }
+
+    var body: some View {
+        Canvas { ctx, size in
+            let cx = size.width / 2
+            let half = size.width / 2
+            let base = size.height * 0.58
+            let visible = Int(half / pxPerTenth) + 2
+            var k = max(Int(position) - visible, 10)
+            while k <= min(Int(position) + visible, 100) {
+                let x = cx + CGFloat(Double(k) - position) * pxPerTenth
+                let near = 1 - min(max(abs(x - cx) / half, 0), 1)
+                let whole = k % 10 == 0
+                let halfPt = k % 5 == 0
+                let v = Double(k) / 10
+                let tone = v <= 5 ? Color(argb: 0xFFC0505A) : ratingColors(v).bg
+                let len = (whole ? 34 : halfPt ? 22 : 13) * (0.7 + 0.5 * near)
+                var line = Path()
+                line.move(to: CGPoint(x: x, y: base - len))
+                line.addLine(to: CGPoint(x: x, y: base))
+                ctx.stroke(line, with: .color(tone.opacity((0.25 + 0.75 * near) * (whole ? 1 : 0.8))),
+                           style: StrokeStyle(lineWidth: whole ? 3 : 1.6, lineCap: .round))
+                if whole {
+                    ctx.draw(Text("\(k / 10)").font(RealFont.inter(13, .bold)).foregroundStyle(.white.opacity(0.35 + 0.65 * near)),
+                             at: CGPoint(x: x, y: base + 20))
+                }
+                k += 1
+            }
+            // The fixed centre, where the score above is read.
+            var centre = Path()
+            centre.move(to: CGPoint(x: cx, y: base - 46))
+            centre.addLine(to: CGPoint(x: cx, y: base + 4))
+            ctx.stroke(centre, with: .color(.white), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            ctx.fill(Path(ellipseIn: CGRect(x: cx - 4, y: base - 54, width: 8, height: 8)), with: .color(.white))
+        }
+    }
+}
+
+/// Series page: the poster fills a rounded top box with the title, how many episodes are scored and the series score;
+/// season chips; 5-wide episode tiles in the score colours (a "+" outline when not scored); the best episode and how
+/// the scores move; a quiet "Listeden çıkar" with a confirm sheet.
+private struct SeriesPage: View {
     let entry: RatingEntry
     let onBack: () -> Void
     let onRate: (RateTarget) -> Void
@@ -290,78 +647,167 @@ private struct SeriesGrid: View {
     @State private var confirmRemove = false
     @State private var episodes: [SeriesEpisode]?
     @State private var error: String?
+    @State private var season: Int?
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            screenBg.ignoresSafeArea()
-            if let u = entry.media.artworkUrl.flatMap(URL.init(string:)) {
-                AsyncImage(url: u) { p in if let i = p.image { i.resizable().scaledToFill() } }
-                    .frame(maxWidth: .infinity).frame(height: 420).clipped().blur(radius: 60).opacity(0.45)
-                    .overlay(LinearGradient(colors: [.clear, screenBg], startPoint: .top, endPoint: .bottom))
-                    .ignoresSafeArea()
-            }
+        let all = episodes ?? []
+        let bySeason = Dictionary(grouping: all, by: \.season).sorted { $0.key < $1.key }
+        let scored = all.filter { entry.episodes[$0.key] != nil }
+        ZStack(alignment: .top) {
+            Color.black.ignoresSafeArea()
             ScrollView {
-                VStack(spacing: 0) {
-                    PosterArtwork(media: entry.media, titleSize: 12).frame(width: 132, height: 192)
-                        .clipShape(RoundedRectangle(cornerRadius: 14)).padding(.top, 58)
-                    Text(entry.media.title).font(RealFont.inter(24)).foregroundStyle(.white).multilineTextAlignment(.center).lineLimit(2).padding(.top, 16)
-                    Text([entry.media.year.map(String.init), episodes.map { t("{0} sezon · {1} bölüm", Set($0.map(\.season)).count, $0.count) } ?? t("Bölümler yükleniyor…")]
-                        .compactMap { $0 }.joined(separator: " · "))
-                        .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF999999)).padding(.top, 4)
-                    HStack(alignment: .lastTextBaseline, spacing: 0) {
-                        Text(entry.value.map(scoreText) ?? "–").font(RealFont.inter(44, .medium))
-                            .foregroundStyle(entry.value != nil ? ratingColors(entry.value).bg : Color(argb: 0xFF555555))
-                        Text(entry.value != nil ? t("  bölüm ortalaman") : t("  henüz bölüm puanı yok")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF888888))
-                    }
-                    .padding(.top, 14).padding(.bottom, 22)
-                    if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)).padding(.bottom, 12) }
-                    let bySeason = Dictionary(grouping: episodes ?? [], by: \.season).sorted { $0.key < $1.key }
-                    ForEach(bySeason, id: \.key) { pair in
-                        let season = pair.key, eps = pair.value
-                        let scores = eps.compactMap { entry.episodes[$0.key] }
-                        let sAvg = scores.isEmpty ? nil : scores.reduce(0, +) / Double(scores.count)
-                        HStack(alignment: .top, spacing: 0) {
-                            Text("S\(season)").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF888888))
-                                .frame(width: 30, height: 30, alignment: .leading).contentShape(Rectangle())
-                                .onTapGesture { onRate(.season(entry.media, season, eps)) }
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 30, maximum: 30), spacing: 5)], alignment: .leading, spacing: 5) {
-                                ForEach(eps) { ep in
-                                    let score = entry.episodes[ep.key]
-                                    let c = ratingColors(score)
-                                    Text(score.map { String(Int($0)) } ?? "·").font(RealFont.inter(11, .medium)).foregroundStyle(c.fg)
-                                        .frame(width: 30, height: 30).background(RoundedRectangle(cornerRadius: 8).fill(c.bg))
-                                        .onTapGesture { onRate(.episode(entry.media, ep, initial: score)) }
+                VStack(alignment: .leading, spacing: 0) {
+                    hero(seasons: bySeason.count, scored: scored.count, total: all.count)
+                    if let error { Text(error).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFB4AB)).padding(16) }
+                    if bySeason.count > 1 {
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 6) {
+                                RateChip(label: t("Hepsi"), on: season == nil) { season = nil }
+                                ForEach(bySeason, id: \.key) { pair in
+                                    let sAvg = mean(pair.value.compactMap { entry.episodes[$0.key] })
+                                    RateChip(label: t("{0}. sezon", pair.key) + (sAvg.map { " · " + f1($0) } ?? ""), on: season == pair.key) { season = pair.key }
                                 }
                             }
-                            Text(sAvg.map { scoreText(round1($0)) } ?? "–").font(RealFont.inter(13, .medium))
-                                .foregroundStyle(sAvg != nil ? ratingColors(sAvg).bg : Color(argb: 0xFF555555))
-                                .frame(width: 38, height: 30, alignment: .trailing)
+                            .padding(.horizontal, 16)
                         }
-                        .padding(.bottom, 8)
+                        .scrollIndicators(.hidden)
+                        .padding(.top, 16)
                     }
-                    if !(episodes ?? []).isEmpty {
-                        HStack(spacing: 8) {
-                            Text(t("Kötü")); Capsule().fill(LinearGradient(colors: ratingScale, startPoint: .leading, endPoint: .trailing)).frame(height: 6); Text(t("Efsane"))
-                        }
-                        .font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF777777)).padding(.top, 10)
-                    }
+                    grid(bySeason)
+                    if scored.count >= 2 { facts(all) }
                     Button { confirmRemove = true } label: {
-                        Text(t("Listeden çıkar")).font(RealFont.inter(14)).foregroundStyle(Color(argb: 0xFFFF8A80)).padding(.vertical, 8)
+                        Text(t("Listeden çıkar")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFFF8A80))
+                            .padding(.horizontal, 16).padding(.vertical, 9)
+                            .background(Capsule().fill(Color(argb: 0xFFFF8A80).opacity(0.08)))
                     }
-                    .buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 28).padding(.bottom, 40)
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 20).padding(.bottom, 36)
                 }
-                .padding(.horizontal, 20)
+                .animation(.easeOut(duration: 0.25), value: season)
             }
             .scrollIndicators(.hidden)
-            BackCircle(action: onBack).padding(.leading, 20).padding(.top, 10)
+            .ignoresSafeArea(edges: .top)
         }
-        .alert(t("Diziyi listeden çıkarmak istediğine emin misin?"), isPresented: $confirmRemove) {
-            Button(t("Çıkar"), role: .destructive, action: onRemove)
-            Button(t("Vazgeç"), role: .cancel) {}
-        } message: { Text(t("{0} ve bölüm puanları Puanlarım'dan silinir.", entry.media.title)) }
+        .overlay {
+            if confirmRemove {
+                ConfirmSheet(title: t("Diziyi listeden çıkarmak istediğine emin misin?"),
+                             message: t("{0} ve bölüm puanları Puanlarım'dan silinir.", entry.media.title),
+                             confirmLabel: t("Çıkar"), onDismiss: { confirmRemove = false }, onConfirm: onRemove)
+            }
+        }
         .task(id: entry.key) {
             do { episodes = try await MediaRatingStore.shared.episodes(entry.media) } catch { self.error = error.localizedDescription; episodes = [] }
         }
+    }
+
+    private func hero(seasons: Int, scored: Int, total: Int) -> some View {
+        GeometryReader { g in
+            let top = g.safeAreaInsets.top
+            ZStack(alignment: .bottomLeading) {
+                PosterArtwork(media: entry.media, titleSize: 16)
+                LinearGradient(stops: [.init(color: .black.opacity(0.15), location: 0.3), .init(color: .black.opacity(0.88), location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.media.title).font(RealFont.inter(30, .bold)).foregroundStyle(.white).lineLimit(2)
+                        Text(episodes == nil ? t("Bölümler yükleniyor…") : t("Dizi · {0} sezon · {1} / {2} bölüm puanlı", seasons, scored, total))
+                            .font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.75))
+                        if let at = entry.addedAt {
+                            Text(t("Eklendi: {0}", Self.longDate(at))).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.6))
+                        }
+                    }
+                    Spacer(minLength: 10)
+                    if let v = entry.value {
+                        let c = ratingColors(v)
+                        Text(f1(v)).font(RealFont.inter(26, .heavy)).foregroundStyle(c.fg)
+                            .padding(.horizontal, 12).padding(.vertical, 4).background(RoundedRectangle(cornerRadius: 14).fill(c.bg))
+                    }
+                }
+                .padding(.horizontal, 22).padding(.bottom, 18)
+            }
+            .frame(width: g.size.width, height: 250 + top)
+            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 34, bottomTrailingRadius: 34, style: .continuous))
+            .overlay(alignment: .topLeading) {
+                YasamBackButton(label: t("Puanla'ya dön"), action: onBack).padding(.leading, 16).padding(.top, top + 8)
+            }
+        }
+        .frame(height: 250 + topInset)
+    }
+
+    private var topInset: CGFloat {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first?.safeAreaInsets.top ?? 47
+    }
+
+    private static func longDate(_ at: EpochMillis) -> String {
+        let f = DateFormatter()
+        f.locale = I18n.locale
+        f.dateFormat = "d MMMM yyyy"
+        return f.string(from: at.date)
+    }
+
+    private func grid(_ bySeason: [(key: Int, value: [SeriesEpisode])]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(bySeason.filter { season == nil || $0.key == season }, id: \.key) { pair in
+                HStack {
+                    YasamCaps(text: t("{0}. SEZON", pair.key))
+                    Spacer()
+                    Button { onRate(.season(entry.media, pair.key, pair.value)) } label: {
+                        Text(t("Sezonu puanla")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7)).padding(.horizontal, 8).padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.bottom, 8)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
+                    ForEach(pair.value) { ep in tile(ep) }
+                }
+                .padding(.bottom, 12)
+            }
+            Text(episodes == nil ? t("Bölümler yükleniyor…") : t("Boş kutuya dokun: o bölümü puanla.")).font(RealFont.inter(12)).foregroundStyle(YasamTone.muted)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(rateCard))
+        .padding(16)
+    }
+
+    private func tile(_ ep: SeriesEpisode) -> some View {
+        let v = entry.episodes[ep.key]
+        let c = ratingColors(v)
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        return Button { onRate(.episode(entry.media, ep, initial: v)) } label: {
+            VStack(spacing: 0) {
+                Text("B\(ep.number)").font(RealFont.inter(10)).foregroundStyle(v != nil ? c.fg.opacity(0.8) : YasamTone.muted)
+                Text(v.map(scoreText) ?? "+").font(RealFont.inter(16, .heavy)).foregroundStyle(v != nil ? c.fg : YasamTone.muted)
+            }
+            .frame(maxWidth: .infinity).frame(height: 52)
+            .background(shape.fill(v != nil ? c.bg : .clear))
+            .overlay(shape.strokeBorder(v != nil ? .clear : .white.opacity(0.25), lineWidth: 1))
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func facts(_ all: [SeriesEpisode]) -> some View {
+        let ordered = all.compactMap { ep in entry.episodes[ep.key].map { (ep, $0) } }
+        let best = ordered.max { $0.1 < $1.1 }!
+        let half = ordered.count / 2
+        let trend = (mean(ordered.dropFirst(half).map(\.1)) ?? 0) - (mean(ordered.prefix(half).map(\.1)) ?? 0)
+        return HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(t("En iyi bölüm")).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFFC9E27A))
+                Text("S\(best.0.season) · B\(best.0.number) · \(scoreText(best.1))").font(RealFont.inter(16, .bold)).foregroundStyle(.white).lineLimit(1)
+            }
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(argb: 0xFFD9F27A).opacity(0.1)))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color(argb: 0xFFD9F27A).opacity(0.3), lineWidth: 1))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(t("Gidişat")).font(RealFont.inter(11)).foregroundStyle(YasamTone.muted)
+                Text(trend > 0.3 ? t("Yükseliyor ↗") : trend < -0.3 ? t("Düşüyor ↘") : t("Sabit →")).font(RealFont.inter(16, .bold)).foregroundStyle(.white)
+            }
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(rateCard))
+        }
+        .padding(.horizontal, 16)
     }
 }
 
