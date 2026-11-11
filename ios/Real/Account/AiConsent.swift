@@ -5,13 +5,14 @@ import UIKit
 @MainActor
 enum AiConsent {
     enum Feature: String {
-        case voice, mood, discovery
+        case voice, mood, discovery, drinks
 
         var title: String {
             switch self {
             case .voice: return t("Sesli komutları AI ile işle")
             case .mood: return t("AI ile öneriler al")
             case .discovery: return t("AI ile keşfet")
+            case .drinks: return t("Fotoğraftan tanı")
             }
         }
         var disclosure: String {
@@ -19,6 +20,7 @@ enum AiConsent {
             case .voice: return t("Komut cihazında çözülemediğinde konuşma metnin ve gerekli kart bilgileri harici AI hizmeti Groq’a gönderilir. AI işlemleri hata yapabilir.")
             case .mood: return t("Seçtiğin duygu ve öneri tercihleri harici AI hizmeti Groq’a gönderilir. AI önerileri hata içerebilir.")
             case .discovery: return t("Seçtiğin filtreler ve önceki öneri başlıkları harici AI hizmetleri Google Gemini veya Groq’a gönderilir. AI önerileri hata içerebilir.")
+            case .drinks: return t("İçki fotoğrafın küçültülerek harici AI hizmeti Groq’a gönderilir ve saklanmaz. AI önerisi hata içerebilir.")
             }
         }
     }

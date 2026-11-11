@@ -1,122 +1,135 @@
 import SwiftUI
 
-/// MoodTrackerHistoryScreen.kt: "Yeni bir iz bırak" card on top, then every entry grouped by day.
+/// MoodTrackerHistoryScreen.kt: the same page as Günlük — glow top up to the status bar, a card to add, the month
+/// calendar, then entries with a date margin; home moods slide left to delete. A tap opens an entry's details.
 struct MoodHistoryScreen: View {
     let onAdd: () -> Void
+    var onClose: (() -> Void)? = nil
     @Environment(LifeStore.self) private var life
     @Environment(\.dismiss) private var dismiss
+    @State private var swipeOpen: String?
+    @State private var open: Set<Int64> = []
 
     var body: some View {
         let sorted = life.moods.sorted { $0.details.loggedAt > $1.details.loggedAt }
-        let accent = sorted.first.map { MoodV2.tint($0.mood) } ?? Color(argb: 0xFF9AA8FF)
-        let groups = Self.group(sorted)
+        let tone = YasamPart.mood.glow
+        let cal = Calendar.real
         ZStack(alignment: .top) {
-            LinearGradient(colors: [Color.black.blend(accent, by: 0.2), Color(argb: 0xFF08090C), .black], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-            VStack(spacing: 0) {
-                HStack {
-                    BackCircle { dismiss() }.accessibilityLabel("Geri")
-                    Spacer()
-                    Text(t("Moodlar")).font(RealFont.inter(18, .semibold)).foregroundStyle(Color(argb: 0xFFF4F4F6))
-                    Spacer()
-                    Color.clear.frame(width: 40, height: 40)
-                }
-                .padding(.horizontal, 18).padding(.vertical, 10)
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        addCard(accent)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(t("Geçmiş izlerin")).font(RealFont.inter(22, .semibold)).foregroundStyle(Color(argb: 0xFFF3F3F5))
-                            Text(sorted.isEmpty ? t("Henüz bir mood kaydın yok.") : t("Moodların günlere göre birlikte gösteriliyor."))
-                                .font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF85858E))
-                        }
-                        .padding(.top, 10).padding(.bottom, 2)
-                        ForEach(groups, id: \.0) { day, entries in
-                            HStack {
-                                Text(Self.dayTitle(day)).font(RealFont.inter(17, .semibold)).foregroundStyle(Color(argb: 0xFFF0F0F3))
-                                Spacer()
-                                Text(t("{0} iz", entries.count)).font(RealFont.inter(11)).foregroundStyle(Color(argb: 0xFF777780))
-                            }
-                            .padding(.top, 12).padding(.bottom, 1)
-                            ForEach(entries) { entryCard($0) }
-                        }
+            Color.black.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    YasamDiscoveryHero(title: t("Moods"), tone: tone, caption: t("{0} iz", sorted.count), onBack: close)
+                    addCard(tone).padding(.horizontal, 16).padding(.top, 14)
+                    if sorted.isEmpty {
+                        Text(t("Henüz bir mood kaydın yok.")).font(RealFont.inter(14)).foregroundStyle(YasamTone.muted)
+                            .padding(.leading, 20).padding(.top, 18)
+                    } else {
+                        HistoryMonthCard(items: sorted.map { HistoryItem(at: $0.details.loggedAt, color: MoodV2.tint($0.mood), photo: nil, group: $0.mood.rawValue) })
+                            .padding(.horizontal, 16).padding(.top, 12)
                     }
-                    .padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 34)
+                    ForEach(Array(sorted.enumerated()), id: \.element.id) { i, entry in
+                        let at = entry.details.loggedAt.date
+                        let prev = i > 0 ? sorted[i - 1].details.loggedAt.date : nil
+                        if prev == nil || !cal.isDate(prev!, equalTo: at, toGranularity: .month) {
+                            YasamCaps(text: Self.monthYear(at)).padding(.leading, 20).padding(.top, 22).padding(.bottom, 8)
+                        }
+                        let firstOfDay = prev == nil || !cal.isDate(prev!, inSameDayAs: at)
+                        SwipeDeleteRow(id: "mood_\(entry.id)", openId: $swipeOpen, radius: 20, surface: Color(argb: 0xFF0D0D0D),
+                                       onDelete: { withAnimation(.snappy) { life.removeMood(entry.id) } }) {
+                            entryCard(entry, day: firstOfDay ? at : nil)
+                        }
+                        .padding(.horizontal, 16).padding(.bottom, 8)
+                    }
+                    Color.clear.frame(height: 34)
                 }
-                .scrollIndicators(.hidden)
             }
+            .scrollIndicators(.hidden)
         }
     }
 
-    private static func group(_ entries: [MoodTrackerEntry]) -> [(Date, [MoodTrackerEntry])] {
-        let cal = Calendar.real
-        var order: [Date] = []
-        var map: [Date: [MoodTrackerEntry]] = [:]
-        for e in entries {
-            let day = cal.startOfDay(for: Date(timeIntervalSince1970: Double(e.details.loggedAt) / 1000))
-            if map[day] == nil { order.append(day) }
-            map[day, default: []].append(e)
-        }
-        return order.map { ($0, map[$0]!) }
-    }
+    private func close() { if let onClose { onClose() } else { dismiss() } }
 
-    private static func dayTitle(_ day: Date) -> String {
-        let cal = Calendar.real
-        if cal.isDateInToday(day) { return t("Bugün") }
-        if cal.isDateInYesterday(day) { return t("Dün") }
+    private static func monthYear(_ d: Date) -> String {
         let f = DateFormatter()
         f.locale = I18n.locale
-        f.dateFormat = "d MMMM · EEEE"
-        return f.string(from: day)
+        f.dateFormat = "LLLL yyyy"
+        return f.string(from: d).uppercased(with: I18n.locale)
     }
 
-    private func addCard(_ accent: Color) -> some View {
+    private func addCard(_ tone: YasamGlowTone) -> some View {
         Button(action: onAdd) {
-            HStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(t("Yeni bir iz bırak")).font(RealFont.inter(24, .medium)).foregroundStyle(.white)
-                    Text(t("Şu an nasıl hissediyorsun ya da bugünün havası nasıldı?")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFC2C2C9))
-                        .multilineTextAlignment(.leading).lineSpacing(3)
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t("Şu an nasılsın?")).font(RealFont.inter(18, .semibold)).foregroundStyle(.white)
+                    Text(t("Anlık his ya da günün havası.")).font(RealFont.inter(13)).foregroundStyle(YasamTone.muted)
                 }
                 Spacer()
-                Text("＋").font(.system(size: 28)).foregroundStyle(.white)
+                Text("+").font(RealFont.inter(22, .bold)).foregroundStyle(.black).frame(width: 40, height: 40).background(Circle().fill(.white))
             }
-            .padding(.horizontal, 22).padding(.vertical, 20)
-            .background(LinearGradient(colors: [Color(argb: 0xFF171923).blend(accent, by: 0.3), Color(argb: 0xFF111217).blend(accent, by: 0.13), Color(argb: 0xFF111217)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(accent.opacity(0.38), lineWidth: 0.8))
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white.opacity(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(tone.light.opacity(0.35), lineWidth: 1))
         }
-        .buttonStyle(PressScaleStyle())
+        .buttonStyle(.plain)
     }
 
-    private func entryCard(_ entry: MoodTrackerEntry) -> some View {
+    /// One mood like a Günlük entry: the day in the margin (only on the day's first mood), then "Anlık his · İyi" and
+    /// the time. A tap opens the details (descriptors, factors) downwards.
+    private func entryCard(_ entry: MoodTrackerEntry, day: Date?) -> some View {
         let accent = MoodV2.tint(entry.mood)
-        let time = Date(timeIntervalSince1970: Double(entry.details.loggedAt) / 1000).formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
-        let descriptors = entry.details.descriptors.prefix(3).map(MoodV2.descriptorLabel)
-        let factors = entry.details.factors.prefix(3).map(Self.factorLabel)
-        return HStack(spacing: 14) {
-            MoodFace(mood: entry.mood, tint: accent).frame(width: 58, height: 58)
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text(entry.details.scope == .moment ? t("Anlık his") : t("Günün havası")).font(RealFont.inter(11, .medium)).foregroundStyle(accent.opacity(0.94))
-                    Spacer()
-                    Text(time).font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF74747D))
-                }
-                Text(MoodV2.families[MoodV2.familyIndex(entry.mood)].title).font(RealFont.inter(21, .semibold)).foregroundStyle(Color(argb: 0xFFF4F4F6))
-                    .padding(.top, 3)
-                if !descriptors.isEmpty {
-                    Text(descriptors.joined(separator: " · ")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFC3C3CA)).lineLimit(2).padding(.top, 3)
-                }
-                if !factors.isEmpty {
-                    Text(factors.joined(separator: " · ")).font(RealFont.inter(10)).foregroundStyle(Color(argb: 0xFF7F7F88)).lineLimit(1).padding(.top, 4)
+        let isOpen = open.contains(entry.id)
+        let descriptors = entry.details.descriptors.map(MoodV2.descriptorLabel)
+        let factors = entry.details.factors.map(Self.factorLabel)
+        let hasDetails = !descriptors.isEmpty || !factors.isEmpty
+        let weekday: String? = day.map {
+            let f = DateFormatter()
+            f.locale = I18n.locale
+            f.dateFormat = "EEE"
+            return f.string(from: $0)
+        }
+        return HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                if let day, let weekday {
+                    Text("\(Calendar.real.component(.day, from: day))").font(RealFont.inter(22, .bold)).foregroundStyle(.white)
+                    Text(weekday).font(RealFont.inter(11)).foregroundStyle(YasamTone.muted)
                 }
             }
+            .frame(width: 42)
+            Rectangle().fill(.white.opacity(0.10)).frame(width: 1, height: 40).padding(.horizontal, 12)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(entry.details.scope == .moment ? t("Anlık his") : t("Günün havası")).font(RealFont.inter(11, .medium)).foregroundStyle(accent)
+                    Spacer()
+                    Text(YasamLogText.time(entry.details.loggedAt)).font(RealFont.inter(11)).foregroundStyle(YasamTone.muted)
+                }
+                HStack(spacing: 8) {
+                    MoodFace(mood: entry.mood, tint: accent).frame(width: isOpen ? 34 : 24, height: isOpen ? 34 : 24)
+                    Text(MoodV2.families[MoodV2.familyIndex(entry.mood)].title).font(RealFont.inter(17, .semibold)).foregroundStyle(.white)
+                    if hasDetails { Text(isOpen ? "⌃" : "⌄").font(RealFont.inter(13)).foregroundStyle(YasamTone.muted) }
+                }
+                .padding(.top, 4)
+                if isOpen && !descriptors.isEmpty {
+                    Text(descriptors.joined(separator: " · ")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFC3C3CA)).padding(.top, 8)
+                }
+                if isOpen && !factors.isEmpty {
+                    Text(factors.joined(separator: " · ")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8F8F98)).padding(.top, 4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 18).padding(.vertical, 16)
-        .background(LinearGradient(colors: [Color(argb: 0xFF17181D).blend(accent, by: 0.18), Color(argb: 0xFF111217)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(.white.opacity(0.13), lineWidth: 0.7))
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .frame(minHeight: 64, alignment: .top)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.05)))
+        .contentShape(RoundedRectangle(cornerRadius: 20))
+        .onTapGesture {
+            guard hasDetails else { return }
+            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.26)) {
+                if isOpen { open.remove(entry.id) } else { open.insert(entry.id) }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(hasDetails ? .isButton : [])
+        .accessibilityHint(hasDetails ? (isOpen ? t("Kapat") : t("Ayrıntılar")) : "")
     }
 
     private static func factorLabel(_ key: String) -> String {

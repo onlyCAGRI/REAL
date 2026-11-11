@@ -137,6 +137,12 @@ final class LifeStore {
         save()
     }
 
+    func removeMood(_ id: Int64) {
+        guard AppUpdateGate.writable() else { return }
+        moods.removeAll { $0.id == id }
+        save()
+    }
+
     func clearAllMoods() {
         moods = []
         save()

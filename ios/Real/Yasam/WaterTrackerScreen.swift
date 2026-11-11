@@ -6,6 +6,10 @@ import UIKit
 /// day's progress (tap / drag to disturb, tilt the phone to slope it), the big percentage riding the surface,
 /// quick-add glass buttons and the "Bugün" history dock.
 struct WaterTrackerScreen: View {
+    /// Me opens one drink per screen: the kind tabs are hidden and the screen stays on this drink.
+    var lockedBeverage: BeverageType? = nil
+    /// Set when hosted inside Me, which runs its own MeMotion transition.
+    var onClose: (() -> Void)? = nil
     @Environment(LifeStore.self) private var life
     @Environment(\.dismiss) private var dismiss
     @State private var beverage: BeverageType = .water
@@ -13,6 +17,8 @@ struct WaterTrackerScreen: View {
     @State private var goalDialog = false
     @State private var goalText = ""
     @State private var shown = false
+    @State private var showHistory = false
+    @State private var waterDays: [EpochDay: WaterDay] = [:]
 
     private struct Palette { let background: [Color]; let liquid: [Color]; let edge: Color; let number: Color }
 
@@ -47,11 +53,20 @@ struct WaterTrackerScreen: View {
                 VStack(alignment: .leading, spacing: 0) {
                     tabs
                     VStack(alignment: .leading, spacing: 0) {
-                        Button { close() } label: {
-                            RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
-                                .frame(width: 44, height: 44).liquidGlass(Circle(), role: .chrome).contentShape(Circle())
+                        HStack {
+                            Button { close() } label: {
+                                RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
+                                    .frame(width: 44, height: 44).liquidGlass(Circle(), role: .chrome).contentShape(Circle())
+                            }
+                            .accessibilityLabel(t("İçecek ekranını kapat"))
+                            Spacer()
+                            if beverage == .water {
+                                YasamHistoryButton {
+                                    waterDays = WaterArchive.record(life)
+                                    withAnimation(YasamScreen.openAnim) { showHistory = true }
+                                }
+                            }
                         }
-                        .accessibilityLabel(t("İçecek ekranını kapat"))
                         Text(beverage.label).font(RealFont.inter(34, .medium)).foregroundStyle(.white).padding(.top, 16)
                         Button {
                             guard beverage == .water else { return }
@@ -96,12 +111,19 @@ struct WaterTrackerScreen: View {
                 }
             }
             .offset(x: shown ? 0 : geo.size.width)
+            if showHistory {
+                WaterHistoryScreen(days: waterDays, currentGoal: life.goalMl) { withAnimation(YasamScreen.closeAnim) { showHistory = false } }
+                    .transition(YasamScreen.meTransition(false))
+                    .zIndex(2)
+            }
         }
         .onAppear {
+            if let lockedBeverage { beverage = lockedBeverage }
+            _ = WaterArchive.record(life)
             engine.target = min(progress, 1.15)
             engine.level = engine.target
             engine.startMotion()
-            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { shown = true }
+            if onClose != nil { shown = true } else { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { shown = true } }
         }
         .onDisappear { engine.stopMotion() }
         .onChange(of: progress) { _, p in engine.target = min(p, 1.15) }
@@ -114,13 +136,14 @@ struct WaterTrackerScreen: View {
     }
 
     private func close() {
+        if let onClose { onClose(); return }
         withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22)) { shown = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { withoutAnimation { dismiss() } }
     }
 
     private var tabs: some View {
         HStack(spacing: 22) {
-            ForEach(BeverageType.allCases) { option in
+            ForEach(lockedBeverage == nil ? BeverageType.allCases : []) { option in
                 Button { beverage = option } label: {
                     Text(option.label).font(RealFont.inter(16, beverage == option ? .semibold : .regular))
                         .foregroundStyle(beverage == option ? Color.white : Color.white.opacity(0.4))

@@ -13,6 +13,7 @@ struct AiPrivacySheet: View {
             (.voice, t("Sesli komutlar")),
             (.mood, t("Mood önerileri")),
             (.discovery, t("Film, dizi ve oyun önerileri")),
+            (.drinks, t("İçki fotoğrafı")),
         ]
     }
 

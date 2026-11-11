@@ -30,6 +30,8 @@ private struct BookFlight: Equatable {
 /// BooksModuleScreen.kt: shelf → (cover flight) → detail → reader.
 struct BooksModuleScreen: View {
     var resumeBookId: String?
+    /// Set when hosted inside Me, which closes it with its own transition.
+    var onClose: (() -> Void)? = nil
     @Environment(BookStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
@@ -134,7 +136,7 @@ struct BooksModuleScreen: View {
         error = nil
         switch page {
         case .shelf:
-            dismiss()
+            if let onClose { onClose() } else { dismiss() }
         case .detail:
             guard let b = selected else { page = .shelf; return }
             withAnimation(.easeIn(duration: 0.18)) { revealDetail = false }

@@ -1,105 +1,76 @@
 import SwiftUI
 import UIKit
 
-/// Yaşam (HomeWidgetContent.kt + Yasam*.kt): module hub opened from the dock with a circular reveal.
-/// Hero sentence card, three icon tabs, the big water figure, line-separated rows (Su, Mood, Günlüklerim,
-/// Kitap, Film & Dizi · Oyun) that expand to quick actions, an in-place Günlüklerim mode, and the glass mic.
+/// Me (Yaşam; HomeWidgetContent.kt + Yasam*.kt): one screen, one rule. Numbers are the "Bugün" tiles (adım, kahve,
+/// uyku, ruh hali, su, alkol), lists are the Keşfet tiles (izle, oyna, dinle, oku, puanla), writing lives in Günlüklerim.
+/// Hold any tile to lift it: drag to reorder, Tam / Yarım to resize, "–" to hide; "Bitti" ends editing.
+/// Me slides in from the right; every screen opened from a tile comes in fast from the right with a small lift and
+/// leaves the same way, Me staying still underneath; coming back the tiles play their entrance again.
 struct YasamScreen: View {
     @Environment(ReminderStore.self) private var store
     @Environment(LifeStore.self) private var life
     @Environment(BookStore.self) private var books
     @Environment(DiscoveryStore.self) private var discovery
     @Environment(\.dismiss) private var dismiss
-    @State private var showBooks = false
-    @State private var discoveryTarget: (kind: DiscoveryKind, list: Bool)?
-    /// Müzik keşfi: false = öneri, true = Müzik listem.
-    @State private var musicTarget: Bool?
-    /// Puanlarım (Keşfet → Puanla).
-    @State private var showRatings = false
-    @State private var resumeBook: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var onOpenCard: (Int64) -> Void = { _ in }
+    /// Opens straight into one of Me's screens (CI screenshots, deep links).
+    var initialScreen: MeScreen? = nil
 
-    @State private var revealed = false
-    @State private var closing = false
-    @State private var section: Section = .home
+    enum MeScreen: String, Identifiable {
+        case steps, coffee, alcohol, journal, water, moods, books
+        var id: String { rawValue }
+    }
+
+    @State private var shown = false
+    @State private var tilesShown = false
+    @State private var editing = false
+    @State private var meScreen: MeScreen?
+    @State private var resumeBook: String?
+    @State private var discoveryTarget: (kind: DiscoveryKind, list: Bool)?
+    @State private var musicTarget: Bool?
+    @State private var showRatings = false
     @State private var showLayout = false
-    @State private var open: String?
-    @State private var moodHistoryOpen = false
-    @State private var waterHistoryOpen = false
-    @State private var showWater = false
     @State private var showMoodAdd = false
-    @State private var showMoodHistory = false
     @State private var showJournalSheet = false
+    @State private var showPick = !YasamLayout.shared.picked
+    @State private var entry: YasamPart?
     @State private var heroTopic = Int.random(in: 0..<6)
-    @State private var contentID = 0
-
-    enum Section { case home, journals }
+    /// Bumped when a Me screen changes data (steps, coffee…), so the tiles read again.
+    @State private var tick = 0
 
     private let hour = Calendar.real.component(.hour, from: Date())
+    static let openAnim = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.34)
+    static let closeAnim = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)
 
     var body: some View {
         GeometryReader { geo in
-            ZStack(alignment: .bottom) {
+            ZStack {
                 Color.black.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         PullToCloseMarker()
-                        heroCard.padding(.top, 4)
-                        if section == .journals {
-                            journalList
-                        } else {
-                            tiles
-                        }
-                        Color.clear.frame(height: 130)
+                        YasamMeHeader(greeting: YasamText.greeting(hour), bits: summaryBits, fallback: heroSentence, onBack: close)
+                            .padding(.top, 8)
+                            .yasamEnter(shown, delay: 0.04, y: 10)
+                        tiles
+                        Color.clear.frame(height: 60)
                     }
-                    .id(contentID)
                 }
                 .scrollIndicators(.hidden)
-                micButton.yasamEnter(revealed, delay: 0.0, y: 0, scale: 0.6)
+                .allowsHitTesting(meScreen == nil)
             }
-            // Circular reveal from the bottom-centre (the dock), like rememberRealEntrance on Android.
-            .mask {
-                Circle()
-                    .frame(width: revealed ? hypot(geo.size.width, geo.size.height) * 2.2 : 10,
-                           height: revealed ? hypot(geo.size.width, geo.size.height) * 2.2 : 10)
-                    .position(x: geo.size.width / 2, y: geo.size.height - 40)
-                    .ignoresSafeArea()
-            }
-            .scaleEffect(closing ? 0.92 : 1)
-            .opacity(closing ? 0 : 1)
+            .offset(x: reduceMotion ? 0 : (shown ? 0 : geo.size.width))
         }
-        .ignoresSafeArea(.container, edges: .bottom)
-        .overlay {
-            if let target = discoveryTarget {
-                DiscoveryScreen(kind: target.kind, startInList: target.list) {
-                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { discoveryTarget = nil }
-                }
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-                .zIndex(4)
-            }
-            if showRatings {
-                RatingsScreen {
-                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { showRatings = false }
-                }
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-                .zIndex(4)
-            }
-            if let list = musicTarget {
-                MusicDiscoveryScreen(startInList: list) {
-                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = nil }
-                }
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-                .zIndex(4)
-            }
-        }
+        .overlay { overlays }
         .presentationBackground(.clear)
         .onAppear {
             MediaRatingStore.shared.importWatched(discovery.film.watched)
-            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9)) { revealed = true }
+            withAnimation(reduceMotion ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { shown = true }
+            replayTiles()
+            if let initialScreen { meScreen = initialScreen }
         }
-        .fullScreenCover(isPresented: $showBooks) { BooksModuleScreen(resumeBookId: resumeBook).liftedTopSafeArea() }
-        .fullScreenCover(isPresented: $showWater) { WaterTrackerScreen().liftedTopSafeArea().presentationBackground(.black) }
-        .fullScreenCover(isPresented: $showMoodAdd) { MoodAddSheet().liftedTopSafeArea() }
+        .fullScreenCover(isPresented: $showMoodAdd, onDismiss: { tick += 1 }) { MoodAddSheet().liftedTopSafeArea() }
         .sheet(isPresented: $showJournalSheet) {
             YasamJournalSheet { text, styles in
                 _ = store.addReminder(text: YasamJournalSheet.title()) { r in
@@ -109,33 +80,107 @@ struct YasamScreen: View {
             }
         }
         .sheet(isPresented: $showLayout) { YasamLayoutSheet() }
-        .fullScreenCover(isPresented: $showMoodHistory) {
-            MoodHistoryScreen(onAdd: { showMoodHistory = false; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showMoodAdd = true } })
-                .liftedTopSafeArea()
+        .sheet(item: $entry) { part in
+            if part == .steps {
+                YasamNumberSheet(title: t("Bugün kaç adım?"), initial: YasamManual.steps(), step: 500, max: 100_000,
+                                 quick: [("3.000", 3000), ("6.000", 6000), ("10.000", 10000)], format: YasamManual.stepsText) {
+                    YasamManual.setSteps($0); tick += 1
+                }
+            } else {
+                YasamNumberSheet(title: t("Dün gece ne kadar uyudun?"), initial: YasamManual.sleep() > 0 ? YasamManual.sleep() : 7 * 60,
+                                 step: 15, max: 16 * 60, quick: [("6s", 360), ("7s", 420), ("8s", 480)], format: YasamManual.sleepText) {
+                    YasamManual.setSleep($0); tick += 1
+                }
+            }
         }
+    }
+
+    // MARK: Overlays (Me's own screens, Keşfet, Puanla, first-run picker)
+
+    @ViewBuilder
+    private var overlays: some View {
+        ZStack {
+            if let screen = meScreen {
+                meScreenView(screen)
+                    .transition(Self.meTransition(reduceMotion))
+                    .zIndex(3)
+            }
+            if let target = discoveryTarget {
+                DiscoveryScreen(kind: target.kind, startInList: target.list) { closeScreen { discoveryTarget = nil } }
+                    .transition(Self.meTransition(reduceMotion))
+                    .zIndex(4)
+            }
+            if showRatings {
+                RatingsScreen { closeScreen { showRatings = false } }
+                    .transition(Self.meTransition(reduceMotion))
+                    .zIndex(4)
+            }
+            if let list = musicTarget {
+                MusicDiscoveryScreen(startInList: list) { closeScreen { musicTarget = nil } }
+                    .transition(Self.meTransition(reduceMotion))
+                    .zIndex(4)
+            }
+            if showPick {
+                YasamPickScreen { withAnimation(.easeOut(duration: 0.25)) { showPick = false }; replayTiles() }
+                    .transition(.opacity)
+                    .zIndex(6)
+            }
+        }
+    }
+
+    /// MeMotion: in from the right with a small lift (340 ms), out to the right with a fade (420 ms).
+    static func meTransition(_ reduce: Bool) -> AnyTransition {
+        reduce ? .opacity : .asymmetric(
+            insertion: .move(edge: .trailing).combined(with: .scale(scale: 0.94)).combined(with: .opacity).animation(openAnim),
+            removal: .move(edge: .trailing).combined(with: .opacity).animation(closeAnim))
+    }
+
+    @ViewBuilder
+    private func meScreenView(_ screen: MeScreen) -> some View {
+        let back = { closeScreen { meScreen = nil } }
+        switch screen {
+        case .steps: YasamStepsScreen(onClose: back)
+        case .coffee: YasamCoffeeScreen(onClose: back)
+        case .alcohol: YasamAlcoholScreen(onClose: back)
+        case .journal: YasamJournalScreen(onClose: back, onWrite: newJournal, onOpen: onOpenCard)
+        case .water: WaterTrackerScreen(lockedBeverage: .water, onClose: back).background(Color.black.ignoresSafeArea())
+        case .moods: MoodHistoryScreen(onAdd: { showMoodAdd = true }, onClose: back)
+        case .books: BooksModuleScreen(resumeBookId: resumeBook, onClose: back).background(Color.black.ignoresSafeArea())
+        }
+    }
+
+    private func openScreen(_ change: () -> Void) {
+        editing = false
+        withAnimation(reduceMotion ? nil : Self.openAnim) { change() }
+    }
+
+    /// Closing a Me screen: it slides out and the tiles play their entrance again (Android re-composes them).
+    private func closeScreen(_ change: () -> Void) {
+        withAnimation(reduceMotion ? nil : Self.closeAnim) { change() }
+        tick += 1
+        replayTiles()
+    }
+
+    private func replayTiles() {
+        guard !reduceMotion else { tilesShown = true; return }
+        var plain = Transaction(); plain.disablesAnimations = true
+        withTransaction(plain) { tilesShown = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { tilesShown = true }
     }
 
     private func close() {
-        if section == .journals { switchSection(.home); return }
-        withAnimation(.timingCurve(0.4, 0, 1, 1, duration: 0.28)) { closing = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { withoutAnimation { dismiss() } }
-    }
-
-    private func switchSection(_ s: Section) {
-        withAnimation(.easeOut(duration: 0.2)) { revealed = false }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            section = s
-            contentID += 1
-            withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.6)) { revealed = true }
-        }
+        if editing { withAnimation { editing = false }; return }
+        withAnimation(reduceMotion ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { shown = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0 : 0.3)) { withoutAnimation { dismiss() } }
     }
 
     // MARK: Data
 
-    private var water: (today: Int, goal: Int, yesterday: Int) {
+    private var water: (today: Int, goal: Int, yesterday: Int, days: [Int]) {
+        let cal = Calendar.real
         let today = Date()
-        let yesterday = Calendar.real.date(byAdding: .day, value: -1, to: today)!
-        return (life.total(on: today), life.goal(on: today), life.total(on: yesterday))
+        let days = (0..<14).reversed().map { life.total(on: cal.date(byAdding: .day, value: -$0, to: today)!) }
+        return (life.total(on: today), life.goal(on: today), life.total(on: cal.date(byAdding: .day, value: -1, to: today)!), days)
     }
 
     private var lastMood: JournalMood? { life.moods.max { $0.details.loggedAt < $1.details.loggedAt }?.mood }
@@ -158,6 +203,40 @@ struct YasamScreen: View {
         return (YasamText.whenLabel(j.createdAt), first)
     }
 
+    private var coffeeToday: Int {
+        _ = tick
+        return YasamCoffeeLog.today(YasamCoffeeLog.load()).count + life.entries(on: Date(), beverage: .coffee).count
+    }
+
+    private var lastCoffee: CoffeeKind? { _ = tick; return YasamCoffeeLog.load().last?.coffee }
+
+    private var alcohol: (today: Int, week: Int, last: DrinkLogEntry?) {
+        _ = tick
+        let log = YasamDrinkLog.load()
+        let cal = Calendar.real
+        let legacyToday = life.entries(on: Date(), beverage: .beer).count
+        let legacyWeek = (0..<7).reduce(0) { $0 + life.entries(on: cal.date(byAdding: .day, value: -$1, to: Date())!, beverage: .beer).count }
+        return (legacyToday + YasamDrinkLog.today(log).count, legacyWeek + YasamDrinkLog.week(log), log.last)
+    }
+
+    private var steps: (today: Int, week: [Int]) { _ = tick; let w = YasamManual.stepsWeek(); return (w.last ?? 0, w) }
+    private var sleep: Int { _ = tick; return YasamManual.sleep() }
+
+    /// "6.240 adım", "1,2 L su", "2 kahve", "7s 20d uyku", "1 içki": only what Me shows and what was logged today.
+    private var summaryBits: [String] {
+        let w = water, a = alcohol, s = steps, sl = sleep, c = coffeeToday
+        return YasamLayout.shared.visible.filter(\.counter).compactMap { p in
+            switch p {
+            case .steps: return s.today > 0 ? t("{0} adım", YasamManual.stepsText(s.today)) : nil
+            case .water: return w.today > 0 ? t("{0} L su", YasamText.litres(w.today)) : nil
+            case .coffee: return c > 0 ? t("{0} kahve", c) : nil
+            case .sleep: return sl > 0 ? t("{0} uyku", YasamManual.sleepText(sl)) : nil
+            case .alcohol: return a.today > 0 ? t("{0} içki", a.today) : nil
+            default: return nil
+            }
+        }
+    }
+
     private var heroSentence: String {
         let w = water
         let progress = Double(w.today) / Double(max(w.goal, 1))
@@ -166,7 +245,8 @@ struct YasamScreen: View {
             if progress <= 0 { return t("Bugün bir bardak suyla başlamaya ne dersin?") }
             if progress >= 1 { return t("Su hedefini tamamladın, harika gidiyorsun.") }
             return t("Bugün {0} L su içtin, hedefe {1} L kaldı.", YasamText.litres(w.today), YasamText.litres(w.goal - w.today))
-        case 1: return YasamText.yesterday(ml: w.yesterday, mood: yesterdayMood) ?? t("Dün nasıl geçti? Bugün nasıl gidiyor?")
+        case 1: return YasamText.yesterday(ml: w.yesterday, mood: yesterdayMood)?.replacingOccurrences(of: "\n", with: " ")
+            ?? t("Dün nasıl geçti? Bugün nasıl gidiyor?")
         case 2: return lastMood.map { t("En son ruh halin {0} idi. Şimdi nasılsın?", $0.label) } ?? t("Bugün ruh halin nasıl?")
         case 3:
             if let last = books.lastRead {
@@ -185,74 +265,42 @@ struct YasamScreen: View {
         }
     }
 
-    // MARK: Hero
-
-    private var heroCard: some View {
-        let journalsMode = section == .journals
-        return ZStack(alignment: .topLeading) {
-            YasamHeroSentence(greeting: journalsMode ? t("{0} GİRİŞ", journals.count) : YasamText.greeting(hour),
-                              sentence: journalsMode ? "Journal" : heroSentence,
-                              tone: YasamTone.mood(lastMood), hour: hour, revealed: revealed)
-            Button(action: close) {
-                RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
-                    .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
-            }
-            .padding(.leading, 22).padding(.top, 8)
-            .accessibilityLabel(journalsMode ? t("Ben ekranına dön") : t("Geri"))
-        }
-        .scaleEffect(revealed ? 1 : 0.96)
-        .opacity(revealed ? 1 : 0)
-        .animation(.spring(duration: 0.56, bounce: 0.3).delay(0.29), value: revealed)
-    }
-
     // MARK: Tiles
 
-    /// Ben ekranının blokları: kayıtlı sıradaki görünen bölümler; art arda gelen keşif bölümleri tek ızgara.
-    private enum TileBlock: Identifiable {
-        case row(YasamPart)
-        case discover([YasamPart])
-        var id: String {
-            switch self {
-            case .row(let p): return p.rawValue
-            case .discover(let ps): return ps.map(\.rawValue).joined(separator: ",")
-            }
-        }
-    }
-
-    private var tileBlocks: [TileBlock] {
-        var blocks: [TileBlock] = []
-        for part in YasamLayout.shared.visible {
-            if part.discover, case .discover(let ps)? = blocks.last {
-                blocks[blocks.count - 1] = .discover(ps + [part])
-            } else {
-                blocks.append(part.discover ? .discover([part]) : .row(part))
-            }
-        }
-        return blocks
-    }
-
     private var tiles: some View {
-        let blocks = tileBlocks
-        let firstDiscover = blocks.firstIndex { if case .discover = $0 { return true } else { return false } }
+        let layout = YasamLayout.shared
+        let parts = layout.visible
+        let counters = parts.filter { $0.counter || $0 == .journal }
+        let discover = parts.filter(\.discover)
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
-                switch block {
-                case .row(let part):
-                    partRow(part, index: index)
-                case .discover(let parts):
-                    if index > 0, case .row = blocks[index - 1] {
-                        Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
-                    }
-                    discoverGrid(parts, header: index == firstDiscover, index: index)
+            if editing {
+                YasamEditBar(hidden: YasamPart.allCases.filter { layout.hidden.contains($0) }) {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { editing = false }
                 }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            if case .row? = blocks.last {
-                Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
+            if !counters.isEmpty {
+                YasamTileGrid(parts: counters, wide: layout.wide, editing: $editing, onTap: tapTile) { part, wide in
+                    counterTile(part, wide: wide)
+                }
+                .yasamEnter(tilesShown, delay: 0.12, y: 14)
             }
-            if blocks.isEmpty {
+            if !discover.isEmpty {
+                HStack(alignment: .bottom) {
+                    Text(t("KEŞFET")).font(.system(size: 12, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted)
+                    Spacer()
+                    Text(t("bugün ne yapsak")).font(.system(size: 12, weight: .light)).foregroundStyle(.white.opacity(0.4))
+                }
+                .padding(.top, 26).padding(.bottom, 12).padding(.horizontal, 4)
+                .yasamEnter(tilesShown, delay: 0.2, y: 10)
+                YasamTileGrid(parts: discover, wide: layout.wide, editing: $editing, onTap: tapTile) { part, wide in
+                    discoverTile(part, wide: wide)
+                }
+                .yasamEnter(tilesShown, delay: 0.24, y: 14)
+            }
+            if parts.isEmpty {
                 Text(t("Tüm bölümler gizli.")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
             }
-            // Sırala / gizle: altta küçük bir yazı; kategori sıralama sayfasıyla aynı sayfayı açar.
             Button { showLayout = true } label: {
                 Text(t("DÜZENLE")).font(.system(size: 11, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted)
                     .padding(.horizontal, 12).padding(.vertical, 8)
@@ -261,71 +309,148 @@ struct YasamScreen: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 18)
         }
-        .padding(.horizontal, 22).padding(.top, 20)
-        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.32), value: open)
-        .animation(.easeOut(duration: 0.22), value: YasamLayout.shared.visible)
+        .padding(.horizontal, 18).padding(.top, 16)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: editing)
     }
 
-    @ViewBuilder
-    private func partRow(_ part: YasamPart, index: Int) -> some View {
-        let w = water
-        let progress = min(Double(w.today) / Double(max(w.goal, 1)), 1)
+    private func tapTile(_ part: YasamPart) {
         switch part {
+        case .steps: openScreen { meScreen = .steps }
+        case .sleep: entry = .sleep
+        case .water: openScreen { meScreen = .water }
+        case .coffee: openScreen { meScreen = .coffee }
+        case .alcohol: openScreen { meScreen = .alcohol }
+        case .mood: openScreen { meScreen = .moods }
+        case .journal: openScreen { meScreen = .journal }
+        case .watch: openScreen { discoveryTarget = (.film, false) }
+        case .play: openScreen { discoveryTarget = (.game, false) }
+        case .listen: openScreen { musicTarget = false }
+        case .book: resumeBook = books.lastRead?.book.id; openScreen { meScreen = .books }
+        case .rate: openScreen { showRatings = true }
+        }
+    }
+
+    private func live(_ f: @escaping () -> Void) -> (() -> Void)? { editing ? nil : f }
+
+    @ViewBuilder
+    private func counterTile(_ part: YasamPart, wide: Bool) -> some View {
+        let tone = part.glow
+        switch part {
+        case .journal:
+            let n = journals.count
+            YasamGlowTile(label: t("Günlüklerim"), tone: tone, value: n > 0 ? "\(n)" : "—", unit: n > 0 ? t("giriş") : nil,
+                          sub: journalPreview.map { wide ? "\($0.when) · \(Self.short($0.line))" : $0.when } ?? t("Bir cümle yaz"),
+                          wide: wide, onAdd: live(newJournal), addLabel: t("Yeni günlük"))
+        case .steps:
+            let s = steps
+            YasamGlowTile(label: t("Adım"), tone: tone, value: s.today > 0 ? YasamManual.stepsText(s.today) : "—",
+                          sub: s.today > 0 ? t("Hedef 10.000 · {0} km", yasamOneDecimal(Double(s.today) * 0.00075)) : t("Dokun, bugünü gir"),
+                          wide: wide, onAdd: live { entry = .steps }, addLabel: t("Bugünü gir")) {
+                YasamVisuals.progress(Double(s.today) / 10_000, width: wide ? 0 : 110)
+            } side: { YasamVisuals.bars(s.week, gapRatio: 0.6) }
+        case .sleep:
+            let m = sleep
+            YasamGlowTile(label: t("Uyku"), tone: tone, value: YasamManual.sleepText(m), sub: m > 0 ? t("Dün gece") : t("Dokun, gir"), wide: wide) {
+                YasamVisuals.sleepRange(m, width: wide ? 220 : 110)
+            }
         case .water:
-            YasamWaterHero(todayMl: w.today, progress: progress, revealed: revealed)
-            YasamRow(label: t("SU"), value: "/ \(YasamText.litres(w.goal)) L", expanded: open == "water", index: index, revealed: revealed,
-                     toggle: { toggle("water") }) {
-                Text(progress >= 1 ? t("Günlük hedefi tamamladın") : t("Hedefe {0} L kaldı", YasamText.litres(max(w.goal - w.today, 0))))
-                    .font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
-            } content: {
-                Text(t("BUGÜN {0}% · 250 ML", Int((progress * 100).rounded()))).font(.system(size: 11, design: .monospaced)).kerning(1).foregroundStyle(YasamTone.muted)
-                Color.clear.frame(height: 12)
-                YasamSlideToAdd(label: t("Kaydır · 250 ml su ekle")) { life.addDrink(250) }
-                YasamTextAction(text: t("SU EKRANINI AÇ  ›"), tone: YasamTone.water) { showWater = true }
-                YasamTextAction(text: waterHistoryOpen ? t("GEÇMİŞİ GİZLE  ‹") : t("GEÇMİŞİ AÇ  ›"), tone: YasamTone.muted) {
-                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { waterHistoryOpen.toggle() }
-                }
-                if waterHistoryOpen { YasamWaterHistory().transition(.opacity.combined(with: .move(edge: .top))) }
+            let w = water
+            let p = Double(w.today) / Double(max(w.goal, 1))
+            YasamGlowTile(label: t("Su"), tone: tone, value: YasamText.litres(w.today), unit: "L",
+                          sub: p >= 1 ? t("Hedef tamam") : t("Hedefe {0} L kaldı", YasamText.litres(max(w.goal - w.today, 0))),
+                          wide: wide, onAdd: live { life.addDrink(250); tick += 1 }, addLabel: t("250 ml su ekle")) {
+                YasamVisuals.progress(p, width: wide ? 0 : 110)
+            } side: { YasamVisuals.bars(w.days) }
+        case .coffee:
+            let c = coffeeToday
+            YasamGlowTile(label: t("Kahve"), tone: tone, value: "\(c)", unit: t("fincan"),
+                          sub: c == 0 ? t("Bugün henüz yok") : t("≈{0} mg kafein", c * 95), wide: wide,
+                          onAdd: live {
+                              if let k = lastCoffee { YasamCoffeeLog.add(k); tick += 1; UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+                              else { openScreen { meScreen = .coffee } }
+                          }, addLabel: t("Kahve ekle")) {
+                YasamVisuals.beans(c, slots: wide ? 8 : 4)
+            }
+        case .alcohol:
+            let a = alcohol
+            YasamGlowTile(label: t("Alkol"), tone: tone, value: "\(a.today)", unit: t("bugün"), sub: t("Bu hafta {0}", a.week), wide: wide,
+                          onAdd: live {
+                              if let last = a.last {
+                                  YasamDrinkLog.add(YasamDrinkLog.newEntry(last.drink, name: last.name, ml: last.ml,
+                                                                          photo: last.photoURL.flatMap { FileManager.default.fileExists(atPath: $0.path) ? last.photo : nil }))
+                                  tick += 1
+                                  UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                              } else { openScreen { meScreen = .alcohol } }
+                          }, addLabel: t("Alkol ekle")) {
+                YasamVisuals.dots(a.week, slots: wide ? 14 : 7)
             }
         case .mood:
-            YasamRow(label: "MOOD", value: lastMood?.label ?? t("Henüz yok"), expanded: open == "mood", index: index, revealed: revealed,
-                     toggle: { toggle("mood") }) {
-                YasamSpark(points: life.moods.sorted { $0.details.loggedAt < $1.details.loggedAt }.suffix(7).map { YasamText.moodScore($0.mood) },
-                           tone: YasamTone.moodDefault)
-            } content: {
-                YasamTextAction(text: t("MOOD EKLE  +"), tone: YasamTone.moodDefault) { showMoodAdd = true }
-                YasamTextAction(text: moodHistoryOpen ? t("GEÇMİŞİ GİZLE  ‹") : t("GEÇMİŞİ AÇ  ›"), tone: YasamTone.muted) {
-                    withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)) { moodHistoryOpen.toggle() }
-                }
-                if moodHistoryOpen { YasamMoodHistory(onAdd: { showMoodAdd = true }, onMore: { showMoodHistory = true }).transition(.opacity.combined(with: .move(edge: .top))) }
+            let points = life.moods.sorted { $0.details.loggedAt < $1.details.loggedAt }.suffix(7).map { YasamText.moodScore($0.mood) }
+            YasamGlowTile(label: t("Ruh hali"), tone: tone, value: lastMood?.label ?? "—", sub: t("Geçmişi aç ›"), wide: wide,
+                          onAdd: live { showMoodAdd = true }, addLabel: t("Mood ekle")) {
+                YasamSpark(points: Array(points), tone: .white).frame(width: wide ? 260 : 120)
             }
-        case .journal:
-            YasamRow(label: t("GÜNLÜKLERİM"), value: t("Bugün yaz"), expanded: open == "journal", index: index, revealed: revealed,
-                     toggle: { toggle("journal") }) {
-                if let p = journalPreview {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(p.when).font(.system(size: 10, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted)
-                        Text(p.line).font(.system(size: 14, weight: .light)).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
-                    }
-                } else {
-                    Text(t("Bugün ne düşünüyorsun?")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7))
-                }
-            } content: {
-                YasamTextAction(text: t("BUGÜN YAZ  +"), tone: YasamTone.journal, action: newJournal)
-                YasamTextAction(text: t("GÜNLÜKLERİ AÇ  ›"), tone: YasamTone.muted) { switchSection(.journals) }
-            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private static func short(_ line: String) -> String { line.count <= 38 ? line : String(line.prefix(37)).trimmingCharacters(in: .whitespaces) + "…" }
+
+    @ViewBuilder
+    private func discoverTile(_ part: YasamPart, wide: Bool) -> some View {
+        let tone = part.glow
+        switch part {
+        case .watch:
+            let list = discovery.snapshot(.film).later
+            let art = list.compactMap(\.media.artworkUrl)
+            YasamGlowTile(label: t("İzle"), tone: tone, value: "\(list.count)", unit: t("listende"), sub: Self.listLine(list.count), wide: wide,
+                          onSub: live { openScreen { discoveryTarget = (.film, !list.isEmpty) } }, wash: true) {
+                if !wide { YasamVisuals.posterStack(art, round: false, w: 22, h: 32) }
+            } side: { YasamVisuals.posterStack(art, round: false, w: 40, h: 58) }
+        case .play:
+            let list = discovery.snapshot(.game).later
+            let art = list.compactMap(\.media.artworkUrl)
+            YasamGlowTile(label: t("Oyna"), tone: tone, value: "\(list.count)", unit: t("listende"), sub: Self.listLine(list.count), wide: wide,
+                          onSub: live { openScreen { discoveryTarget = (.game, !list.isEmpty) } }, wash: true) {
+                if !wide { YasamVisuals.posterStack(art, round: false, w: 22, h: 32) }
+            } side: { YasamVisuals.posterStack(art, round: false, w: 40, h: 58) }
+        case .listen:
+            let list = MusicDiscoveryStore.shared.snapshot.list
+            let art = list.reversed().compactMap(\.music.artworkUrl)
+            YasamGlowTile(label: t("Dinle"), tone: tone, value: "\(list.count)", unit: t("şarkı"), sub: Self.listLine(list.count), wide: wide,
+                          onSub: live { openScreen { musicTarget = !list.isEmpty } }, wash: true) {
+                if !wide { YasamVisuals.posterStack(art, round: true, w: 26, h: 26) }
+            } side: { YasamVisuals.posterStack(art, round: true, w: 44, h: 44) }
         case .book:
             let last = books.lastRead
-            YasamRow(label: t("KİTAP"), value: last?.percent.map { "%\($0)" } ?? last?.book.title ?? t("Rafını aç"),
-                     expanded: open == "book", index: index, revealed: revealed, toggle: { toggle("book") }) {
-                if let last { YasamBookPreview(book: last.book, percent: last.percent) }
-                else { Text(t("Rafını aç")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7)) }
-            } content: {
-                if let last {
-                    YasamTextAction(text: t("OKUMAYA DEVAM ET  ›"), tone: YasamTone.book) { resumeBook = last.book.id; showBooks = true }
-                    YasamTextAction(text: t("RAFI AÇ  ›"), tone: YasamTone.muted) { resumeBook = nil; showBooks = true }
-                } else {
-                    YasamTextAction(text: t("RAFINI AÇ  ›"), tone: YasamTone.book) { resumeBook = nil; showBooks = true }
+            YasamGlowTile(label: t("Oku"), tone: tone, value: last?.percent.map { "%\($0)" } ?? "—", sub: last?.book.title ?? t("Rafını aç"), wide: wide,
+                          onSub: last == nil ? nil : live { resumeBook = nil; openScreen { meScreen = .books } }, wash: true) {
+                GeometryReader { _ in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.25))
+                        Capsule().fill(.white).frame(width: (wide ? 180 : 110) * CGFloat(last?.percent ?? 0) / 100)
+                    }
+                }
+                .frame(width: wide ? 180 : 110, height: 5)
+            }
+        case .rate:
+            let entries = MediaRatingStore.shared.entries
+            let values = entries.compactMap(\.value)
+            let films = entries.filter { !$0.series }.count
+            let series = entries.count - films
+            let parts = [films > 0 ? t("{0} film", films) : nil, series > 0 ? t("{0} dizi", series) : nil].compactMap { $0 }.joined(separator: ", ")
+            let line = entries.isEmpty ? t("İzlediklerine puan ver, zevkin ortaya çıksın")
+                : (values.count < entries.count ? t("{0} · {1} puan bekliyor", parts, entries.count - values.count) : parts)
+            let recent = entries.sorted { ($0.addedAt ?? .min) > ($1.addedAt ?? .min) }.compactMap(\.value).prefix(wide ? 10 : 6)
+            let avg = values.isEmpty ? nil : (values.reduce(0, +) / Double(values.count) * 10).rounded() / 10
+            YasamGlowTile(label: t("Puanla"), tone: tone, value: avg.map(scoreText) ?? "—", sub: line, wide: wide, wash: true) {
+                if !recent.isEmpty {
+                    HStack(spacing: 3) {
+                        ForEach(Array(recent.enumerated()), id: \.offset) { _, v in
+                            RoundedRectangle(cornerRadius: 3).fill(ratingColors(v).bg).frame(width: 10, height: 10)
+                        }
+                    }
                 }
             }
         default:
@@ -333,98 +458,11 @@ struct YasamScreen: View {
         }
     }
 
-    private func discoverGrid(_ parts: [YasamPart], header: Bool, index: Int) -> some View {
-        YasamDiscoverGrid(
-            parts: parts, header: header,
-            watchCount: discovery.snapshot(.film).later.count, playCount: discovery.snapshot(.game).later.count,
-            listenCount: MusicDiscoveryStore.shared.snapshot.list.count,
-            watchArt: discovery.snapshot(.film).later.compactMap(\.media.artworkUrl),
-            playArt: discovery.snapshot(.game).later.compactMap(\.media.artworkUrl),
-            listenArt: MusicDiscoveryStore.shared.snapshot.list.reversed().compactMap(\.music.artworkUrl),
-            ratings: MediaRatingStore.shared.entries,
-            open: { kind, list in
-                switch kind {
-                case 0: openDiscovery(.film, list: list)
-                case 1: openDiscovery(.game, list: list)
-                case 2: withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { musicTarget = list }
-                default: withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { showRatings = true }
-                }
-            })
-        .yasamEnter(revealed, delay: 0.48 + Double(index) * 0.055, y: 14)
-    }
+    /// The line under the number is a pill with an arrow: an empty list invites to suggestions, a full one opens the list.
+    private static func listLine(_ count: Int) -> String { count == 0 ? t("Öneri al") : t("Listeyi aç") }
 
-    private func openDiscovery(_ kind: DiscoveryKind, list: Bool) {
-        withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { discoveryTarget = (kind, list) }
-    }
-
-    private var musicCount: String {
-        let n = MusicDiscoveryStore.shared.snapshot.list.count
-        return n > 0 ? " · \(n)" : ""
-    }
-
-    private func listCount(_ kind: DiscoveryKind) -> String {
-        let n = discovery.snapshot(kind).later.count
-        return n > 0 ? " · \(n)" : ""
-    }
-
-    private func toggle(_ key: String) {
-        open = open == key ? nil : key
-        if open != "mood" { moodHistoryOpen = false }
-        if open != "water" { waterHistoryOpen = false }
-    }
-
-    /// "BUGÜN YAZ" opens YasamJournalSheet (Android); saving adds a "Günlük · d MMMM" journal card.
+    /// "+" on Günlüklerim opens YasamJournalSheet; saving adds a "Günlük · d MMMM" journal card.
     private func newJournal() { showJournalSheet = true }
-
-    // MARK: Journals mode
-
-    private var journalList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            YasamTextAction(text: t("BUGÜN YAZ  +"), tone: YasamTone.journal, action: newJournal).yasamEnter(revealed, delay: 0.3, y: 14)
-            if journals.isEmpty {
-                Text(t("Henüz günlük yok")).font(.system(size: 19, weight: .light)).foregroundStyle(.white.opacity(0.85)).padding(.vertical, 12)
-            }
-            ForEach(Array(journals.prefix(60).enumerated()), id: \.element.id) { index, r in
-                if let j = r.journal {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
-                        Button { onOpenCard(r.id) } label: {
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack(spacing: 8) {
-                                    Text(YasamText.whenLabel(j.createdAt)).font(.system(size: 10, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted)
-                                    if let m = j.mood { Circle().fill(YasamTone.mood(m)).frame(width: 7, height: 7) }
-                                }
-                                let text = j.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                                if !text.isEmpty {
-                                    Text(text).font(.system(size: 14, weight: .light)).foregroundStyle(.white.opacity(0.88)).lineLimit(2).multilineTextAlignment(.leading)
-                                }
-                            }
-                            .padding(.vertical, 14)
-                            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .yasamEnter(revealed, delay: 0.3 + Double(min(index + 1, 12)) * 0.055, y: 14)
-                }
-            }
-            Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
-        }
-        .padding(.horizontal, 22).padding(.top, 12)
-    }
-
-    private var micButton: some View {
-        // YasamMic → onComposerMicClick: Yaşam closes and the Home dock starts voice capture.
-        Button {
-            close()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { NotificationCenter.default.post(name: .realStartVoice, object: nil) }
-        } label: {
-            RealSymbol("waveform", size: 23).foregroundStyle(.white)
-                .frame(width: 64, height: 64).liquidGlass(Circle())
-        }
-        .padding(.top, 8).padding(.bottom, 34)
-        .accessibilityLabel(t("Sesli komut"))
-    }
 }
 
 // MARK: - Pieces
@@ -644,78 +682,6 @@ struct WordFlow: Layout {
     }
 }
 
-/// "SU · BUGÜN" giant thin figure + 36 rising bars lit up to today's progress.
-struct YasamWaterHero: View {
-    let todayMl: Int
-    let progress: Double
-    let revealed: Bool
-    @State private var shown: Double = 0
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(t("SU · BUGÜN")).font(.system(size: 11, design: .monospaced)).kerning(1.6).foregroundStyle(YasamTone.muted)
-            HStack(alignment: .lastTextBaseline, spacing: 0) {
-                Text(String(format: "%.1f", shown / 1000).replacingOccurrences(of: ".", with: ","))
-                    .font(.system(size: 48, weight: .light)).foregroundStyle(.white)
-                    .contentTransition(.numericText())
-                Text(" L").font(RealFont.inter(20)).foregroundStyle(YasamTone.muted)
-            }
-            GeometryReader { geo in
-                let n = 36
-                let gap = geo.size.width / CGFloat(n)
-                ZStack(alignment: .bottomLeading) {
-                    ForEach(0..<n, id: \.self) { k in
-                        let curve = 0.28 + 0.72 * pow(Double(k) / Double(n - 1), 1.6)
-                        Capsule()
-                            .fill(Double(k) < progress * Double(n) ? YasamTone.water : Color.white.opacity(0.14))
-                            .frame(width: 1.6, height: geo.size.height * curve * (revealed ? 1 : 0))
-                            .offset(x: gap * CGFloat(k) + gap / 2)
-                            .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.52).delay(0.38 + Double(k) * 0.014), value: revealed)
-                    }
-                }
-                .frame(maxHeight: .infinity, alignment: .bottom)
-            }
-            .frame(height: 44)
-            .padding(.top, 10)
-        }
-        .padding(.bottom, 12)
-        .yasamEnter(revealed, delay: 0.3, y: 12)
-        .onAppear { withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9).delay(0.3)) { shown = Double(todayMl) } }
-        .onChange(of: todayMl) { _, v in withAnimation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.9)) { shown = Double(v) } }
-    }
-}
-
-/// Hairline-separated row: mono label, thin value, rotating chevron, always-visible preview, expandable actions.
-/// YasamBookPreview: the book's main colour as a small box plus a thin progress bar.
-struct YasamBookPreview: View {
-    let book: Book
-    let percent: Int?
-    @Environment(BookStore.self) private var books
-
-    var body: some View {
-        let base = books.coverImage(book).flatMap(CoverPalette.dominant) ?? coverBaseColor(book)
-        let tone = base.luminance < 0.25 ? base.blend(.white, by: 0.35) : base
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 5)
-                .fill(LinearGradient(colors: [tone, tone.blend(.black, by: 0.2)], startPoint: .top, endPoint: .bottom))
-                .frame(width: 34, height: 48)
-            VStack(alignment: .leading, spacing: 8) {
-                Text(book.author.isEmpty ? book.title : t("{0} · {1}", book.title, book.author))
-                    .font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.85)).lineLimit(2)
-                if let percent {
-                    GeometryReader { g in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 2).fill(.white.opacity(0.10))
-                            RoundedRectangle(cornerRadius: 2).fill(tone).frame(width: g.size.width * CGFloat(min(max(percent, 0), 100)) / 100)
-                        }
-                    }
-                    .frame(height: 4)
-                }
-            }
-        }
-    }
-}
-
 extension Color {
     /// Linear sRGB mix (Compose lerp equivalent).
     func blend(_ other: Color, by t: Double) -> Color {
@@ -725,242 +691,5 @@ extension Color {
         UIColor(other).getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
         let t = CGFloat(t)
         return Color(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t, opacity: a1 + (a2 - a1) * t)
-    }
-}
-
-struct YasamRow<Preview: View, Content: View>: View {
-    let label: String
-    let value: String
-    let expanded: Bool
-    let index: Int
-    let revealed: Bool
-    let toggle: () -> Void
-    @ViewBuilder let preview: Preview
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
-            Button(action: toggle) {
-                HStack(spacing: 0) {
-                    Text(label).font(.system(size: 12, design: .monospaced)).kerning(1.2).foregroundStyle(YasamTone.muted).lineLimit(1)
-                    Spacer()
-                    Text(value).font(.system(size: 15, weight: .light)).foregroundStyle(.white).lineLimit(1)
-                    RealSymbol("chevron.down", size: 12.6).foregroundStyle(.white.opacity(0.6))
-                        .rotationEffect(.degrees(expanded ? 180 : 0))
-                        .frame(width: 14).padding(.leading, 14)
-                }
-                .frame(minHeight: 56)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityValue(expanded ? t("Açık") : t("Kapalı"))
-            preview.padding(.bottom, 16)
-            if expanded {
-                VStack(alignment: .leading, spacing: 0) { content }
-                    .padding(.bottom, 14)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-        .yasamEnter(revealed, delay: 0.48 + Double(index) * 0.055, y: 14)
-    }
-}
-
-struct YasamTextAction: View {
-    let text: String
-    let tone: Color
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            Text(text).font(.system(size: 12, design: .monospaced)).kerning(1.2).foregroundStyle(tone)
-                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-/// "Slide to add": drag the white knob past 85% to log 250 ml; springs back.
-struct YasamSlideToAdd: View {
-    let label: String
-    let onDone: () -> Void
-    @State private var drag: CGFloat = 0
-
-    var body: some View {
-        GeometryReader { geo in
-            let maxX = max(geo.size.width - 44 - 8, 1)
-            let fraction = min(max(drag / maxX, 0), 1)
-            ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.07))
-                Text(label).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.6 * (1 - fraction)))
-                    .frame(maxWidth: .infinity).padding(.leading, 22)
-                RealSymbol("arrow.right", size: 16.1).foregroundStyle(.black)
-                    .frame(width: 44, height: 44).background(Circle().fill(.white))
-                    .padding(4)
-                    .offset(x: drag)
-                    .gesture(DragGesture()
-                        .onChanged { drag = min(max($0.translation.width, 0), maxX) }
-                        .onEnded { _ in
-                            if drag > maxX * 0.85 { UIImpactFeedbackGenerator(style: .medium).impactOccurred(); onDone() }
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { drag = 0 }
-                        })
-            }
-        }
-        .frame(height: 52)
-        .accessibilityElement()
-        .accessibilityLabel(label)
-        .accessibilityAction { onDone() }
-    }
-}
-
-/// Mini mood line (last 7 scores); a faint baseline with fewer than two points.
-struct YasamSpark: View {
-    let points: [Double]
-    let tone: Color
-
-    var body: some View {
-        Canvas { ctx, size in Self.draw(&ctx, size: size, points: points, tone: tone) }
-            .frame(height: 34)
-    }
-
-    static func curve(_ pts: [CGPoint]) -> Path {
-        var path = Path()
-        guard let first = pts.first else { return path }
-        path.move(to: first)
-        var i = 1
-        while i < pts.count {
-            let mid = (pts[i - 1].x + pts[i].x) / 2
-            path.addCurve(to: pts[i], control1: CGPoint(x: mid, y: pts[i - 1].y), control2: CGPoint(x: mid, y: pts[i].y))
-            i += 1
-        }
-        return path
-    }
-
-    private static func draw(_ ctx: inout GraphicsContext, size: CGSize, points: [Double], tone: Color) {
-        let style = StrokeStyle(lineWidth: 2, lineCap: .round)
-        if points.count < 2 {
-            var p = Path()
-            p.move(to: CGPoint(x: 2, y: size.height / 2))
-            p.addLine(to: CGPoint(x: size.width - 2, y: size.height / 2))
-            ctx.stroke(p, with: .color(tone.opacity(0.25)), style: style)
-            return
-        }
-        let step: CGFloat = (size.width - 4) / CGFloat(points.count - 1)
-        var pts: [CGPoint] = []
-        for (i, v) in points.enumerated() {
-            let norm: CGFloat = CGFloat(1 - (v - 1) / 4)
-            let y: CGFloat = 3 + norm * (size.height - 6)
-            pts.append(CGPoint(x: 2 + CGFloat(i) * step, y: y))
-        }
-        ctx.stroke(curve(pts), with: .color(tone), style: style)
-    }
-}
-
-/// Mood row history: one continuous line of the last 20 moods, 5 per screen width, newest on the right.
-struct YasamMoodHistory: View {
-    @Environment(LifeStore.self) private var life
-    let onAdd: () -> Void
-    var onMore: () -> Void = {}
-    @State private var drawn: CGFloat = 0
-
-    var body: some View {
-        let points = Array(life.moods.sorted { $0.details.loggedAt > $1.details.loggedAt }.prefix(20).reversed())
-        VStack(alignment: .leading, spacing: 0) {
-            if points.isEmpty {
-                Text(t("Henüz mood yok")).font(.system(size: 13, weight: .light)).foregroundStyle(.white.opacity(0.7)).padding(.vertical, 8)
-                YasamTextAction(text: t("MOOD EKLE  +"), tone: YasamTone.moodDefault, action: onAdd)
-            } else {
-                GeometryReader { geo in
-                    let width = geo.size.width * CGFloat(max(points.count, 5)) / 5
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        VStack(spacing: 6) {
-                            Canvas { ctx, size in Self.drawChart(&ctx, size: size, points: points, drawn: drawn) }
-                            .frame(height: 60)
-                            HStack(spacing: 0) {
-                                ForEach(points) { e in
-                                    VStack(spacing: 2) {
-                                        Text(YasamText.whenLabel(e.details.loggedAt).components(separatedBy: " · ").first ?? "")
-                                            .font(.system(size: 10, design: .monospaced)).foregroundStyle(YasamTone.muted).lineLimit(1)
-                                        Text(e.mood.label).font(.system(size: 11, design: .monospaced)).foregroundStyle(MoodV2.tint(e.mood)).lineLimit(1)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-                            }
-                        }
-                        .frame(width: width)
-                    }
-                    .defaultScrollAnchor(.trailing)
-                }
-                .frame(height: 100)
-                YasamTextAction(text: t("DAHA FAZLA  ›"), tone: YasamTone.muted, action: onMore)
-            }
-        }
-        .padding(.top, 4)
-        .onAppear { withAnimation(.linear(duration: 0.5)) { drawn = 1 } }
-    }
-}
-
-extension YasamMoodHistory {
-    static func drawChart(_ ctx: inout GraphicsContext, size: CGSize, points: [MoodTrackerEntry], drawn: CGFloat) {
-        let n = points.count
-        guard n > 0 else { return }
-        let cell: CGFloat = size.width / CGFloat(n)
-        var pts: [CGPoint] = []
-        for (i, e) in points.enumerated() {
-            let norm: CGFloat = CGFloat(1 - (YasamText.moodScore(e.mood) - 1) / 4)
-            let y: CGFloat = 8 + norm * (size.height - 16)
-            pts.append(CGPoint(x: cell * (CGFloat(i) + 0.5), y: y))
-        }
-        var base = Path()
-        base.move(to: CGPoint(x: 0, y: size.height / 2))
-        base.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-        ctx.stroke(base, with: .color(Color.white.opacity(0.1)), lineWidth: 1)
-        if n > 1 {
-            let path = YasamSpark.curve(pts).trimmedPath(from: 0, to: drawn)
-            // The line carries each point's mood family tint and blends into the next one in between.
-            let stops = pts.enumerated().map { i, p in Gradient.Stop(color: MoodV2.tint(points[i].mood), location: p.x / size.width) }
-            ctx.opacity = 0.85
-            ctx.stroke(path, with: .linearGradient(Gradient(stops: stops), startPoint: .zero, endPoint: CGPoint(x: size.width, y: 0)),
-                       style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-            ctx.opacity = 1
-        }
-        for i in 0..<n {
-            let reach: CGFloat = CGFloat(i) / CGFloat(max(n - 1, 1))
-            guard reach <= drawn + 0.01 else { continue }
-            let rect = CGRect(x: pts[i].x - 3.5, y: pts[i].y - 3.5, width: 7, height: 7)
-            ctx.fill(Path(ellipseIn: rect), with: .color(MoodV2.tint(points[i].mood)))
-        }
-    }
-}
-
-/// Water row history: daily totals of the last 20 days against each day's frozen goal.
-struct YasamWaterHistory: View {
-    @Environment(LifeStore.self) private var life
-
-    var body: some View {
-        let cal = Calendar.real
-        let days = (0..<20).reversed().map { cal.date(byAdding: .day, value: -$0, to: Date())! }
-        let values = days.map { (day: $0, ml: life.total(on: $0), goal: life.goal(on: $0)) }
-        let maxValue = max(values.map { max($0.ml, $0.goal) }.max() ?? 1, 1)
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .bottom, spacing: 4) {
-                ForEach(values, id: \.day) { v in
-                    VStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(v.ml >= v.goal ? YasamTone.water : YasamTone.water.opacity(v.ml > 0 ? 0.5 : 0.12))
-                            .frame(height: max(3, 56 * CGFloat(v.ml) / CGFloat(maxValue)))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            }
-            .frame(height: 60)
-            HStack {
-                Text(t("20 GÜN ÖNCE")).font(.system(size: 10, design: .monospaced)).foregroundStyle(YasamTone.muted)
-                Spacer()
-                Text(t("BUGÜN")).font(.system(size: 10, design: .monospaced)).foregroundStyle(YasamTone.muted)
-            }
-        }
-        .padding(.vertical, 8)
     }
 }
