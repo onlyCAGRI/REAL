@@ -298,6 +298,86 @@ struct ReminderItem: Codable, Identifiable, Hashable {
     var isCompleted: Bool { completedAt != nil }
     var hasRepeat: Bool { repeatRule != .none }
 
+    /// ReminderTime.kt eventEndAt: a timed event with an end ("Bitiş"). From alertAt until this it reads "Devam ediyor",
+    /// after it "Bitti · işaretle" and an end notification asks "Bitti mi?". Repeating cards keep their old look.
+    var eventEndAt: EpochMillis? {
+        guard let start = alertAt, let end = endAt, !hasRepeat, end > start else { return nil }
+        return end
+    }
+
+    /// ReminderTime.kt runningSpan: the occurrence running at [now]. A one-off card runs from alertAt to eventEndAt; a
+    /// repeating card ("her gün 9–10 spor") repeats its first occurrence's length (endAt − anchorAlertAt, at most a day)
+    /// at each occurrence of its rule. iOS keeps alertAt on the series, so the occurrence comes from the rule itself.
+    func runningSpan(at now: EpochMillis) -> (start: EpochMillis, end: EpochMillis)? {
+        guard !isCompleted else { return nil }
+        if !hasRepeat {
+            guard let start = alertAt, let end = eventEndAt, now >= start, now < end else { return nil }
+            return (start, end)
+        }
+        guard let first = anchorAlertAt ?? alertAt, let endAt else { return nil }
+        let length = endAt - first
+        guard length > 0, length <= 24 * 60 * 60_000 else { return nil }
+        let windowStart = now - length
+        if first > windowStart, first <= now,
+           !repeatSkippedEpochDays.contains(Calendar.real.epochDay(ofMillis: first)) { return (first, first + length) }
+        guard let start = Recurrence.nextRepeat(base: first, rule: repeatRule, weekdaysMask: repeatWeekdaysMask,
+                                                untilEpochDay: repeatUntilEpochDay, after: windowStart,
+                                                skipped: repeatSkippedEpochDays),
+              start <= now else { return nil }
+        return (start, start + length)
+    }
+
+    /// ReminderTime.kt conflictingCardIds — Çakışma: ids of open timed cards (REAL and phone calendar) whose times
+    /// overlap, for occurrences not yet over. A card without an end is a moment: it overlaps only inside another's span
+    /// or at the same start. All-day cards, dividers and done cards never count.
+    static func conflictingIds(_ cards: [ReminderItem], now: EpochMillis) -> Set<Int64> {
+        Set(conflictPairs(cards, now: now).flatMap { [$0.0.id, $0.1.id] })
+    }
+
+    /// conflictPartners: the cards [card] overlaps with, in time order ("Diş hekimi ile çakışıyor").
+    static func conflictPartners(of card: ReminderItem, in cards: [ReminderItem], now: EpochMillis) -> [ReminderItem] {
+        var seen = Set<Int64>()
+        return conflictPairs(cards.filter { $0.id != card.id } + [card], now: now).compactMap { a, b in
+            a.id == card.id ? b : b.id == card.id ? a : nil
+        }.filter { seen.insert($0.id).inserted }
+    }
+
+    private static func conflictPairs(_ cards: [ReminderItem], now: EpochMillis) -> [(ReminderItem, ReminderItem)] {
+        struct Span { let card: ReminderItem; let start: EpochMillis; let end: EpochMillis }
+        let spans: [Span] = cards.compactMap { r in
+            guard !r.isCompleted, !r.isDivider, let start = r.alertAt else { return nil }
+            var length: EpochMillis = 0
+            if !r.hasRepeat { length = max(0, (r.endAt ?? start) - start) }
+            else if let end = r.endAt {
+                let l = end - (r.anchorAlertAt ?? start)
+                if l > 0 && l <= 24 * 60 * 60_000 { length = l }
+            }
+            let span = Span(card: r, start: start, end: start + length)
+            return span.end >= now || span.start >= now - 60_000 ? span : nil
+        }.sorted { $0.start < $1.start }
+        var out: [(ReminderItem, ReminderItem)] = []
+        for i in spans.indices {
+            for j in (i + 1)..<spans.count {
+                let a = spans[i], b = spans[j]
+                if b.start > a.end { break }
+                if a.card.id != b.card.id && (a.start == b.start || b.start < a.end) { out.append((a.card, b.card)) }
+            }
+        }
+        return out
+    }
+
+    /// 0...1 through the running occurrence, or nil when nothing is running at [now].
+    func ongoingProgress(at now: EpochMillis) -> Double? {
+        guard let span = runningSpan(at: now) else { return nil }
+        return Double(now - span.start) / Double(span.end - span.start)
+    }
+
+    /// The event's end passed and the card is still open: grey "Bitti · işaretle", not the red of an overdue alert.
+    func hasEventEnded(at now: EpochMillis) -> Bool {
+        guard !isCompleted, let end = eventEndAt else { return false }
+        return now >= end
+    }
+
     /// When the early warning for the current alert fires, or nil without one.
     var earlyAlertAt: EpochMillis? {
         guard let alertAt, let minutes = earlyAlertMinutes, (1...ReminderItem.maxEarlyAlertMinutes).contains(minutes) else { return nil }

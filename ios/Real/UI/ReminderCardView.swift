@@ -23,6 +23,9 @@ struct ReminderCardView: View {
     var swipeRightLabel = "Move 24 hour"
     /// True when the card stays in the list after the right swipe, so it slides back into place.
     var swipeRightKeepsCard = true
+    /// Çakışma: set by Home / category lists for cards whose times overlap.
+    @Environment(\.cardConflicts) private var cardConflicts
+    private var conflict: Bool { !reminder.isCompleted && cardConflicts.contains(reminder.id) }
     /// Sade kartlar (Ayarlar, deneysel): no completion circle; the text moves left.
     var plainStyle = false
     /// Home search results: the card's category name in a small pill (like the category descriptions).
@@ -147,6 +150,10 @@ struct ReminderCardView: View {
             ZStack(alignment: .trailing) {
                 if let accent { shape.fill(accent) } else { shape.fill(RealColors.cardSurface) }
                 if isSelected { shape.fill(RealColors.accentBlue.opacity(0.07)) }
+                // Sis dolumu: a card whose event is running fills with a soft green mist from the left.
+                OngoingMist(reminder: reminder)
+                // Çakışma: an amber edge light when this card's time overlaps another's.
+                if conflict { ConflictEdge() }
                 // Kontrol ettir: a slow light from the right edge until this viewer opens the card.
                 if let glow = CheckRequests.shared.glow(reminder, me: RealAuth.shared.account?.uid, categoryColor: reminder.customCategoryId == nil ? nil : category.map { $0.visual.stripe.0 }) { CheckGlowOverlay(color: glow) }
                 if let stripes {
@@ -278,11 +285,18 @@ struct ReminderCardView: View {
             HStack(spacing: 5) {
                 if dated, let alert = reminder.alertAt {
                     let overdue = alert < EpochMillis.now
-                    let color: Color = useDark ? (overdue ? Color(argb: 0xFFC53030) : Color(argb: 0xFF1E3A8A))
+                    let color: Color = conflict ? (useDark ? Conflict.amberOnLight : Conflict.amber)
+                        : useDark ? (overdue ? Color(argb: 0xFFC53030) : Color(argb: 0xFF1E3A8A))
                         : (overdue ? RealColors.overdue : RealColors.accentBlue)
-                    Text(reminder.hasRepeat ? "\(RealDates.reminder(alert)) • \(Recurrence.patternLabel(reminder) ?? reminder.repeatRule.displayName)"
+                    let date = Text(reminder.hasRepeat ? "\(RealDates.reminder(alert)) • \(Recurrence.patternLabel(reminder) ?? reminder.repeatRule.displayName)"
                          : RealDates.reminder(alert))
                         .foregroundStyle(color).lineLimit(1).layoutPriority(1)
+                    // An event with an end: "Devam ediyor · xx dk kaldı" while it runs, "Bitti · işaretle" after.
+                    if reminder.endAt != nil {
+                        OngoingDateLine(reminder: reminder, useDark: useDark, subtext: subtext, fallback: AnyView(date))
+                    } else {
+                        date
+                    }
                 } else if dated, let day = reminder.plannedDateEpochDay {
                     Text(RealDates.planned(day))
                         .foregroundStyle(useDark ? Color(argb: 0xFF1E3A8A) : RealColors.accentBlue).lineLimit(1).layoutPriority(1)

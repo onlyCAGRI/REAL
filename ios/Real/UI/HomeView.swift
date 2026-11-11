@@ -280,6 +280,7 @@ struct HomeView: View {
             }
             .animation(.spring(duration: 0.35), value: active.map(\.id))
         }
+        .environment(\.cardConflicts, ReminderItem.conflictingIds(store.reminders + calendarItems.map(CalendarCards.card), now: .now))
         .scrollDismissesKeyboard(.interactively)
         .hideBottomScrollEdgeEffect()
         .background(RealColors.background.ignoresSafeArea())

@@ -110,11 +110,14 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
     let role: LiquidGlassRole
     let dim: Double
     @AppStorage("reduce_dynamic_blur") private var reduceDynamicBlur = false
+    /// iOS Ayarlar → Erişilebilirlik → Şeffaflığı Azalt: the system glass already turns opaque; the dock goes flat too,
+    /// as with the app's own switch. (The iOS 27 Liquid Glass slider needs nothing here: glassEffect follows it.)
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
 
     func body(content: Content) -> some View {
         // The glass itself takes no touches: without this only the icon on it was tappable, and a tap beside the icon
         // went through to whatever lies below (the map under the back button zoomed in).
-        if reduceDynamicBlur && role == .dock { content.flatDock(shape, dim: dim).contentShape(shape) }
+        if (reduceDynamicBlur || systemReduceTransparency) && role == .dock { content.flatDock(shape, dim: dim).contentShape(shape) }
         else { content.systemOrFallbackGlass(shape, role: role, dim: dim).contentShape(shape) }
     }
 }

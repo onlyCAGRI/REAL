@@ -193,6 +193,7 @@ struct CategoryScreen: View {
                 .animation(.spring(duration: 0.35), value: lists.active.map(\.id))
                 .animation(.spring(duration: 0.3), value: showProgress)
             }
+            .environment(\.cardConflicts, ReminderItem.conflictingIds(store.reminders + calendarItems.map(CalendarCards.card), now: .now))
             .coordinateSpace(name: "categoryScroll")
             .onPreferenceChange(HeroBottomKey.self) { heroBottom = $0 }
             // Pull down from the top: the page follows a little and slides back to home (every category, like the

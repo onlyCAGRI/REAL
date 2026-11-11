@@ -377,6 +377,16 @@ final class ReminderStore {
         }
     }
 
+    /// Notification "+15 dk uzat": the event ends [minutes] later, counted from now when its end already passed.
+    func extendEnd(_ id: Int64, minutes: Int) {
+        mutate(id) { r in
+            guard !r.isCompleted, let end = r.endAt else { return }
+            let now = EpochMillis.now
+            r.endAt = max(end, now) + EpochMillis(minutes) * 60_000
+            r.updatedAt = now
+        }
+    }
+
     /// "Sadece bu gün": skip one occurrence of a repeating series, the series itself stays.
     func deleteOccurrence(_ id: Int64, occurrence: EpochMillis) {
         guard AppUpdateGate.writable() else { return }

@@ -219,7 +219,7 @@ struct SettingsScreen: View {
     /// Home-screen icon: nil = white AppIcon, "AppIconDark" = black.
     @State private var iconDark = UIApplication.shared.alternateIconName != nil
 
-    private enum SettingsSheet { case language, appIcon, map, calendar, vi, music, snooze, suggestionReset, ratingReset }
+    private enum SettingsSheet { case language, appIcon, map, calendar, travel, vi, music, snooze, suggestionReset, ratingReset }
     /// Set after asking; nil = read AlarmKit's state.
     @State private var alarmAllowed: Bool?
     @State private var notificationTest: String?
@@ -285,6 +285,10 @@ struct SettingsScreen: View {
             ChoiceSheet(title: t("Ana ekranda takvim"),
                         choices: [0, 7, 14].map { SheetChoice(value: $0, label: $0 > 0 ? t("Önümüzdeki {0} gün", $0) : t("Kapalı")) },
                         selected: calendarHomeDays, onSelect: { calendarHomeDays = $0 }, onDismiss: close)
+        case .travel:
+            ChoiceSheet(title: t("Yola çıkış"),
+                        choices: TravelMode.allCases.map { SheetChoice(value: $0.rawValue, label: $0.label) },
+                        selected: travelModeRaw, onSelect: { travelModeRaw = $0 }, onDismiss: close)
         case .vi:
             ChoiceSheet(title: "Vi",
                         choices: [SheetChoice(value: "normal", label: t("Açık")), SheetChoice(value: "kapali", label: t("Kapalı"))],
@@ -319,6 +323,8 @@ struct SettingsScreen: View {
 
     @AppStorage(HomeCardStyle.plainKey) private var plainCards = true
     @AppStorage(CalendarCards.homeDaysKey) private var calendarHomeDays = 0
+    /// "Yola çıkış" (DepartureReminder.TravelMode): Ortalama by default.
+    @AppStorage(TravelMode.storageKey) private var travelModeRaw = TravelMode.average.rawValue
     @AppStorage(RealPet.modeKey) private var petMode = "normal"
     @State private var musicSource = MusicSource.saved
 
@@ -386,6 +392,10 @@ struct SettingsScreen: View {
             // Kapalı / 7 gün / 14 gün, picked in a sheet.
             SettingsChoiceRow(icon: .calendar, title: t("Ana ekranda takvim"),
                               value: calendarHomeDays > 0 ? t("Önümüzdeki {0} gün", calendarHomeDays) : t("Kapalı")) { sheet = .calendar }
+            SettingsDivider()
+            // "Çıkma vakti": how the time to leave for a card's place is counted.
+            SettingsChoiceRow(icon: .pin, title: t("Yola çıkış"),
+                              value: (TravelMode(rawValue: travelModeRaw) ?? .average).label) { sheet = .travel }
             SettingsDivider()
             if RealPet.available {
                 SettingsChoiceRow(icon: .cat, title: "Vi", value: petMode == "kapali" ? t("Kapalı") : t("Açık")) { sheet = .vi }
@@ -518,10 +528,13 @@ struct SettingsScreen: View {
             SettingsActionRow(icon: .settings, title: t("İpucunu dene"), subtitle: t("Örnek eğitim ipucunu gösterir")) {
                 RealTips.shared.show("test", force: true)
             }
-            SettingsDivider()
-            SettingsToggleRow(icon: .person, title: t("Tüm avatar parçaları açık"),
-                              subtitle: t("Deneme için: başarım ödülü olan kilitli parçalar da seçilebilir."),
-                              isOn: Binding(get: { AvatarUnlocks.allOpen }, set: { AvatarUnlocks.allOpen = $0 }))
+            // Hidden while achievements are paused: every part is open anyway.
+            if !AvatarUnlocks.paused {
+                SettingsDivider()
+                SettingsToggleRow(icon: .person, title: t("Tüm avatar parçaları açık"),
+                                  subtitle: t("Deneme için: başarım ödülü olan kilitli parçalar da seçilebilir."),
+                                  isOn: Binding(get: { AvatarUnlocks.allOpen }, set: { AvatarUnlocks.allOpen = $0 }))
+            }
         }
         SettingsSectionHeader(title: t("BİLDİRİM TESTİ"))
         SettingsGlassGroup {

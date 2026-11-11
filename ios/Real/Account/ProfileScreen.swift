@@ -12,6 +12,8 @@ import FirebaseAuth
 enum AvatarUnlocks {
     private static let allKey = "avatar_unlocks_all_open"
     private static let earnedKey = "avatar_unlocks_earned"
+    /// Achievements are paused: every reward part is open; `false` brings the locks back.
+    static let paused = true
 
     static var allOpen: Bool {
         get { UserDefaults.standard.bool(forKey: allKey) }
@@ -28,7 +30,7 @@ enum AvatarUnlocks {
 
     /// The editor page's __UNLOCKED__ value: "*" or base64 JSON of the earned part names.
     static func pageValue() -> String {
-        if allOpen { return "*" }
+        if paused || allOpen { return "*" }
         let data = (try? JSONSerialization.data(withJSONObject: earned.sorted())) ?? Data("[]".utf8)
         return data.base64EncodedString()
     }
@@ -259,10 +261,10 @@ struct ProfileScreen: View {
         return .member
     }
     private var joinedAt: Date? { Auth.auth().currentUser?.metadata.creationDate }
+    // Admin stamps only while achievements are paused (their stamps came from `progress`).
     private var stamps: [Stamp] {
-        let earnedStamps = progress.filter { $0.done && $0.def.stamp }.map(\.def.id)
         var ids: [String] = []
-        for id in granted + earnedStamps where !ids.contains(id) { ids.append(id) }
+        for id in granted where !ids.contains(id) { ids.append(id) }
         return ids.compactMap(stampFor)
     }
     private var allTitles: [Achievements.Title] {
@@ -295,7 +297,7 @@ struct ProfileScreen: View {
                 .padding(.horizontal, 20)
                 compactCard(background).onTapGesture { showCard = true }
                     .accessibilityAddTraits(.isButton).accessibilityLabel(t("Üye kartını aç"))
-                achievementSummary
+                // Achievements are paused for now: achievementSummary / achievementsView stay below, unused.
             }
             .padding(.bottom, 32)
         }
@@ -325,7 +327,6 @@ struct ProfileScreen: View {
         }
         .sheet(isPresented: $showTitles) { titleSheet.presentationDetents([.medium, .large]) }
         .fullScreenCover(isPresented: $showCard) { cardView(background) }
-        .fullScreenCover(isPresented: $showAchievements) { achievementsView }
     }
 
     // MARK: Parts

@@ -13,8 +13,11 @@ enum NotificationScheduler {
     static var enabled = true
     static let dueCategory = "REAL_REMINDER_DUE"
     static let immediateCategory = "REAL_REMINDER"
+    static let eventStartCategory = "REAL_EVENT_START"
+    static let eventEndCategory = "REAL_EVENT_END"
     static let completeAction = "REAL_COMPLETE"
     static let snoozeAction = "REAL_SNOOZE_10"
+    static let extendAction = "REAL_EXTEND_15"
     static let snoozeMillis: EpochMillis = 10 * 60 * 1000
     private static let repeatsAhead = 8
 
@@ -23,10 +26,15 @@ enum NotificationScheduler {
 
     static func registerCategories() {
         let complete = UNNotificationAction(identifier: completeAction, title: t("Tamamla"), options: [])
+        let completeEvent = UNNotificationAction(identifier: completeAction, title: t("Tamamladım"), options: [])
         let snooze = UNNotificationAction(identifier: snoozeAction, title: t("10 dk ertele"), options: [])
+        let extend = UNNotificationAction(identifier: extendAction, title: t("+15 dk"), options: [])
         let due = UNNotificationCategory(identifier: dueCategory, actions: [complete, snooze], intentIdentifiers: [], options: [])
         let immediate = UNNotificationCategory(identifier: immediateCategory, actions: [complete], intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([due, immediate])
+        // Started: only "10 dk ertele"; finishing is asked again at the end. Ended: "Tamamlandı" / "+15 dk uzat".
+        let eventStart = UNNotificationCategory(identifier: eventStartCategory, actions: [snooze], intentIdentifiers: [], options: [])
+        let eventEnd = UNNotificationCategory(identifier: eventEndCategory, actions: [completeEvent, extend], intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([due, immediate, eventStart, eventEnd])
     }
 
     /// Off while REAL re-adds everything on its own (launch, coming to the front): only a card being set asks.
@@ -162,6 +170,11 @@ enum NotificationScheduler {
                 // Fresh content per occurrence: iOS moves an attachment's file away on add, so a shared one fails after the first.
                 let content = content(for: item, alerting: true)
                 if item.isAlarm { content.interruptionLevel = .timeSensitive }
+                // An event with an end that just started: "Başladı", and only "10 dk ertele"; finishing is asked at the end.
+                if item.eventEndAt != nil {
+                    content.categoryIdentifier = eventStartCategory
+                    content.subtitle = t("Başladı")
+                }
                 post(UNNotificationRequest(identifier: identifier(item.id, i), content: content, trigger: calendarTrigger(time.date)))
             }
             // "Erken uyarı": a heads-up before each occurrence ("15 dk sonra · …").
@@ -174,6 +187,13 @@ enum NotificationScheduler {
                 heads.sound = .default
                 post(UNNotificationRequest(identifier: earlyIdentifier(item.id, i), content: heads, trigger: calendarTrigger(early.date)))
             }
+        }
+        // "Bitti mi?": once when the event's end arrives, with "Tamamlandı" / "+15 dk uzat".
+        if let end = item.eventEndAt, end > now {
+            let content = content(for: item, alerting: true)
+            content.body = t("Süresi doldu")
+            content.categoryIdentifier = eventEndCategory
+            post(UNNotificationRequest(identifier: endIdentifier(item.id), content: content, trigger: calendarTrigger(end.date)))
         }
     }
 
@@ -280,6 +300,7 @@ enum NotificationScheduler {
     }
 
     private static func identifier(_ id: Int64, _ index: Int) -> String { index == 0 ? "reminder-\(id)" : "reminder-\(id)-\(index)" }
+    private static func endIdentifier(_ id: Int64) -> String { "reminder-\(id)-end" }
 
     /// Alarm snoozed on REAL's page before iOS 26 (no AlarmKit): one time-sensitive notification.
     static func scheduleAlarmFallback(_ alarm: RingingAlarm) {
@@ -297,7 +318,8 @@ enum NotificationScheduler {
     static func cancel(_ id: Int64, alarms: Bool = true, keepSnooze: Bool = false) {
         guard enabled else { return }
         if alarms, #available(iOS 26.0, *) { RealAlarmKit.cancel(id, keepSnooze: keepSnooze) }
-        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) } + [placeIdentifier(id), DepartureReminder.identifier(id)]
+        let ids = (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) }
+            + [placeIdentifier(id), DepartureReminder.identifier(id), endIdentifier(id)]
             + (keepSnooze ? [] : ["reminder-\(id)-snooze"])
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
@@ -306,7 +328,7 @@ enum NotificationScheduler {
     static func removeDelivered(_ id: Int64) {
         guard enabled else { return }
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: (0..<repeatsAhead).map { identifier(id, $0) } + (0..<repeatsAhead).map { earlyIdentifier(id, $0) }
-            + ["reminder-\(id)-now", placeIdentifier(id), "reminder-\(id)-snooze"])
+            + ["reminder-\(id)-now", placeIdentifier(id), "reminder-\(id)-snooze", endIdentifier(id)])
     }
 
     /// Off while refilling notifications only: system alarms stay as they are (ringing, snoozed, scheduled).

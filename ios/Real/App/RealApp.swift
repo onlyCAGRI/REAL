@@ -153,6 +153,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 NotificationScheduler.removeDelivered(id)
             case NotificationScheduler.snoozeAction:
                 store?.snooze(id)
+            case NotificationScheduler.extendAction:
+                store?.extendEnd(id, minutes: 15)
+                NotificationScheduler.removeDelivered(id)
             case UNNotificationDefaultActionIdentifier:
                 // A place notification also carries its place: RootView opens the arrival focus screen for it.
                 NotificationCenter.default.post(name: .realOpenReminder, object: nil, userInfo: response.notification.request.content.userInfo)

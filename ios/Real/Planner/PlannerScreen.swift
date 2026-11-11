@@ -73,7 +73,8 @@ struct PlannerScreen: View {
                 // Takvim is the month: the grid and the picked day's plans. Category goals open from the category screen.
                 PlannerMonthView(selectedDay: $selectedDay, today: today,
                                  externals: { from, to in calendarConnection.occurrences(from: from, to: to).map(Self.externalCard) },
-                                 onOpenEvent: { openEvent($0) })
+                                 onOpenEvent: { openEvent($0) },
+                                 onSwipeBack: { modeRaw = "hours_24" })
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: 80)), removal: .opacity.combined(with: .offset(x: 80))))
             } else {
                 hours24Content(reminders: calendarReminders)
@@ -835,8 +836,8 @@ struct PlannerNext24Card: View {
     private static func amPm(_ millis: EpochMillis) -> String {
         let c = Calendar.real.dateComponents([.hour, .minute], from: millis.date)
         let hour = c.hour ?? 0
-        let h = hour == 0 ? 12 : (hour <= 12 ? hour : hour - 12)
         if !I18n.isEnglish { return String(format: "%02d:%02d", hour, c.minute ?? 0) }
+        let h = hour == 0 ? 12 : (hour <= 12 ? hour : hour - 12)
         return String(format: "%d:%02d %@", h, c.minute ?? 0, hour < 12 ? "am" : "pm")
     }
 

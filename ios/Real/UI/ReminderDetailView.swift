@@ -74,6 +74,11 @@ struct ReminderDetailView: View {
     @State private var showMoodPicker = false
     @State private var previewPhoto: ReminderAttachment?
     @FocusState private var titleFocused: Bool
+    /// Checklist editing: one focus per item id, plus the "add item" row at the bottom.
+    private enum ChecklistFocus: Hashable { case item(Int64), add }
+    @FocusState private var checklistFocus: ChecklistFocus?
+    /// A just-added first item asks for focus once its row is on screen.
+    @State private var pendingChecklistFocus: ChecklistFocus?
     /// The cover title comes back through Yaşam's blur whenever editing toggles or it changes size.
     @State private var titleShown = true
     @State private var showTitleTools = false
@@ -308,6 +313,9 @@ struct ReminderDetailView: View {
         CardStackDeck(stack: stack, editing: editing, inline: inlineStack != nil,
                       onEdit: { editingStackCard = $0 },
                       onAdd: addStackCard,
+                      onDelete: { card in
+                          withAnimation(.spring(duration: 0.3)) { updateStack { $0.cards.removeAll { $0.id == card.id } } }
+                      },
                       onChange: { id, change in
                           updateStack { s in
                               if let i = s.cards.firstIndex(where: { $0.id == id }) { change(&s.cards[i]) }
@@ -316,10 +324,16 @@ struct ReminderDetailView: View {
                       onStartTyping: { if !editing && inlineStack == nil { inlineStack = stored?.cardStack } })
     }
 
-    /// A new card is an empty one on the deck, ready to type on; one left empty is dropped when stored.
+    /// The first card is an empty one on the deck, ready to type on; one left empty is dropped when stored.
+    /// With cards already there the new one opens in the card editor: appended blank to a deck it showed
+    /// nothing you could see (it went off screen, or the keyboard closing dropped it as empty).
     private func addStackCard() {
         let card = seededStackCard(CardStackCard())
-        updateStack { $0.cards.append(card) }
+        if let existing = inlineStack ?? shown?.cardStack, !existing.cards.isEmpty {
+            editingStackCard = card
+        } else {
+            updateStack { $0.cards.append(card) }
+        }
     }
 
     private func finishInlineStack() {
@@ -721,6 +735,9 @@ struct ReminderDetailView: View {
                     .multilineTextAlignment(textAlign)
                     .frame(maxWidth: .infinity, alignment: frameAlign)
                     .padding(.top, 10)
+                // Çakışma: on the card only an amber edge and time; here it says with what.
+                DetailConflictLine(reminder: r, others: store.reminders + CalendarCards.upcoming(days: 30).map(CalendarCards.card))
+                    .frame(maxWidth: .infinity, alignment: frameAlign)
             } else if !r.isCompleted, let epochDay = r.plannedDateEpochDay {
                 let d = Calendar.real.startOfDay(epochDay: epochDay)
                 let weekday = t(Calendar.real.isoWeekday(of: d).full)
@@ -952,12 +969,14 @@ struct ReminderDetailView: View {
                         draft?.checklistItems = []
                         draft?.isChecklist = false
                         checklistOpen = false
+                        checklistFocus = nil
+                        pendingChecklistFocus = nil
                     } label: { RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFF8E8E98)).frame(width: 28, height: 28) }
                     .accessibilityLabel(t("Checklist kutusunu kaldır"))
                 }
             }
             .padding(.horizontal, 4).padding(.vertical, 2)
-            ForEach(items) { item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 HStack(spacing: 12) {
                     Button {
                         UISelectionFeedbackGenerator().selectionChanged()
@@ -978,9 +997,16 @@ struct ReminderDetailView: View {
                     if editing {
                         TextField("", text: Binding(get: { item.text }, set: { v in
                             draft?.checklistItems = (draft?.checklistItems ?? []).map { $0.id == item.id ? ChecklistItem(id: $0.id, text: v, completedAt: $0.completedAt) : $0 }
-                        }))
+                        }), prompt: Text(t("Madde {0}", index + 1)).foregroundStyle(Color(argb: 0xFF6C6C76)))
                         .font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFF1F1F5))
-                        Button { draft?.checklistItems.removeAll { $0.id == item.id } } label: {
+                        .focused($checklistFocus, equals: .item(item.id))
+                        .submitLabel(.next)
+                        .onSubmit { focusNextChecklist(after: item.id) }
+                        .onAppear { focusPendingChecklistIfNeeded(item.id) }
+                        Button {
+                            draft?.checklistItems.removeAll { $0.id == item.id }
+                            if pendingChecklistFocus == .item(item.id) { pendingChecklistFocus = nil }
+                        } label: {
                             RealSymbol("xmark", size: 12.6).foregroundStyle(Color(argb: 0xFF7A7A85)).frame(width: 28, height: 28)
                         }
                     } else {
@@ -997,14 +1023,15 @@ struct ReminderDetailView: View {
                     RealSymbol("plus", size: 14.9).foregroundStyle(RealColors.accentBlue).frame(width: 32, height: 32)
                     TextField("", text: $newChecklistText, prompt: Text(t("Madde ekle")).foregroundStyle(Color(argb: 0xFF6C6C76)))
                         .font(RealFont.inter(15))
+                        .focused($checklistFocus, equals: .add)
                         .submitLabel(.next)
                         .onSubmit {
-                            let t = newChecklistText.trimmingCharacters(in: .whitespaces)
-                            guard !t.isEmpty else { return }
-                            let next = max(EpochMillis.now, (draft?.checklistItems.map(\.id).max() ?? 0) + 1)
-                            draft?.checklistItems.append(ChecklistItem(id: next, text: t))
+                            let text = newChecklistText.trimmingCharacters(in: .whitespaces)
+                            guard !text.isEmpty else { return }
+                            draft?.checklistItems.append(ChecklistItem(id: nextChecklistItemId(), text: text))
                             draft?.isChecklist = true
                             newChecklistText = ""
+                            checklistFocus = .add
                         }
                 }
             }
@@ -1012,6 +1039,25 @@ struct ReminderDetailView: View {
         .padding(.horizontal, 16).padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardContentChrome(corners: 22)
+    }
+
+    private func nextChecklistItemId() -> Int64 {
+        max(EpochMillis.now, (draft?.checklistItems.map(\.id).max() ?? 0) + 1)
+    }
+
+    /// Keyboard "next" in an item: the next row, or the "add item" row after the last one.
+    private func focusNextChecklist(after id: Int64) {
+        guard let items = draft?.checklistItems,
+              let index = items.firstIndex(where: { $0.id == id }) else { return }
+        checklistFocus = index + 1 < items.count ? .item(items[index + 1].id) : .add
+    }
+
+    /// A first item created by the Checklist button is focused once SwiftUI has put its row on screen, so typing
+    /// goes into the item instead of staying in the card title.
+    private func focusPendingChecklistIfNeeded(_ id: Int64) {
+        guard pendingChecklistFocus == .item(id) else { return }
+        pendingChecklistFocus = nil
+        DispatchQueue.main.async { checklistFocus = .item(id) }
     }
 
     private func photoBlock(_ a: ReminderAttachment, heroInset: CGFloat = 0) -> some View {
@@ -1414,8 +1460,17 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "camera", label: t("Kamera ile fotoğraf ekle"), active: false) { Task { if await PermissionPrompt.cameraReady() { showCamera = true } } }
                     QuickAction(symbol: "checklist", label: t("Checklist"), active: checklistOpen || !(d?.checklistItems.isEmpty ?? true),
                                 count: d?.checklistItems.count) {
+                        titleFocused = false
                         checklistOpen = true
                         draft?.isChecklist = true
+                        let items = draft?.checklistItems ?? []
+                        if items.isEmpty {
+                            let id = nextChecklistItemId()
+                            draft?.checklistItems = [ChecklistItem(id: id, text: "")]
+                            pendingChecklistFocus = .item(id)
+                        } else if let first = items.first {
+                            checklistFocus = .item(first.id)
+                        }
                     }
                     QuickAction(symbol: "rectangle.stack", label: t("Kart Yığını"), active: d?.cardStack != nil, count: d?.cardStack?.cards.count, tip: "detail_stack") {
                         addStackCard()
@@ -1706,6 +1761,8 @@ struct CardStackDeck: View {
     var inline = false
     var onEdit: (CardStackCard) -> Void = { _ in }
     var onAdd: () -> Void = {}
+    /// The ✕ on the front card while writing (Android's delete on the active card); the last one removes the stack.
+    var onDelete: (CardStackCard) -> Void = { _ in }
     /// Changes the latest copy of a card: the text editor stores its text and styles one right after the other.
     var onChange: (String, (inout CardStackCard) -> Void) -> Void = { _, _ in }
     var onStartTyping: () -> Void = {}
@@ -1830,6 +1887,15 @@ struct CardStackDeck: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(t("Metin araçları"))
+                    Button { onDelete(c) } label: {
+                        RealSymbol("xmark", size: 12.6).foregroundStyle(fg.opacity(0.85))
+                            .frame(width: 28, height: 28)
+                            .overlay(Circle().strokeBorder(fg.opacity(0.4), lineWidth: 0.8))
+                            .frame(width: 40, height: 40)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(t("Kartı sil"))
                 }
             }
             Spacer(minLength: 0)

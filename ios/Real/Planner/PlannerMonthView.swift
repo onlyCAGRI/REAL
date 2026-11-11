@@ -8,6 +8,8 @@ struct PlannerMonthView: View {
     let today: Date
     let externals: (Date, Date) -> [ReminderItem]
     let onOpenEvent: (Int64) -> Void
+    /// A right swipe below the grid (the day's plans, empty space) goes back to 24 hour, like Android.
+    var onSwipeBack: () -> Void = {}
 
     @State private var month: Date = Calendar.real.startOfMonth(for: Date())
     @State private var direction: CGFloat = 1
@@ -24,20 +26,28 @@ struct PlannerMonthView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                monthBar
-                HStack(spacing: 4) {
-                    ForEach(weekdays, id: \.self) { d in
-                        Text(d).font(RealFont.inter(12, .medium)).foregroundStyle(Color(argb: 0xFF8E9094)).frame(maxWidth: .infinity)
+                // Month bar, weekdays and grid: a swipe here turns the month (it wins over the page swipe below).
+                VStack(alignment: .leading, spacing: 10) {
+                    monthBar
+                    HStack(spacing: 4) {
+                        ForEach(weekdays, id: \.self) { d in
+                            Text(d).font(RealFont.inter(12, .medium)).foregroundStyle(Color(argb: 0xFF8E9094)).frame(maxWidth: .infinity)
+                        }
                     }
-                }
-                VStack(spacing: 5) {
-                    ForEach(0..<(days.count / 7), id: \.self) { row in
-                        weekRow(Array(days[(row * 7)..<(row * 7 + 7)]), byDay: byDay)
+                    VStack(spacing: 5) {
+                        ForEach(0..<(days.count / 7), id: \.self) { row in
+                            weekRow(Array(days[(row * 7)..<(row * 7 + 7)]), byDay: byDay)
+                        }
                     }
+                    .id(month)
+                    .transition(.asymmetric(insertion: .move(edge: direction > 0 ? .trailing : .leading).combined(with: .opacity),
+                                            removal: .move(edge: direction > 0 ? .leading : .trailing).combined(with: .opacity)))
                 }
-                .id(month)
-                .transition(.asymmetric(insertion: .move(edge: direction > 0 ? .trailing : .leading).combined(with: .opacity),
-                                        removal: .move(edge: direction > 0 ? .leading : .trailing).combined(with: .opacity)))
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 30).onEnded { v in
+                    guard abs(v.translation.width) > abs(v.translation.height) * 1.5 else { return }
+                    changeMonth(v.translation.width < 0 ? 1 : -1)
+                })
                 VStack(alignment: .leading, spacing: 4) {
                     Text(RealDates.longDay(selectedDay)).font(RealType.editorialItem).kerning(-1).foregroundStyle(Color(argb: 0xFFF3F1F4))
                     Text(picked.isEmpty ? t("Bu gün için plan yok") : t("{0} plan", picked.count)).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF8C8C95))
@@ -68,8 +78,9 @@ struct PlannerMonthView: View {
         .onAppear { month = calendar.startOfMonth(for: selectedDay) }
         .onChange(of: selectedDay) { _, _ in durationEditorId = nil }
         .gesture(DragGesture(minimumDistance: 30).onEnded { v in
+            // Below the grid: right swipe back to 24 hour; a left swipe still turns the month.
             guard abs(v.translation.width) > abs(v.translation.height) * 1.5 else { return }
-            changeMonth(v.translation.width < 0 ? 1 : -1)
+            if v.translation.width > 0 { onSwipeBack() } else { changeMonth(1) }
         })
     }
 

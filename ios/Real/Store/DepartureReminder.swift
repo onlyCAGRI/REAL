@@ -25,21 +25,20 @@ enum DepartureReminder {
             guard let here = await CurrentLocation.fix() else { return }
             // Close by: nothing to plan.
             guard here.distance(from: place) > 1500 else { return }
-            let request = MKDirections.Request()
-            request.source = MKMapItem(placemark: MKPlacemark(coordinate: here.coordinate))
-            request.destination = MKMapItem(placemark: MKPlacemark(coordinate: place.coordinate))
-            request.transportType = .automobile
-            request.arrivalDate = arrival
-            guard let eta = try? await MKDirections(request: request).calculateETA() else { return }
-            let leave = arrival.addingTimeInterval(-eta.expectedTravelTime - margin)
+            let mode = TravelMode.current
+            guard let travel = await travelTime(from: here, to: place, arrival: arrival, mode: mode) else { return }
+            let leave = arrival.addingTimeInterval(-travel - margin)
             guard leave.timeIntervalSinceNow > 60 else { return }
-            let minutes = Int((eta.expectedTravelTime / 60).rounded())
+            let minutes = Int((travel / 60).rounded())
             let clock = DateFormatter()
             clock.locale = I18n.locale; clock.dateFormat = "HH:mm"
             let content = UNMutableNotificationContent()
             content.title = t("Çıkma vakti")
             let what = name.isEmpty ? title.split(separator: "\n").first.map(String.init) ?? "" : name
-            content.body = t("{0} · trafikle yaklaşık {1} dk. {2}'da orada olmak için şimdi çık.", what.isEmpty ? t("Yol") : what, minutes, clock.string(from: arrival))
+            // "trafikle" only for a drive; walking, transit and the average just say "yolda".
+            content.body = mode == .car
+                ? t("{0} · trafikle yaklaşık {1} dk. {2}'da orada olmak için şimdi çık.", what.isEmpty ? t("Yol") : what, minutes, clock.string(from: arrival))
+                : t("{0} · yolda yaklaşık {1} dk. {2}'da orada olmak için şimdi çık.", what.isEmpty ? t("Yol") : what, minutes, clock.string(from: arrival))
             content.sound = .default
             content.threadIdentifier = "departure"
             content.userInfo = ["reminderId": id]
@@ -49,6 +48,49 @@ enum DepartureReminder {
     }
 
     static func refresh(_ items: [ReminderItem]) { items.forEach(plan) }
+
+    /// Seconds to the place for [mode], as the worker does on Android: driving (traffic at that hour), walking, transit,
+    /// or Ortalama = halfway between driving and walking, never more than twice the drive. Transit falls back to the
+    /// average where Apple has no transit data (and none for dolmuş).
+    private static func travelTime(from here: CLLocation, to place: CLLocation, arrival: Date, mode: TravelMode) async -> TimeInterval? {
+        func eta(_ type: MKDirectionsTransportType) async -> TimeInterval? {
+            let request = MKDirections.Request()
+            request.source = MKMapItem(placemark: MKPlacemark(coordinate: here.coordinate))
+            request.destination = MKMapItem(placemark: MKPlacemark(coordinate: place.coordinate))
+            request.transportType = type
+            request.arrivalDate = arrival
+            return (try? await MKDirections(request: request).calculateETA())?.expectedTravelTime
+        }
+        func average() async -> TimeInterval? {
+            async let car = eta(.automobile)
+            async let walk = eta(.walking)
+            guard let drive = await car else { return nil }
+            guard let foot = await walk else { return drive }
+            return min((drive + foot) / 2, drive * 2)
+        }
+        switch mode {
+        case .car: return await eta(.automobile)
+        case .walk: return await eta(.walking)
+        case .transit: if let transit = await eta(.transit) { return transit } else { return await average() }
+        case .average: return await average()
+        }
+    }
+}
+
+/// Ayarlar → "Yola çıkış" (TravelModeSetting on Android): how the time to leave is counted, Ortalama by default.
+enum TravelMode: String, CaseIterable, Identifiable {
+    case average, car, transit, walk
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .average: return t("Ortalama")
+        case .car: return t("Araba")
+        case .transit: return t("Toplu taşıma")
+        case .walk: return t("Yürüyüş")
+        }
+    }
+    static let storageKey = "travel_mode"
+    static var current: TravelMode { TravelMode(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .average }
 }
 
 /// Where the phone is, for the departure time and the card's route: the system's cached position when it is under
