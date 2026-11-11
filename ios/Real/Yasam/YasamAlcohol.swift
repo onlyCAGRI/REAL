@@ -306,76 +306,97 @@ private struct AlcoholPourStage: View {
         return [.wine, .sparkling, .sake].contains(kind) ? 450 : 700
     }
 
+    private var level: Double { 0.1 + 0.72 * min(max(Double(ml) / Double(maxMl), 0), 1) }
+    private var liquidColor: Color { scanning || kind == nil ? Color(argb: 0xFF8A8A96) : kind!.liquid }
+    private var foam: Bool { (kind == .beer || kind == .cider) && !scanning }
+    private var portions: [(String, Int)] { scanning ? DrinkKind.unknownPortions : kind?.portions ?? DrinkKind.unknownPortions }
+
     var body: some View {
-        let level = 0.1 + 0.72 * min(max(Double(ml) / Double(maxMl), 0), 1)
-        let color = scanning || kind == nil ? Color(argb: 0xFF8A8A96) : kind!.liquid
-        let foam = (kind == .beer || kind == .cider) && !scanning
         GeometryReader { geo in
             ZStack {
-                TimelineView(.animation(paused: reduceMotion)) { tl in
-                    let phase = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3.2) / 3.2 * 2 * .pi
-                    PourLiquid(level: level, phase: phase, foam: foam)
-                        .fill(color)
-                        .overlay {
-                            if foam { PourFoam(level: level, phase: phase).fill(Color(argb: 0xFFFFF3D6)) }
-                        }
-                }
-                .ignoresSafeArea()
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: level)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: color)
-                VStack(alignment: .leading, spacing: 0) {
-                    YasamBackButton(action: onBack)
-                    HStack(spacing: 12) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(argb: 0xFF1B1B21))
-                            if let photo, let image = UIImage(contentsOfFile: photo.path) {
-                                Image(uiImage: image).resizable().scaledToFill()
-                            }
-                            if scanning { ProgressView().tint(.white) }
-                        }
-                        .frame(width: 60, height: 60).clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(title).font(RealFont.inter(19, .bold)).foregroundStyle(.white)
-                            Text(scanning ? t("Bu arada ne kadar içtin?") : kind != nil ? t("Ne kadar içtin?") : t("Miktarı seç, türünü sonra soracağız"))
-                                .font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.75))
-                        }
-                    }
-                    .padding(.top, 14)
-                    VStack(spacing: 2) {
-                        Text(yasamMlText(ml)).font(.system(size: 68, weight: .thin)).foregroundStyle(.white)
-                            .contentTransition(.numericText()).animation(.snappy, value: ml)
-                        Text(t("yukarı aşağı sürükle")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7))
-                    }
-                    .frame(maxWidth: .infinity).padding(.top, 40)
-                    Spacer()
-                    ChipFlow(spacing: 6, lineSpacing: 6) {
-                        ForEach(scanning ? DrinkKind.unknownPortions : kind?.portions ?? DrinkKind.unknownPortions, id: \.1) { label, v in
-                            DrinkChip(label: t(label), on: v == ml, onDark: true) { onMl(v) }
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    Button(action: onNext) {
-                        Text(scanning ? t("Tanınıyor…") : t("Devam")).font(RealFont.inter(16, .bold)).foregroundStyle(.black)
-                            .frame(maxWidth: .infinity).frame(height: 54).background(Capsule().fill(.white.opacity(scanning ? 0.55 : 1)))
-                    }
-                    .buttonStyle(.plain).disabled(scanning)
-                    .padding(.top, 14).padding(.bottom, 10)
-                }
-                .padding(.horizontal, 16).padding(.top, 8)
+                liquid
+                controls
             }
             .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 4)
-                    .onChanged { g in
-                        if startMl == nil { startMl = ml }
-                        let up = -g.translation.height
-                        let next = Int((Double(startMl!) + up / geo.size.height * Double(maxMl) * 1.3) / 10) * 10
-                        let clamped = min(max(next, 20), 1000)
-                        if clamped != ml { onMl(clamped); UISelectionFeedbackGenerator().selectionChanged() }
-                    }
-                    .onEnded { _ in startMl = nil }
-            )
+            .gesture(drag(height: geo.size.height))
         }
+    }
+
+    private func drag(height: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { g in
+                if startMl == nil { startMl = ml }
+                let up = Double(-g.translation.height)
+                let raw = Double(startMl ?? ml) + up / Double(max(height, 1)) * Double(maxMl) * 1.3
+                let clamped = min(max(Int(raw / 10) * 10, 20), 1000)
+                if clamped != ml { onMl(clamped); UISelectionFeedbackGenerator().selectionChanged() }
+            }
+            .onEnded { _ in startMl = nil }
+    }
+
+    private var liquid: some View {
+        let level = self.level
+        let foam = self.foam
+        let color = liquidColor
+        return TimelineView(.animation(paused: reduceMotion)) { tl in
+            let phase: Double = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3.2) / 3.2 * 2 * Double.pi
+            ZStack {
+                PourLiquid(level: level, phase: phase, foam: foam).fill(color)
+                if foam { PourFoam(level: level, phase: phase).fill(Color(argb: 0xFFFFF3D6)) }
+            }
+        }
+        .ignoresSafeArea()
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: level)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: color)
+    }
+
+    private var thumb: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(argb: 0xFF1B1B21))
+            if let photo, let image = UIImage(contentsOfFile: photo.path) {
+                Image(uiImage: image).resizable().scaledToFill()
+            }
+            if scanning { ProgressView().tint(.white) }
+        }
+        .frame(width: 60, height: 60).clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var subtitle: String {
+        scanning ? t("Bu arada ne kadar içtin?") : kind != nil ? t("Ne kadar içtin?") : t("Miktarı seç, türünü sonra soracağız")
+    }
+
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            YasamBackButton(action: onBack)
+            HStack(spacing: 12) {
+                thumb
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(RealFont.inter(19, .bold)).foregroundStyle(.white)
+                    Text(subtitle).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.75))
+                }
+            }
+            .padding(.top, 14)
+            VStack(spacing: 2) {
+                Text(yasamMlText(ml)).font(.system(size: 68, weight: .thin)).foregroundStyle(.white)
+                    .contentTransition(.numericText()).animation(.snappy, value: ml)
+                Text(t("yukarı aşağı sürükle")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7))
+            }
+            .frame(maxWidth: .infinity).padding(.top, 40)
+            Spacer()
+            ChipFlow(spacing: 6, lineSpacing: 6) {
+                ForEach(portions, id: \.1) { item in
+                    DrinkChip(label: t(item.0), on: item.1 == ml, onDark: true) { onMl(item.1) }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            Button(action: onNext) {
+                Text(scanning ? t("Tanınıyor…") : t("Devam")).font(RealFont.inter(16, .bold)).foregroundStyle(.black)
+                    .frame(maxWidth: .infinity).frame(height: 54).background(Capsule().fill(.white.opacity(scanning ? 0.55 : 1)))
+            }
+            .buttonStyle(.plain).disabled(scanning)
+            .padding(.top, 14).padding(.bottom, 10)
+        }
+        .padding(.horizontal, 16).padding(.top, 8)
     }
 
     private var title: String {
