@@ -2,7 +2,13 @@ import Foundation
 import Observation
 import UIKit
 
-enum BoardBlockType: String, Codable, CaseIterable { case text = "TEXT", card = "CARD", checklist = "CHECKLIST", photo = "PHOTO", stack = "STACK" }
+enum BoardBlockType: String, Codable, CaseIterable, Identifiable {
+    case text = "TEXT", card = "CARD", checklist = "CHECKLIST", photo = "PHOTO", stack = "STACK"
+    // REAL content on a board (BoardCanonicalBlock.kt): the payload is the card model's own JSON, kept in rawPayload.
+    case location = "LOCATION", gif = "GIF", music = "MUSIC", media = "MEDIA", mood = "MOOD",
+         attachment = "ATTACHMENT", voice = "VOICE", link = "LINK"
+    var id: String { rawValue }
+}
 
 struct BoardTransform: Codable, Hashable {
     var x: Double = 0
@@ -272,6 +278,7 @@ final class PanoStore {
         case .checklist: return a.text != b.text || a.checklist != b.checklist
         case .stack: return a.stack != b.stack
         case .card, .photo: return false            // a card is a server snapshot; a photo is replaced, not edited
+        case .location, .gif, .music, .media, .mood, .attachment, .voice, .link: return false   // added or removed, not edited here
         }
     }
 
@@ -442,6 +449,14 @@ final class PanoStore {
                 body["payload"] = Self.payload(item)
             case .text, .checklist:
                 body["payload"] = Self.payload(item)
+            case .gif:
+                try await uploadPhoto(&item)
+                body["payload"] = ["assetId": item.assetId ?? "", "mime": item.mime ?? "image/gif"]
+            case .attachment, .voice:
+                try await uploadFile(item)
+                body["payload"] = Self.payload(item)
+            case .location, .music, .media, .mood, .link:
+                body["payload"] = Self.payload(item)
             }
             replace(item)
             return try await call("\(path)/items", method: "POST", body: body)
@@ -451,7 +466,7 @@ final class PanoStore {
                                   body: ["operationId": op.id, "baseVersion": item.transformVersion ?? 1, "group": "transform",
                                          "transform": Self.transformJSON(item.transform)])
         case .content:
-            guard var item = current, item.type != .card, item.type != .photo else { return [:] }
+            guard var item = current, [.text, .checklist, .stack].contains(item.type) else { return [:] }
             if item.type == .stack { try await uploadStackImages(&item); replace(item) }
             return try await call("\(path)/items/\(item.id)", method: "PATCH",
                                   body: ["operationId": op.id, "baseVersion": item.contentVersion ?? 1, "group": "content", "payload": Self.payload(item)])
@@ -590,10 +605,20 @@ final class PanoStore {
         item.stackImages = images.filter { withImage.contains($0.key) }
     }
 
+    /// A file, picture or voice recording block: its bytes go up as a board asset under the model's own id
+    /// (BoardAssets.stageContent). Text snippets carry no file.
     @MainActor
-    private func uploadAsset(boardId: String, id: String, mime: String, data: Data) async throws {
+    private func uploadFile(_ item: PanoItem) async throws {
+        guard let id = item.assetId, let mime = item.mime, let path = item.photoPath,
+              let data = try? Data(contentsOf: Self.fileDirectory.appendingPathComponent(path)) else { return }
+        let kind = item.type == .voice ? "VOICE" : (mime.hasPrefix("image/") ? "IMAGE" : "FILE")
+        try await uploadAsset(boardId: item.boardId, id: id, mime: mime, data: data, kind: kind)
+    }
+
+    @MainActor
+    private func uploadAsset(boardId: String, id: String, mime: String, data: Data, kind: String = "IMAGE") async throws {
         guard data.count <= 10 * 1024 * 1024 else { throw PanoFailure.http(413, [:]) }
-        let r = try await call("boards/\(boardId)/assets/\(id)", method: "POST", body: ["mime": mime, "byte_size": data.count, "kind": "IMAGE"])
+        let r = try await call("boards/\(boardId)/assets/\(id)", method: "POST", body: ["mime": mime, "byte_size": data.count, "kind": kind])
         if (r["state"] as? String) == "READY" { return }
         guard let url = URL(string: RealBackend.origin + "/api/boards/v1/boards/\(boardId)/assets/\(id)/content") else { return }
         var request = URLRequest(url: url, timeoutInterval: 90)
@@ -682,16 +707,16 @@ final class PanoStore {
             let createdAt = old["createdAt"] ?? NSNumber(value: Int64(Date().timeIntervalSince1970 * 1000))
             p = ["stack": ["id": old["id"] as? String ?? panoId(), "prompt": old["prompt"] ?? NSNull(), "cards": cards, "createdAt": createdAt],
                  "images": (item.stackImages ?? [:]).map { ["cardId": $0.key, "assetId": $0.value, "mime": "image/jpeg"] }]
-        case .photo:
+        case .photo, .gif:
             p = ["assetId": item.assetId ?? "", "mime": item.mime ?? "image/jpeg"]
-        case .card:
-            break
+        case .card, .location, .music, .media, .mood, .attachment, .voice, .link:
+            break                                   // the stored payload goes as it is
         }
         return p
     }
 
-    /// Server item → iOS block. Types iOS cannot show yet (music, film, mood, voice, file, link, location, GIF) stay
-    /// on the server untouched.
+    /// Server item → iOS block. Music, film, mood, voice, file, link and location keep their payload in rawPayload
+    /// and are read from it when drawn (PanoContentBlocks.swift).
     static func item(_ o: [String: Any], boardId: String) -> PanoItem? {
         guard let typeName = o["type"] as? String, let type = BoardBlockType(rawValue: typeName), let id = o["id"] as? String else { return nil }
         let t = (o["transform"] as? [String: Any]) ?? [:]
@@ -730,10 +755,16 @@ final class PanoStore {
                 if let card = image["cardId"] as? String, let asset = image["assetId"] as? String { images[card] = asset }
             }
             item.stackImages = images
-        case .photo:
+        case .photo, .gif:
             item.assetId = payload["assetId"] as? String
             item.mime = payload["mime"] as? String
             guard item.assetId != nil else { return nil }
+        case .attachment, .voice:
+            // The file behind it (none for a text snippet) is fetched like a photo and kept in photoPath.
+            item.assetId = payload["assetId"] as? String
+            item.mime = payload["mime"] as? String
+        case .location, .music, .media, .mood, .link:
+            break
         }
         return item
     }

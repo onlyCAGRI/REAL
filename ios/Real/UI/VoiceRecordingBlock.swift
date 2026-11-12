@@ -101,7 +101,9 @@ final class VoiceRecorderEngine: NSObject, AVAudioPlayerDelegate {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback)
             try AVAudioSession.sharedInstance().setActive(true)
-            let p = try AVAudioPlayer(contentsOf: AttachmentStorage.directory.appendingPathComponent(r.localPath))
+            // A recording fetched from a board has no file extension: say it is m4a.
+            let url = AttachmentStorage.directory.appendingPathComponent(r.localPath)
+            let p = try AVAudioPlayer(contentsOf: url, fileTypeHint: url.pathExtension.isEmpty ? AVFileType.m4a.rawValue : nil)
             p.delegate = self
             p.play()
             player = p

@@ -54,6 +54,17 @@ final class ScreenshotTests: XCTestCase {
         shot("panoboard")
     }
 
+    /// Music, mood, location and link blocks on a board.
+    func test18bPanoBlocks() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "pano"]
+        app.launch()
+        let board = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'OKKK'")).firstMatch
+        if board.waitForExistence(timeout: 10) { board.tap() }
+        Thread.sleep(forTimeInterval: 4)
+        shot("panoblocks")
+    }
+
     func test19Books() { capture("books", settle: 3) }
     func test20Reader() { capture("reader", settle: 3) }
 

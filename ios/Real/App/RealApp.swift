@@ -299,7 +299,20 @@ enum DemoData {
             PanoItem(boardId: a.id, type: .checklist, transform: BoardTransform(x: 0, y: 380, width: 260, height: 190, z: 3),
                      checklist: [PanoChecklistEntry(text: "Logo", done: true), PanoChecklistEntry(text: "Renkler"), PanoChecklistEntry(text: "Kartlar")]),
         ]
-        pano.replaceAll(boards: [a, b, c], items: [a.id: items], members: [a.id: ["Çağrı", "Deniz", "Elif", "Mert"], b.id: ["Çağrı", "Deniz"]])
+        // REAL content blocks on the second board (music, mood, location, link).
+        var extra: [PanoItem] = []
+        func content(_ c: PanoNewContent, y: Double) {
+            var block = PanoItem(boardId: b.id, type: c.type, transform: BoardTransform(x: 0, y: y, width: c.width, height: c.height, z: extra.count + 1))
+            block.rawPayload = PanoPayload.json(c.payload)
+            extra.append(block)
+        }
+        if let music = PanoPayload.music(MusicBlock(title: "Gece Yolu", artist: "Demo Sanatçı", provider: "Apple Music", providerUrl: "https://music.apple.com/")) {
+            content(music, y: 40)
+        }
+        content(PanoPayload.mood(.calm, MoodDetails(scope: .moment, descriptors: [], energy: nil, factors: [], loggedAt: .now)), y: 205)
+        content(PanoPayload.location(ReminderLocation(placeName: "Kadıköy İskelesi", address: "Kadıköy, İstanbul", latitude: 40.9917, longitude: 29.0233)), y: 420)
+        if let link = PanoPayload.linkOrSnippet("https://example.com/plan") { content(link, y: 715) }
+        pano.replaceAll(boards: [a, b, c], items: [a.id: items, b.id: extra], members: [a.id: ["Çağrı", "Deniz", "Elif", "Mert"], b.id: ["Çağrı", "Deniz"]])
     }
 
     static func path(for args: [String], store: ReminderStore) -> [Route] {

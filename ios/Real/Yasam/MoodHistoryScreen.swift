@@ -132,7 +132,7 @@ struct MoodHistoryScreen: View {
         .accessibilityHint(hasDetails ? (isOpen ? t("Kapat") : t("Ayrıntılar")) : "")
     }
 
-    private static func factorLabel(_ key: String) -> String {
+    static func factorLabel(_ key: String) -> String {
         MoodV2.factorGroups.flatMap(\.1).first { $0.0 == key }.map { t($0.1) } ?? key
     }
 }

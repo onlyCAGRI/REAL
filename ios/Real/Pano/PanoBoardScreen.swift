@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Board canvas (PanoBoardScreen.kt + BoardCanvas.kt): world-anchored dot grid, pan + pinch zoom, blocks drawn
 /// at their transforms. Pencil = edit mode: drag blocks, delete the selected one, and the bottom dock with
@@ -16,6 +17,9 @@ struct PanoBoardScreen: View {
     @State private var editing = false
     @State private var selected: String?
     @State private var adding = false
+    @State private var contentRequest: BoardBlockType?
+    @State private var showFileImporter = false
+    @State private var notice: String?
     @State private var dragging: [String: CGSize] = [:]
     @State private var revealed = false
     @State private var photoItem: PhotosPickerItem?
@@ -64,6 +68,11 @@ struct PanoBoardScreen: View {
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .onChange(of: photoItem) { _, item in importPhoto(item) }
         .sheet(item: $editingText) { item in PanoTextEditor(item: item) }
+        .sheet(item: $contentRequest) { type in PanoContentFlow(type: type, onDone: addContent) }
+        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], onCompletion: importFile)
+        .alert(notice ?? "", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+            Button("OK", role: .cancel) {}
+        }
     }
 
     // MARK: Gestures
@@ -237,8 +246,15 @@ struct PanoBoardScreen: View {
     private func add(_ type: BoardBlockType, reminderId: Int64?, size: CGSize) {
         adding = false
         switch type {
-        case .photo:
+        case .photo, .gif:
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showPhotoPicker = true }
+        case .attachment:
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showFileImporter = true }
+            return
+        case .location, .music, .media, .mood, .voice, .link:
+            // REAL's own picker for the content; the block is placed when it hands something back.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { contentRequest = type }
+            return
         case .text:
             let item = pano.add(PanoItem(boardId: boardId, type: .text, transform: placement(size: size, width: 240, height: 140), text: ""))
             selected = item.id
@@ -260,10 +276,46 @@ struct PanoBoardScreen: View {
         editing = true
     }
 
+    /// A block from one of REAL's pickers (music, film, mood, voice, link, location, file).
+    private func addContent(_ content: PanoNewContent) {
+        contentRequest = nil
+        var item = PanoItem(boardId: boardId, type: content.type,
+                            transform: placement(size: UIScreen.main.bounds.size, width: content.width, height: content.height))
+        item.rawPayload = PanoPayload.json(content.payload)
+        item.photoPath = content.file
+        item.assetId = content.assetId
+        item.mime = content.mime
+        selected = pano.add(item).id
+        editing = true
+    }
+
+    private func importFile(_ result: Result<URL, Error>) {
+        guard case .success(let url) = result else { return }
+        if let content = PanoPayload.file(url) { addContent(content) }
+        else { notice = "This file could not be added (10 MB at most)." }
+    }
+
     private func importPhoto(_ item: PhotosPickerItem?) {
         guard let item else { return }
         Task {
-            guard let data = try? await item.loadTransferable(type: Data.self), let a = AttachmentStorage.save(data) else { return }
+            guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+            if PanoFiles.isGIF(data) {
+                let size = UIImage(data: data)?.size ?? CGSize(width: 1, height: 1)
+                let gifRatio = size.height / max(size.width, 1)
+                let name = PanoFiles.saveGIF(data)
+                await MainActor.run {
+                    photoItem = nil
+                    guard let name else { notice = "This GIF is larger than 10 MB."; return }
+                    let w = 240.0
+                    let t = placement(size: UIScreen.main.bounds.size, width: w, height: min(max(w * gifRatio, 100), 640))
+                    var gif = PanoItem(boardId: boardId, type: .gif, transform: t, photoPath: name)
+                    gif.mime = "image/gif"
+                    selected = pano.add(gif).id
+                    editing = true
+                }
+                return
+            }
+            guard let a = AttachmentStorage.save(data) else { return }
             let image = AttachmentStorage.image(a.localPath)
             let ratio = image.map { $0.size.height / max($0.size.width, 1) } ?? 1
             await MainActor.run {
@@ -364,6 +416,8 @@ struct PanoBlockView: View {
             CardStackDeck(stack: CardStackBlock(cards: item.stack))
                 .scaleEffect(0.7, anchor: .top)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        case .location, .gif, .music, .media, .mood, .attachment, .voice, .link:
+            PanoContentBlock(item: item)
         }
     }
 }
@@ -394,13 +448,14 @@ struct PanoAddSheet: View {
                     }
                 }
                 Section("More") {
-                    ForEach(["Location", "Music", "Movie / TV", "Mood", "Voice", "Link / snippet", "File / Attachment", "GIF"], id: \.self) { name in
-                        HStack {
-                            Text(name).foregroundStyle(.secondary)
-                            Spacer()
-                            Text(t("Yakında")).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
+                    row("Location", "mappin.and.ellipse") { onAdd(.location, nil) }
+                    row("Music", "music.note") { onAdd(.music, nil) }
+                    row("Movie / TV", "film") { onAdd(.media, nil) }
+                    row("Mood", "face.smiling") { onAdd(.mood, nil) }
+                    row("Voice", "mic") { onAdd(.voice, nil) }
+                    row("Link / snippet", "link") { onAdd(.link, nil) }
+                    row("File / Attachment", "doc") { onAdd(.attachment, nil) }
+                    row("GIF", "photo.on.rectangle") { onAdd(.gif, nil) }
                 }
             }
             .navigationTitle("Add to Pano")
