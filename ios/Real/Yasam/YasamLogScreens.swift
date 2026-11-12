@@ -187,7 +187,8 @@ struct YasamStepsScreen: View {
             LinearGradient(colors: [Color(argb: 0xFF1A1FBF), Color(argb: 0xFF3B44F0), Color(argb: 0xFF2129C8)], startPoint: .top, endPoint: .bottom)
             RadialGradient(colors: [Color(argb: 0x66BEA0FF), .clear], center: UnitPoint(x: 0.85, y: 0.05), startRadius: 0, endRadius: 320)
             GeometryReader { g in
-                let safeTop = g.safeAreaInsets.top
+                // The chart ignores the top safe area, so the proxy reports 0: use the window's inset.
+                let safeTop = topInset
                 VStack(spacing: 0) {
                     Canvas { ctx, size in
                         let n = CGFloat(bars.count)
@@ -237,7 +238,7 @@ struct YasamStepsScreen: View {
                 Text(t("Elle girildi · saat bağlanınca otomatik")).font(RealFont.inter(11, .semibold)).foregroundStyle(Color(argb: 0xFF9A99A4))
                     .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 0) {
-                    ForEach([(StepRange.day, t("G")), (.week, t("H")), (.month, t("A"))], id: \.1) { r, label in
+                    ForEach([(StepRange.day, t("G")), (.week, t("H")), (.month, String(t("Ay").prefix(1)))], id: \.1) { r, label in
                         Button { range = r } label: {
                             Text(label).font(RealFont.inter(12, .semibold)).foregroundStyle(r == range ? .black : Color(argb: 0xFF9A99A4))
                                 .padding(.horizontal, 11).padding(.vertical, 5)
