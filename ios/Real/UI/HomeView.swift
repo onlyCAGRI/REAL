@@ -56,6 +56,16 @@ struct RootView: View {
                             BooksModuleScreen(resumeBookId: "demo_txt").toolbar(.hidden, for: .navigationBar)
                         } else if name == "Su" {
                             WaterTrackerScreen().toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Adım" {
+                            YasamStepsScreen(onClose: {}).toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Kahve" {
+                            YasamCoffeeScreen(onClose: {}).toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Alkol" {
+                            YasamAlcoholScreen(onClose: {}).toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Günlük" {
+                            YasamJournalScreen(onClose: {}, onWrite: {}, onOpen: { _ in }).toolbar(.hidden, for: .navigationBar)
+                        } else if name == "Puanla" {
+                            RatingsScreen(onClose: {}).toolbar(.hidden, for: .navigationBar)
                         } else {
                             ModulePlaceholderScreen(name: name)
                         }
@@ -137,6 +147,7 @@ struct RootView: View {
 struct HomeView: View {
     @Environment(ReminderStore.self) private var store
     @Environment(BookStore.self) private var books
+    @Environment(PanoStore.self) private var pano
     @Environment(\.navNamespace) private var nav
     @Binding var path: [Route]
     @State private var expanded = false
@@ -158,6 +169,10 @@ struct HomeView: View {
     @State private var selectedCategoryIds: Set<Int64> = []
     @State private var pressedTile: String?
     @State private var showPano = false
+    /// Home deck page: 0 categories, 1 boards (swipe the deck sideways, HomeDeckDots under it).
+    @State private var deckPage = ProcessInfo.processInfo.arguments.contains("panodeck") ? 1 : 0
+    /// A board opened straight from the home deck; closing it comes back home.
+    @State private var homeBoard: PanoBoard?
     @State private var contextTarget: ContextCardType?
     @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
     /// What the sort arrow now does, under it on the right; it fades after a moment.
@@ -198,7 +213,7 @@ struct HomeView: View {
                     .padding(.top, 20)
                     .padding(.bottom, 22)
                     .opacity(selectedIds.isEmpty ? 1 : 0)
-                if !searchOpen { categoryDeck.padding(.horizontal, 16).startupRise(0).zIndex(1).transition(.opacity) }
+                if !searchOpen { homeDeck.padding(.horizontal, 16).startupRise(0).zIndex(1).transition(.opacity) }
                 // "Kartlarım" (swipe left to search) + the category screen's sort arrow: newest on top → newest at the
                 // bottom → nearest date.
                 HomeCardsSearchTitle(open: $searchOpen.animation(.timingCurve(0.2, 0, 0, 1, duration: 0.3)), query: $searchQuery) {
@@ -347,6 +362,7 @@ struct HomeView: View {
         }
         .fullScreenCover(isPresented: $showSettings) { SettingsScreen { showSettings = false }.liftedTopSafeArea().pullToClose { showSettings = false } }
         .sheet(isPresented: $showCategoryOrder) { CategoryOrderSheet() }
+        .fullScreenCover(item: $homeBoard) { b in PanoBoardScreen(boardId: b.id).liftedTopSafeArea().presentationBackground(.black) }
         .fullScreenCover(isPresented: $showPano) { PanoScreen().liftedTopSafeArea().pullToClose { showPano = false }.presentationBackground(.black) }
         .fullScreenCover(item: $contextTarget) { target in
             Group {
@@ -438,6 +454,37 @@ struct HomeView: View {
             }
             .accessibilityLabel(t("Hesap menüsünü aç"))
         }
+    }
+
+    /// Categories and boards share the deck's place: swipe sideways between them (HomeBoardDeck.kt pager).
+    private var homeDeck: some View {
+        let selecting = !selectedCategoryIds.isEmpty
+        let news = PanoSeen.shared.unread(pano).values.contains { $0 > 0 }
+        return VStack(spacing: 0) {
+            ZStack(alignment: .top) {
+                if deckPage == 0 || selecting {
+                    categoryDeck.transition(.offset(x: -60).combined(with: .opacity))
+                } else {
+                    HomeBoardDeck(previewCount: previewCount) { homeBoard = $0 }
+                        .transition(.offset(x: 60).combined(with: .opacity))
+                }
+            }
+            .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { v in
+                let dx = v.translation.width
+                guard abs(dx) > 60, abs(dx) > abs(v.translation.height) * 1.5 else { return }
+                let page = dx < 0 ? 1 : 0
+                guard page != deckPage else { return }
+                UISelectionFeedbackGenerator().selectionChanged()
+                withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.32)) { deckPage = page }
+            }, including: selecting ? .subviews : .all)
+            if !selecting {
+                HomeDeckDots(page: deckPage, boardsNews: news)
+                    .padding(.bottom, 10)
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.32)) { deckPage = 1 - deckPage } }
+            }
+        }
+        .onAppear { pano.requestSync(delay: 0.4) }
     }
 
     private var categoryDeck: some View {

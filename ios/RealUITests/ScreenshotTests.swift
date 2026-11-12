@@ -76,6 +76,12 @@ final class ScreenshotTests: XCTestCase {
     func test26MediaBlocks() { capture("media", settle: 3) }
 
     func test27Settings() { capture("settings", settle: 2) }
+    func test28PanoDeck() { capture("panodeck", settle: 3) }
+    func test29Steps() { capture("steps", settle: 3) }
+    func test30Coffee() { capture("coffee", settle: 3) }
+    func test31Alcohol() { capture("alcohol", settle: 3) }
+    func test32Journal() { capture("journal", settle: 3) }
+    func test33Ratings() { capture("ratings", settle: 3) }
 
     func test28AccountMenu() {
         let app = XCUIApplication()

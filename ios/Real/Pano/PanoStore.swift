@@ -41,6 +41,8 @@ struct PanoItem: Codable, Identifiable, Hashable {
     var photoPath: String? = nil
     var stack: [CardStackCard] = []
     var authorName: String = "ME"
+    /// Who added the block (server author_uid): someone else's new block lights up the home deck.
+    var authorUid: String? = nil
     // Cloud (BoardRepository): the versions the server last confirmed, the board asset behind a photo, the stack's
     // board-owned photos (card id → asset id) and the server payload, kept so fields iOS does not edit (text colour,
     // alignment, stack id…) go back unchanged. Optional so boards saved before cloud sync still load.
@@ -60,6 +62,9 @@ struct PanoBoard: Codable, Identifiable, Hashable {
     var role = "OWNER"
     var updatedAt: EpochMillis = .now
     var background = "BLACK_DOTS"
+    /// Owner's short line on the home deck card (≤ 40) and colour index into PanoColors.palette.
+    var description: String? = nil
+    var color: Int? = nil
 }
 
 /// One queued change (BoardMutation). The request body is built when it is sent, from the block as it is then, so a
@@ -77,6 +82,7 @@ struct PanoMutation: Codable, Hashable {
     var shared: Bool? = nil
     var role: String? = nil
     var revision: Int? = nil
+    var color: Int? = nil
 }
 
 /// Boards, blocks and per-board viewports, kept on the phone and synced both ways with the REAL server
@@ -132,13 +138,41 @@ final class PanoStore {
     // MARK: Local edits (each one queued for the server)
 
     @discardableResult
-    func createBoard(title: String, shared: Bool) -> PanoBoard {
-        let board = PanoBoard(title: title.trimmingCharacters(in: .whitespacesAndNewlines), shared: shared)
+    func createBoard(title: String, shared: Bool, color: Int? = nil) -> PanoBoard {
+        var board = PanoBoard(title: title.trimmingCharacters(in: .whitespacesAndNewlines), shared: shared)
+        board.color = color
         boards.insert(board, at: 0)
-        queue.append(PanoMutation(kind: .board, boardId: board.id, title: board.title, shared: shared))
+        queue.append(PanoMutation(kind: .board, boardId: board.id, title: board.title, shared: shared, color: color))
         save()
         requestSync()
         return board
+    }
+
+    /// Owner renames the board and sets its short description and colour (every member sees them). A board not yet on
+    /// the server changes here and in its queued create (BoardRepository.editBoard).
+    @MainActor
+    func editBoard(_ id: String, title: String, description: String?, color: Int?) async throws {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let desc = description?.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200).description
+        let d = (desc?.isEmpty ?? true) ? nil : desc
+        if RealAuth.shared.account != nil, !queue.contains(where: { $0.kind == .board && $0.boardId == id }) {
+            let r = try await call("boards/\(id)", method: "PATCH",
+                                   body: ["title": name, "description": d ?? NSNull(), "color": color ?? NSNull()])
+            let row = r["board"] as? [String: Any]
+            if let i = boards.firstIndex(where: { $0.id == id }) {
+                boards[i].title = (row?["title"] as? String) ?? name
+                boards[i].description = (row?["description"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? (row == nil ? d : nil)
+                boards[i].color = row.map { ($0["color"] as? NSNumber)?.intValue } ?? color
+                boards[i].updatedAt = (row?["updated_at"] as? NSNumber)?.int64Value ?? .now
+            }
+        } else {
+            if let i = boards.firstIndex(where: { $0.id == id }) {
+                boards[i].title = name; boards[i].description = d; boards[i].color = color
+            }
+            for i in queue.indices where queue[i].kind == .board && queue[i].boardId == id { queue[i].title = name; queue[i].color = color }
+        }
+        save()
     }
 
     /// The account's boards replace their copies here; boards that exist only on this device are kept.
@@ -377,7 +411,9 @@ final class PanoStore {
         let current = op.itemId.flatMap { id in items[op.boardId]?.first { $0.id == id } }
         switch op.kind {
         case .board:
-            return try await call("boards", method: "POST", body: ["id": op.boardId, "title": op.title ?? "Pano", "shared": op.shared ?? false])
+            var body: [String: Any] = ["id": op.boardId, "title": op.title ?? "Pano", "shared": op.shared ?? false]
+            if let color = op.color { body["color"] = color }
+            return try await call("boards", method: "POST", body: body)
         case .removeBoard:
             if op.role == "MEMBER", let uid = RealAuth.shared.account?.uid {
                 return try await call("\(path)/members/\(uid.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? uid)", method: "DELETE", body: [:])
@@ -433,6 +469,8 @@ final class PanoStore {
             var b = PanoBoard(id: id, title: title, shared: (row["shared"] as? Int) == 1 || (row["shared"] as? Bool) == true)
             b.role = (row["role"] as? String) ?? "OWNER"
             b.updatedAt = (row["updated_at"] as? NSNumber)?.int64Value ?? .now
+            b.description = (row["description"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            b.color = (row["color"] as? NSNumber)?.intValue
             if let look = looks[id] { b.background = look }
             remote.append(b)
         }
@@ -653,6 +691,7 @@ final class PanoStore {
         let payload = (o["payload"] as? [String: Any]) ?? [:]
         var item = PanoItem(id: id, boardId: boardId, type: type, transform: transform)
         item.authorName = (o["author_name"] as? String) ?? "REAL user"
+        item.authorUid = o["author_uid"] as? String
         item.revision = (o["revision"] as? NSNumber)?.intValue ?? 1
         item.transformVersion = (o["transform_version"] as? NSNumber)?.intValue ?? 1
         item.contentVersion = (o["content_version"] as? NSNumber)?.intValue ?? 1

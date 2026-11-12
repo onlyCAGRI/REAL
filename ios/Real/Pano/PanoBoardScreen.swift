@@ -38,12 +38,14 @@ struct PanoBoardScreen: View {
             .opacity(revealed ? 1 : 0)
             .overlay(alignment: .topTrailing) { topControls.padding(.top, 10).padding(.trailing, 14) }
             .overlay(alignment: .topLeading) {
-                Button { dismiss() } label: {
+                // Floating back (hidden while editing so it does not sit over the dock's work).
+                if !editing { Button { dismiss() } label: {
                     RealSymbol("chevron.left", size: 19.5).foregroundStyle(.white)
                         .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
                 }
                 .padding(12)
-                .accessibilityLabel(t("Panolara dön"))
+                .accessibilityLabel(t("Geri"))
+                .transition(.opacity) }
             }
             .overlay(alignment: .bottom) { if editing { editDock(size: geo.size).padding(.bottom, 14).transition(.move(edge: .bottom).combined(with: .opacity)) } }
             .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.22), value: editing)
@@ -54,8 +56,11 @@ struct PanoBoardScreen: View {
             viewport = pano.viewports[boardId] ?? BoardViewport()
             pano.requestSync(delay: 0.1)
             withAnimation(.easeOut(duration: 0.44)) { revealed = true }
+            PanoSeen.shared.mark(board: boardId, items: pano.items(of: boardId))
         }
-        .onDisappear { pano.viewports[boardId] = viewport; pano.save() }
+        // An open board is read as it changes: blocks arriving while it is on screen are not news on home.
+        .onChange(of: pano.items(of: boardId)) { _, items in PanoSeen.shared.mark(board: boardId, items: items) }
+        .onDisappear { pano.viewports[boardId] = viewport; pano.save(); PanoSeen.shared.mark(board: boardId, items: pano.items(of: boardId)) }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .onChange(of: photoItem) { _, item in importPhoto(item) }
         .sheet(item: $editingText) { item in PanoTextEditor(item: item) }

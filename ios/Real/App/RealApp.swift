@@ -326,6 +326,11 @@ enum DemoData {
         case "filmdeck": return [.module("FilmDeck")]
         case "game": return [.module("Oyun")]
         case "reader": return [.module("Okuyucu")]
+        case "steps": return [.module("Adım")]
+        case "coffee": return [.module("Kahve")]
+        case "alcohol": return [.module("Alkol")]
+        case "journal": return [.module("Günlük")]
+        case "ratings": return [.module("Puanla")]
         case "planner24":
             UserDefaults.standard.set("hours_24", forKey: "planner_view_mode")
             return [.planner]

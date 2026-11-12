@@ -18,14 +18,15 @@ enum PanoColors {
     static let palette = [sand, sage, clay, mist, lilac, ivory]
 
     /// Stable colour per board; neighbours never share one.
-    static func colors(for ids: [String]) -> [String: Color] {
+    /// The owner's pick (`chosen`) wins; otherwise a stable colour that differs from the card above.
+    static func colors(for ids: [String], chosen: [String: Int] = [:]) -> [String: Color] {
         var out: [String: Color] = [:]
         var prev = -1
         for id in ids {
-            var i = abs(id.hashValue) % palette.count
+            let picked = chosen[id].flatMap { palette.indices.contains($0) ? $0 : nil }
             let stable = id.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0x7fffffff }
-            i = stable % palette.count
-            if i == prev { i = (i + 1) % palette.count }
+            var i = picked ?? stable % palette.count
+            if picked == nil && i == prev { i = (i + 1) % palette.count }
             out[id] = palette[i]
             prev = i
         }
@@ -56,7 +57,7 @@ struct PanoScreen: View {
     var body: some View {
         let mine = pano.boards.filter { $0.role == "OWNER" }
         let others = pano.boards.filter { $0.role != "OWNER" }
-        let colors = PanoColors.colors(for: (mine + others).map(\.id))
+        let colors = PanoColors.colors(for: (mine + others).map(\.id), chosen: (mine + others).reduce(into: [:]) { $0[$1.id] = $1.color })
         VStack(spacing: 0) {
             header.yasamEnter(revealed, delay: 0, y: 0)
             ScrollView {
