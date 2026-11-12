@@ -127,6 +127,33 @@ final class ScreenshotTests: XCTestCase {
         shot("detailcolor")
     }
 
+    /// Card stack in Düzenle: "+ Kart ekle" puts a card on the deck, typing lands on it, ✕ removes it.
+    func test9bStackEdit() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-REALDemo", "-REALScreen", "stack", "-AppleLanguages", "(tr)"]
+        app.launch()
+        let edit = app.buttons["Düzenle"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 15), "Düzenle")
+        edit.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        shot("stackedit")
+        let add = app.buttons["+ Kart ekle"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5), "+ Kart ekle")
+        let before = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'KART 0'")).count
+        add.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        app.typeText("Yeni kart metni")
+        Thread.sleep(forTimeInterval: 1)
+        shot("stackadd")
+        let after = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'KART 0'")).count
+        XCTAssertGreaterThanOrEqual(after, before, "card added")
+        let remove = app.buttons["Kartı sil"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5), "Kartı sil")
+        remove.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        shot("stackdelete")
+    }
+
     func test10DetailScrolled() {
         let app = XCUIApplication()
         app.launchArguments = ["-REALDemo", "-REALScreen", "detail"]

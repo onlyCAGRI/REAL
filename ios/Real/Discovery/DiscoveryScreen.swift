@@ -530,7 +530,7 @@ struct PosterAddLabel: View {
         let ink: Color = busy ? Color(argb: 0xFF66666C) : (tone.luminance > 0.5 ? Color(argb: 0xFF111111) : .white)
         HStack(spacing: 7) {
             RealSymbol("plus", size: 18.4)
-            Text("REAL'e ekle").font(RealFont.inter(13, .medium)).lineLimit(1)
+            Text(t("REAL'e ekle")).font(RealFont.inter(13, .medium)).lineLimit(1)
         }
         .foregroundStyle(ink)
         .padding(.horizontal, 16).frame(minHeight: 48)

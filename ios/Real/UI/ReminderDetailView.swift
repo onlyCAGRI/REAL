@@ -329,7 +329,11 @@ struct ReminderDetailView: View {
     /// nothing you could see (it went off screen, or the keyboard closing dropped it as empty).
     private func addStackCard() {
         let card = seededStackCard(CardStackCard())
-        if let existing = inlineStack ?? shown?.cardStack, !existing.cards.isEmpty {
+        // Düzenle: the card joins the deck and comes to the front for typing, as on Android (one left blank is
+        // dropped on save). Without Düzenle the keyboard closing would drop a blank one, so that path keeps the sheet.
+        if editing {
+            withAnimation(.spring(duration: 0.3)) { updateStack { $0.cards.append(card) } }
+        } else if let existing = inlineStack ?? shown?.cardStack, !existing.cards.isEmpty {
             editingStackCard = card
         } else {
             updateStack { $0.cards.append(card) }

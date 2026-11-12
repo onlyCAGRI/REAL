@@ -299,7 +299,7 @@ enum DemoData {
             PanoItem(boardId: a.id, type: .checklist, transform: BoardTransform(x: 0, y: 380, width: 260, height: 190, z: 3),
                      checklist: [PanoChecklistEntry(text: "Logo", done: true), PanoChecklistEntry(text: "Renkler"), PanoChecklistEntry(text: "Kartlar")]),
         ]
-        pano.replaceAll(boards: [a, b, c], items: [a.id: items])
+        pano.replaceAll(boards: [a, b, c], items: [a.id: items], members: [a.id: ["Çağrı", "Deniz", "Elif", "Mert"], b.id: ["Çağrı", "Deniz"]])
     }
 
     static func path(for args: [String], store: ReminderStore) -> [Route] {

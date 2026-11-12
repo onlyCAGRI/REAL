@@ -254,7 +254,7 @@ struct WaterTrackerScreen: View {
             }
             .padding(.horizontal, 24)
             if entries.isEmpty {
-                Text("İlk yudumunu ekle.").font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFA3A6AA)).padding(24)
+                Text(t("İlk yudumunu ekle.")).font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFFA3A6AA)).padding(24)
                 Spacer(minLength: 0)
             } else {
                 ScrollView {

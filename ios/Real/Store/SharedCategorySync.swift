@@ -54,7 +54,7 @@ final class SharedCategorySync {
         switch (f.status, f.code ?? "") {
         case (_, "CATEGORY_MEMBER_LIMIT"): return t("Bir kategoride en fazla 10 kişi olabilir.")
         case (_, "CATEGORY_READ_ONLY"): return t("Bu kategoride sadece görüntüleme iznin var.")
-        case (_, "CATEGORY_SYNC_REQUIRED"): return t("Bu kategori henüz buluta eşitlenmedi. Android'de oluşturulan kategoriler paylaşılabilir.")
+        case (_, "CATEGORY_SYNC_REQUIRED"): return t("Bu kategori henüz buluta eşitlenmedi. Birkaç saniye sonra yeniden dene.")
         case (401, _), (403, _): return t("Bu işlem için iznin yok.")
         case (404, _): return t("Kategoriye artık erişimin yok.")
         case (429, _): return t("Çok fazla işlem. Biraz sonra tekrar dene.")

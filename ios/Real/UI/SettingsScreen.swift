@@ -468,7 +468,7 @@ struct SettingsScreen: View {
             }
             SettingsDivider()
             SettingsActionRow(icon: .note, title: t("Veri hakları ve talepler"), subtitle: t("Kopya, düzeltme, silme veya itiraz talebi")) {
-                notice = t("Hesap verilerin için kopya, düzeltme veya silme talebini şimdilik Android uygulamasından ya da gizlilik sayfasındaki adresten yapabilirsin. Bu iPhone'daki verileri uygulamayı silerek tamamen kaldırabilirsin.")
+                notice = t("Hesap verilerin için kopya, düzeltme veya silme talebini gizlilik sayfasındaki adresten yapabilirsin. Bu iPhone'daki verileri uygulamayı silerek tamamen kaldırabilirsin.")
             }
             SettingsDivider()
             // Off by default: the profile photo goes to Kişilerim and shared-category people only when this is on.

@@ -123,7 +123,10 @@ struct HomeBoardDeck: View {
         // The board's description sits where the owner's name used to be.
         if let d = board.description, !d.isEmpty { pills.append(d) }
         let owner = board.role == "OWNER"
-        return PanoDeckCard(title: board.title, color: color, ink: deckInk, pills: pills, last: last, news: news)
+        // Members as overlapping initials, only when the board has more than one person.
+        let people = pano.members[board.id] ?? []
+        return PanoDeckCard(title: board.title, color: color, ink: deckInk, pills: pills, last: last, news: news,
+                            people: people.count > 1 ? people : [])
             .scaleEffect(pressed == board.id ? 0.985 : 1)
             .contentShape(Rectangle())
             .onTapGesture { onOpenBoard(board) }
@@ -149,6 +152,21 @@ struct PanoDeckCard: View {
     let pills: [String]
     var last = true
     var news = 0
+    var people: [String] = []
+
+    private static let faceColors: [UInt32] = [0xFFC4473C, 0xFF2F6FE0, 0xFF2F8F74, 0xFFE8A33A, 0xFF7A52C7]
+
+    /// Up to three faces; with more people the last one reads "+n".
+    private var faces: [(label: String, fill: Color)] {
+        let more = people.count > 3
+        var out = (more ? Array(people.prefix(2)) : people).map { name -> (label: String, fill: Color) in
+            let t = name.trimmingCharacters(in: .whitespaces)
+            let hash = t.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0x7fffffff }
+            return (t.isEmpty ? "?" : String(t.prefix(1)).uppercased(), Color(argb: Self.faceColors[hash % Self.faceColors.count]))
+        }
+        if more { out.append(("+\(people.count - 2)", Color(argb: 0xFF2A2A2F))) }
+        return out
+    }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -170,6 +188,19 @@ struct PanoDeckCard: View {
                     CategoryPill(text: pill, foreground: ink).frame(maxWidth: 150, alignment: .leading)
                 }
                 Spacer()
+                if !people.isEmpty {
+                    HStack(spacing: -7) {
+                        ForEach(Array(faces.enumerated()), id: \.offset) { i, face in
+                            Text(face.label).font(RealFont.inter(10, .bold)).foregroundStyle(.white).lineLimit(1)
+                                .frame(width: 24, height: 24)
+                                .background(Circle().fill(face.fill))
+                                .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.5))
+                                .zIndex(Double(i))
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(people.joined(separator: ", "))
+                }
             }
         }
         .padding(.horizontal, 22)

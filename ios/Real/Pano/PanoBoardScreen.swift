@@ -434,7 +434,7 @@ struct PanoTextEditor: View {
                         }
                     }
                     .onDelete { item.checklist.remove(atOffsets: $0) }
-                    TextField("Madde ekle", text: $newEntry).onSubmit {
+                    TextField(t("Madde ekle"), text: $newEntry).onSubmit {
                         let t = newEntry.trimmingCharacters(in: .whitespaces)
                         if !t.isEmpty { item.checklist.append(PanoChecklistEntry(text: t)) }
                         newEntry = ""

@@ -91,6 +91,8 @@ struct PanoMutation: Codable, Hashable {
 final class PanoStore {
     private(set) var boards: [PanoBoard] = []
     private(set) var items: [String: [PanoItem]] = [:]
+    /// Everyone on a board, owner first (server "members"); the home deck shows their initials.
+    private(set) var members: [String: [String]] = [:]
     var viewports: [String: BoardViewport] = [:]
     private(set) var queue: [PanoMutation] = []
     private(set) var cursors: [String: Int64] = [:]
@@ -112,6 +114,7 @@ final class PanoStore {
         var queue: [PanoMutation]?
         var cursors: [String: Int64]?
         var migrated: Bool?
+        var members: [String: [String]]?
     }
 
     init(persist: Bool = true) {
@@ -126,12 +129,13 @@ final class PanoStore {
             queue = snap.queue ?? []
             cursors = snap.cursors ?? [:]
             migrated = snap.migrated ?? false
+            members = snap.members ?? [:]
         }
     }
 
     func save() {
         guard persist else { return }
-        let snap = Snapshot(boards: boards, items: items, viewports: viewports, queue: queue, cursors: cursors, migrated: migrated)
+        let snap = Snapshot(boards: boards, items: items, viewports: viewports, queue: queue, cursors: cursors, migrated: migrated, members: members)
         if let data = try? JSONEncoder().encode(snap) { try? data.write(to: fileURL, options: .atomic) }
     }
 
@@ -255,9 +259,10 @@ final class PanoStore {
         if let i = boards.firstIndex(where: { $0.id == boardId }) { boards[i].updatedAt = .now }
     }
 
-    func replaceAll(boards: [PanoBoard], items: [String: [PanoItem]]) {
+    func replaceAll(boards: [PanoBoard], items: [String: [PanoItem]], members: [String: [String]] = [:]) {
         self.boards = boards
         self.items = items
+        self.members = members
         save()
     }
 
@@ -479,6 +484,11 @@ final class PanoStore {
         boards = (remote + boards.filter { pending.contains($0.id) && !remoteIds.contains($0.id) }).sorted { $0.updatedAt > $1.updatedAt }
         items = items.filter { allowed.contains($0.key) }
         cursors = cursors.filter { allowed.contains($0.key) }
+        var names: [String: [String]] = [:]
+        for (id, list) in r["members"] as? [String: [[String: Any]]] ?? [:] where allowed.contains(id) {
+            names[id] = list.compactMap { $0["name"] as? String }
+        }
+        members = names
     }
 
     @MainActor
