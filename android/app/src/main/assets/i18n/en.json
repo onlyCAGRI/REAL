@@ -3404,5 +3404,8 @@
   "Hedef ekle": "Add goal",
   "Kategorinin kartlarını aç": "Open the category's cards",
   "Sürükleyerek sırala": "Drag to reorder",
-  "{0} için yeni hedef": "New goal in {0}"
+  "{0} için yeni hedef": "New goal in {0}",
+  "Hedef yolu": "Path",
+  "Önceki {0} hedefi göster": "Show {0} earlier goals",
+  "{0}: {1} tamamlandı. Önceki hafta için dokun.": "{0}: {1} done. Tap for the previous week."
 }
