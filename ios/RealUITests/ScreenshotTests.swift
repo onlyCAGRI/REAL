@@ -115,6 +115,9 @@ final class ScreenshotTests: XCTestCase {
     func test15Yasam() { capture("yasam", settle: 3) }
     func test16Water() { capture("water", settle: 3) }
 
+    /// The Pro page with the three plans, for App Review's subscription screenshot.
+    func test34Pro() { capture("pro", settle: 3) }
+
     func test8Goal() { capture("goal", settle: 4) }
 
     private func shot(_ name: String) {

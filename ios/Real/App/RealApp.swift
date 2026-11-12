@@ -11,6 +11,7 @@ struct RealApp: App {
     @State private var discovery: DiscoveryStore
     @State private var language = LanguageSettings.shared
     private let initialPath: [Route]
+    private let demoPro: Bool
 
     init() {
         HomeCardStyle.moveToPlainOnce()
@@ -39,6 +40,8 @@ struct RealApp: App {
             if !showcase { discovery.seedDemo() }
             _discovery = State(initialValue: discovery)
             initialPath = DemoData.path(for: args, store: store)
+            demoPro = args.firstIndex(of: "-REALScreen").map { $0 + 1 < args.count && args[$0 + 1] == "pro" } ?? false
+            if demoPro { ProStore.shared.showDemo() }
         } else {
             _store = State(initialValue: ReminderStore())
             _life = State(initialValue: LifeStore())
@@ -46,6 +49,7 @@ struct RealApp: App {
             _books = State(initialValue: BookStore())
             _discovery = State(initialValue: DiscoveryStore())
             initialPath = []
+            demoPro = false
         }
     }
 
@@ -63,6 +67,8 @@ struct RealApp: App {
                 .background(Color.black)
                 .overlay { RequiredUpdateHost(uid: RealAuth.shared.account?.uid) }
                 .overlay { RealToastHost() }
+                // CI screenshot of the Pro page (App Review wants it with the subscriptions).
+                .overlay { if demoPro { RealProScreen() } }
                 .onChange(of: RealAuth.shared.account?.uid) { _, _ in
                     ProAccess.shared.clear()
                     ProStore.shared.reset()

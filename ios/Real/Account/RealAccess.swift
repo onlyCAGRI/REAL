@@ -309,7 +309,7 @@ struct RealProScreen: View {
                     .buttonStyle(.plain).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFF91B9FF)).frame(minHeight: 44)
                 }
             }
-        } else if !signedIn {
+        } else if !signedIn && !store.demo {
             note(t("REAL Pro hesabına bağlıdır. Hesap menüsünden giriş yapabilirsin."))
         } else if !store.offers.isEmpty {
             VStack(spacing: 10) {
@@ -335,7 +335,7 @@ struct RealProScreen: View {
         let summary: String = {
             switch offer.plan {
             case .founder: return t("İlk 100 üyeye özel yıllık fiyat · {0} yer kaldı", store.founderLeft)
-            case .yearly: return t("Ayda {0}", (offer.product.price / 12).formatted(offer.product.priceFormatStyle))
+            case .yearly: return t("Ayda {0}", offer.perMonth ?? "")
             case .monthly: return t("İstediğin zaman iptal et")
             }
         }()
@@ -347,7 +347,7 @@ struct RealProScreen: View {
                 }
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(offer.product.displayPrice).font(RealFont.inter(17, .semibold)).foregroundStyle(Color(argb: 0xFFF3F1F4))
+                    Text(offer.price).font(RealFont.inter(17, .semibold)).foregroundStyle(Color(argb: 0xFFF3F1F4))
                     Text(yearly ? t("yılda") : t("ayda")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9B9BA4))
                 }
             }

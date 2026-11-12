@@ -12,8 +12,28 @@ final class ProStore {
     enum Plan: String { case monthly, yearly, founder }
     struct Offer: Identifiable {
         let plan: Plan
-        let product: Product
-        var id: String { product.id }
+        /// Nil only on the demo screen (CI screenshots), which has nothing to buy.
+        let product: Product?
+        let id: String
+        /// The App Store's price ("₺79,99"), and for a yearly plan what that is per month.
+        let price: String
+        let perMonth: String?
+
+        init(plan: Plan, product: Product) {
+            self.plan = plan
+            self.product = product
+            id = product.id
+            price = product.displayPrice
+            perMonth = plan == .monthly ? nil : (product.price / 12).formatted(product.priceFormatStyle)
+        }
+
+        init(demo plan: Plan, price: String, perMonth: String?) {
+            self.plan = plan
+            product = nil
+            id = "demo." + plan.rawValue
+            self.price = price
+            self.perMonth = perMonth
+        }
     }
 
     /// What can be bought now, best offer first. The founder plan is here only while the server says places are left.
@@ -24,7 +44,19 @@ final class ProStore {
     private(set) var loading = false
     private(set) var loaded = false
     private(set) var working = false
+    /// CI screenshots (-REALDemo -REALScreen pro): the plans with their App Store prices, without a store or an account.
+    private(set) var demo = false
     var notice: String?
+
+    func showDemo() {
+        demo = true
+        loaded = true
+        founderLeft = 100
+        proDailyAi = 100
+        offers = [Offer(demo: .founder, price: "$19.99", perMonth: "$1.67"),
+                  Offer(demo: .yearly, price: "$29.99", perMonth: "$2.50"),
+                  Offer(demo: .monthly, price: "$3.99", perMonth: nil)]
+    }
 
     @ObservationIgnored private var token: UUID?
     @ObservationIgnored private var listener: Task<Void, Never>?
@@ -67,7 +99,7 @@ final class ProStore {
     private static func claimedKey(_ uid: String) -> String { "pro_claimed_v1/" + uid }
 
     func load() async {
-        guard !loading, let uid = RealAuth.shared.account?.uid else { return }
+        guard !demo, !loading, let uid = RealAuth.shared.account?.uid else { return }
         loading = true
         defer { loading = false; loaded = true }
         do {
@@ -93,7 +125,7 @@ final class ProStore {
     }
 
     func buy(_ offer: Offer) async {
-        guard !working, let uid = RealAuth.shared.account?.uid else { return }
+        guard !working, let product = offer.product, let uid = RealAuth.shared.account?.uid else { return }
         working = true
         notice = nil
         defer { working = false }
@@ -101,7 +133,7 @@ final class ProStore {
             var options: Set<Product.PurchaseOption> = []
             // Ties the purchase to this REAL account, so no other account can claim it.
             if let token { options.insert(.appAccountToken(token)) }
-            switch try await offer.product.purchase(options: options) {
+            switch try await product.purchase(options: options) {
             case .success(let result):
                 guard case .verified(let transaction) = result else { notice = t("Satın alma doğrulanamadı."); return }
                 do {
