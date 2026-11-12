@@ -3388,5 +3388,21 @@
   "Bu Apple hesabında etkin bir abonelik bulunamadı.": "No active subscription was found on this Apple account.",
   "Bu abonelik başka bir REAL hesabına bağlı.": "This subscription belongs to another REAL account.",
   "App Store'a şu anda ulaşılamıyor. Biraz sonra tekrar dene.": "The App Store cannot be reached right now. Try again in a moment.",
-  "Satın alma tamamlanamadı. Biraz sonra tekrar dene.": "The purchase could not be completed. Try again in a moment."
+  "Satın alma tamamlanamadı. Biraz sonra tekrar dene.": "The purchase could not be completed. Try again in a moment.",
+  "Başlıksız": "Untitled",
+  "Geçen hafta": "Last week",
+  "Görünüm ve sıralama": "Look and order",
+  "Amaç": "Goal",
+  "Henüz hedef yok": "No goals yet",
+  "hedef tamamlandı": "goals done",
+  "Önceki hafta": "Previous week",
+  "Sonraki hafta": "Next week",
+  "{0} tamamlandı": "{0} done",
+  "Tamamlandı olarak işaretle": "Mark as done",
+  "Tamamlanmadı olarak işaretle": "Mark as not done",
+  "Linki değiştir": "Change link",
+  "Hedef ekle": "Add goal",
+  "Kategorinin kartlarını aç": "Open the category's cards",
+  "Sürükleyerek sırala": "Drag to reorder",
+  "{0} için yeni hedef": "New goal in {0}"
 }

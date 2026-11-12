@@ -1,9 +1,9 @@
 import SwiftUI
 import UIKit
 
-/// Planner category detail ("Planning" / goal screen, PlannerCategoryDetailScreen.kt):
-/// title + date, progress tile with notched corner, swipe card (Next up / Link / Members),
-/// weekly activity pager, and the numbered Goals sheet with progress rails.
+/// A category's goals (Amaç). Drawn as a continuation of the category screen: its coloured header with the count,
+/// one segment per goal and the week's days; the next goal as the highlighted card; link and people as two pills;
+/// then the goals as REAL card rows (check, title, date, checklist line, completion note) and "Hedef ekle".
 struct PlannerGoalScreen: View {
     @Environment(ReminderStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -15,7 +15,6 @@ struct PlannerGoalScreen: View {
     @State private var composing = false
     @State private var reorderMode = false
     @State private var stylePopup = false
-    @State private var swipePage = 0
     @State private var weekPage = 0
     @State private var showPasteLink = false
     @State private var dragId: Int64?
@@ -72,15 +71,15 @@ struct PlannerGoalScreen: View {
 
     private var goals: [Goal] {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "MMM d"
+        f.locale = I18n.locale
+        f.setLocalizedDateFormatFromTemplate("dMMM")
         var list = members.map { r -> Goal in
             let due = r.alertAt.map { $0.date } ?? r.plannedDateEpochDay.map { calendar.startOfDay(epochDay: $0) }
             let items = r.isChecklist ? r.checklistItems.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty } : []
             let checked = items.filter(\.isCompleted).count
-            let caption = [due.map { "Due \(f.string(from: $0))" }, items.isEmpty ? nil : "\(checked)/\(items.count)"]
+            let caption = [due.map { f.string(from: $0) }, items.isEmpty ? nil : "\(checked)/\(items.count)"]
                 .compactMap { $0 }.joined(separator: "  ·  ")
-            return Goal(id: r.id, title: r.text.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled" : r.text, caption: caption,
+            return Goal(id: r.id, title: r.text.trimmingCharacters(in: .whitespaces).isEmpty ? t("Başlıksız") : r.text, caption: caption,
                         done: r.isCompleted,
                         progress: (!r.isCompleted && !items.isEmpty && checked > 0) ? Double(checked) / Double(items.count) : nil,
                         note: r.completionNote)
@@ -128,35 +127,32 @@ struct PlannerGoalScreen: View {
     }
 
     private func weekTitle(_ monday: Date, current: Date) -> String {
-        if calendar.isDate(monday, inSameDayAs: current) { return "This week" }
-        if calendar.isDate(monday, inSameDayAs: calendar.date(byAdding: .weekOfYear, value: -1, to: current)!) { return "Last week" }
+        if calendar.isDate(monday, inSameDayAs: current) { return t("Bu hafta") }
+        if calendar.isDate(monday, inSameDayAs: calendar.date(byAdding: .weekOfYear, value: -1, to: current)!) { return t("Geçen hafta") }
         let sunday = calendar.date(byAdding: .day, value: 6, to: monday)!
         let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        let sameMonth = calendar.component(.month, from: monday) == calendar.component(.month, from: sunday)
-        f.dateFormat = "MMM d"
-        return sameMonth ? "\(f.string(from: monday)) – \(calendar.component(.day, from: sunday))" : "\(f.string(from: monday)) – \(f.string(from: sunday))"
+        f.locale = I18n.locale
+        f.setLocalizedDateFormatFromTemplate("dMMM")
+        return "\(f.string(from: monday)) – \(f.string(from: sunday))"
     }
 
     var body: some View {
         let goals = self.goals
         let total = goals.count
         let doneCount = goals.filter(\.done).count
-        let activeIndex = goals.firstIndex { !$0.done }
-        let overall = total == 0 ? 0 : Double(doneCount) / Double(total)
+        let next = goals.first { !$0.done }
         ZStack(alignment: .bottom) {
             Color.black.ignoresSafeArea()
-            LinearGradient(colors: [accent.opacity(0.22), .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: 480).frame(maxHeight: .infinity, alignment: .top).ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    topBar.intro(intro, delay: 0)
-                    titleBlock.intro(intro, delay: 0.06, y: 14)
-                    tiles(doneCount: doneCount, total: total, next: activeIndex.map { goals[$0] })
-                    weekSection.intro(intro, delay: 0.38, y: 16)
-                    goalsSheet(goals: goals, total: total, activeIndex: activeIndex, overall: overall)
-                        .offset(y: intro ? 0 : 140)
-                        .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.6).delay(0.2), value: intro)
+                    header(goals: goals, doneCount: doneCount, total: total)
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let next { nextCard(next).intro(intro, delay: 0.10, y: 14).padding(.bottom, 10) }
+                        extras.intro(intro, delay: 0.16, y: 14)
+                        goalList(goals: goals, nextId: next?.id)
+                    }
+                    .padding(.horizontal, 16).padding(.top, 14)
+                    Color.clear.frame(height: 120)
                 }
             }
             .scrollIndicators(.hidden)
@@ -182,249 +178,237 @@ struct PlannerGoalScreen: View {
         }
     }
 
-    private var topBar: some View {
-        HStack {
-            Button { dismiss() } label: {
-                RealSymbol("chevron.left", size: 21.8).foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel(t("Geri"))
-            Spacer()
-            Button("Done") { dismiss() }
-                .font(RealFont.inter(15))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12).padding(.vertical, 10)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-    }
-
-    private var titleBlock: some View {
-        let name = category?.name ?? ""
-        let size: CGFloat = name.count > 24 ? 36 : (name.count > 14 ? 44 : 54)
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "EEEE, MMMM d  ·  yyyy"
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(name)
-                .font(RealFont.inter(size))
-                .kerning(name.count > 24 ? -1.2 : (name.count > 14 ? -1.8 : -2.2))
-                .foregroundStyle(Color(argb: 0xFFF3F1F4))
-                .lineLimit(3)
-            Text(f.string(from: Date())).font(RealType.editorialSubtitle).foregroundStyle(Self.muted)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 26)
-    }
-
-    private func tiles(doneCount: Int, total: Int, next: Goal?) -> some View {
-        VStack(spacing: 12) {
-            GeometryReader { geo in
-                let w1 = (geo.size.width - 10) / 2.9
-                HStack(spacing: 10) {
-                    progressTile(doneCount: doneCount, total: total)
-                        .frame(width: w1)
-                        .scaleEffect(intro ? 1 : 0.6).opacity(intro ? 1 : 0)
-                        .animation(.spring(duration: 0.52, bounce: 0.3).delay(0.22), value: intro)
-                    swipeCard(next: next)
-                        .scaleEffect(intro ? 1 : 0.6).opacity(intro ? 1 : 0)
-                        .animation(.spring(duration: 0.52, bounce: 0.3).delay(0.3), value: intro)
-                }
-            }
-            .frame(height: 120)
-            GeometryReader { geo in
-                let w1 = (geo.size.width - 10) / 2.9
-                PagerDots(current: swipePage, count: 3, accent: accent)
-                    .frame(width: geo.size.width - w1 - 10)
-                    .offset(x: w1 + 10)
-            }
-            .frame(height: 6)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 26)
-    }
-
-    private func progressTile(doneCount: Int, total: Int) -> some View {
-        ZStack(alignment: .topLeading) {
-            NotchedTileShape().fill(accent)
-            RealSymbol(category?.icon.symbol ?? "star.fill", size: 17)
-                .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(Self.black))
-                .padding(14)
-            VStack(alignment: .leading, spacing: 0) {
+    /// The category's own header, as on its card list: back and ⋯ in glass rounds, then what the goals add up to.
+    private func header(goals: [Goal], doneCount: Int, total: Int) -> some View {
+        let fg = category?.visual.foreground ?? .white
+        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 34, bottomTrailingRadius: 34, style: .continuous)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                headerRound("chevron.left", label: t("Geri"), fg: fg) { dismiss() }
                 Spacer()
-                Text("\(doneCount)/\(total)").font(RealFont.inter(34)).kerning(-1.2).foregroundStyle(onAccent)
-                Text("goals done").font(RealFont.inter(12)).foregroundStyle(onAccent.opacity(0.6))
+                headerRound("ellipsis", label: t("Görünüm ve sıralama"), fg: fg) { stylePopup = true }
             }
-            .padding(.leading, 16).padding(.bottom, 12)
-            // Düzenle only reorders the goals; the badge then becomes the "done" check.
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) { reorderMode.toggle() }
-            } label: {
-                ZStack {
-                    // The badge sits in the black notch, so it is drawn in the tile colour.
-                    Circle().fill(reorderMode ? accent : .clear)
-                    Circle().strokeBorder(accent.opacity(0.55), lineWidth: 1)
-                    ActionIcon(reorderMode ? .check : .edit, size: 15)
-                        .foregroundStyle(reorderMode ? onAccent : accent)
+            HStack(spacing: 8) {
+                if let symbol = category?.icon.symbol, !symbol.isEmpty { RealSymbol(symbol, size: 14) }
+                Text((category?.name ?? "") + "  ·  " + t("Amaç")).font(RealFont.inter(13, .medium)).lineLimit(1)
+            }
+            .foregroundStyle(fg.opacity(0.8))
+            .padding(.top, 22)
+            if total == 0 {
+                Text(t("Henüz hedef yok")).font(RealFont.inter(30, .medium)).kerning(-0.8).foregroundStyle(fg).padding(.top, 6)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(doneCount)/\(total)").font(RealFont.inter(44, .medium)).kerning(-1.4).foregroundStyle(fg)
+                        .contentTransition(.numericText())
+                    Text(t("hedef tamamlandı")).font(RealFont.inter(14)).foregroundStyle(fg.opacity(0.8))
                 }
-                .frame(width: 30, height: 30)
+                .padding(.top, 4)
+                segments(goals, fg: fg).padding(.top, 14)
             }
-            .frame(maxWidth: .infinity, alignment: .topTrailing)
-            .padding(5)
-            .accessibilityLabel(reorderMode ? t("Sıralamayı bitir") : t("Hedefleri sırala"))
+            weekStrip(fg: fg).padding(.top, 18)
+        }
+        .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 20)
+        // Runs up behind the status bar, and stays filled when the list is pulled down.
+        .background(shape.fill(category?.visual.gradient ?? LinearGradient(colors: [accent, accent], startPoint: .top, endPoint: .bottom))
+            .padding(.top, -900))
+        .intro(intro, delay: 0)
+    }
+
+    private func headerRound(_ symbol: String, label: String, fg: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            RealSymbol(symbol, size: 18).foregroundStyle(fg)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(fg.opacity(0.16)))
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// One segment per goal, in the goals' order; a long list becomes one bar.
+    @ViewBuilder
+    private func segments(_ goals: [Goal], fg: Color) -> some View {
+        if goals.count <= 12 {
+            HStack(spacing: 5) {
+                ForEach(goals) { goal in
+                    Capsule().fill(fg.opacity(goal.done ? 1 : 0.28)).frame(height: 6)
+                }
+            }
+            .animation(.easeOut(duration: 0.3), value: goals.map(\.done))
+        } else {
+            let part = Double(goals.filter(\.done).count) / Double(goals.count)
+            Capsule().fill(fg.opacity(0.28)).frame(height: 6)
+                .overlay(alignment: .leading) { GeometryReader { g in Capsule().fill(fg).frame(width: g.size.width * part) } }
         }
     }
 
-    private func swipeCard(next: Goal?) -> some View {
-        let link = store.categoryLinks[categoryId] ?? ""
-        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
-        return TabView(selection: $swipePage) {
-            HStack(spacing: 0) {
-                VStack(alignment: .leading) {
-                    Text("Next up").font(RealFont.inter(12)).foregroundStyle(Self.muted)
-                    Spacer()
-                    Text(next?.title ?? "Everything is done").font(RealFont.inter(15)).foregroundStyle(.white).lineLimit(3)
-                }
-                .padding(.leading, 16).padding(.vertical, 14).padding(.trailing, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                PagerActionButton(label: "Start", symbol: "chevron.right", accent: accent, enabled: next != nil) {
-                    if let next { path.append(.detail(next.id)) }
-                }
-            }
-            .tag(0)
-            HStack(spacing: 0) {
-                VStack(alignment: .leading) {
-                    Label("Link", systemImage: "link").font(RealFont.inter(12)).foregroundStyle(Self.muted)
-                    Spacer()
-                    Text(link.isEmpty ? t("Link yapıştır") : (URL(string: link)?.host?.replacingOccurrences(of: "www.", with: "") ?? link))
-                        .font(RealFont.inter(17, .medium)).foregroundStyle(link.isEmpty ? Self.muted : .white).lineLimit(2)
-                        .onTapGesture { showPasteLink = true }
-                }
-                .padding(.leading, 18).padding(.vertical, 14).padding(.trailing, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                PagerActionButton(label: link.isEmpty ? t("Yapıştır") : t("Aç"), symbol: "chevron.right", accent: accent, enabled: true) {
-                    if let url = URL(string: link), !link.isEmpty { openURL(url) } else { showPasteLink = true }
-                }
-            }
-            .tag(1)
-            HStack(spacing: 0) {
-                VStack(alignment: .leading) {
-                    Text("Members (\(max(people.count, 1)))").font(RealFont.inter(12)).foregroundStyle(Self.muted)
-                    Spacer()
-                    HStack(spacing: -10) {
-                        // Real people of a shared category (it showed only you, even to members).
-                        if people.isEmpty {
-                            ProfileAvatar(name: store.ownerName, size: 36).overlay(Circle().strokeBorder(Self.black, lineWidth: 2))
-                        } else {
-                            ForEach(people.prefix(3)) { p in
-                                ConnectionAvatar(name: p.name, key: p.uid, size: 36, pictureVersion: p.pictureVersion)
-                                    .overlay(Circle().strokeBorder(Self.black, lineWidth: 2))
-                            }
-                            if people.count > 3 {
-                                Text("+\(people.count - 3)").font(RealFont.inter(12, .medium)).foregroundStyle(.white)
-                                    .frame(width: 36, height: 36).background(Circle().fill(.white.opacity(0.12)))
-                                    .overlay(Circle().strokeBorder(Self.black, lineWidth: 2))
-                            }
-                        }
-                        Button { showPeople = true } label: {
-                            RealSymbol("plus", size: 14.9).foregroundStyle(.white)
-                                .frame(width: 36, height: 36)
-                                .background(Circle().fill(Self.black)).overlay(Circle().strokeBorder(Self.faint, lineWidth: 1))
-                        }
-                        .accessibilityLabel(t("Kişi ekle"))
-                    }
-                }
-                .padding(.leading, 18).padding(.vertical, 14).padding(.trailing, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                PagerActionButton(label: "Manage", symbol: "person", accent: accent, enabled: category != nil) { showPeople = true }
-            }
-            .tag(2)
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .clipShape(shape)
-        .overlay(shape.strokeBorder(Self.line, lineWidth: 1))
-    }
-
-    private var weekSection: some View {
+    /// The week's seven days as dots (filled: something was completed that day), with earlier weeks one tap back.
+    private func weekStrip(fg: Color) -> some View {
         let weeks = self.weeks
-        return VStack(spacing: 0) {
-            TabView(selection: $weekPage) {
-                ForEach(Array(weeks.enumerated()), id: \.element.id) { index, week in
-                    VStack(spacing: 0) {
-                        HStack {
-                            Text(week.title).font(RealType.editorialItem).kerning(-1).foregroundStyle(.white)
-                            Spacer()
-                            Text("\(week.done) done").font(RealFont.inter(13)).foregroundStyle(Self.muted)
-                        }
-                        .padding(.horizontal, 4)
-                        WeekActivityView(activity: week.activity, todayIndex: week.todayIndex, accent: accent)
+        let index = min(max(weekPage, 0), max(weeks.count - 1, 0))
+        let week = weeks.indices.contains(index) ? weeks[index] : nil
+        let symbols = { () -> [String] in
+            var c = calendar
+            c.locale = I18n.locale
+            let s = c.veryShortStandaloneWeekdaySymbols
+            return (0..<7).map { s[($0 + 1) % 7] }   // Monday first
+        }()
+        return HStack(spacing: 2) {
+            Button { withAnimation(.easeOut(duration: 0.2)) { weekPage = index - 1 } } label: {
+                RealSymbol("chevron.left", size: 11).frame(width: 26, height: 36).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).disabled(index == 0).opacity(index == 0 ? 0.3 : 0.85)
+            .accessibilityLabel(t("Önceki hafta"))
+            Text("\(week?.title ?? "")  ·  \(week?.done ?? 0)").font(RealFont.inter(12, .medium)).lineLimit(1)
+            if index < weeks.count - 1 {
+                Button { withAnimation(.easeOut(duration: 0.2)) { weekPage = index + 1 } } label: {
+                    RealSymbol("chevron.right", size: 11).frame(width: 26, height: 36).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).opacity(0.85)
+                .accessibilityLabel(t("Sonraki hafta"))
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 11) {
+                ForEach(0..<7, id: \.self) { i in
+                    let value = (week?.activity.indices.contains(i) ?? false) ? (week?.activity[i] ?? 0) : 0
+                    let today = week?.todayIndex == i
+                    VStack(spacing: 5) {
+                        Text(symbols[i]).font(today ? RealFont.inter(11, .semibold) : RealFont.inter(11)).opacity(today ? 1 : 0.65)
+                        Circle().fill(fg.opacity(value > 0 ? 1 : 0.28)).frame(width: 8, height: 8)
+                            .overlay(Circle().strokeBorder(fg, lineWidth: today && value == 0 ? 1 : 0))
                     }
-                    .tag(index)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 154)
-            Button {
-                path.append(.customCategory(categoryId))
-            } label: {
-                HStack {
-                    Text("Add a reminder to \(category?.name ?? "")").font(RealFont.inter(14)).foregroundStyle(.white).lineLimit(1)
-                    Spacer()
-                    RealSymbol("chevron.right", size: 13.8).foregroundStyle(Self.muted)
-                }
-                .padding(.horizontal, 20)
-                .frame(height: 52)
-                .overlay(RoundedRectangle(cornerRadius: 26).strokeBorder(Self.line, lineWidth: 1))
-            }
-            .padding(.top, 12)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(t("{0} tamamlandı", week?.done ?? 0))
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 30)
+        .foregroundStyle(fg)
+        .padding(.leading, -8)
     }
 
-    private func goalsSheet(goals: [Goal], total: Int, activeIndex: Int?, overall: Double) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("Goals (\(total))").font(RealType.editorialItem).kerning(-1).foregroundStyle(.white)
-                    Spacer()
-                    Button(action: newGoal) {
-                        RealSymbol("plus", size: 17.2).foregroundStyle(.white)
-                            .frame(width: 40, height: 40).overlay(Circle().strokeBorder(Self.faint, lineWidth: 1))
-                    }
-                    .accessibilityLabel("Add goal")
+    private func complete(_ id: Int64) {
+        withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(id) }
+    }
+
+    private func progressLine(_ part: Double, track: Color, fill: Color) -> some View {
+        Capsule().fill(track).frame(height: 3)
+            .overlay(alignment: .leading) { GeometryReader { g in Capsule().fill(fill).frame(width: g.size.width * part) } }
+    }
+
+    /// The first goal that is not done, in the category's colour, with its own "done" button.
+    private func nextCard(_ goal: Goal) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(t("Sıradaki")).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.7))
+                Text(goal.title).font(RealFont.inter(18)).foregroundStyle(.white).lineLimit(2).padding(.top, 2)
+                if !goal.caption.isEmpty {
+                    Text(goal.caption).font(RealType.cardMetaPrimary).foregroundStyle(.white.opacity(0.78)).padding(.top, 3)
                 }
-                HStack(spacing: 12) {
-                    Capsule().fill(.white.opacity(0.09)).frame(height: 5)
-                        .overlay(alignment: .leading) {
-                            GeometryReader { g in Capsule().fill(accent).frame(width: g.size.width * overall) }
+                if let part = goal.progress { progressLine(part, track: .white.opacity(0.22), fill: .white).padding(.top, 10) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { path.append(.detail(goal.id)) }
+            Button { complete(goal.id) } label: {
+                RealSymbol("checkmark", size: 18).foregroundStyle(Self.black)
+                    .frame(width: 44, height: 44).background(Circle().fill(.white))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(t("Tamamlandı olarak işaretle"))
+        }
+        .padding(.leading, 18).padding(.trailing, 14).padding(.vertical, 14)
+        .background {
+            ZStack {
+                shape.fill(RealColors.cardSurface)
+                shape.fill(accent.opacity(0.45))
+            }
+        }
+        .overlay(shape.strokeBorder(accent.lerp(.white, 0.55), lineWidth: 1.5))
+    }
+
+    private func pill<Content: View>(label: String, action: @escaping () -> Void, @ViewBuilder content: () -> Content) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) { content() }
+                .font(RealFont.inter(13)).foregroundStyle(RealColors.subtext)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .background(Capsule().fill(RealColors.cardSurface))
+                .overlay(Capsule().strokeBorder(RealColors.cardBorder, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// The category's link (a tap opens it, or asks for one) and its people.
+    private var extras: some View {
+        let link = store.categoryLinks[categoryId] ?? ""
+        let host = URL(string: link)?.host?.replacingOccurrences(of: "www.", with: "") ?? link
+        let count = max(people.count, 1)
+        return HStack(spacing: 8) {
+            pill(label: link.isEmpty ? t("Link yapıştır") : host, action: {
+                if let url = URL(string: link), !link.isEmpty { openURL(url) } else { showPasteLink = true }
+            }) {
+                RealSymbol("link", size: 14)
+                Text(link.isEmpty ? t("Link yapıştır") : host).lineLimit(1)
+            }
+            .contextMenu {
+                if !link.isEmpty { Button(t("Linki değiştir")) { showPasteLink = true } }
+            }
+            pill(label: people.isEmpty ? t("Kişi ekle") : t("{0} kişi", count), action: { showPeople = true }) {
+                HStack(spacing: -6) {
+                    if people.isEmpty {
+                        ProfileAvatar(name: store.ownerName, size: 22)
+                    } else {
+                        ForEach(people.prefix(3)) { p in
+                            ConnectionAvatar(name: p.name, key: p.uid, size: 22, pictureVersion: p.pictureVersion)
+                                .overlay(Circle().strokeBorder(RealColors.cardSurface, lineWidth: 1.5))
                         }
-                    Text("\(Int(overall * 100))%").font(RealFont.inter(12)).foregroundStyle(Self.muted)
+                    }
+                }
+                Text(people.isEmpty ? t("Kişi ekle") : t("{0} kişi", count)).lineLimit(1)
+            }
+            .disabled(category == nil)
+        }
+    }
+
+    private func goalList(goals: [Goal], nextId: Int64?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(t("Hedefler")).font(RealType.sectionTitle).foregroundStyle(.white)
+                Spacer()
+                if goals.count > 1 {
+                    Button(reorderMode ? t("Bitti") : t("Sırala")) { withAnimation(.easeOut(duration: 0.2)) { reorderMode.toggle() } }
+                        .buttonStyle(.plain)
+                        .font(RealFont.inter(13, .medium)).foregroundStyle(reorderMode ? .white : RealColors.subtext)
+                        .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                        .accessibilityLabel(reorderMode ? t("Sıralamayı bitir") : t("Hedefleri sırala"))
                 }
             }
-            .padding(.leading, 24).padding(.trailing, 20).padding(.top, 26).padding(.bottom, 22)
+            .padding(.horizontal, 6).padding(.top, 14)
             ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
-                goalRow(goal, number: index + 1, active: index == activeIndex, isLast: index == goals.count - 1)
+                goalRow(goal, next: goal.id == nextId)
                     .opacity(intro ? 1 : 0)
-                    .animation(.easeOut(duration: 0.38).delay(0.52 + Double(min(index, 6)) * 0.055), value: intro)
+                    .animation(.easeOut(duration: 0.38).delay(0.22 + Double(min(index, 6)) * 0.05), value: intro)
             }
             Button(action: newGoal) {
-                HStack(spacing: 10) {
-                    RealSymbol("plus", size: 16.1)
-                    Text("Add goal").font(RealFont.inter(14))
+                HStack(spacing: 8) {
+                    RealSymbol("plus", size: 15)
+                    Text(t("Hedef ekle")).font(RealFont.inter(14))
                 }
-                .foregroundStyle(accent)
-                .frame(maxWidth: .infinity)
-                .frame(height: 60)
-                .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Color(argb: 0xFF3A3A42), style: StrokeStyle(lineWidth: 1.5, dash: [7, 6])))
+                .foregroundStyle(RealColors.subtext)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(Color(argb: 0xFF3A3A42), style: StrokeStyle(lineWidth: 1, dash: [6, 5])))
+                .contentShape(Rectangle())
             }
-            .padding(.leading, 24).padding(.trailing, 20).padding(.top, 6).padding(.bottom, 8)
-            Color.clear.frame(height: 140)
+            .buttonStyle(.plain)
+            Button { path.append(.customCategory(categoryId)) } label: {
+                Text(t("Kategorinin kartlarını aç")).font(RealFont.inter(13)).foregroundStyle(RealColors.textMuted)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.plain)
         }
-        .background(UnevenRoundedRectangle(topLeadingRadius: 36, topTrailingRadius: 36, style: .continuous).fill(Self.sheet).ignoresSafeArea(edges: .bottom))
-        .padding(.top, 30)
     }
 
     private func startNote(_ goal: Goal) {
@@ -444,57 +428,45 @@ struct PlannerGoalScreen: View {
         }
     }
 
-    private func goalRow(_ goal: Goal, number: Int, active: Bool, isLast: Bool) -> some View {
-        let state: Int = goal.done ? 0 : (active ? 1 : 2) // Done, Active, Locked
-        let rail: Double = state == 0 ? 1 : (state == 1 ? (goal.progress ?? 0) : 0)
-        let caption = goal.done ? t("Tamamlandı") : (!goal.caption.isEmpty ? goal.caption : (state == 1 ? "In progress" : "Up next"))
-        return HStack(alignment: .top, spacing: 14) {
-            VStack(spacing: 0) {
+    /// A goal as a REAL card row: the check, the title and its date / checklist count, then what belongs to its state —
+    /// the checklist line while open, the Tamamlama notu once done. In "Sırala" a handle on the right moves it.
+    private func goalRow(_ goal: Goal, next: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        let dragging = dragId == goal.id
+        let caption = goal.done ? t("Tamamlandı") : goal.caption
+        return HStack(alignment: .top, spacing: 6) {
+            Button { complete(goal.id) } label: {
                 ZStack {
-                    if state == 1 { PulseCircle(color: accent) }
-                    Button { withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(goal.id) } } label: {
-                        ZStack {
-                            switch state {
-                            case 0: Circle().fill(accent)
-                            case 1: Circle().fill(accent.opacity(0.16)); Circle().strokeBorder(accent, lineWidth: 2)
-                            default: Circle().strokeBorder(Color(argb: 0xFF3A3A42), lineWidth: 1)
-                            }
-                            if state == 0 {
-                                RealSymbol("checkmark", size: 17.2).foregroundStyle(onAccent)
-                            } else {
-                                Text("\(number)").font(RealFont.inter(16)).foregroundStyle(state == 1 ? accent : Color(argb: 0xFF7C7C85))
-                            }
-                        }
-                        .frame(width: 42, height: 42)
+                    if goal.done {
+                        Circle().fill(accent)
+                        RealSymbol("checkmark", size: 12).foregroundStyle(onAccent)
+                    } else {
+                        Circle().strokeBorder(next ? accent : Self.faint, lineWidth: 1.5)
                     }
-                    .accessibilityLabel("Goal \(number), \(goal.done ? "done" : "not done")")
                 }
-                .frame(width: 52, height: 52)
-                if !isLast {
-                    GeometryReader { g in
-                        ZStack(alignment: .top) {
-                            Capsule().fill(.white.opacity(0.10))
-                            Capsule().fill(accent).frame(height: g.size.height * rail)
-                        }
-                    }
-                    .frame(width: 2)
-                    .padding(.vertical, 2)
-                    .animation(.easeOut(duration: 0.65), value: rail)
-                }
+                .frame(width: 24, height: 24)
+                .frame(width: 40, height: 46)
+                .contentShape(Rectangle())
             }
-            .frame(width: 52)
+            .buttonStyle(.plain)
+            .accessibilityLabel(goal.done ? t("Tamamlanmadı olarak işaretle") : t("Tamamlandı olarak işaretle"))
             VStack(alignment: .leading, spacing: 0) {
-                Text(caption).font(RealFont.inter(11)).kerning(0.5).foregroundStyle(state == 1 ? accent : Self.muted)
-                Text(goal.title)
-                    .font(RealType.editorialItem).kerning(-1)
-                    .foregroundStyle(goal.done ? Self.muted : (state == 1 ? .white : Color(argb: 0xFFC9C9D0)))
-                    .strikethrough(goal.done, color: Self.muted)
-                    .padding(.top, 4)
-                    .onTapGesture { path.append(.detail(goal.id)) }
-                // Tamamlama notu under a completed goal. The pencil (or a tap on the note) writes it in place.
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(goal.title).font(RealType.cardTitle)
+                        .foregroundStyle(goal.done ? RealColors.textMuted : RealColors.text)
+                        .strikethrough(goal.done, color: RealColors.textMuted)
+                        .lineLimit(3)
+                    if !caption.isEmpty {
+                        Text(caption).font(RealType.cardMetaPrimary).foregroundStyle(goal.done ? RealColors.textMuted : RealColors.accentBlue)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { path.append(.detail(goal.id)) }
+                // Tamamlama notu under a completed goal, written in place.
                 if goal.done && noteGoalId == goal.id {
                     TextField(t("Not yaz…"), text: $noteText, axis: .vertical)
-                        .font(RealFont.inter(13)).italic()
+                        .font(RealFont.inter(13))
                         .foregroundStyle(Color(argb: 0xFFE6E6EC)).tint(accent)
                         .focused($noteFocused)
                         .onChange(of: noteFocused) { _, focused in if !focused { saveNote() } }
@@ -504,58 +476,40 @@ struct PlannerGoalScreen: View {
                             if t.contains(where: \.isNewline) { noteText = t.filter { !$0.isNewline }; saveNote() }
                             else if t.count > 140 { noteText = String(t.prefix(140)) }
                         }
-                        .padding(.top, 6)
+                        .padding(.top, 7)
                         .onAppear { noteFocused = true }
-                } else if goal.done, let note = goal.note {
-                    Text(note)
-                        .font(RealFont.inter(13)).italic()
-                        .foregroundStyle(Color(argb: 0xFFB7B7C0))
-                        .padding(.top, 6)
+                } else if goal.done {
+                    Text(goal.note ?? t("Not yaz…"))
+                        .font(RealFont.inter(13))
+                        .foregroundStyle(goal.note == nil ? Self.faint : RealColors.subtext)
+                        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                        .contentShape(Rectangle())
                         .onTapGesture { startNote(goal) }
-                        .accessibilityLabel("Tamamlama notu: \(note)")
+                        .accessibilityLabel(goal.note.map { t("Tamamlama notu: {0}", $0) } ?? t("Not yaz…"))
+                        .accessibilityAddTraits(.isButton)
                 }
-                if let p = goal.progress, !goal.done {
-                    HStack(spacing: 10) {
-                        Capsule().fill(.white.opacity(0.10)).frame(width: 120, height: 4)
-                            .overlay(alignment: .leading) { Capsule().fill(accent).frame(width: 120 * p, height: 4) }
-                        Text("\(Int(p * 100))%").font(RealFont.inter(12)).foregroundStyle(Self.muted)
-                    }
-                    .padding(.top, 12)
+                if let part = goal.progress, !goal.done {
+                    progressLine(part, track: .white.opacity(0.10), fill: accent).padding(.top, 9)
                 }
-                HStack(spacing: 2) {
-                    HStack(spacing: 5) {
-                        Circle().frame(width: 6, height: 6)
-                        Circle().frame(width: 6, height: 6)
-                    }
-                    .foregroundStyle(reorderMode || dragId == goal.id ? accent : Self.faint)
-                    .frame(width: 44, height: 36, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .gesture(reorderGesture(goal.id), including: reorderMode ? .all : .none)
-                    Button { if goal.done { startNote(goal) } else { path.append(.detail(goal.id)) } } label: {
-                        RealSymbol("pencil", size: 17.2).foregroundStyle(Self.muted).frame(width: 32, height: 32)
-                    }
-                    .accessibilityLabel(goal.done ? "Tamamlama notu yaz" : "Edit goal")
-                    Spacer()
-                    Button { withAnimation(.spring(duration: 0.35)) { store.toggleCompleted(goal.id) } } label: {
-                        Text(goal.done ? "Undo" : "Mark done")
-                            .font(RealFont.inter(12))
-                            .foregroundStyle(goal.done ? Self.muted : .white)
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .overlay(Capsule().strokeBorder(Self.faint, lineWidth: 1))
-                    }
-                }
-                .padding(.top, 14)
             }
-            .padding(.top, 2)
-            .padding(.bottom, isLast ? 14 : 30)
+            .padding(.vertical, 13)
+            if reorderMode {
+                RealSymbol("line.3.horizontal", size: 16)
+                    .foregroundStyle(dragging ? accent : RealColors.textMuted)
+                    .frame(width: 44, height: 46)
+                    .contentShape(Rectangle())
+                    .gesture(reorderGesture(goal.id))
+                    .accessibilityLabel(t("Sürükleyerek sırala"))
+            }
         }
-        .padding(.leading, 18).padding(.trailing, 20)
-        .background(dragId == goal.id ? Color(argb: 0xFF1B1B21) : Self.sheet)
-        .scaleEffect(dragId == goal.id ? 1.02 : 1)
-        .zIndex(dragId == goal.id ? 1 : 0)
+        .padding(.leading, 6).padding(.trailing, reorderMode ? 4 : 16)
+        .background(shape.fill(dragging ? Color(argb: 0xFF1B1B21) : RealColors.cardSurface))
+        .overlay(shape.strokeBorder(RealColors.cardBorder, lineWidth: 1))
+        .scaleEffect(dragging ? 1.02 : 1)
+        .zIndex(dragging ? 1 : 0)
     }
 
-    /// Reorder mode: drag the dots; every ~110pt of travel swaps with the neighbour.
+    /// Reorder mode: drag the handle; every ~76pt of travel (a row) swaps with the neighbour.
     private func reorderGesture(_ id: Int64) -> some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { value in
@@ -566,7 +520,7 @@ struct PlannerGoalScreen: View {
                     dragStartIndex = dragOrder?.firstIndex(of: id) ?? 0
                 }
                 guard var order = dragOrder, let from = order.firstIndex(of: id) else { return }
-                let steps = Int((value.translation.height / 110).rounded(.towardZero))
+                let steps = Int((value.translation.height / 76).rounded(.towardZero))
                 let target = min(max(dragStartIndex + steps, 0), order.count - 1)
                 if target != from {
                     order.remove(at: from)
@@ -594,97 +548,6 @@ struct PlannerGoalScreen: View {
     }
 }
 
-/// Rounded tile with a concave notch top-right where the pencil badge sits.
-struct NotchedTileShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let body = Path(roundedRect: rect, cornerRadius: 28, style: .continuous)
-        let hole = Path(ellipseIn: CGRect(x: rect.maxX - 24 - 31, y: 24 - 31, width: 62, height: 62))
-        return body.subtracting(hole)
-    }
-}
-
-private struct PulseCircle: View {
-    let color: Color
-    @State private var on = false
-    var body: some View {
-        Circle().fill(color.opacity(on ? 0.26 : 0.08))
-            .frame(width: 52, height: 52)
-            .onAppear { withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { on = true } }
-    }
-}
-
-private struct PagerActionButton: View {
-    let label: String
-    let symbol: String
-    let accent: Color
-    let enabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                RealSymbol(symbol, size: 14.9)
-                    .foregroundStyle(RealColors.plannerInk)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(enabled ? accent : accent.opacity(0.3)))
-                Text(label).font(RealFont.inter(12)).foregroundStyle(.white).lineLimit(1)
-            }
-            .frame(width: 76)
-            .frame(maxHeight: .infinity)
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(accent.opacity(enabled ? 0.8 : 0.3), lineWidth: 1))
-            .padding(6)
-        }
-        .disabled(!enabled)
-    }
-}
-
-struct PagerDots: View {
-    let current: Int
-    let count: Int
-    let accent: Color
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<count, id: \.self) { i in
-                Capsule().fill(i == current ? accent : Color(argb: 0xFF3A3A42))
-                    .frame(width: i == current ? 18 : 6, height: 6)
-            }
-        }
-        .animation(.easeOut(duration: 0.2), value: current)
-    }
-}
-
-private struct WeekActivityView: View {
-    let activity: [Int]
-    let todayIndex: Int
-    let accent: Color
-    private let labels = ["M", "T", "W", "T", "F", "S", "S"]
-
-    var body: some View {
-        let maxValue = max(1, activity.max() ?? 1)
-        HStack(alignment: .bottom, spacing: 10) {
-            ForEach(0..<7, id: \.self) { i in
-                let value = activity.indices.contains(i) ? activity[i] : 0
-                VStack(spacing: 6) {
-                    Spacer(minLength: 0)
-                    GeometryReader { g in
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(value == 0 ? Color.white.opacity(0.08) : accent.opacity(i == todayIndex ? 1 : 0.55))
-                            .frame(width: g.size.width * 0.62, height: 6 + 40 * CGFloat(value) / CGFloat(maxValue))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    }
-                    .frame(height: 46)
-                    Text(labels[i]).font(RealFont.inter(10)).foregroundStyle(i == todayIndex ? .white : Color(argb: 0xFF8C8C95))
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.horizontal, 18).padding(.vertical, 14)
-        .frame(height: 104)
-        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Color(argb: 0xFF2A2A31), lineWidth: 1))
-        .padding(.top, 14)
-    }
-}
-
 /// "Add to REAL" window over the goal screen: dim scrim, glass input pill above the keyboard.
 private struct GoalComposerWindow: View {
     let accent: Color
@@ -698,7 +561,7 @@ private struct GoalComposerWindow: View {
         ZStack(alignment: .bottom) {
             Color.black.opacity(0.55).ignoresSafeArea().onTapGesture(perform: onDismiss)
             VStack(alignment: .leading, spacing: 6) {
-                Text("New goal in \(categoryName)").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8C8C95)).lineLimit(1)
+                Text(t("{0} için yeni hedef", categoryName)).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF8C8C95)).lineLimit(1)
                 HStack {
                     TextField("", text: $text, prompt: Text("Add to REAL").foregroundStyle(Color(argb: 0xFF7C7C85)))
                         .font(RealFont.inter(18)).foregroundStyle(.white).tint(accent)
