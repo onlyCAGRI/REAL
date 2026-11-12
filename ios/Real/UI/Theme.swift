@@ -79,7 +79,17 @@ let reminderColorChoices: [ReminderColorChoice] = rawPalette.enumerated().map { 
 /// round the colour wheel (yellow, orange, pink-red, purple, blue, teal, green), each followed by its vivid companion. Cards
 /// store the index, so the order changes nothing saved; the four "Koleksiyon" duplicates are not offered.
 let reminderColorDisplayOrder = [0, 1, 9, 31, 10, 32, 11, 33, 13, 35, 12, 34, 14, 36, 16, 38, 15, 37, 17, 39, 18, 40, 19, 41, 4, 26, 2, 24, 3, 25, 5, 27, 6, 28, 7, 29, 8, 30]
-let pickerColorChoices: [ReminderColorChoice] = reminderColorDisplayOrder.map { reminderColorChoices[$0] }
+/// What the pickers offer: 24 of the 38, in the same wheel order. The two neutrals, the 18 first colours and four
+/// later ones with no near twin (olive, magenta, periwinkle, leaf); the other 14 sat a shade away from one of these.
+/// reminderColorDisplayOrder stays whole: planner colours are picked from it by hash, as on Android.
+let pickerColorOrder = [0, 1, 9, 10, 32, 11, 13, 12, 14, 16, 38, 15, 17, 18, 19, 4, 26, 2, 3, 5, 6, 7, 8, 30]
+let pickerColorChoices: [ReminderColorChoice] = pickerColorOrder.map { reminderColorChoices[$0] }
+
+/// The picker list plus colours already in use that it no longer offers, so a card or category keeps showing its own.
+func pickerColors(keeping current: [Int?]) -> [ReminderColorChoice] {
+    let extra = Set(current.compactMap { $0 }).filter { !pickerColorOrder.contains($0) && reminderColorChoices.indices.contains($0) }
+    return pickerColorChoices + reminderColorDisplayOrder.filter { extra.contains($0) }.map { reminderColorChoices[$0] }
+}
 
 func paletteColor(_ index: Int?) -> Color? {
     guard let index, reminderColorChoices.indices.contains(index) else { return nil }

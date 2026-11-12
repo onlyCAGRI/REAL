@@ -521,7 +521,10 @@ private struct ColorChoiceRow: View {
     let locked: (Int) -> Bool
 
     /// The ones this account can use first, so the locked ones are not in the way.
-    private var ordered: [ReminderColorChoice] { pickerColorChoices.filter { !locked($0.index) } + pickerColorChoices.filter { locked($0.index) } }
+    private var ordered: [ReminderColorChoice] {
+        let all = pickerColors(keeping: [selected])
+        return all.filter { !locked($0.index) } + all.filter { locked($0.index) }
+    }
 
     var body: some View {
         HStack(spacing: 0) {
