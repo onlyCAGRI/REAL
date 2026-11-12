@@ -15,6 +15,10 @@ struct RealAccessSnapshot {
     let isPro: Bool
     /// Admin panel's tester grant (member card: Tester kartı).
     var tester: Bool = false
+    /// Pro comes from an App Store subscription (not a gift), so the Pro page offers "Aboneliği yönet".
+    var subscribed: Bool = false
+    /// Öncü üye number, for the first hundred yearly subscribers.
+    var founderNumber: Int? = nil
     let effectiveFeatures: Set<String>
     let validUntil: Date
 
@@ -62,6 +66,8 @@ final class ProAccess {
         let ttl = (((body["cacheUntil"] as? NSNumber)?.doubleValue ?? 0) - ((body["serverTime"] as? NSNumber)?.doubleValue ?? 0)) / 1000
         let value = RealAccessSnapshot(uid: uid, isPro: body["plan"] as? String == "PRO",
                                        tester: body["tester"] as? Bool == true,
+                                       subscribed: body["source"] as? String == "APP_STORE",
+                                       founderNumber: ((body["purchase"] as? [String: Any])?["founderNumber"] as? NSNumber)?.intValue,
                                        effectiveFeatures: Set(flags.compactMap { ($0.value as? Bool) == true ? $0.key : nil }),
                                        validUntil: Date().addingTimeInterval(min(max(ttl, 0), 15 * 60)))
         snapshot = value
@@ -194,14 +200,18 @@ struct ProAccessHost: View {
     }
 }
 
-/// RealProDialog.kt: the full Pro screen. Nothing is sold until App Store subscriptions exist, so its button stays off.
+/// RealProDialog.kt: the full Pro screen. Plans and prices come from the App Store (ProStore); the server decides who is Pro.
 struct RealProScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var access = ProAccess.shared
+    @State private var store = ProStore.shared
     @State private var showDetails = false
+    @State private var choice: String?
 
     private var isPro: Bool { access.snapshot?.isPro == true }
+    private var signedIn: Bool { RealAuth.shared.account != nil }
+    private var selected: ProStore.Offer? { store.offers.first { $0.id == choice } ?? store.offers.first }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -233,35 +243,121 @@ struct RealProScreen: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 8)
-                        Text(isPro ? t("Bu hesapta REAL Pro etkin.") : t("Abonelikler henüz satışa açılmadı. Planlar ve fiyatlar hazır olduğunda burada görünecek."))
-                            .font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true).padding(.vertical, 12)
+                        plans.padding(.vertical, 12)
                     }
                     .padding(.horizontal, 24)
                 }
                 .scrollIndicators(.hidden)
                 VStack(spacing: 2) {
-                    Button { if isPro { dismiss() } } label: {
-                        Text(isPro ? t("Tamam") : t("App Store ile abone ol")).font(RealFont.inter(16, .semibold)).foregroundStyle(.black)
-                            .frame(maxWidth: .infinity, minHeight: 54)
-                            .background(Capsule().fill(.white.opacity(isPro ? 1 : 0.28)))
+                    if let notice = store.notice {
+                        Text(notice).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFFFFC27A)).multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true).padding(.bottom, 8)
+                    }
+                    let canBuy = !isPro && selected != nil && !store.working
+                    Button {
+                        if isPro { dismiss() } else if let offer = selected { Task { await store.buy(offer) } }
+                    } label: {
+                        ZStack {
+                            if store.working { ProgressView().tint(.black) } else {
+                                Text(isPro ? t("Tamam") : t("App Store ile abone ol")).font(RealFont.inter(16, .semibold)).foregroundStyle(.black)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .background(Capsule().fill(.white.opacity(isPro || canBuy ? 1 : 0.28)))
                     }
                     .buttonStyle(.plain)
-                    .disabled(!isPro)
-                    HStack(spacing: 4) {
-                        Text(t("Satın almaları geri yükle")).foregroundStyle(.white.opacity(0.3)).padding(.horizontal, 8).padding(.vertical, 13)
+                    .disabled(!isPro && !canBuy)
+                    HStack(spacing: 0) {
+                        Button(t("Geri yükle")) { Task { await store.restore() } }
+                            .disabled(!signedIn || store.working).padding(.horizontal, 8).padding(.vertical, 13)
+                        Button(t("Kullanım koşulları")) {
+                            if let url = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/") { openURL(url) }
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 13)
                         Button(t("Gizlilik politikası")) {
                             if let url = URL(string: "https://real-privacy-staging.realapp.workers.dev/privacy") { openURL(url) }
                         }
-                        .foregroundStyle(.white.opacity(0.65)).padding(.horizontal, 8).padding(.vertical, 13)
+                        .padding(.horizontal, 8).padding(.vertical, 13)
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white.opacity(0.65))
                     .font(RealFont.inter(13))
                 }
                 .padding(.horizontal, 24).padding(.top, 10).padding(.bottom, 6)
             }
         }
         .preferredColorScheme(.dark)
-        .task { _ = try? await access.refresh() }
+        .task {
+            _ = try? await access.refresh()
+            await store.load()
+        }
+        .onDisappear { store.notice = nil }
         .sheet(isPresented: $showDetails) { details }
+    }
+
+    /// The account's state, or what is on sale: founder (while places are left), yearly, monthly.
+    @ViewBuilder
+    private var plans: some View {
+        if isPro {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(access.snapshot?.founderNumber.map { t("Bu hesapta REAL Pro etkin. Öncü üye #{0}", $0) } ?? t("Bu hesapta REAL Pro etkin."))
+                    .font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
+                if access.snapshot?.subscribed == true {
+                    Button(t("Aboneliği yönet")) {
+                        if let url = URL(string: "https://apps.apple.com/account/subscriptions") { openURL(url) }
+                    }
+                    .buttonStyle(.plain).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFF91B9FF)).frame(minHeight: 44)
+                }
+            }
+        } else if !signedIn {
+            note(t("REAL Pro hesabına bağlıdır. Hesap menüsünden giriş yapabilirsin."))
+        } else if !store.offers.isEmpty {
+            VStack(spacing: 10) {
+                ForEach(store.offers) { offer in planRow(offer) }
+                Text(t("Abonelik, dönem bitmeden en az 24 saat önce iptal edilmezse aynı fiyatla kendiliğinden yenilenir. App Store hesap ayarlarından yönetip iptal edebilirsin."))
+                    .font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+            }
+        } else if store.loaded {
+            note(t("Planlar şu anda yüklenemedi. Biraz sonra tekrar dene."))
+        } else {
+            ProgressView().tint(.white).frame(maxWidth: .infinity, minHeight: 60)
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text).font(RealFont.inter(13)).foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func planRow(_ offer: ProStore.Offer) -> some View {
+        let on = offer.id == selected?.id
+        let yearly = offer.plan != .monthly
+        let title = offer.plan == .founder ? t("Öncü üye") : yearly ? t("Yıllık") : t("Aylık")
+        let summary: String = {
+            switch offer.plan {
+            case .founder: return t("İlk 100 üyeye özel yıllık fiyat · {0} yer kaldı", store.founderLeft)
+            case .yearly: return t("Ayda {0}", (offer.product.price / 12).formatted(offer.product.priceFormatStyle))
+            case .monthly: return t("İstediğin zaman iptal et")
+            }
+        }()
+        return Button { choice = offer.id } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(RealFont.inter(16, .semibold)).foregroundStyle(Color(argb: 0xFFF3F1F4))
+                    Text(summary).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF9B9BA4)).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(offer.product.displayPrice).font(RealFont.inter(17, .semibold)).foregroundStyle(Color(argb: 0xFFF3F1F4))
+                    Text(yearly ? t("yılda") : t("ayda")).font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFF9B9BA4))
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white.opacity(on ? 0.10 : 0.04)))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(on ? 0.9 : 0.12), lineWidth: on ? 1.5 : 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     private func benefit(_ glyph: ActionGlyph, _ title: String, _ summary: String) -> some View {
@@ -281,8 +377,10 @@ struct RealProScreen: View {
                 Text(t("Pro için hazırlanan özellikler")).font(RealFont.inter(13)).foregroundStyle(Color(argb: 0xFF9B9BA4))
                 ForEach([t("Pro; AI ile sesli komutları, mood önerilerini, film, dizi ve oyun önerilerini, sınırsız hedefi ve tüm renkleri açar."),
                          t("Temel kartlar, telefonda çözülen sesli komutlar, mood kaydı, 8 temel renk ve kategori başına bir hedef ücretsiz kalır."),
-                         t("AI kullanım sınırları ve son plan ayrıntıları abonelikler satışa açılmadan belirtilecek. Sınırsız AI kullanımı sunulmuyor."),
-                         t("iPhone'da ödeme App Store üzerinden tamamlanacak. Satın almadan önce fiyatı ve yenileme koşullarını göreceksin."),
+                         store.proDailyAi.map { t("Pro ile günde {0} AI isteği hakkın olur. Sınırsız AI kullanımı sunulmuyor.", $0) }
+                            ?? t("Pro ile AI için günlük bir hakkın olur. Sınırsız AI kullanımı sunulmuyor."),
+                         t("Öncü üye fiyatı ilk 100 yıllık üyeye özeldir ve aboneliğin kesintisiz sürdükçe aynı kalır."),
+                         t("iPhone'da ödeme App Store üzerinden tamamlanır. Satın almadan önce fiyatı ve yenileme koşullarını görürsün."),
                          t("Abonelik AI gizlilik tercihlerini değiştirmez. Abonelik bitince kartların silinmez.")], id: \.self) { line in
                     Text(line).font(RealFont.inter(15)).foregroundStyle(.white.opacity(0.8)).fixedSize(horizontal: false, vertical: true)
                 }
