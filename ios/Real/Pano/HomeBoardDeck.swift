@@ -7,7 +7,7 @@ private let deckInk = Color(argb: 0xFF151517)
 /// What this phone has already seen on each board: block id → content version (PanoSeen.kt). A block someone else
 /// added, or whose content changed, since the board was last open counts as new; moving a block does not. The first
 /// time a board is met everything on it is taken as seen, so an update does not light up old boards.
-@Observable
+@MainActor @Observable
 final class PanoSeen {
     static let shared = PanoSeen()
     /// Bumped on every mark so the home deck recounts.
