@@ -16,7 +16,7 @@ enum AvatarUnlocks {
     static let paused = true
 
     static var allOpen: Bool {
-        get { UserDefaults.standard.bool(forKey: allKey) }
+        get { RealBuild.developerTools && UserDefaults.standard.bool(forKey: allKey) }
         set { UserDefaults.standard.set(newValue, forKey: allKey) }
     }
     static var earned: Set<String> { Set(UserDefaults.standard.stringArray(forKey: earnedKey) ?? []) }

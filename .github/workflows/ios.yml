@@ -254,6 +254,7 @@ jobs:
           DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
           APPSTORE_PROFILE: ${{ secrets.IOS_APPSTORE_PROFILE }}
           SHARE_APPSTORE_PROFILE: ${{ secrets.IOS_SHARE_APPSTORE_PROFILE }}
+          WIDGETS_APPSTORE_PROFILE: ${{ secrets.IOS_WIDGETS_APPSTORE_PROFILE }}
           TEAM_ID: VW6K9YCWLJ
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
@@ -261,6 +262,8 @@ jobs:
           # The App Check debug token is for simulator builds only: the device build is compiled without it, so it
           # never ships inside an IPA (devices prove themselves with App Attest).
           echo 'enum BuildSecrets { static let appCheckDebugToken = "" }' > Real/App/BuildSecrets.swift
+          # The widget extension (com.cagri.real.widgets) is signed with its own App Store profile, "REAL Widgets App Store".
+          if [ -z "$WIDGETS_APPSTORE_PROFILE" ]; then echo "::error title=TestFlight::IOS_WIDGETS_APPSTORE_PROFILE secret is missing (the widget extension's App Store profile, base64)"; exit 1; fi
           KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
           printf '%s\n' "$ASC_KEY_P8" > "$KEY"
           # Signing identity in a throwaway keychain, the profile where Xcode looks for it.
@@ -276,6 +279,7 @@ jobs:
           for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
             mkdir -p "$dir"; printf '%s' "$APPSTORE_PROFILE" | base64 --decode > "$dir/real-appstore.mobileprovision"
             printf '%s' "$SHARE_APPSTORE_PROFILE" | base64 --decode > "$dir/real-share-appstore.mobileprovision"
+            printf '%s' "$WIDGETS_APPSTORE_PROFILE" | base64 --decode > "$dir/real-widgets-appstore.mobileprovision"
           done
           echo "::warning title=signing identities::$(security find-identity -v -p codesigning "$KEYCHAIN" | head -3 | tr '\n' ' ')"
           cat > build/ExportOptions.plist <<EOF
@@ -287,7 +291,7 @@ jobs:
             <key>teamID</key><string>$TEAM_ID</string>
             <key>signingStyle</key><string>manual</string>
             <key>signingCertificate</key><string>Apple Distribution</string>
-            <key>provisioningProfiles</key><dict><key>com.cagri.real</key><string>REAL App Store</string><key>com.cagri.real.share</key><string>REAL Share App Store</string></dict>
+            <key>provisioningProfiles</key><dict><key>com.cagri.real</key><string>REAL App Store</string><key>com.cagri.real.share</key><string>REAL Share App Store</string><key>com.cagri.real.widgets</key><string>REAL Widgets App Store</string></dict>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict></plist>
           EOF
@@ -295,7 +299,7 @@ jobs:
           xcodebuild archive -project Real.xcodeproj -scheme Real -configuration Release \
             -destination "generic/platform=iOS" -archivePath build/REAL.xcarchive \
             DEVELOPMENT_TEAM=$TEAM_ID CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" \
-            REAL_PROFILE="REAL App Store" REAL_SHARE_PROFILE="REAL Share App Store" OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
+            REAL_PROFILE="REAL App Store" REAL_SHARE_PROFILE="REAL Share App Store" REAL_WIDGETS_PROFILE="REAL Widgets App Store" OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
             CURRENT_PROJECT_VERSION=$BUILD_NUMBER > build/archive.log 2>&1
           status=$?
           grep -E "error:|\*\* ARCHIVE" build/archive.log | sort -u | head -80

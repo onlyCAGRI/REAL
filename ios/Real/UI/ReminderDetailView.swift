@@ -1566,14 +1566,14 @@ struct ReminderDetailView: View {
                 HStack(spacing: 4) {
                     let d = draft
                     // Most used first, least used last (Android order).
-                    QuickAction(symbol: "calendar", label: t("Tarih / Saat"), active: d?.alertAt != nil || d?.plannedDateEpochDay != nil) {
+                    QuickAction(symbol: "calendar", label: t("Tarih / Saat"), active: d?.alertAt != nil || d?.plannedDateEpochDay != nil, tip: "detail_date") {
                         if let d { openSchedule(d) }
                     }
                     QuickAction(symbol: "photo", label: t("Fotoğraf ekle"), active: false,
                                 count: d?.attachments.filter { $0.type == .image }.count) { showPhotoPicker = true }
                     QuickAction(symbol: "camera", label: t("Kamera ile fotoğraf ekle"), active: false) { Task { if await PermissionPrompt.cameraReady() { showCamera = true } } }
                     QuickAction(symbol: "checklist", label: t("Checklist"), active: checklistOpen || !(d?.checklistItems.isEmpty ?? true),
-                                count: d?.checklistItems.count) {
+                                count: d?.checklistItems.count, tip: "detail_checklist") {
                         titleFocused = false
                         lowerEditDock()
                         checklistOpen = true
@@ -1593,18 +1593,18 @@ struct ReminderDetailView: View {
                     }
                     QuickAction(symbol: "mappin", label: t("Konum"), active: d?.location != nil, tip: "detail_location") { withoutAnimation { showLocationGuide = true } }
                     QuickAction(symbol: "waveform", label: t("Ses kaydı"), active: voiceRecorderOpen || !(d?.voiceRecordings.isEmpty ?? true),
-                                count: d?.voiceRecordings.count) { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
+                                count: d?.voiceRecordings.count, tip: "detail_voice") { withAnimation(.spring(duration: 0.3)) { voiceRecorderOpen = true } }
                     let mediaTotal = (d?.musicBlocks.count ?? 0) + (d?.mediaBlocks.count ?? 0) + (d?.gameBlocks.count ?? 0)
                     QuickAction(symbol: "play.rectangle", label: t("Medya"), active: mediaTotal > 0,
                                 count: mediaTotal > 0 ? mediaTotal : nil, tip: "detail_media") { showMusicSearch = true }
                     QuickAction(symbol: "doc", label: t("Dosya ekle"), active: false,
                                 count: d?.attachments.filter { $0.type == .file }.count) { showFileImporter = true }
-                    QuickAction(symbol: "face.smiling", label: t("Mood"), active: d?.mood != nil) { showMoodPicker = true }
+                    QuickAction(symbol: "face.smiling", label: t("Mood"), active: d?.mood != nil, tip: "detail_mood") { showMoodPicker = true }
                     // Real Labs: experimental extras after a divider, as on Android.
                     Rectangle().fill(.white.opacity(0.14)).frame(width: 1, height: 22).padding(.horizontal, 6)
                     Text("Real Labs").font(RealFont.inter(11)).foregroundStyle(.white.opacity(0.45)).fixedSize().padding(.trailing, 2)
-                    QuickAction(symbol: "map", label: t("Harita posteri"), active: false) { openPoster { showMapPoster = true } }
-                    QuickAction(symbol: "sparkles", label: t("Gökyüzü posteri"), active: false) { openPoster { showSkyPoster = true } }
+                    QuickAction(symbol: "map", label: t("Harita posteri"), active: false, tip: "detail_map_poster") { openPoster { showMapPoster = true } }
+                    QuickAction(symbol: "sparkles", label: t("Gökyüzü posteri"), active: false, tip: "detail_sky_poster") { openPoster { showSkyPoster = true } }
                 }
                 .padding(.leading, 2).padding(.trailing, 12)
             }

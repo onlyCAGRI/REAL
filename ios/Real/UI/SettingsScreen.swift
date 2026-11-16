@@ -187,6 +187,16 @@ enum ProfilePhotoStore {
 
 // MARK: - Settings (SettingsScreen.kt)
 
+/// Geliştirici araçları (Ayarlar) and the switches behind it exist on the simulator and in debug builds only:
+/// a phone build (TestFlight, App Store) has neither the section nor a test switch left on from before.
+enum RealBuild {
+    #if DEBUG || targetEnvironment(simulator)
+    static let developerTools = true
+    #else
+    static let developerTools = false
+    #endif
+}
+
 struct SettingsScreen: View {
     let onBack: () -> Void
     @State private var sharePhoto = ProfilePictures.sharePhoto
@@ -394,7 +404,7 @@ struct SettingsScreen: View {
             }
             SettingsDivider()
             SettingsToggleRow(icon: .check, title: t("Sade kartlar"),
-                              subtitle: t("Deneysel. Tamamlamak için kartı sağa kaydır."), isOn: $plainCards)
+                              subtitle: t("Tamamlamak için kartı sağa kaydır."), isOn: $plainCards)
             SettingsDivider()
             SettingsToggleRow(icon: .category, title: t("Bağlam kartları"), subtitle: t("Ana ekranın altında ara sıra öneri kartları"), isOn: $contextCards)
             SettingsDivider()
@@ -495,10 +505,12 @@ struct SettingsScreen: View {
                 withAnimation(.easeOut(duration: 0.2)) { page = .sources }
             }
         }
-        SettingsSectionHeader(title: t("GELİŞTİRİCİ"))
-        SettingsGlassGroup {
-            SettingsActionRow(icon: .settings, title: t("Geliştirici araçları"), subtitle: t("Tanılama, testler ve tasarım demoları")) {
-                withAnimation(.easeOut(duration: 0.2)) { page = .developer }
+        if RealBuild.developerTools {
+            SettingsSectionHeader(title: t("GELİŞTİRİCİ"))
+            SettingsGlassGroup {
+                SettingsActionRow(icon: .settings, title: t("Geliştirici araçları"), subtitle: t("Tanılama, testler ve tasarım demoları")) {
+                    withAnimation(.easeOut(duration: 0.2)) { page = .developer }
+                }
             }
         }
         Color.clear.frame(height: 40)

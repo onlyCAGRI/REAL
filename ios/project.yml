@@ -59,6 +59,8 @@ targets:
         product: Lottie
       # Share → REAL (App Groups), push, Sign in with Apple, time-sensitive alerts and share links: paid team only.
       - target: RealShare
+      # Home-screen widgets (Kartlarım, Kategori, Su, Takvim): they draw from the App Group summary the app leaves.
+      - target: RealWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cagri.real
@@ -91,6 +93,25 @@ targets:
         INFOPLIST_FILE: RealShare/Info.plist
         CODE_SIGN_ENTITLEMENTS: RealShare/RealShare.entitlements
         PROVISIONING_PROFILE_SPECIFIER: "$(REAL_SHARE_PROFILE)"
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+  # Home-screen widgets. No Firebase, no app code: only Shared/ and its own views.
+  RealWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: RealWidgets
+        excludes:
+          - "*.entitlements"
+          - Info.plist
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cagri.real.widgets
+        PRODUCT_NAME: RealWidgets
+        INFOPLIST_FILE: RealWidgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: RealWidgets/RealWidgets.entitlements
+        PROVISIONING_PROFILE_SPECIFIER: "$(REAL_WIDGETS_PROFILE)"
         TARGETED_DEVICE_FAMILY: "1"
         SKIP_INSTALL: YES
   RealTests:

@@ -284,7 +284,7 @@ struct YasamScreen: View {
         let discover = parts.filter(\.discover)
         return VStack(alignment: .leading, spacing: 0) {
             if editing {
-                YasamEditBar(hidden: YasamPart.allCases.filter { layout.hidden.contains($0) }) {
+                YasamEditBar(hidden: YasamPart.offered.filter { layout.hidden.contains($0) }) {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { editing = false }
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))

@@ -14,26 +14,33 @@ final class RealTips {
 
     private static let tips: [String: Tip] = [
         "test": Tip(title: "Eğitim ipucu", body: "Bir şeye ilk dokunduğunda böyle kısa bir açıklama çıkar."),
-        "composer_date": Tip(title: "Tarih ve saat", body: "Karta gün ve saat ver. \"Yarın 9'da\" ya da \"her cumartesi 6'da\" diye yazarsan altta seçenekler çıkar; birine dokununca tarih karta geçer."),
-        "composer_bell": Tip(title: "Bildirim", body: "Zil açıkken kart sana bildirim gönderir; tarihsiz kartta hemen gelir. Alarm için tarih ekranında saati sağa it."),
-        "composer_location": Tip(title: "Konum", body: "Karta bir yer ekle ya da oraya varınca veya ayrılınca hatırlatsın."),
-        "composer_category": Tip(title: "Kategori", body: "Kartı bir kategoriye koy ya da yeni kategori oluştur. Kategoriler ana ekranda renkli kartlar olarak durur."),
+        "composer_date": Tip(title: "Tarih ve saat", body: "Karta gün ve saat ver. Yazarak da olur: \"yarın 9'da\" ya da \"her cumartesi 6'da\" yaz, altta çıkan seçeneğe dokun."),
+        "composer_bell": Tip(title: "Bildirim", body: "Zil açıksa kart, zamanı gelince bildirim gönderir. Tarihi olmayan kartta bildirim hemen gelir. Alarm gibi çalması için tarih ekranında saati sağa it."),
+        "composer_location": Tip(title: "Konum", body: "Karta bir yer ekle. İstersen oraya varınca ya da oradan ayrılınca hatırlatır."),
+        "composer_category": Tip(title: "Kategori", body: "Kartı bir kategoriye koy ya da yenisini oluştur. Kategoriler ana ekranda renkli kartlar olarak durur."),
         "composer_add": Tip(title: "Ekler", body: "Fotoğraf, kamera, ses kaydı, konum ve liste buradan eklenir."),
-        "detail_edit_dock": Tip(title: "Bloklar", body: "Alttaki simgeleri sağa sola kaydır; her biri karta yeni bir blok ekler."),
-        "detail_stack": Tip(title: "Kart yığını", body: "Üst üste duran küçük kartlar: not, alıntı ya da fikir yaz."),
-        "detail_stack_use": Tip(title: "Kart yığını", body: "Yazmak için öndeki karta dokun; arkadaki karta dokununca öne gelir."),
-        "detail_location": Tip(title: "Konum", body: "Bir yer seç; oraya varınca ya da ayrılınca REAL hatırlatır. Kartta tarih de varsa hava durumu görünür."),
-        "detail_share": Tip(title: "Paylaş", body: "Kartı bir REAL kullanıcısına gönder, bağlantı olarak paylaş ya da düz metin yolla."),
-        "detail_media": Tip(title: "Medya", body: "Şarkı, film, dizi ya da oyun ekle; karttan tek dokunuşla açılır.")
+        "detail_edit_dock": Tip(title: "Bloklar", body: "Alttaki simgelerin her biri karta bir blok ekler. Hepsini görmek için sağa sola kaydır."),
+        "detail_date": Tip(title: "Tarih ve saat", body: "Karta gün ve saat ver. Zil açıksa zamanı gelince bildirim gelir."),
+        "detail_checklist": Tip(title: "Checklist", body: "Karta işaretlenebilir bir liste ekler. Her satır bir madde; biteni işaretle."),
+        "detail_voice": Tip(title: "Ses kaydı", body: "Karta sesli not kaydet. Kayıt kartta durur, istediğin zaman dinlersin."),
+        "detail_mood": Tip(title: "Mood", body: "O anki ruh halini karta ekle."),
+        "detail_map_poster": Tip(title: "Harita posteri", body: "Kartın konumundan bir harita posteri hazırlar. Önce karta bir konum eklemen gerekir."),
+        "detail_sky_poster": Tip(title: "Gökyüzü posteri", body: "Kartın yerinde ve zamanında gökyüzünün nasıl göründüğünü postere çevirir. Önce karta bir konum eklemen gerekir."),
+        "detail_stack": Tip(title: "Kart yığını", body: "Üst üste duran küçük kartlar. Not, alıntı ya da fikir yazmak için."),
+        "detail_stack_use": Tip(title: "Kart yığını", body: "Yazmak için öndeki karta dokun. Arkadaki karta dokunursan o öne gelir."),
+        "detail_location": Tip(title: "Konum", body: "Bir yer seç. Oraya varınca ya da oradan ayrılınca REAL hatırlatır. Kartta tarih de varsa o günün hava durumu görünür."),
+        "detail_share": Tip(title: "Paylaş", body: "Kartı bir REAL kullanıcısına gönder, bağlantı olarak paylaş ya da düz metin olarak yolla."),
+        "detail_media": Tip(title: "Medya", body: "Şarkı, film, dizi ya da oyun ekle. Karttan tek dokunuşla açılır.")
     ]
 
     private static let alwaysOnKey = "real_tips_always_on"
-    private static func seenKey(_ key: String) -> String { "real_tips_seen:\(key)" }
+    /// The number goes up when the tips are rewritten, so everyone meets the new ones once.
+    private static func seenKey(_ key: String) -> String { "real_tips_seen2:\(key)" }
 
     private(set) var shown: Shown?
     private(set) var closing = false
     /// Every tap shows its tip (development). Off: each tip once.
-    private(set) var alwaysOn = UserDefaults.standard.bool(forKey: alwaysOnKey)
+    private(set) var alwaysOn = RealBuild.developerTools && UserDefaults.standard.bool(forKey: alwaysOnKey)
     @ObservationIgnored var anchors: [String: CGRect] = [:]
     @ObservationIgnored private var token = 0
 
@@ -174,17 +181,17 @@ private struct RealTipHost: View {
     }
 
     private func card(_ current: RealTips.Shown) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(t(current.tip.title)).font(RealFont.inter(18, .bold)).foregroundStyle(Color(argb: 0xFF0B0B0D))
-                Text(t(current.tip.body)).font(RealFont.inter(16)).foregroundStyle(Color(argb: 0xFF3A3A42))
-                    .lineSpacing(3)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(t(current.tip.title)).font(RealFont.inter(20, .bold)).foregroundStyle(Color(argb: 0xFF0B0B0D))
+                Text(t(current.tip.body)).font(RealFont.inter(17)).foregroundStyle(Color(argb: 0xFF3A3A42))
+                    .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button { tips.gotIt() } label: {
-                Text(t("Anladım")).font(RealFont.inter(15, .semibold)).foregroundStyle(.white)
-                    .padding(.horizontal, 18).padding(.vertical, 11)
+                Text(t("Anladım")).font(RealFont.inter(16, .semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 20).padding(.vertical, 12)
                     .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(argb: 0xFF0B0B0D)))
             }
             .buttonStyle(.plain)

@@ -8,6 +8,11 @@ enum YasamPart: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Not in 1.0: Adım and Uyku come back with Apple Health. Their code and saved numbers stay.
+    static let later: Set<YasamPart> = [.steps, .sleep]
+    /// The parts Me offers; everything that lists parts for the person reads this, not allCases.
+    static let offered: [YasamPart] = allCases.filter { !later.contains($0) }
+
     var label: String {
         switch self {
         case .steps: return t("Adım")
@@ -117,7 +122,7 @@ final class YasamLayout {
     /// Off: Me leaves home (the word by the logo). Its data stays.
     private(set) var enabled: Bool
 
-    var visible: [YasamPart] { order.filter { !hidden.contains($0) } }
+    var visible: [YasamPart] { order.filter { !hidden.contains($0) && !YasamPart.later.contains($0) } }
 
     private init() {
         let d = UserDefaults.standard
@@ -181,7 +186,7 @@ final class YasamLayout {
 
     /// First-run picker: what is chosen shows, the rest hides.
     func pick(_ chosen: Set<YasamPart>) {
-        hidden = Set(YasamPart.allCases).subtracting(chosen)
+        hidden = Set(YasamPart.offered).subtracting(chosen)
         picked = true
         persist()
     }
@@ -329,7 +334,7 @@ struct YasamPickScreen: View {
                     .padding(.top, 4).padding(.bottom, 16)
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                        ForEach([YasamPart.journal] + YasamPart.allCases.filter { $0 != .journal }) { part in
+                        ForEach([YasamPart.journal] + YasamPart.offered.filter { $0 != .journal }) { part in
                             tile(part)
                         }
                     }

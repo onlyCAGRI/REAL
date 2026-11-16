@@ -130,10 +130,10 @@ final class ProStore {
         notice = nil
         defer { working = false }
         do {
-            var options: Set<Product.PurchaseOption> = []
-            // Ties the purchase to this REAL account, so no other account can claim it.
-            if let token { options.insert(.appAccountToken(token)) }
-            switch try await product.purchase(options: options) {
+            // Ties the purchase to this REAL account, so no other account can claim it. Without the token there is
+            // no purchase: an unmarked subscription could be claimed by whoever names its transaction first.
+            guard let token else { notice = t("Mağaza bilgisi alınamadı. Biraz sonra tekrar dene."); return }
+            switch try await product.purchase(options: [.appAccountToken(token)]) {
             case .success(let result):
                 guard case .verified(let transaction) = result else { notice = t("Satın alma doğrulanamadı."); return }
                 do {

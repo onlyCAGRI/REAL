@@ -49,6 +49,8 @@ final class LifeStore {
     private let fileURL: URL
     private let persist: Bool
     let calendar = Calendar.real
+    /// After every change (the home-screen widgets redraw their water).
+    @ObservationIgnored var onSaved: (() -> Void)?
 
     private struct Snapshot: Codable {
         var goalMl: Int
@@ -72,6 +74,7 @@ final class LifeStore {
     }
 
     private func save() {
+        onSaved?()
         guard persist else { return }
         let snap = Snapshot(goalMl: goalMl, entries: entries, dailyGoals: dailyGoals, moods: moods)
         if let data = try? JSONEncoder().encode(snap) { try? data.write(to: fileURL, options: .atomic) }

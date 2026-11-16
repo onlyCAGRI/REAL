@@ -77,6 +77,7 @@ struct RealApp: App {
                 .task { ProStore.shared.start() }
                 .onOpenURL { url in
                     if AppleMusicAccount.shared.handle(url) { return }
+                    if WidgetBridge.handle(url) { return }
                     if RealDeepLinks.shared.handle(url) { return }
                     _ = RealAuth.shared.handle(url: url)
                 }
@@ -109,8 +110,16 @@ struct RealApp: App {
                             SharedCategorySync.shared.request(store)
                             RealCloudSync.shared.request(store, life)
                             ShareImport.writeSnapshot(store)
+                            WidgetBridge.request(store, life)
                         }
                     }
+                    // Home-screen widgets: water changes redraw them too.
+                    life.onSaved = { [weak store, weak life] in
+                        guard let store, let life else { return }
+                        Task { @MainActor in WidgetBridge.request(store, life) }
+                    }
+                    // What a widget's tick or +1 changed while REAL was closed, then a fresh summary for the widgets.
+                    WidgetBridge.sync(store, life)
                     // Share → REAL: shares left by the share extension, and the card list it shows.
                     ShareImport.run(store)
                     ShareImport.writeSnapshot(store)
@@ -118,7 +127,7 @@ struct RealApp: App {
                     // Achievements: a day counts towards the "gün üst üste" streak when REAL is opened on it.
                     Achievements.recordOpen()
                     NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
-                        Task { @MainActor in ShareImport.run(store); await store.clearFiredPlaces(); Achievements.recordOpen() }
+                        Task { @MainActor in ShareImport.run(store); WidgetBridge.sync(store, life); await store.clearFiredPlaces(); Achievements.recordOpen() }
                     }
                     // Two-way cloud sync, shared categories and Pano, every minute while the app is open.
                     pano.reminders = store
