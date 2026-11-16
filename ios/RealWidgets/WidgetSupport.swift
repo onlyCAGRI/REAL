@@ -1,5 +1,6 @@
 import AppIntents
 import SwiftUI
+import UIKit
 import WidgetKit
 
 // MARK: Colours
@@ -16,23 +17,48 @@ extension Color {
     init(hex: UInt32) { self.init(argb: Int(hex)) }
 }
 
-enum WColor {
-    static let text = Color(hex: 0xFFF3F3F5)
-    static let sub = Color(hex: 0xFFA5A5B0)
-    static let muted = Color(hex: 0xFF808089)
-    static let card = Color(hex: 0xFF17181B)
-    static let cardBorder = Color(hex: 0xFF26262A)
-    static let circle = Color(hex: 0xFF626269)
-    static let green = Color(hex: 0xFF5DCAA5)
-    static let blue = Color(hex: 0xFF2E8BFF)
-    static let top = Color(hex: 0xFF1B1C21)
-    static let bottom = Color(hex: 0xFF0D0E11)
+/// Dark on a dark Home Screen, light on a light one. The fills are translucent so that the system's glass and tinted
+/// modes (which keep only a view's alpha) still show the text over them.
+private func dyn(_ dark: UInt32, _ light: UInt32) -> Color {
+    Color(uiColor: UIColor { $0.userInterfaceStyle == .light ? UIColor(Color(hex: light)) : UIColor(Color(hex: dark)) })
 }
 
-/// The widgets' own dark surface (the system swaps it for glass when the Home Screen is set to Şeffaf / Renkli).
+enum WColor {
+    static let text = dyn(0xFFF3F3F5, 0xFF141416)
+    static let sub = dyn(0xFFA5A5B0, 0xFF6B6B73)
+    static let muted = dyn(0xFF808089, 0xFF8E8E96)
+    static let card = Color(hex: 0xFF17181B)
+    static let cardBorder = Color(hex: 0xFF26262A)
+    static let circle = dyn(0xFF626269, 0xFFB0B0B8)
+    static let hair = dyn(0x17FFFFFF, 0x14000000)
+    /// PlannerMonthView's day tile: a coming day, a past day, the hairline around them.
+    static let tile = dyn(0x14FFFFFF, 0x0E000000)
+    static let tilePast = dyn(0x06FFFFFF, 0x05000000)
+    static let tileBorder = dyn(0x12FFFFFF, 0x0D000000)
+    static let green = Color(hex: 0xFF5DCAA5)
+    static let blue = Color(hex: 0xFF2E8BFF)
+    static let top = dyn(0xFF232327, 0xFFFBFAF7)
+    static let bottom = dyn(0xFF111113, 0xFFECEAE4)
+}
+
+/// Relative luminance of a 0xAARRGGBB colour (dark text goes on a light colour).
+func widgetLuminance(_ argb: Int) -> Double {
+    let v = UInt32(truncatingIfNeeded: argb)
+    func ch(_ x: Double) -> Double { x <= 0.03928 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
+    return 0.2126 * ch(Double((v >> 16) & 0xFF) / 255) + 0.7152 * ch(Double((v >> 8) & 0xFF) / 255) + 0.0722 * ch(Double(v & 0xFF) / 255)
+}
+
+/// The widgets' own surface (the system swaps it for glass when the Home Screen is set to Şeffaf / Renkli), with the
+/// first card's colour glowing from the top-left corner: green while its event runs, else its category's colour.
 struct WidgetSurface: View {
+    var glow: Color? = nil
     var body: some View {
-        LinearGradient(colors: [WColor.top, WColor.bottom], startPoint: .top, endPoint: .bottom)
+        ZStack {
+            LinearGradient(colors: [WColor.top, WColor.bottom], startPoint: .top, endPoint: .bottom)
+            if let glow {
+                RadialGradient(colors: [glow.opacity(0.32), glow.opacity(0)], center: .topLeading, startRadius: 0, endRadius: 250)
+            }
+        }
     }
 }
 
@@ -54,6 +80,32 @@ struct RealEntry: TimelineEntry {
     /// Open cards, and the ones ticked on a widget a moment ago (they linger, struck through).
     func visible(_ cards: [WidgetData.Card]) -> [WidgetData.Card] {
         cards.filter { !$0.done || ($0.doneAt ?? 0) + WidgetData.doneLingerMs > now }
+    }
+
+    func clock(_ ms: Int64) -> String {
+        Date(timeIntervalSince1970: Double(ms) / 1000).formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "tr_TR")))
+    }
+
+    private func dayName(_ day: Int) -> String {
+        switch day - today {
+        case 0: return s("Bugün", "Today")
+        case 1: return s("Yarın", "Tomorrow")
+        case -1: return s("Dün", "Yesterday")
+        default: return WidgetData.date(ofEpochDay: day).formatted(.dateTime.day().month(.abbreviated).locale(locale))
+        }
+    }
+
+    /// "Bugün 14:30", "Yarın 09:00", "16 Kas 14:30"; a planned day without a time is just the day.
+    func dateText(_ card: WidgetData.Card) -> String? {
+        guard let day = card.day else { return nil }
+        return card.alertAt.map { dayName(day) + " " + clock($0) } ?? dayName(day)
+    }
+
+    /// A row's short time: today's hour, else the day.
+    func shortTime(_ card: WidgetData.Card) -> String? {
+        guard let day = card.day else { return nil }
+        if day == today, let alert = card.alertAt { return clock(alert) }
+        return dayName(day)
     }
 
     func cards(in category: String) -> [WidgetData.Card] { visible(data.cards.filter { $0.category == category }) }
@@ -314,5 +366,140 @@ struct WidgetEmpty: View {
     var body: some View {
         Text(text).font(.system(size: 13)).foregroundStyle(WColor.sub).multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: Kartlarım's pieces
+
+extension WidgetData.Card {
+    func running(at now: Int64) -> Bool {
+        guard !done, let s = spanStart, let e = spanEnd else { return false }
+        return now >= s && now < e
+    }
+    func ended(at now: Int64) -> Bool {
+        guard !done, let e = spanEnd else { return false }
+        return now >= e
+    }
+    func progress(at now: Int64) -> Double {
+        guard let s = spanStart, let e = spanEnd, e > s else { return 0 }
+        return min(1, max(0, Double(now - s) / Double(e - s)))
+    }
+    var url: URL { URL(string: "real://widget/card/\(id)")! }
+}
+
+struct WidgetTick: View {
+    var done: Bool
+    var size: CGFloat = 22
+    var ring: Color = WColor.circle
+    @Environment(\.widgetRenderingMode) private var mode
+
+    var body: some View {
+        ZStack {
+            // On glass a filled circle would swallow its own check mark.
+            if done && mode == .fullColor { Circle().fill(WColor.green) }
+            Circle().strokeBorder(done && mode == .fullColor ? Color.clear : ring, lineWidth: 1.6)
+            if done {
+                Image(systemName: "checkmark").font(.system(size: size * 0.45, weight: .bold))
+                    .foregroundStyle(mode == .fullColor ? Color(hex: 0xFF0B2B20) : ring)
+            }
+        }
+        .frame(width: size, height: size)
+        .contentShape(Rectangle())
+    }
+}
+
+/// The card that matters now, large: what it is, when, and how far its event has run.
+struct HeroCard: View {
+    let card: WidgetData.Card
+    let entry: RealEntry
+    var large = true
+
+    private var running: Bool { card.running(at: entry.now) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Link(destination: card.url) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        status
+                        Text(card.title).font(.system(size: large ? 24 : 20, weight: .bold)).foregroundStyle(WColor.text)
+                            .strikethrough(card.done, color: WColor.text).lineLimit(1).minimumScaleFactor(0.8)
+                        detail
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Button(intent: ToggleCardIntent(card: card.id)) { WidgetTick(done: card.done, size: large ? 34 : 30) }
+                    .buttonStyle(.plain)
+            }
+            if large && running {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(WColor.hair)
+                        Capsule().fill(WColor.green).frame(width: geo.size.width * card.progress(at: entry.now))
+                    }
+                }
+                .frame(height: 4)
+                .padding(.top, 12).padding(.bottom, 4)
+            }
+        }
+        .opacity(card.done ? 0.5 : 1)
+    }
+
+    @ViewBuilder private var status: some View {
+        if running {
+            HStack(spacing: 6) {
+                Circle().fill(WColor.green).frame(width: 7, height: 7)
+                Text(entry.s("Devam ediyor", "Ongoing"))
+            }
+            .font(.system(size: 12, weight: .semibold)).foregroundStyle(WColor.green)
+        } else if card.ended(at: entry.now) {
+            Text(entry.s("Bitti · işaretle", "Ended · tick it")).font(.system(size: 12, weight: .semibold)).foregroundStyle(WColor.muted)
+        } else {
+            HStack(spacing: 6) {
+                if let a = card.stripeA { Circle().fill(Color(argb: a)).frame(width: 7, height: 7) }
+                Text(entry.s("Sırada", "Next"))
+            }
+            .font(.system(size: 12, weight: .semibold)).foregroundStyle(WColor.sub)
+        }
+    }
+
+    @ViewBuilder private var detail: some View {
+        if running, let end = card.spanEnd {
+            (Text(Date(timeIntervalSince1970: Double(end) / 1000), style: .relative)
+                + Text(entry.s(" kaldı · bitiş ", " left · ends ") + entry.clock(end)))
+                .font(.system(size: 13)).foregroundStyle(WColor.sub).lineLimit(1)
+        } else if let text = entry.dateText(card) {
+            Text(text).font(.system(size: 13)).foregroundStyle(WColor.sub).lineLimit(1)
+        }
+    }
+}
+
+/// The cards after it: one line each under a hairline, the category's colour as a dot beside the time.
+struct CardLine: View {
+    let card: WidgetData.Card
+    let entry: RealEntry
+    var height: CGFloat = 42
+
+    var body: some View {
+        HStack(spacing: 11) {
+            Button(intent: ToggleCardIntent(card: card.id)) { WidgetTick(done: card.done, size: height > 30 ? 22 : 17) }
+                .buttonStyle(.plain)
+            Link(destination: card.url) {
+                HStack(spacing: 6) {
+                    Text(card.title).font(.system(size: height > 30 ? 15 : 14)).foregroundStyle(WColor.text)
+                        .strikethrough(card.done, color: WColor.text).lineLimit(1)
+                    Spacer(minLength: 4)
+                    if let a = card.stripeA { Circle().fill(Color(argb: a)).frame(width: 7, height: 7) }
+                    if let time = entry.shortTime(card) {
+                        Text(time).font(.system(size: 13)).foregroundStyle(WColor.sub).lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+            }
+        }
+        .frame(height: height)
+        .overlay(alignment: .top) { Rectangle().fill(WColor.hair).frame(height: 1) }
+        .opacity(card.done ? 0.5 : 1)
     }
 }

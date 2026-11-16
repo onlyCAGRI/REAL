@@ -20,7 +20,7 @@ struct CardsWidget: Widget {
         StaticConfiguration(kind: "RealCards", provider: RealProvider()) { entry in
             CardsWidgetView(entry: entry)
                 .environment(\.locale, entry.locale)
-                .containerBackground(for: .widget) { WidgetSurface() }
+                .containerBackground(for: .widget) { WidgetSurface(glow: CardsWidgetView.glow(entry)) }
         }
         .configurationDisplayName("Kartlarım")
         .description("Sıradaki kartların. Tik ile tamamla.")
@@ -33,26 +33,42 @@ struct CardsWidgetView: View {
     let entry: RealEntry
     @Environment(\.widgetFamily) private var family
 
+    /// The surface's glow: green while the first card's event runs, else its category's colour.
+    static func glow(_ entry: RealEntry) -> Color? {
+        guard let first = entry.visible(entry.data.cards).first, !first.done else { return nil }
+        if first.running(at: entry.now) { return WColor.green }
+        return first.stripeA.map { Color(argb: $0) }
+    }
+
     var body: some View {
-        let cards = Array(entry.visible(entry.data.cards).prefix(family == .systemLarge ? 5 : 2))
-        let today = entry.data.cards.filter { !$0.done && $0.day == entry.today }.count
-        VStack(spacing: 6) {
-            HStack {
-                Text(entry.s("Kartlarım", "My cards")).font(.system(size: 15, weight: .medium)).foregroundStyle(WColor.text)
-                Spacer()
-                if today > 0 {
-                    Text(entry.s("Bugün \(today)", "Today \(today)")).font(.system(size: 13)).foregroundStyle(WColor.sub)
+        let large = family == .systemLarge
+        let cards = Array(entry.visible(entry.data.cards).prefix(8))
+        let open = entry.data.cards.filter { !$0.done }.count
+        GeometryReader { geo in
+            VStack(alignment: .leading, spacing: 0) {
+                if large {
+                    HStack {
+                        Text(entry.s("BUGÜN", "TODAY") + " · " + entry.date.formatted(.dateTime.day().month(.wide).locale(entry.locale)).uppercased(with: entry.locale))
+                        Spacer()
+                        Text(entry.s("\(open) açık", "\(open) open"))
+                    }
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(WColor.sub)
+                    .padding(.bottom, 10)
+                }
+                if let hero = cards.first {
+                    let rowHeight: CGFloat = large ? 42 : 27
+                    // As many lines as the widget's height holds under the hero.
+                    let used: CGFloat = large ? 32 + 26 + 68 + (hero.running(at: entry.now) ? 20 : 0) + 8 : 28 + 62
+                    let rows = min(cards.count - 1, max(0, Int((geo.size.height - used) / rowHeight)))
+                    HeroCard(card: hero, entry: entry, large: large)
+                    Spacer(minLength: large ? 8 : 0)
+                    ForEach(cards.dropFirst().prefix(rows)) { CardLine(card: $0, entry: entry, height: rowHeight) }
+                } else {
+                    WidgetEmpty(text: entry.s("Açık kart yok.", "No open cards."))
                 }
             }
-            .padding(.horizontal, 6).padding(.top, 2)
-            if cards.isEmpty {
-                WidgetEmpty(text: entry.s("Açık kart yok.", "No open cards."))
-            } else {
-                ForEach(cards) { WidgetCardRow(card: $0, entry: entry) }
-                Spacer(minLength: 0)
-            }
+            .padding(large ? 16 : 14)
         }
-        .padding(12)
         .widgetURL(URL(string: "real://widget/home"))
     }
 }
@@ -142,12 +158,7 @@ struct CategoryWidgetView: View {
 
     /// Dark text on a light category, as categoryForeground decides in the app.
     private func foreground(_ c: WidgetData.Category) -> Color {
-        func lum(_ argb: Int) -> Double {
-            let v = UInt32(truncatingIfNeeded: argb)
-            func ch(_ x: Double) -> Double { x <= 0.03928 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
-            return 0.2126 * ch(Double((v >> 16) & 0xFF) / 255) + 0.7152 * ch(Double((v >> 8) & 0xFF) / 255) + 0.0722 * ch(Double(v & 0xFF) / 255)
-        }
-        return (lum(c.start) + lum(c.end)) / 2 > 0.42 ? Color(hex: 0xFF101010) : .white
+        return (widgetLuminance(c.start) + widgetLuminance(c.end)) / 2 > 0.42 ? Color(hex: 0xFF101010) : .white
     }
 
     private func pill(_ c: WidgetData.Category) -> some View {
@@ -217,11 +228,14 @@ struct WaveTop: Shape {
 
 struct AddGlassButton: View {
     var size: CGFloat = 44
+    @Environment(\.widgetRenderingMode) private var mode
     var body: some View {
         Button(intent: AddGlassIntent()) {
-            Image(systemName: "plus").font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(Color(hex: 0xFF0B1E4A))
+            // On glass everything is one tint: a translucent disc keeps the plus readable.
+            Image(systemName: "plus").font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(mode == .fullColor ? Color(hex: 0xFF0B1E4A) : .white)
                 .frame(width: size, height: size)
-                .background(Circle().fill(.white))
+                .background(Circle().fill(.white.opacity(mode == .fullColor ? 1 : 0.22)))
         }
         .buttonStyle(.plain)
     }
@@ -244,6 +258,7 @@ struct WaterGlassWidget: Widget {
 
 struct WaterGlassView: View {
     let entry: RealEntry
+    @Environment(\.widgetRenderingMode) private var mode
 
     var body: some View {
         let water = WidgetData.water(entry.data.water, today: entry.today)
@@ -254,6 +269,7 @@ struct WaterGlassView: View {
             GeometryReader { geo in
                 WaveTop()
                     .fill(LinearGradient(colors: [Color(hex: 0xFF3D8BFF), Color(hex: 0xFF1450D8), Color(hex: 0xFF0B36A8)], startPoint: .top, endPoint: .bottom))
+                    .opacity(mode == .fullColor ? 1 : 0.3)
                     .frame(height: level <= 0 ? 0 : geo.size.height * level + 8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .animation(.spring(response: 0.6, dampingFraction: 0.7), value: level)
@@ -267,6 +283,13 @@ struct WaterGlassView: View {
                 Text("\(glasses)").font(.system(size: 56, weight: .light)).contentTransition(.numericText())
                     .padding(.top, 4)
                 Text(entry.s("bardak", glasses == 1 ? "glass" : "glasses")).font(.system(size: 12)).opacity(0.85)
+                if glasses >= goal {
+                    let over = glasses - goal
+                    Text("✓ " + entry.s("hedef", "goal") + (over > 0 ? " +\(over)" : "")).font(.system(size: 11, weight: .bold))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(.white.opacity(0.24)))
+                        .padding(.top, 6)
+                }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 18).padding(.top, 16)
@@ -416,6 +439,7 @@ struct CalendarWidget: Widget {
 
 struct CalendarWidgetView: View {
     let entry: RealEntry
+    @Environment(\.widgetRenderingMode) private var mode
 
     /// The month's weeks, Monday first; nil pads the first and last week.
     private var weeks: [[Int?]] {
@@ -438,56 +462,81 @@ struct CalendarWidgetView: View {
 
     var body: some View {
         let selected = entry.pickedDay ?? entry.today
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(entry.date.formatted(.dateTime.month(.wide).locale(entry.locale)).capitalized(with: entry.locale))
-                    .font(.system(size: 19, weight: .medium)).foregroundStyle(WColor.text)
+                    .font(.system(size: 17, weight: .bold)).foregroundStyle(WColor.text)
                 Spacer()
-                Text(entry.date.formatted(.dateTime.year().locale(entry.locale))).font(.system(size: 13)).foregroundStyle(WColor.sub)
+                Text(entry.date.formatted(.dateTime.year().locale(entry.locale))).font(.system(size: 12)).foregroundStyle(WColor.sub)
             }
-            .padding(.horizontal, 6)
-            HStack(spacing: 0) {
+            .padding(.horizontal, 2).padding(.bottom, 2)
+            HStack(spacing: 4) {
                 ForEach(weekdayLetters, id: \.self) {
-                    Text($0).font(.system(size: 10.5)).foregroundStyle(WColor.muted).frame(maxWidth: .infinity)
+                    Text($0).font(.system(size: 10, weight: .semibold)).foregroundStyle(WColor.sub).frame(maxWidth: .infinity)
                 }
             }
-            .padding(.top, 8).padding(.bottom, 3)
             ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
-                HStack(spacing: 0) {
+                HStack(spacing: 4) {
                     ForEach(Array(week.enumerated()), id: \.offset) { _, day in
-                        if let day { CalendarDay(day: day, entry: entry, selected: selected) } else { Color.clear.frame(maxWidth: .infinity).frame(height: 34) }
+                        if let day { CalendarDay(day: day, entry: entry, selected: selected) } else { Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity) }
                     }
                 }
+                .frame(maxHeight: 38)
             }
-            Spacer(minLength: 4)
-            footer(selected)
+            Spacer(minLength: 0)
+            band(selected).padding(.top, 4)
         }
-        .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 12)
+        .padding(14)
     }
 
-    @ViewBuilder private func footer(_ day: Int) -> some View {
+    /// The picked day's first card as a band in its category's colour (green while its event runs).
+    @ViewBuilder private func band(_ day: Int) -> some View {
         let cards = entry.cards(on: day)
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
         if let first = cards.first {
-            let more = cards.count - 1
-            WidgetCardRow(card: first, entry: entry, more: more > 0 ? entry.s("\(more) kart daha", more == 1 ? "1 more card" : "\(more) more cards") : nil)
+            let argb: Int? = first.running(at: entry.now) ? Int(UInt32(0xFF5DCAA5)) : first.stripeA
+            let coloured = mode == .fullColor && argb != nil
+            let ink: Color = coloured ? (widgetLuminance(argb ?? 0) > 0.5 ? Color(hex: 0xFF101010) : .white) : WColor.text
+            let time = [first.alertAt.map { entry.clock($0) }, cards.count > 1 ? "+\(cards.count - 1)" : nil].compactMap { $0 }.joined(separator: "  ")
+            HStack(spacing: 11) {
+                Button(intent: ToggleCardIntent(card: first.id)) { WidgetTick(done: first.done, ring: ink.opacity(0.85)) }
+                    .buttonStyle(.plain)
+                Link(destination: first.url) {
+                    HStack(spacing: 6) {
+                        Text(first.title).font(.system(size: 15, weight: .semibold)).strikethrough(first.done, color: ink).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(time).font(.system(size: 13)).opacity(0.9).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                }
+            }
+            .foregroundStyle(ink)
+            .padding(.horizontal, 13)
+            .frame(height: 46)
+            .background {
+                if coloured, let argb {
+                    shape.fill(LinearGradient(colors: [Color(argb: argb), Color(argb: argb).opacity(0.55)], startPoint: .leading, endPoint: .trailing))
+                } else {
+                    shape.fill(WColor.tile)
+                }
+            }
+            .overlay { if !coloured { shape.strokeBorder(WColor.tileBorder, lineWidth: 0.5) } }
         } else {
             let name = day == entry.today ? entry.s("Bugün", "Today")
                 : WidgetData.date(ofEpochDay: day).formatted(.dateTime.day().month(.wide).locale(entry.locale))
-            let shape = RoundedRectangle(cornerRadius: 17, style: .continuous)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(entry.s("\(name) boş", "\(name) is free")).font(.system(size: 14)).foregroundStyle(WColor.muted)
-                Text(entry.s("Kart eklemek için dokun", "Tap to add a card")).font(.system(size: 11)).foregroundStyle(WColor.sub)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .frame(height: 50)
-            .background { shape.fill(WColor.card) }
-            .overlay { shape.strokeBorder(WColor.cardBorder, lineWidth: 0.75) }
+            Text(entry.s("\(name) boş · kart ekle ＋", "\(name) is free · add a card ＋")).font(.system(size: 14)).foregroundStyle(WColor.sub)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 13)
+                .frame(height: 46)
+                .background { shape.fill(WColor.tilePast) }
+                .overlay { shape.strokeBorder(WColor.tileBorder, lineWidth: 0.5) }
         }
     }
 }
 
-/// One day: its number (today filled white, the picked day ringed) over up to three dots in its cards' category colours.
+/// One day as the app's month draws it (PlannerMonthView.tile): a box with the number on the left and up to three
+/// dots in its cards' category colours stacked on the right; past days faded, today framed, the picked day ringed.
 struct CalendarDay: View {
     let day: Int
     let entry: RealEntry
@@ -504,23 +553,28 @@ struct CalendarDay: View {
     }
 
     var body: some View {
-        let isToday = day == entry.today
+        let isToday = day == entry.today, isSelected = day == selected, past = day < entry.today
         let number = Calendar.current.component(.day, from: WidgetData.date(ofEpochDay: day))
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         Button(intent: PickDayIntent(day: day)) {
-            VStack(spacing: 1) {
-                Text("\(number)").font(.system(size: 13.5, weight: isToday ? .semibold : .regular))
-                    .foregroundStyle(isToday ? Color(hex: 0xFF0B0B0D) : (day < entry.today ? Color(hex: 0xFF5E5E66) : WColor.text))
-                    .frame(width: 26, height: 26)
-                    .background { if isToday { Circle().fill(.white) } }
-                    .overlay { if !isToday && day == selected { Circle().strokeBorder(.white, lineWidth: 1.5) } }
-                HStack(spacing: 2.5) {
+            HStack(spacing: 0) {
+                Text("\(number)").font(.system(size: 13, weight: isToday || isSelected ? .bold : .regular))
+                    .foregroundStyle(past ? WColor.muted : WColor.text)
+                Spacer(minLength: 0)
+                VStack(spacing: 2.5) {
                     ForEach(Array(dots.enumerated()), id: \.offset) { _, color in
-                        Circle().fill(color).frame(width: 4, height: 4)
+                        Circle().fill(color).frame(width: 4.5, height: 4.5)
                     }
                 }
-                .frame(height: 5)
             }
-            .frame(maxWidth: .infinity).frame(height: 34)
+            .padding(.leading, 7).padding(.trailing, 5)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background { shape.fill(past ? WColor.tilePast : WColor.tile) }
+            .overlay {
+                if isToday { shape.strokeBorder(WColor.text, lineWidth: 2) }
+                else if isSelected { shape.strokeBorder(WColor.sub, lineWidth: 1.5) }
+                else { shape.strokeBorder(WColor.tileBorder, lineWidth: 0.5) }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
