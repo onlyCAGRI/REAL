@@ -470,6 +470,7 @@ struct HomeView: View {
                     }
                 }
             Spacer()
+            HomeStatusCapsule()
             Button { withoutAnimation { showAccountMenu = true } } label: {
                 ProfileAvatar(name: store.ownerName, size: 44).startupAvatar()
             }

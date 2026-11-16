@@ -124,24 +124,44 @@ enum SkyPosterRenderer {
         return catalog
     }
 
-    static func render(_ template: SkyPosterTemplate, place: PosterPlace, epochMillis: Int64, scale: CGFloat) async -> UIImage? {
-        await Task.detached(priority: .userInitiated) {
+    /// [scale] sizes the 4:5 poster; any other [format] is drawn with its long side 3000 px.
+    static func render(_ template: SkyPosterTemplate, place: PosterPlace, epochMillis: Int64, scale: CGFloat,
+                       format: PosterFormat = .poster) async -> UIImage? {
+        let size = format == .poster
+            ? CGSize(width: (canvas.width * scale).rounded(), height: (canvas.height * scale).rounded())
+            : await MainActor.run { format.size() }
+        return await Task.detached(priority: .userInitiated) {
             guard let data = catalog() else { return nil }
-            let size = CGSize(width: (canvas.width * scale).rounded(), height: (canvas.height * scale).rounded())
-            let format = UIGraphicsImageRendererFormat()
-            format.scale = 1
-            format.opaque = true
-            return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
-                draw(ctx.cgContext, w: size.width, h: size.height, template, place, epochMillis, data)
+            let rendererFormat = UIGraphicsImageRendererFormat()
+            rendererFormat.scale = 1
+            rendererFormat.opaque = true
+            return UIGraphicsImageRenderer(size: size, format: rendererFormat).image { ctx in
+                draw(ctx.cgContext, pageW: size.width, pageH: size.height, template, place, epochMillis, data, format)
             }
         }.value
     }
 
-    private static func draw(_ c: CGContext, w: CGFloat, h: CGFloat, _ template: SkyPosterTemplate, _ place: PosterPlace,
-                             _ epochMillis: Int64, _ data: Catalog) {
+    private static func draw(_ c: CGContext, pageW: CGFloat, pageH: CGFloat, _ template: SkyPosterTemplate, _ place: PosterPlace,
+                             _ epochMillis: Int64, _ data: Catalog, _ format: PosterFormat) {
         c.setFillColor(UIColor(argb: template.background).cgColor)
-        c.fill(CGRect(x: 0, y: 0, width: w, height: h))
-        let cx = w / 2, cy = h * 0.40, radius = w * 0.40
+        c.fill(CGRect(x: 0, y: 0, width: pageW, height: pageH))
+        let frame = PosterFrame(w: pageW, h: pageH, format: format)
+        let u = frame.u
+        // The chart: as before on the 4:5 poster; above the block on tall pages (the wallpaper too), on the right of
+        // a wide page (the block takes the bottom-left).
+        let chart: (CGFloat, CGFloat, CGFloat) = {
+            if format == .poster { return (pageW / 2, pageH * 0.40, pageW * 0.40) }
+            if frame.wide {
+                let r = min(pageH * 0.40, pageW * 0.27)
+                return (pageW - r * 1.14 - pageW * 0.04, pageH / 2, r)
+            }
+            let room = frame.y(0.30)
+            let r = min(pageW * 0.40, room / 2 / 1.12)
+            return (pageW / 2, room / 2 + u * 0.02, r)
+        }()
+        let (cx, cy, radius) = chart
+        // Star, line and label sizes follow the chart (equal to the page width on the 4:5 poster).
+        let w = radius / 0.40
         let jd = SkyMath.julian(epochMillis)
         let lst = SkyMath.localSidereal(jd, place.longitude)
 
@@ -223,30 +243,28 @@ enum SkyPosterRenderer {
         PosterKit.drawCentered(wst, x: cx + off, baseline: cy + mid, font: cardinal, color: ink)
 
         // Title block, as on the map poster: place, rule, the moment, coordinates and the Moon.
-        PosterKit.drawCentered(place.title.uppercased(with: place.locale), x: w / 2, baseline: h * 0.835,
-                               font: PosterKit.titleFont(size: w * 0.075), color: ink, kern: 0.55, maxWidth: w * 0.86)
-        c.setStrokeColor(UIColor(argb: template.text, alpha: 200 / 255).cgColor)
-        c.setLineWidth(w * 0.0008)
-        c.strokeLineSegments(between: [CGPoint(x: w * 0.40, y: h * 0.86), CGPoint(x: w * 0.60, y: h * 0.86)])
+        PosterKit.drawCentered(place.title.uppercased(with: place.locale), x: frame.x, baseline: frame.y(0.20625),
+                               font: PosterKit.titleFont(size: u * 0.075), color: ink, kern: 0.55, maxWidth: frame.titleMaxWidth,
+                               align: frame.align)
+        frame.drawRule(c, 0.175, ink: template.text)
 
         let formatter = DateFormatter()
         formatter.locale = I18n.locale
         formatter.dateFormat = "d MMMM yyyy · HH:mm"
         let moment = formatter.string(from: Date(timeIntervalSince1970: Double(epochMillis) / 1000)).uppercased(with: I18n.locale)
-        PosterKit.drawCentered(moment, x: w / 2, baseline: h * 0.893, font: PosterKit.lightFont(size: w * 0.026), color: ink, kern: 0.12)
+        PosterKit.drawCentered(moment, x: frame.x, baseline: frame.y(0.13375), font: PosterKit.lightFont(size: u * 0.026), color: ink,
+                               kern: 0.12, align: frame.align)
 
-        let mono = PosterKit.monoFont(size: w * 0.0165)
+        let mono = PosterKit.monoFont(size: u * 0.0165)
         let soft = UIColor(argb: template.text, alpha: 215 / 255)
-        PosterKit.drawCentered(PosterKit.coordinates(place.latitude, place.longitude), x: w / 2, baseline: h * 0.922, font: mono, color: soft)
+        PosterKit.drawCentered(PosterKit.coordinates(place.latitude, place.longitude), x: frame.x, baseline: frame.y(0.0975),
+                               font: mono, color: soft, align: frame.align)
         // Below the horizon the Moon is not on the chart; say so, or the phase line reads like a missing Moon.
         let moonUp = SkyMath.altAz(ra: moon.ra, dec: moon.dec, latitude: place.latitude, lst: lst).alt > 0
         let phase = "\(t(SkyMath.phaseName(moon))) · %\(Int(moon.illumination * 100))" + (moonUp ? "" : " · " + t("ufkun altında"))
-        PosterKit.drawCentered(phase, x: w / 2, baseline: h * 0.945, font: mono, color: soft)
+        PosterKit.drawCentered(phase, x: frame.x, baseline: frame.y(0.06875), font: mono, color: soft, align: frame.align)
 
-        let small = PosterKit.monoFont(size: w * 0.0115)
-        let faint = UIColor(argb: template.text, alpha: 165 / 255)
-        PosterKit.drawCentered("Yale Bright Star Catalog · d3-celestial", x: w * 0.975, baseline: h * 0.978, font: small, color: faint, align: .right)
-        PosterKit.drawCentered("Real", x: w * 0.025, baseline: h * 0.978, font: PosterKit.brandFont(size: w * 0.0115), color: faint, align: .left)
+        frame.drawCredit("Yale Bright Star Catalog · d3-celestial", ink: template.text)
         UIGraphicsPopContext()
     }
 
@@ -302,6 +320,7 @@ struct SkyPosterScreen: View {
     @State private var preview: UIImage?
     @State private var failed = false
     @State private var busy = false
+    @State private var pickFormats = false
     @State private var minute: Double = 0
     @State private var moment: Int64 = 0
     @State private var dayStart: Int64 = 0
@@ -347,10 +366,7 @@ struct SkyPosterScreen: View {
                     }
                 }
                 PosterButton(label: t("Kaydet"), ink: ink, primary: onAttach == nil, enabled: place != nil && !busy) {
-                    guard let place else { return }
-                    busy = true
-                    let template = template, moment = moment
-                    PosterKit.save(title: place.title, render: { await printSize(template, place, moment) }) { busy = false }
+                    if place != nil { pickFormats = true }
                 }
                 PosterButton(label: t("Paylaş"), ink: ink, enabled: place != nil && !busy) {
                     guard let place else { return }
@@ -385,6 +401,23 @@ struct SkyPosterScreen: View {
             guard let place, moment > 0 else { return }
             failed = false
             if let next = await SkyPosterRenderer.render(template, place: place, epochMillis: moment, scale: 0.34) { preview = next } else { failed = true }
+        }
+        .sheet(isPresented: $pickFormats) {
+            PosterFormatSheet(surface: surface, ink: ink) { formats in
+                pickFormats = false
+                guard let place else { return }
+                busy = true
+                let template = template, moment = moment
+                PosterKit.saveAll(title: place.title, renders: formats.map { format -> () async -> UIImage? in
+                    {
+                        if format == .poster { return await printSize(template, place, moment) }
+                        return await SkyPosterRenderer.render(template, place: place, epochMillis: moment, scale: 1, format: format)
+                    }
+                }) { busy = false }
+            }
+            .presentationDetents([.height(390)])
+            .presentationBackground(surface)
+            .presentationDragIndicator(.visible)
         }
     }
 

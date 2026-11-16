@@ -102,15 +102,15 @@ struct MapPosterTemplate: Identifiable, Equatable {
 /// frames exactly what is saved.
 @MainActor
 enum MapPosterRenderer {
-    static let canvas = CGSize(width: 3000, height: 3750)
+    nonisolated static let canvas = CGSize(width: 3000, height: 3750)
     /// 3000 × 2.56 = 7680 px wide; each of the 3 × 3 snapshots is 2560 × 3200.
     static let highRes: CGFloat = 2.56
     private static let grid = 3
 
     /// The finished poster; [scale] < 1 is a light preview of the same frame. Nil when the map could not load.
     static func render(_ template: MapPosterTemplate, place: PosterPlace, scale: CGFloat = 1,
-                       zoom: Double = MapPosterTemplate.posterZoom) async -> UIImage? {
-        let center = CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude)
+                       zoom: Double = MapPosterTemplate.posterZoom, center: CLLocationCoordinate2D? = nil) async -> UIImage? {
+        let center = center ?? CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude)
         guard let snap = await snapshot(template, center: center, size: canvas, scale: scale, zoom: zoom) else { return nil }
         let size = CGSize(width: canvas.width * scale, height: canvas.height * scale)
         let format = UIGraphicsImageRendererFormat()
@@ -124,14 +124,13 @@ enum MapPosterRenderer {
 
     /// The print poster: the same frame drawn 2.56× sharper (8K wide). One snapshot that size passes the GPU's
     /// texture limit, so it is a 3 × 3 grid of snapshots, each centred on its own part of the map, stitched.
-    static func renderHighRes(_ template: MapPosterTemplate, place: PosterPlace, zoom: Double,
+    static func renderHighRes(_ template: MapPosterTemplate, place: PosterPlace, zoom: Double, center: CLLocationCoordinate2D? = nil,
                               onProgress: @escaping (Double) -> Void) async -> UIImage? {
         let tileW = canvas.width / CGFloat(grid), tileH = canvas.height / CGFloat(grid)
         // MapLibre's world is 512 × 2^zoom points wide (Web Mercator).
         let world = 512 * pow(2, zoom)
-        let cx = (place.longitude + 180) / 360 * world
-        let sinLat = sin(place.latitude * .pi / 180)
-        let cy = (0.5 - log((1 + sinLat) / (1 - sinLat)) / (4 * .pi)) * world
+        let mid = center ?? CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude)
+        let (cx, cy) = worldPoint(mid, zoom)
         var tiles: [UIImage] = []
         for row in 0..<grid {
             for col in 0..<grid {
@@ -159,6 +158,60 @@ enum MapPosterRenderer {
         }
     }
 
+    /// MapPosterRenderer.kt renderFormat: the poster in another [format], the same width of ground as the poster at
+    /// [zoom] on a taller or shorter page, long side 3000 px (2100 when the phone cannot hold that).
+    static func renderFormat(_ template: MapPosterTemplate, place: PosterPlace, zoom: Double, center: CLLocationCoordinate2D,
+                             format: PosterFormat) async -> UIImage? {
+        let logical = CGSize(width: canvas.width, height: (canvas.width / format.aspect).rounded())
+        for longSide in [CGFloat(3000), 2100] {
+            let scale = longSide / max(logical.width, logical.height)
+            guard let snap = await snapshot(template, center: center, size: logical, scale: scale, zoom: zoom) else { continue }
+            let size = CGSize(width: (logical.width * scale).rounded(), height: (logical.height * scale).rounded())
+            let rendererFormat = UIGraphicsImageRendererFormat()
+            rendererFormat.scale = 1
+            rendererFormat.opaque = true
+            return UIGraphicsImageRenderer(size: size, format: rendererFormat).image { ctx in
+                snap.draw(in: CGRect(origin: .zero, size: size))
+                decorate(ctx.cgContext, size: size, template, place, format: format)
+            }
+        }
+        return nil
+    }
+
+    /// The preview's map alone (the title block is the separate [overlay]), so a pinch moves it under a still title.
+    static func previewMap(_ template: MapPosterTemplate, center: CLLocationCoordinate2D, zoom: Double, scale: CGFloat) async -> UIImage? {
+        await snapshot(template, center: center, size: canvas, scale: scale, zoom: zoom)
+    }
+
+    /// The same frame [levels] zoom steps further out (2^levels times as wide), drawn behind the preview so a pinch
+    /// out or a nudge shows real map around it.
+    static func farLayer(_ template: MapPosterTemplate, center: CLLocationCoordinate2D, zoom: Double, levels: Int, scale: CGFloat) async -> UIImage? {
+        await snapshot(template, center: center, size: canvas, scale: scale, zoom: zoom - Double(levels))
+    }
+
+    /// The fades and the title block on a transparent page the preview's size.
+    static func overlay(_ template: MapPosterTemplate, place: PosterPlace, scale: CGFloat) -> UIImage {
+        let size = CGSize(width: canvas.width * scale, height: canvas.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            decorate(ctx.cgContext, size: size, template, place)
+        }
+    }
+
+    /// Web Mercator world points (MapLibre's 512-wide tiles) at [zoom]; and back.
+    nonisolated static func worldPoint(_ c: CLLocationCoordinate2D, _ zoom: Double) -> (Double, Double) {
+        let world = 512 * pow(2, zoom)
+        let sinLat = sin(c.latitude * .pi / 180)
+        return ((c.longitude + 180) / 360 * world, (0.5 - log((1 + sinLat) / (1 - sinLat)) / (4 * .pi)) * world)
+    }
+
+    nonisolated static func worldCoordinate(_ x: Double, _ y: Double, _ zoom: Double) -> CLLocationCoordinate2D {
+        let world = 512 * pow(2, zoom)
+        return CLLocationCoordinate2D(latitude: atan(sinh(.pi * (1 - 2 * y / world))) * 180 / .pi, longitude: x / world * 360 - 180)
+    }
+
     private static func snapshot(_ template: MapPosterTemplate, center: CLLocationCoordinate2D, size: CGSize,
                                  scale: CGFloat, zoom: Double) async -> UIImage? {
         guard let url = template.styleURL else { return nil }
@@ -178,39 +231,41 @@ enum MapPosterRenderer {
         }
     }
 
-    /// Soft fades at the top and under the title, then the title block and the OpenStreetMap credit.
-    private static func decorate(_ c: CGContext, size: CGSize, _ template: MapPosterTemplate, _ place: PosterPlace) {
+    /// Soft fades at the top and under the title, then the title block and the OpenStreetMap credit, placed for
+    /// [format] (PosterFrame; the 4:5 poster is unchanged).
+    private static func decorate(_ c: CGContext, size: CGSize, _ template: MapPosterTemplate, _ place: PosterPlace,
+                                 format: PosterFormat = .poster) {
         let w = size.width, h = size.height
+        let frame = PosterFrame(w: w, h: h, format: format)
+        let u = frame.u
         let space = CGColorSpaceCreateDeviceRGB()
         func bg(_ a: CGFloat) -> CGColor { UIColor(argb: template.background, alpha: a).cgColor }
         if let top = CGGradient(colorsSpace: space, colors: [bg(0.75), bg(0)] as CFArray, locations: [0, 1]) {
-            c.saveGState(); c.clip(to: CGRect(x: 0, y: 0, width: w, height: h * 0.16))
-            c.drawLinearGradient(top, start: .zero, end: CGPoint(x: 0, y: h * 0.16), options: [])
+            c.saveGState(); c.clip(to: CGRect(x: 0, y: 0, width: w, height: u * 0.2))
+            c.drawLinearGradient(top, start: .zero, end: CGPoint(x: 0, y: u * 0.2), options: [])
             c.restoreGState()
         }
+        let fadeTop = frame.y(0.475)
         if let bottom = CGGradient(colorsSpace: space, colors: [bg(0), bg(0.82), bg(0.94)] as CFArray, locations: [0, 0.55, 1]) {
-            c.saveGState(); c.clip(to: CGRect(x: 0, y: h * 0.62, width: w, height: h * 0.38))
-            c.drawLinearGradient(bottom, start: CGPoint(x: 0, y: h * 0.62), end: CGPoint(x: 0, y: h), options: [])
+            c.saveGState(); c.clip(to: CGRect(x: 0, y: fadeTop, width: w, height: h - fadeTop))
+            c.drawLinearGradient(bottom, start: CGPoint(x: 0, y: fadeTop), end: CGPoint(x: 0, y: h), options: [])
             c.restoreGState()
         }
         UIGraphicsPushContext(c)
         let ink = UIColor(argb: template.text)
-        // Title: wide-spaced capitals, shrunk until it fits the poster's width.
-        PosterKit.drawCentered(place.title.uppercased(with: place.locale), x: w / 2, baseline: h * 0.842,
-                               font: PosterKit.titleFont(size: w * 0.085), color: ink, kern: 0.55, maxWidth: w * 0.86)
-        c.setStrokeColor(UIColor(argb: template.text, alpha: 200 / 255).cgColor)
-        c.setLineWidth(w * 0.0008)
-        c.strokeLineSegments(between: [CGPoint(x: w * 0.40, y: h * 0.868), CGPoint(x: w * 0.60, y: h * 0.868)])
+        // Title: wide-spaced capitals, shrunk until it fits.
+        PosterKit.drawCentered(place.title.uppercased(with: place.locale), x: frame.x, baseline: frame.y(0.1975),
+                               font: PosterKit.titleFont(size: u * 0.085), color: ink, kern: 0.55, maxWidth: frame.titleMaxWidth,
+                               align: frame.align)
+        frame.drawRule(c, 0.165, ink: template.text)
         if !place.country.isEmpty {
-            PosterKit.drawCentered(place.country.uppercased(with: place.locale), x: w / 2, baseline: h * 0.902,
-                                   font: PosterKit.lightFont(size: w * 0.027), color: ink)
+            PosterKit.drawCentered(place.country.uppercased(with: place.locale), x: frame.x, baseline: frame.y(0.1225),
+                                   font: PosterKit.lightFont(size: u * 0.027), color: ink, align: frame.align)
         }
-        PosterKit.drawCentered(PosterKit.coordinates(place.latitude, place.longitude), x: w / 2, baseline: h * 0.935,
-                               font: PosterKit.monoFont(size: w * 0.0165), color: UIColor(argb: template.text, alpha: 215 / 255))
-        let small = PosterKit.monoFont(size: w * 0.0115)
-        let faint = UIColor(argb: template.text, alpha: 165 / 255)
-        PosterKit.drawCentered("© OpenStreetMap contributors", x: w * 0.975, baseline: h * 0.978, font: small, color: faint, align: .right)
-        PosterKit.drawCentered("Real", x: w * 0.025, baseline: h * 0.978, font: PosterKit.brandFont(size: w * 0.0115), color: faint, align: .left)
+        PosterKit.drawCentered(PosterKit.coordinates(place.latitude, place.longitude), x: frame.x, baseline: frame.y(0.08125),
+                               font: PosterKit.monoFont(size: u * 0.0165), color: UIColor(argb: template.text, alpha: 215 / 255),
+                               align: frame.align)
+        frame.drawCredit("© OpenStreetMap contributors", ink: template.text)
         UIGraphicsPopContext()
     }
 }
@@ -227,16 +282,32 @@ struct MapPosterScreen: View {
 
     @State private var template = MapPosterTemplate.all[0]
     @State private var place: PosterPlace?
-    @State private var preview: UIImage?
     @State private var failed = false
     @State private var busy = false
     @State private var explore = false
-    /// [zoom] is what the preview and the saved poster use; [sliderZoom] follows the finger and only scales the
-    /// current preview, so the map is fetched once, when the finger lifts.
+    @State private var pickFormats = false
+    /// [zoom] / [center] are what the preview and the saved poster use. While a finger is on the map or the ruler,
+    /// [liveZoom] and [livePan] only move the current preview's layers; the map is fetched once, on release.
     @State private var zoom = MapPosterTemplate.posterZoom
-    @State private var sliderZoom = MapPosterTemplate.posterZoom
+    @State private var center: CLLocationCoordinate2D?
+    @State private var liveZoom = MapPosterTemplate.posterZoom
+    @State private var livePan: CGSize = .zero
+    /// The part of [livePan] already sent as the new [center]; taken off when that preview lands.
+    @State private var committedPan: CGSize = .zero
+    @State private var pinchStart: Double?
+    @State private var panStart: CGSize?
     @State private var previewZoom = MapPosterTemplate.posterZoom
+    @State private var previewCenter: CLLocationCoordinate2D?
+    @State private var previewMap: UIImage?
+    @State private var overlay: UIImage?
+    /// Zoomed-out copies of the current preview (how many times as wide, image), farthest first.
+    @State private var far: [(CGFloat, UIImage)] = []
+    @State private var frameWidth: CGFloat = 1
     @State private var progress: Double?
+
+    private let previewScale: CGFloat = 0.34
+    private var home: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
+    private var mid: CLLocationCoordinate2D { center ?? home }
 
     var body: some View {
         let surface = Color(argb: template.background)
@@ -245,29 +316,26 @@ struct MapPosterScreen: View {
             PosterHeader(title: t("Harita posteri"), ink: ink, onClose: onClose)
             Color.clear
                 .aspectRatio(0.8, contentMode: .fit)
-                .overlay {
-                    if let preview {
-                        Image(uiImage: preview).resizable().scaledToFill()
-                            .scaleEffect(CGFloat(pow(2, sliderZoom - previewZoom)))
-                    }
-                }
+                .overlay { layers }
                 .overlay {
                     if failed { Text(t("Harita yüklenemedi")).font(RealFont.inter(13)).foregroundStyle(Color(argb: template.text)) }
-                    else if preview == nil { Text(t("Poster hazırlanıyor…")).font(RealFont.inter(13)).foregroundStyle(ink.opacity(0.6)) }
+                    else if previewMap == nil { Text(t("Poster hazırlanıyor…")).font(RealFont.inter(13)).foregroundStyle(ink.opacity(0.6)) }
                 }
+                .background(surface)
                 .clipped()
+                .background(GeometryReader { g in
+                    Color.clear.onAppear { frameWidth = max(g.size.width, 1) }
+                        .onChange(of: g.size.width) { _, w in frameWidth = max(w, 1) }
+                })
+                .contentShape(Rectangle())
+                // Pinch to zoom, drag to nudge the map; the title stays where it is.
+                .gesture(mapGesture, including: busy ? GestureMask.subviews : .all)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 12).padding(.vertical, 4)
-            HStack(spacing: 10) {
-                ActionIcon(.minus, color: ink.opacity(0.6), size: 14)
-                Slider(value: $sliderZoom, in: MapPosterTemplate.zoomRange, onEditingChanged: { editing in
-                    if !editing { zoom = sliderZoom }
-                })
-                .tint(ink)
-                .disabled(busy)
-                ActionIcon(.add, color: ink.opacity(0.6), size: 14)
+            PosterZoomRuler(zoom: $liveZoom, latitude: latitude, ink: ink, enabled: !busy) { settled in
+                liveZoom = settled
+                commit()
             }
-            .padding(.horizontal, 16)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(MapPosterTemplate.all) { item in
@@ -283,24 +351,20 @@ struct MapPosterScreen: View {
                         guard let place else { return }
                         busy = true
                         Task {
-                            let image = await MapPosterRenderer.render(template, place: place, scale: 1, zoom: zoom)
+                            let image = await MapPosterRenderer.render(template, place: place, scale: 1, zoom: zoom, center: mid)
                             busy = false
                             if let image { onAttach(image); onClose() } else { RealToast.shared.show(t("Poster hazırlanamadı")) }
                         }
                     }
                 }
                 PosterButton(label: t("Kaydet"), ink: ink, primary: onAttach == nil, enabled: place != nil && !busy) {
-                    guard let place else { return }
-                    busy = true
-                    let template = template, zoom = zoom
-                    // Keeps going if the screen closes and then ends in a notification.
-                    PosterKit.save(title: place.title, render: { await printSize(template, place, zoom) }) { busy = false }
+                    if place != nil { pickFormats = true }
                 }
                 PosterButton(label: t("Paylaş"), ink: ink, enabled: place != nil && !busy) {
                     guard let place else { return }
                     busy = true
                     Task {
-                        let image = await printSize(template, place, zoom)
+                        let image = await printSize(template, place, zoom, mid)
                         busy = false
                         if let image, let url = PosterKit.shareFile(image, name: PosterKit.fileName("REAL", place.title, template.id)) {
                             PosterKit.share(url)
@@ -321,26 +385,194 @@ struct MapPosterScreen: View {
         .onAppear { PosterKit.openScreens += 1 }
         .onDisappear { PosterKit.openScreens -= 1 }
         .task { place = await PosterKit.place(latitude: latitude, longitude: longitude, fallback: placeName) }
-        .task(id: "\(template.id)-\(zoom)-\(place != nil)") {
+        .task(id: "\(template.id)-\(place != nil)") {
             guard let place else { return }
+            overlay = MapPosterRenderer.overlay(template, place: place, scale: previewScale)
+        }
+        .task(id: "\(template.id)-\(zoom)-\(mid.latitude),\(mid.longitude)") {
             failed = false
-            let z = zoom
-            if let next = await MapPosterRenderer.render(template, place: place, scale: 0.34, zoom: z) {
-                preview = next
-                previewZoom = z
-            } else { failed = true }
+            let z = zoom, c = mid
+            guard let next = await MapPosterRenderer.previewMap(template, center: c, zoom: z, scale: previewScale) else {
+                if !Task.isCancelled { failed = true }
+                return
+            }
+            guard !Task.isCancelled else { return }
+            previewMap = next; previewZoom = z; previewCenter = c; far = []
+            livePan = CGSize(width: livePan.width - committedPan.width, height: livePan.height - committedPan.height)
+            committedPan = .zero
+            // Then the surroundings, one and two steps out, so pinching out stays inside the map.
+            var layers: [(CGFloat, UIImage)] = []
+            for levels in 1...2 {
+                if levels == 2 && z - MapPosterTemplate.zoomRange.lowerBound <= 1 { break }
+                guard let image = await MapPosterRenderer.farLayer(template, center: c, zoom: z, levels: levels, scale: previewScale),
+                      !Task.isCancelled else { continue }
+                layers.insert((CGFloat(1 << levels), image), at: 0)
+                far = layers
+            }
         }
         .fullScreenCover(isPresented: $explore) {
-            MapPosterExplore(latitude: latitude, longitude: longitude, template: template, place: place, zoom: zoom) { explore = false }
+            MapPosterExplore(latitude: mid.latitude, longitude: mid.longitude, template: template, place: place, zoom: zoom) { explore = false }
+        }
+        .sheet(isPresented: $pickFormats) {
+            PosterFormatSheet(surface: surface, ink: ink) { formats in
+                pickFormats = false
+                guard let place else { return }
+                busy = true
+                let template = template, zoom = zoom, center = mid
+                // Keeps going if the screen closes and then ends in a notification.
+                PosterKit.saveAll(title: place.title, renders: formats.map { format -> () async -> UIImage? in
+                    {
+                        if format == .poster { return await printSize(template, place, zoom, center) }
+                        return await MapPosterRenderer.renderFormat(template, place: place, zoom: zoom, center: center, format: format)
+                    }
+                }) { busy = false }
+            }
+            .presentationDetents([.height(390)])
+            .presentationBackground(surface)
+            .presentationDragIndicator(.visible)
         }
     }
 
+    /// The preview in layers: the zoomed-out surroundings, the map, then the fades and title that stay put. The map
+    /// scales about its own centre, wherever the nudge has put it.
+    private var layers: some View {
+        Canvas { ctx, size in
+            guard let previewMap else { return }
+            let s = CGFloat(pow(2, liveZoom - previewZoom))
+            let midPoint = CGPoint(x: size.width / 2 + livePan.width, y: size.height / 2 + livePan.height)
+            func draw(_ image: UIImage, _ factor: CGFloat) {
+                let w = size.width * factor * s, h = size.height * factor * s
+                ctx.draw(Image(uiImage: image), in: CGRect(x: midPoint.x - w / 2, y: midPoint.y - h / 2, width: w, height: h))
+            }
+            for (factor, image) in far { draw(image, factor) }
+            draw(previewMap, 1)
+            if let overlay { ctx.draw(Image(uiImage: overlay), in: CGRect(origin: .zero, size: size)) }
+        }
+    }
+
+    private var mapGesture: some Gesture {
+        SimultaneousGesture(
+            MagnifyGesture()
+                .onChanged { v in
+                    if pinchStart == nil { pinchStart = liveZoom }
+                    liveZoom = min(max((pinchStart ?? liveZoom) + log2(Double(v.magnification)), MapPosterTemplate.zoomRange.lowerBound),
+                                   MapPosterTemplate.zoomRange.upperBound)
+                }
+                .onEnded { _ in pinchStart = nil; commit() },
+            DragGesture(minimumDistance: 4)
+                .onChanged { v in
+                    if panStart == nil { panStart = livePan }
+                    let start = panStart ?? livePan
+                    let limit = frameWidth * 0.45
+                    livePan = CGSize(width: min(max(start.width + v.translation.width, -limit), limit),
+                                     height: min(max(start.height + v.translation.height, -limit), limit))
+                }
+                .onEnded { _ in panStart = nil; commit() }
+        )
+    }
+
+    /// Release of a pinch, a drag or the ruler: the live zoom and nudge become the poster's (the place stays near).
+    private func commit() {
+        let range = MapPosterTemplate.zoomRange
+        let nextZoom = min(max(liveZoom, range.lowerBound), range.upperBound)
+        guard nextZoom != zoom || livePan != committedPan else { return }
+        let base = previewCenter ?? home
+        let s = pow(2, nextZoom - previewZoom)
+        let perPoint = Double(MapPosterRenderer.canvas.width / frameWidth)
+        let (cx, cy) = MapPosterRenderer.worldPoint(base, previewZoom)
+        let (px, py) = MapPosterRenderer.worldPoint(home, previewZoom)
+        // At most 30% of the frame away from the place, measured at the new zoom.
+        let maxX = Double(MapPosterRenderer.canvas.width) * 0.3 / s
+        let maxY = Double(MapPosterRenderer.canvas.height) * 0.3 / s
+        let nx = px + min(max(cx - Double(livePan.width) * perPoint / s - px, -maxX), maxX)
+        let ny = py + min(max(cy - Double(livePan.height) * perPoint / s - py, -maxY), maxY)
+        committedPan = livePan
+        zoom = nextZoom
+        center = MapPosterRenderer.worldCoordinate(nx, ny, previewZoom)
+    }
+
     /// Photos and share get the 8K print; a phone that cannot hold it still gets the 3000 pt poster.
-    @MainActor private func printSize(_ template: MapPosterTemplate, _ place: PosterPlace, _ zoom: Double) async -> UIImage? {
+    @MainActor private func printSize(_ template: MapPosterTemplate, _ place: PosterPlace, _ zoom: Double,
+                                      _ center: CLLocationCoordinate2D) async -> UIImage? {
         progress = 0
         defer { progress = nil }
-        if let big = await MapPosterRenderer.renderHighRes(template, place: place, zoom: zoom, onProgress: { progress = $0 }) { return big }
-        return await MapPosterRenderer.render(template, place: place, scale: 1, zoom: zoom)
+        if let big = await MapPosterRenderer.renderHighRes(template, place: place, zoom: zoom, center: center,
+                                                           onProgress: { progress = $0 }) { return big }
+        return await MapPosterRenderer.render(template, place: place, scale: 1, zoom: zoom, center: center)
+    }
+}
+
+/// MapPosterScreen.kt ZoomRuler: the zoom as a ruler, like the sky poster's clock. The levels scroll under a fixed
+/// centre line, the width the poster covers is read above it ("4,8 km"), a fling glides and settles on a tenth.
+private struct PosterZoomRuler: View {
+    @Binding var zoom: Double
+    let latitude: Double
+    let ink: Color
+    let enabled: Bool
+    let onSettled: (Double) -> Void
+
+    @State private var dragStart: Double?
+    private let perLevel: CGFloat = 72
+    private var range: ClosedRange<Double> { MapPosterTemplate.zoomRange }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(Self.widthLabel(latitude, zoom))
+                .font(.system(size: 22, weight: .light, design: .monospaced)).kerning(2).foregroundStyle(ink)
+            Canvas { ctx, size in
+                let cx = size.width / 2, half = size.width / 2, base = size.height * 0.62
+                var step = Int((range.lowerBound * 4).rounded(.up))
+                while step <= Int(range.upperBound * 4) {
+                    let level = Double(step) / 4
+                    let x = cx + CGFloat(level - zoom) * perLevel
+                    if x >= -8 && x <= size.width + 8 {
+                        let near = 1 - min(1, max(0, abs(x - cx) / half))
+                        let whole = step % 4 == 0
+                        let len = (whole ? 22 : step % 2 == 0 ? 14 : 8) * (0.7 + 0.5 * near)
+                        var line = Path()
+                        line.move(to: CGPoint(x: x, y: base - len))
+                        line.addLine(to: CGPoint(x: x, y: base))
+                        ctx.stroke(line, with: .color(ink.opacity((0.15 + 0.65 * near) * (whole ? 1 : 0.75))), lineWidth: whole ? 1.6 : 1)
+                        if whole {
+                            ctx.draw(Text(Self.widthLabel(latitude, level)).font(.system(size: 10)).foregroundColor(ink.opacity(0.24 + 0.63 * near)),
+                                     at: CGPoint(x: x, y: base + 12))
+                        }
+                    }
+                    step += 1
+                }
+                var centre = Path()
+                centre.move(to: CGPoint(x: cx, y: base - 30))
+                centre.addLine(to: CGPoint(x: cx, y: base + 2))
+                ctx.stroke(centre, with: .color(ink), lineWidth: 2)
+                ctx.fill(Path(ellipseIn: CGRect(x: cx - 3, y: base - 35, width: 6, height: 6)), with: .color(ink))
+            }
+            .frame(height: 58)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 2)
+                .onChanged { g in
+                    guard enabled else { return }
+                    if dragStart == nil { dragStart = zoom }
+                    zoom = min(max((dragStart ?? zoom) - Double(g.translation.width / perLevel), range.lowerBound), range.upperBound)
+                }
+                .onEnded { g in
+                    guard enabled, let start = dragStart else { return }
+                    dragStart = nil
+                    let glide = start - Double(g.predictedEndTranslation.width / perLevel)
+                    let target = min(max((glide * 10).rounded() / 10, range.lowerBound), range.upperBound)
+                    withAnimation(.spring(response: 0.55, dampingFraction: 0.9)) { zoom = target }
+                    onSettled(target)
+                })
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// How wide the poster's map is on the ground at [zoom]: "850 m", "4,8 km", "22 km".
+    static func widthLabel(_ latitude: Double, _ zoom: Double) -> String {
+        let metersPerPoint = 40_075_016.686 * cos(latitude * .pi / 180) / (512 * pow(2, zoom))
+        let meters = metersPerPoint * Double(MapPosterRenderer.canvas.width)
+        if meters < 1000 { return "\(Int((meters / 10).rounded() * 10)) m" }
+        if meters < 10_000 { return String(format: "%.1f km", locale: I18n.locale, meters / 1000) }
+        return "\(Int((meters / 1000).rounded())) km"
     }
 }
 

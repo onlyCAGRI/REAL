@@ -3420,5 +3420,19 @@
   "Konumlu kartlarda ne zaman yola çıkacağın": "When to leave for cards with a place",
   "Ana ekrandaki kedi": "The cat on Home",
   "Bloğu kaldır": "Remove block",
-  "Etrafa Bak": "Look Around"
+  "Etrafa Bak": "Look Around",
+  "Hangi ölçülerde kaydedilsin?": "Which sizes should be saved?",
+  "Birden fazla seçebilirsin. Her birinin köşesinde Real yazar.": "You can pick more than one. Each carries Real in a corner.",
+  "Oran": "Ratio",
+  "Bir ölçü seç": "Pick a size",
+  "{0} ölçüyü kaydet": "Save {0} sizes",
+  "{0} poster galeriye kaydedildi": "{0} posters saved to the gallery",
+  "Poster": "Poster",
+  "Instagram": "Instagram",
+  "Hikâye": "Story",
+  "Duvar kâğıdı": "Wallpaper",
+  "tam ekran": "full screen",
+  "Konum izleniyor": "Location in use",
+  "Kartların bu cihazda kalır, bağlantı gelince eşitlenir.": "Your cards stay on this phone and sync when you're back online.",
+  "{0} yer için varınca veya ayrılınca hatırlatıcısı bekliyor. Hiç kalmayınca REAL konumunu kullanmaz.": "{0} places have an arrival or departure reminder waiting. When none are left, REAL stops using your location."
 }

@@ -374,40 +374,37 @@ struct HomeContextCard: View {
         }
     }
 
-    /// Looks like one of the person's cards, tinted with its colour so it reads as a REAL suggestion.
+    /// One slim line: accent dot, "title · message", a short progress line, then +250 (water) or ›.
     private func tile(_ c: ContextCard) -> some View {
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
-        return HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 2).fill(c.type.accent).frame(width: 4, height: 34)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(c.title).font(RealFont.inter(15)).foregroundStyle(Color(white: 0.95)).lineLimit(1)
-                Text(c.message).font(RealFont.inter(12)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
-                Text(t("REAL önerisi · {0}", c.eyebrow.lowercased())).font(RealFont.inter(11))
-                    .foregroundStyle(c.type.accent.opacity(0.8)).padding(.top, 1)
-                if c.progress != nil {
-                    GeometryReader { g in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.white.opacity(0.10))
-                            Capsule().fill(c.type.accent).frame(width: g.size.width * min(max(progress, 0.02), 1))
-                        }
-                    }
-                    .frame(height: 3).padding(.top, 6)
+        return HStack(spacing: 0) {
+            Circle().fill(c.type.accent).frame(width: 8, height: 8)
+            (Text(c.title).foregroundStyle(Color(white: 0.95)).fontWeight(.medium)
+                + Text(c.message.isEmpty ? "" : "  ·  " + c.message).foregroundStyle(.white.opacity(0.55)))
+                .font(RealFont.inter(13)).lineLimit(1).truncationMode(.tail)
+                .padding(.leading, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if c.progress != nil {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.10))
+                    Capsule().fill(c.type.accent).frame(width: 56 * min(max(progress, 0.02), 1))
                 }
+                .frame(width: 56, height: 3).padding(.leading, 10)
             }
-            Spacer(minLength: 6)
             if c.type == .water {
                 Button { addWater() } label: {
-                    Text(c.primaryLabel).font(RealFont.inter(13)).foregroundStyle(.black)
-                        .padding(.horizontal, 12).padding(.vertical, 8).background(Capsule().fill(.white))
+                    Text(c.primaryLabel).font(RealFont.inter(12)).fontWeight(.medium).foregroundStyle(.black)
+                        .padding(.horizontal, 10).padding(.vertical, 7).background(Capsule().fill(.white))
                 }
                 .buttonStyle(.plain)
+                .padding(.leading, 8)
             } else {
-                Text("›").font(.system(size: 24)).foregroundStyle(c.type.accent).padding(.horizontal, 4)
+                Text("›").font(.system(size: 22)).foregroundStyle(c.type.accent).padding(.horizontal, 8)
             }
         }
-        .padding(.leading, 14).padding(.trailing, 12).padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(shape.fill(Color(argb: 0xFF141416)).overlay(shape.fill(c.type.accent.opacity(0.10))))
+        .padding(.leading, 14).padding(.trailing, 6)
+        .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44, alignment: .leading)
+        .background(shape.fill(Color(argb: 0xFF141416)).overlay(shape.fill(c.type.accent.opacity(0.08))))
         .overlay(shape.strokeBorder(c.type.accent.opacity(0.35), lineWidth: 0.5))
         .contentShape(shape)
         .offset(x: dragX)
