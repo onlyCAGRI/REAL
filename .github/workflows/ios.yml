@@ -237,6 +237,8 @@ jobs:
         with:
           name: REAL-simulator-app
           path: REAL-simulator.zip
+          # Carries the App Check debug token and the repository is public: keep it only as long as an upload needs.
+          retention-days: 1
 
       - name: Archive and upload to TestFlight
         # "testflight" runs only. Manual signing with the team's Apple Distribution certificate (.p12) and the "REAL App
@@ -256,6 +258,9 @@ jobs:
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
           mkdir -p build
+          # The App Check debug token is for simulator builds only: the device build is compiled without it, so it
+          # never ships inside an IPA (devices prove themselves with App Attest).
+          echo 'enum BuildSecrets { static let appCheckDebugToken = "" }' > Real/App/BuildSecrets.swift
           KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
           printf '%s\n' "$ASC_KEY_P8" > "$KEY"
           # Signing identity in a throwaway keychain, the profile where Xcode looks for it.

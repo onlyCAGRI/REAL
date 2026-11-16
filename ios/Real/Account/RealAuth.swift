@@ -36,9 +36,14 @@ final class RealAuth {
         // Test builds exchange the debug token registered in the Firebase console for App Check tokens
         // (simulators and devices without App Attest). A small provider of our own does the exchange, so it
         // always uses exactly that token.
+        // Simulator only: a real device proves itself with App Attest and never uses (or carries) the debug token.
+        #if targetEnvironment(simulator)
         if !BuildSecrets.appCheckDebugToken.isEmpty {
             AppCheck.setAppCheckProviderFactory(RealDebugAppCheckFactory(debugToken: BuildSecrets.appCheckDebugToken))
         }
+        #else
+        AppCheck.setAppCheckProviderFactory(RealAppAttestFactory())
+        #endif
         FirebaseApp.configure()
         if let clientID = FirebaseApp.app()?.options.clientID {
             GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
@@ -341,6 +346,11 @@ private final class AppleSignInRequest: NSObject, ASAuthorizationControllerDeleg
 
 /// App Check could not produce a token; REAL's worker requires one on every account request.
 struct AppCheckUnavailable: Error { let reason: String }
+
+/// Devices: Apple's App Attest (the app is registered for it in the Firebase console).
+final class RealAppAttestFactory: NSObject, AppCheckProviderFactory {
+    func createProvider(with app: FirebaseApp) -> AppCheckProvider? { AppAttestProvider(app: app) }
+}
 
 /// Exchanges the console-registered debug token for an App Check token (projects.apps.exchangeDebugToken).
 final class RealDebugAppCheckFactory: NSObject, AppCheckProviderFactory {
