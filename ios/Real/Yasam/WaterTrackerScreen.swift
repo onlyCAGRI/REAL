@@ -158,7 +158,7 @@ struct WaterTrackerScreen: View {
 
     private func liquid(size: CGSize) -> some View {
         // 60 fps is plenty for the surface; on 120 Hz phones the full-screen Canvas kept the main thread busy.
-        TimelineView(.animation(minimumInterval: 1 / 60)) { timeline in
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: RealMotion.reduce)) { timeline in
             Canvas { ctx, canvasSize in
                 drawLiquid(&ctx, canvasSize, timeline.date.timeIntervalSinceReferenceDate)
             }

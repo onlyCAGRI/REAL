@@ -85,7 +85,7 @@ struct SwipeTutorial: View {
 
     var body: some View {
         if visible {
-            TimelineView(.animation) { tl in
+            TimelineView(.animation(paused: RealMotion.reduce)) { tl in
                 let phases = upLabel == nil ? 2.0 : 3.0
                 let time = tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: phases * 1.5) / 1.5
                 let phase = min(Int(time), Int(phases) - 1)

@@ -14,7 +14,7 @@ struct AlarmScreen: View {
         let accent = alarm.color
         ZStack {
             Self.ink.ignoresSafeArea()
-            TimelineView(.animation) { timeline in
+            TimelineView(.animation(paused: RealMotion.reduce)) { timeline in
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 Canvas { ctx, size in Self.drawBackground(&ctx, size: size, t: t, accent: accent, calm: 1 - slide) }
             }

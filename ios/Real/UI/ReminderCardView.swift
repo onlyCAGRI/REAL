@@ -313,6 +313,7 @@ struct ReminderCardView: View {
                     if dated || trigger != nil || plainPlace != nil { Text("·").foregroundStyle(subtext) }
                     RealSymbol("checklist", size: 11).foregroundStyle(subtext)
                     Text("\(checklist.filter(\.isCompleted).count)/\(checklist.count)").foregroundStyle(subtext).lineLimit(1).layoutPriority(1)
+                        .contentTransition(.numericText(value: Double(checklist.filter(\.isCompleted).count)))
                 }
             }
             .font(RealType.cardMeta)
@@ -528,7 +529,7 @@ struct CategoryTileView: View {
             if hero, let heroActions {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 8) {
-                        if showCount { CategoryPill(text: cardCountText(count), foreground: visual.foreground) }
+                        if showCount { CategoryPill(text: cardCountText(count), foreground: visual.foreground, number: count) }
                         if !description.isEmpty { CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading) }
                     }
                     Spacer()
@@ -536,7 +537,7 @@ struct CategoryTileView: View {
                 }
             } else {
                 HStack(spacing: 8) {
-                    if showCount { CategoryPill(text: cardCountText(count), foreground: visual.foreground) }
+                    if showCount { CategoryPill(text: cardCountText(count), foreground: visual.foreground, number: count) }
                     if !description.isEmpty {
                         CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading)
                     }
@@ -562,10 +563,14 @@ struct CategoryTileView: View {
 struct CategoryPill: View {
     let text: String
     let foreground: Color
+    /// A count in the text: its digits roll when it changes ("13 kart" → "14 kart").
+    var number: Int? = nil
 
     var body: some View {
         Text(text)
             .font(RealType.categoryPill)
+            .contentTransition(number.map { .numericText(value: Double($0)) } ?? .identity)
+            .animation(.snappy, value: number)
             .foregroundStyle(foreground)
             .lineLimit(1)
             .padding(.horizontal, 10)

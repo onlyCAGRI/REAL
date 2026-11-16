@@ -3407,5 +3407,18 @@
   "{0} için yeni hedef": "New goal in {0}",
   "Hedef yolu": "Path",
   "Önceki {0} hedefi göster": "Show {0} earlier goals",
-  "{0}: {1} tamamlandı. Önceki hafta için dokun.": "{0}: {1} done. Tap for the previous week."
+  "{0}: {1} tamamlandı. Önceki hafta için dokun.": "{0}: {1} done. Tap for the previous week.",
+  "Bildirimler": "Notifications",
+  "Hatırlatıcılar bu cihazda açık.": "Reminders are on for this device.",
+  "Hatırlatıcıları alabilmek için izni aç.": "Turn on permission to get reminders.",
+  "Ses ve görünüm": "Sound and style",
+  "Alarm kartları sessiz modda da çalar.": "Alarm cards ring even in silent mode.",
+  "Alarm kartları sessiz modda da çalsın diye izin ver.": "Allow it so alarm cards ring even in silent mode.",
+  "Logonun yanında. Kapatsan da verilerin kalır.": "Next to the logo. Turning it off keeps your data.",
+  "Deneysel. Tamamlamak için kartı sağa kaydır.": "Experimental. Swipe a card right to complete it.",
+  "Ana ekranın altında ara sıra öneri kartları": "Now and then, suggestion cards at the bottom of Home",
+  "Konumlu kartlarda ne zaman yola çıkacağın": "When to leave for cards with a place",
+  "Ana ekrandaki kedi": "The cat on Home",
+  "Bloğu kaldır": "Remove block",
+  "Etrafa Bak": "Look Around"
 }

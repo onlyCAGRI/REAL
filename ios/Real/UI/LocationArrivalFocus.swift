@@ -686,7 +686,7 @@ private struct ArrivalCloseUpLayer: View {
             .position(map.destination)
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)
-        .onAppear { pulse = true }
+        .onAppear { pulse = !RealMotion.reduce }
     }
 }
 
@@ -733,7 +733,7 @@ private struct ArrivalMapLayer: View {
                 .task(id: drawn) {
                     guard drawn else { return }
                     try? await Task.sleep(for: .milliseconds(hasRoute ? 1_450 : 400))
-                    pinPulse = true
+                    pinPulse = !RealMotion.reduce
                 }
             } else {
                 ZStack {
@@ -745,7 +745,7 @@ private struct ArrivalMapLayer: View {
                     Circle().fill(.white).frame(width: 10, height: 10)
                 }
                 .position(x: size.width / 2, y: size.height / 2)
-                .onAppear { pulse = true }
+                .onAppear { pulse = !RealMotion.reduce }
             }
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)

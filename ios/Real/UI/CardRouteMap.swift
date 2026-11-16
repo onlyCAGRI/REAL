@@ -17,6 +17,11 @@ struct CardRouteMap: View {
     @AppStorage("reduce_animations") private var reduceAnimations = false
     @AppStorage(MapAppearance.darkKey) private var mapDark = false
     @AppStorage(MapAppearance.plainKey) private var mapPlain = false
+    /// The live map stays hidden until its tiles had time to load: it used to show an empty grid, then pop in.
+    @State private var mapVisible = false
+    /// A picture of this map from an earlier visit (or drawn now), under the live map while it loads.
+    @State private var snapshot: UIImage?
+    private static let snapshots: NSCache<NSString, UIImage> = { let c = NSCache<NSString, UIImage>(); c.countLimit = 30; return c }()
 
     var body: some View {
         Map(position: Binding(get: { position ?? .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 900, longitudinalMeters: 900)) },
@@ -35,7 +40,10 @@ struct CardRouteMap: View {
         }
         .mapStyle(MapAppearance.style(plain: mapPlain))
         .environment(\.colorScheme, MapAppearance.scheme(dark: mapDark))
+        .opacity(mapVisible ? 1 : 0)
+        .background { placeholder }
         .frame(height: route == nil ? 150 : 280)
+        .clipped()
         .allowsHitTesting(false)
         .overlay(alignment: .topLeading) {
             if let route {
@@ -48,6 +56,44 @@ struct CardRouteMap: View {
         }
         .animation(.easeOut(duration: 0.3), value: route == nil)
         .task(id: routeWanted) { await load() }
+        .task { await reveal() }
+    }
+
+    /// The map's own ground colour, then the remembered picture of it; the live map fades in over both.
+    private var placeholder: some View {
+        ZStack {
+            mapDark ? Color(argb: 0xFF24262A) : Color(argb: 0xFFEEEAE2)
+            if let snapshot {
+                Image(uiImage: snapshot).resizable().scaledToFill().transition(.opacity)
+            }
+        }
+    }
+
+    private var snapshotKey: NSString {
+        String(format: "%.5f,%.5f,%d,%d", coordinate.latitude, coordinate.longitude, mapDark ? 1 : 0, mapPlain ? 1 : 0) as NSString
+    }
+
+    private func reveal() async {
+        let key = snapshotKey
+        let cached = Self.snapshots.object(forKey: key)
+        if let cached { snapshot = cached } else { Task { await drawSnapshot(key) } }
+        // A remembered picture looks like the map already, so the live one can come sooner.
+        try? await Task.sleep(for: .milliseconds(cached == nil ? 450 : 200))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.3)) { mapVisible = true }
+    }
+
+    private func drawSnapshot(_ key: NSString) async {
+        let options = MKMapSnapshotter.Options()
+        options.region = MKCoordinateRegion(center: coordinate, latitudinalMeters: 900, longitudinalMeters: 900)
+        options.size = CGSize(width: 400, height: 150)
+        options.traitCollection = UITraitCollection(userInterfaceStyle: mapDark ? .dark : .light)
+        let config = MKStandardMapConfiguration()
+        config.pointOfInterestFilter = mapPlain ? .excludingAll : .includingAll
+        options.preferredConfiguration = config
+        guard let image = try? await MKMapSnapshotter(options: options).start().image else { return }
+        Self.snapshots.setObject(image, forKey: key)
+        if !mapVisible { withAnimation(.easeOut(duration: 0.2)) { snapshot = image } }
     }
 
     private func load() async {

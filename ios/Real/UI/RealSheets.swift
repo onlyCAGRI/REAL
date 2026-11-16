@@ -191,6 +191,7 @@ private extension View {
 struct SettingsChoiceRow: View {
     let icon: ActionGlyph
     let title: String
+    var subtitle = ""
     let value: String
     let action: () -> Void
 
@@ -198,8 +199,14 @@ struct SettingsChoiceRow: View {
         Button(action: action) {
             HStack(spacing: 14) {
                 SettingsIconTile(icon: icon)
-                Text(title).font(RealFont.inter(16)).kerning(-0.2).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(RealFont.inter(16)).kerning(-0.2).foregroundStyle(.white)
+                    if !subtitle.isEmpty {
+                        Text(subtitle).font(RealFont.inter(12.5)).foregroundStyle(Color(argb: 0xFF9A9AA5)).lineSpacing(4)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Text(value).font(RealFont.inter(15)).foregroundStyle(Color(argb: 0xFF9A9AA4)).lineLimit(1)
                     .padding(.leading, 8).padding(.trailing, 6)
                 ActionIcon(.chevronRight, color: Color(argb: 0xFF75757F), size: 16)

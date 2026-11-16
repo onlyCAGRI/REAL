@@ -96,8 +96,10 @@ struct GameBlockView: View {
             if editing {
                 HStack {
                     Spacer()
-                    Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 40, height: 40) }
-                        .accessibilityLabel(t("Oyunu kaldır"))
+                    BlockOwnRemove {
+                        Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 40, height: 40) }
+                            .accessibilityLabel(t("Oyunu kaldır"))
+                    }
                 }
             }
             HStack(alignment: .top, spacing: 14) {

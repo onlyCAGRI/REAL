@@ -25,6 +25,8 @@ struct ReminderDetailView: View {
     /// Opened from home: the bar starts as home's capsule and takes the dock's shape.
     var fromHome = false
     @State private var dockFormed = false
+    /// Height the system navigation bar adds above the page (the cover reaches up under it as well).
+    @State private var barExtra: CGFloat = 0
 
     @State private var draft: ReminderItem?
     @State private var showClipboardTray = false
@@ -51,7 +53,6 @@ struct ReminderDetailView: View {
     /// Tamamla's sweep: Kaydet's, mirrored from the left.
     @State private var completeSweepStart: Date?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var iconsPeek: CGFloat = 0
     @State private var reordering = false
     @State private var newChecklistText = ""
     @State private var checklistOpen = false
@@ -94,6 +95,7 @@ struct ReminderDetailView: View {
                 // Kontrol ettir: opening the card puts its light out for this viewer.
                 .task(id: store.reminder(reminderId)?.checkRequest?.at) { if let r = store.reminder(reminderId) { CheckRequests.shared.markSeen(r) } }
             if let r = shown {
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 12) {
                         let order = blockOrder(r)
@@ -102,17 +104,16 @@ struct ReminderDetailView: View {
                             // The cover reaches the screen edges and up under the status bar, like a category's header;
                             // the column's side margins and top padding are undone here.
                             let hero = (r.contentBlockLayout[heroKey] ?? CardBlockPlacement()).normalized
-                            let inset = windowTopInset + 10
+                            let inset = windowTopInset + barExtra + 10
                             let isTextHero = heroKey == "text"
                             let nonTextHeight = CGFloat(max(hero.minHeight, detailHeroMinHeight)) + inset
                             block(heroKey, r, heroInset: inset)
                                 .environment(\.cardBlockHeight, isTextHero ? 0 : nonTextHeight)
                                 .frame(maxWidth: .infinity, minHeight: isTextHero ? nil : nonTextHeight, alignment: .top)
-                                .overlay(alignment: .top) { header(r).padding(.horizontal, 22).padding(.top, inset - 4).erased() }
                                 .padding(.horizontal, -16)
                                 .padding(.top, -inset)
                                 .padding(.bottom, 2)
-                        } else if !editing { header(r).erased() } else { Color.clear.frame(height: 4) }
+                        } else { Color.clear.frame(height: 4) }
                         CardBlockGrid(keys: heroKey == nil ? order : Array(order.dropFirst()),
                                       layout: heroKey.map { heroLiftedLayout(r.contentBlockLayout, hero: $0) } ?? r.contentBlockLayout,
                                       editing: editing,
@@ -145,7 +146,9 @@ struct ReminderDetailView: View {
                                       onResizeBegan: lowerEditDock,
                                       onMovingChange: { lifted in
                                           withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: lifted ? 0.2 : 0.26)) { blockMoving = lifted }
-                                      }) { key in
+                                      },
+                                      removable: { Self.removableKinds.contains(Self.blockKind($0)) },
+                                      onRemove: { removeBlock($0) }) { key in
                             block(key, r).transition(.opacity.combined(with: .scale(scale: 0.97)))
                         }
                         Text(createdLine(r))
@@ -153,9 +156,6 @@ struct ReminderDetailView: View {
                             .foregroundStyle(Color(argb: 0xFF8C8C95))
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .padding(.top, heroKey == "text" && order.count == 1 ? 0 : 8).padding(.trailing, 6)
-                        if editing, !r.isCompleted, r.alertAt != nil || r.plannedDateEpochDay != nil {
-                            scheduleChips(r).padding(.top, 12).erased()
-                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
@@ -174,6 +174,15 @@ struct ReminderDetailView: View {
                 .scrollDismissesKeyboard(.interactively)
                 // A lifted block owns the finger: the page does not scroll under it.
                 .scrollDisabled(blockMoving)
+                // Typing in the checklist: the colour / category panels fold away (they filled the space above the
+                // dock) and the list comes into view.
+                .onChange(of: checklistFocus) { _, focus in
+                    guard focus != nil else { return }
+                    // The dock (Renk ve kategori, tools) lowers to its slim bar: the list and the keyboard get the room.
+                    lowerEditDock()
+                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("checklistBlock", anchor: .center) }
+                }
+                }
                 .erased()
                 bottomColumn(r).erased()
             } else {
@@ -181,7 +190,14 @@ struct ReminderDetailView: View {
             }
         }
         .erased()
-        .toolbar(.hidden, for: .navigationBar)
+        // iOS 27's own bar (trial): the system back button and a glass group for Yapıştır and the star, so they
+        // arrive and leave the way they do in Apple's apps. The old drawn header is `header(_:)`.
+        .toolbar(editing ? .hidden : .visible, for: .navigationBar)
+        .toolbar { detailToolbar }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { barExtra = max(0, $0 - windowTopInset) }
+        .sheet(isPresented: $showClipboardTray) {
+            ClipboardTraySheet(busy: trayBusy) { item in addFromTray(item) }
+        }
         .task {
             // CI stack check: the edit mode's views too.
             guard ProcessInfo.processInfo.arguments.contains("-REALDetailEdit"), let stored else { return }
@@ -420,7 +436,7 @@ struct ReminderDetailView: View {
                 }
             }
         case "mood": if let mood = r.mood { moodBlock(mood).erased() }
-        case "checklist": checklistBlock(r).erased()
+        case "checklist": checklistBlock(r).id("checklistBlock").erased()
         case "photos": if let a = r.attachments.first(where: { $0.id == id }) { photoBlock(a, heroInset: heroInset).erased() }
         case "files":
             if id == "reference", let url = r.referenceUrl { linkBlock(url).erased() }
@@ -457,7 +473,101 @@ struct ReminderDetailView: View {
         }
     }
 
+    /// Blocks the "–" badge can take off in Düzenle. The title (text) stays; the weather keeps its own hide menu.
+    private static func heroShape(cover: Bool) -> AnyShape {
+        if cover, #available(iOS 26.0, *) {
+            return AnyShape(ConcentricRectangle(uniformTopCorners: .concentric(minimum: .fixed(28)), uniformBottomCorners: .fixed(28)))
+        }
+        return AnyShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    private static let removableKinds: Set<String> = ["card_stack", "mood", "checklist", "photos", "files", "location",
+                                                       "journal", "voice", "music", "media", "game"]
+
+    private static func blockKind(_ key: String) -> String { key.split(separator: ":").first.map(String.init) ?? key }
+
+    /// The "–" badge: takes the block off the draft (Vazgeç brings it back).
+    private func removeBlock(_ key: String) {
+        let id = key.contains(":") ? String(key.split(separator: ":", maxSplits: 1)[1]) : ""
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.spring(duration: 0.3)) {
+            switch Self.blockKind(key) {
+            case "card_stack": draft?.cardStack = nil
+            case "mood": draft?.mood = nil
+            case "checklist":
+                draft?.checklistItems = []
+                draft?.isChecklist = false
+                checklistOpen = false
+                checklistFocus = nil
+                pendingChecklistFocus = nil
+            case "photos": draft?.attachments.removeAll { $0.id == id }
+            case "files":
+                if id == "reference" { draft?.referenceUrl = nil } else { draft?.attachments.removeAll { $0.id == id } }
+            case "location": draft?.location = nil
+            case "journal": draft?.journal = nil
+            case "voice":
+                NotificationCenter.default.post(name: .realFinishVoiceRecording, object: nil)
+                voiceRecorderOpen = false
+                draft?.voiceRecordings = []
+            case "music": draft?.musicBlocks.removeAll { $0.id == id }
+            case "media": draft?.mediaBlocks.removeAll { $0.id == id }
+            case "game": draft?.gameBlocks.removeAll { $0.id == id }
+            default: break
+            }
+        }
+    }
+
     // MARK: Header
+
+    private var pasteButton: some View {
+        PasteButton(supportedContentTypes: CardPaste.contentTypes) { providers in paste(providers) }
+            .labelStyle(.iconOnly)
+            .buttonBorderShape(.circle)
+            // It refuses a see-through tint (it then falls back to its own light fill), so it gets an opaque dark one.
+            .tint(Color(argb: 0xFF26262B))
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                showClipboardTray = true
+            })
+            .accessibilityAction(named: Text(t("Panodan ekle"))) { showClipboardTray = true }
+    }
+
+    @ToolbarContentBuilder
+    private var detailToolbar: some ToolbarContent {
+        if let r = shown, !editing {
+            ToolbarItem(placement: .principal) { FreshPastePill { providers in paste(providers) } }
+            if CalendarCardPublisher.shared.hasExternalTarget(r.id) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    let done = CalendarCardPublisher.shared.isPublished(r)
+                    Button { CalendarCardPublisher.shared.offer(r.id) } label: {
+                        Image(systemName: done ? "checkmark" : "arrow.triangle.2.circlepath")
+                    }
+                    .accessibilityLabel(t("Takvime web bağlantısı ekle"))
+                }
+            }
+            // Yapıştır is the system PasteButton (no "Allow paste?" prompt). It always paints its own fill, which sat as
+            // a grey square inside the bar's glass group, so it stands on its own as a dark circle beside the star.
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarTrailing) { pasteButton }
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .topBarTrailing) { pasteButton }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    store.mutate(reminderId) { $0.isImportant.toggle() }
+                } label: {
+                    Image(systemName: r.isImportant ? "star.fill" : "star")
+                        .foregroundStyle(r.isImportant ? Color(argb: 0xFFEACB75) : .white)
+                        // The star fills with a small bounce (it used to swap at once).
+                        .contentTransition(.symbolEffect(.replace))
+                        .symbolEffect(.bounce, value: r.isImportant)
+                }
+                .accessibilityLabel(r.isImportant ? t("Önemli işaretini kaldır") : t("Önemli olarak işaretle"))
+            }
+        }
+    }
 
     private func header(_ r: ReminderItem) -> some View {
         HStack {
@@ -505,9 +615,6 @@ struct ReminderDetailView: View {
                         showClipboardTray = true
                     })
                     .accessibilityAction(named: Text(t("Panodan ekle"))) { showClipboardTray = true }
-                    .sheet(isPresented: $showClipboardTray) {
-                        ClipboardTraySheet(busy: trayBusy) { item in addFromTray(item) }
-                    }
                 Rectangle().fill(.white.opacity(0.13)).frame(width: 1, height: 18)
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -543,7 +650,9 @@ struct ReminderDetailView: View {
         let italic = storedText?.textItalic == true
         let fontSize: CGFloat = (cover && alone) ? 36 : 28
         let titleFont = storedText?.textBold == true ? Font.custom("InterTight-Bold", size: fontSize) : RealFont.inter(fontSize)
-        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+        // A cover reaches the top of the screen: its top corners follow the display's own corners (iOS 26+), so the
+        // starred ring is not cut off by them. Below the cover, and before iOS 26, all four corners are 28.
+        let shape = Self.heroShape(cover: cover)
         let accent = reminderAccentGradient(start: r.accentStart, end: r.accentEnd, completed: r.isCompleted,
                                             blend: r.gradientBlendFraction, solidArgb: r.customSolidColorArgb)
         let dark = r.autoDarkText
@@ -592,7 +701,7 @@ struct ReminderDetailView: View {
             if let accent { shape.fill(accent) }
             else { shape.fill(LinearGradient(colors: [Color(argb: 0xFF18181A), LiquidGlassTokens.contentColor], startPoint: .top, endPoint: .bottom)) }
         }
-        .overlay { if r.isImportant { shape.strokeBorder(Color.white.opacity(0.85), lineWidth: 1.25) } }
+        .overlay { if r.isImportant { shape.stroke(Color.white.opacity(0.85), lineWidth: 2.5).clipShape(shape) } }
         .background { if cover { GeometryReader { g in Color.clear.onAppear { coverTitleHeight = g.size.height }.onChange(of: g.size.height) { _, h in coverTitleHeight = h } } } }
         .overlay(alignment: .bottom) { if editing && cover && !alone { coverTitleHandle(dark: dark, extra: coverExtra) } }
         .overlay(alignment: .bottomTrailing) { titleTools(stored: storedText, alignment: alignKey, cover: cover) }
@@ -969,14 +1078,12 @@ struct ReminderDetailView: View {
                 if !summary.isEmpty { Text("  •  \(summary)").font(RealFont.inter(12)).foregroundStyle(Color(argb: 0xFFA5A5B5)).lineLimit(1) }
                 Spacer()
                 if editing {
-                    Button {
-                        draft?.checklistItems = []
-                        draft?.isChecklist = false
-                        checklistOpen = false
-                        checklistFocus = nil
-                        pendingChecklistFocus = nil
-                    } label: { RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFF8E8E98)).frame(width: 28, height: 28) }
-                    .accessibilityLabel(t("Checklist kutusunu kaldır"))
+                    BlockOwnRemove {
+                        Button { removeBlock("checklist") } label: {
+                            RealSymbol("xmark", size: 13.8).foregroundStyle(Color(argb: 0xFF8E8E98)).frame(width: 28, height: 28)
+                        }
+                        .accessibilityLabel(t("Checklist kutusunu kaldır"))
+                    }
                 }
             }
             .padding(.horizontal, 4).padding(.vertical, 2)
@@ -1167,7 +1274,7 @@ struct ReminderDetailView: View {
                 }
                 Spacer()
                 if editing {
-                    removeButton { draft?.location = nil }
+                    BlockOwnRemove { removeButton { draft?.location = nil } }
                 } else {
                     Button(t("Haritada aç")) { openInMaps(l) }.font(RealFont.inter(13, .medium)).foregroundStyle(RealColors.accentBlue)
                 }
@@ -1241,6 +1348,8 @@ struct ReminderDetailView: View {
                 .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 0.5))
         }
         .padding(8)
+        // Clear of the block's 30pt resize band on the right edge, which sat over it and took the tap.
+        .padding(.trailing, 24)
         .accessibilityLabel(t("Kaldır"))
     }
 
@@ -1337,11 +1446,12 @@ struct ReminderDetailView: View {
     private func actionBar(_ r: ReminderItem) -> some View {
         ZStack {
             HStack(spacing: 0) {
-                DetailAction(label: t("Vazgeç"), symbol: "xmark") { draft = nil; secondaryExpanded = false; checklistOpen = false }
+                DetailAction(label: t("Vazgeç"), symbol: "xmark") { draft = nil; secondaryExpanded = false; checklistOpen = false; voiceRecorderOpen = false }
                     .detailDockItem(visible: editing && dockShown, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
                 DetailAction(label: t("Kaydet"), symbol: "checkmark", color: Color(argb: 0xFF91B9FF),
                              enabled: !(draft?.text.trimmingCharacters(in: .whitespaces).isEmpty ?? true)) {
                     if !reduceMotion { saveSweepStart = Date() }
+                    NotificationCenter.default.post(name: .realFinishVoiceRecording, object: nil)
                     saveDraft()
                 }
                 .detailDockItem(visible: editing && dockShown, enterDelay: DetailDockMotion.itemInDelay, reduceMotion: reduceMotion)
@@ -1465,6 +1575,7 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "checklist", label: t("Checklist"), active: checklistOpen || !(d?.checklistItems.isEmpty ?? true),
                                 count: d?.checklistItems.count) {
                         titleFocused = false
+                        lowerEditDock()
                         checklistOpen = true
                         draft?.isChecklist = true
                         let items = draft?.checklistItems ?? []
@@ -1496,18 +1607,10 @@ struct ReminderDetailView: View {
                     QuickAction(symbol: "sparkles", label: t("Gökyüzü posteri"), active: false) { openPoster { showSkyPoster = true } }
                 }
                 .padding(.leading, 2).padding(.trailing, 12)
-                .offset(x: iconsPeek)
             }
-            // Hint (Android): shortly after the icons appear they slide a little left and back, twice.
-            .task {
-                guard !reduceMotion else { return }
-                try? await Task.sleep(for: .milliseconds(650))
-                for _ in 0..<2 {
-                    withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.42)) { iconsPeek = -36 }
-                    try? await Task.sleep(for: .milliseconds(420))
-                    withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.48)) { iconsPeek = 0 }
-                    try? await Task.sleep(for: .milliseconds(700))
-                }
+            // Date, duration and end live in the dock under the tool icons (they were a row lost under the blocks).
+            if let d = draft, !d.isCompleted, d.alertAt != nil || d.plannedDateEpochDay != nil {
+                scheduleChips(d).padding(.top, -4)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
@@ -1567,6 +1670,7 @@ struct ReminderDetailView: View {
         draft = nil
         secondaryExpanded = false
         checklistOpen = false
+        voiceRecorderOpen = false
     }
 
     /// "+" in Panodan ekle: the row becomes blocks on this card and stays in the tray for other cards.
@@ -1796,7 +1900,9 @@ struct CardStackDeck: View {
             if !cards.isEmpty {
                 card(cards[current], index: current, front: true)
                     .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
-                    .onTapGesture { if !typing { onStartTyping() } }
+                    // Only while the card is not being typed on: an always-on tap here took the touches meant for the
+                    // title / text fields and the Aa button, so nothing could be written on a stack card in Düzenle.
+                    .gesture(TapGesture().onEnded { onStartTyping() }, including: typing ? .subviews : .all)
                     .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
                     .simultaneousGesture(photoPinch, including: cards[current].imageUri != nil ? .all : .subviews)
                     .zIndex(2)
@@ -2573,14 +2679,18 @@ private struct PhotoBlockBody: View {
                 .contentShape(Rectangle())
                 .onTapGesture { if editing { onTap() } }
             if editing {
-                Button(action: remove) {
-                    RealSymbol("xmark", size: 11.5).foregroundStyle(.white)
-                        .frame(width: 22, height: 22).background(Circle().fill(.black.opacity(0.6)))
-                        .frame(width: 44, height: 44)
+                // Only on the cover now: in the grid the block's "–" badge removes it.
+                BlockOwnRemove {
+                    Button(action: remove) {
+                        RealSymbol("xmark", size: 11.5).foregroundStyle(.white)
+                            .frame(width: 22, height: 22).background(Circle().fill(.black.opacity(0.6)))
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(t("Kaldır"))
+                    .padding(.top, heroInset > 0 ? heroInset + 48 : 4)
+                    // Clear of the block's 30pt resize band on the right edge, which sat over it and took the tap.
+                    .padding(.trailing, heroInset > 0 ? 12 : 30)
                 }
-                .accessibilityLabel(t("Kaldır"))
-                .padding(.top, heroInset > 0 ? heroInset + 48 : 0)
-                .padding(.trailing, heroInset > 0 ? 12 : 0)
             }
         }
         .onChange(of: attachment.photoScale) { _, _ in syncFromAttachment() }
@@ -2807,9 +2917,21 @@ enum AttachmentStorage {
                                   displayName: url.lastPathComponent, sizeBytes: size)
     }
 
+    /// Card photos are drawn on every update of the card (the colour panel, typing); reading the 2048px JPEG from disk
+    /// each time dropped frames. Names are unique per photo, so a decoded copy is kept in memory.
+    private static let imageCache: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 40
+        return c
+    }()
+
     static func image(_ path: String) -> UIImage? {
         guard !path.isEmpty else { return nil }
-        return UIImage(contentsOfFile: directory.appendingPathComponent(path).path)
+        if let hit = imageCache.object(forKey: path as NSString) { return hit }
+        guard let loaded = UIImage(contentsOfFile: directory.appendingPathComponent(path).path) else { return nil }
+        let image = loaded.preparingForDisplay() ?? loaded
+        imageCache.setObject(image, forKey: path as NSString)
+        return image
     }
 
     static func remove(_ attachment: ReminderAttachment) {

@@ -286,3 +286,19 @@ enum RealDates {
         return f.string(from: date)
     }
 }
+
+/// REAL's motion in one place: whether motion is reduced (the system setting or REAL's own "Animasyonları azalt"), and
+/// the curves pages, panels and small confirmations share. New motion uses these; older screens move over in time.
+enum RealMotion {
+    static var reduce: Bool { UIAccessibility.isReduceMotionEnabled || UserDefaults.standard.bool(forKey: "reduce_animations") }
+    /// Pages and panels arriving: fast start, long soft landing.
+    static let enter = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.42)
+    /// Leaving: picks up speed and goes.
+    static let exit = Animation.timingCurve(0.3, 0, 0.1, 1, duration: 0.3)
+    /// Things moving across the screen (a deck page, a panel resizing).
+    static let move = Animation.interpolatingSpring(duration: 0.42, bounce: 0)
+    /// Settling after a finger lets go.
+    static let settle = Animation.interpolatingSpring(duration: 0.34, bounce: 0)
+    /// Small confirmations (a star, a tick): a short, lively spring.
+    static let pop = Animation.spring(duration: 0.35, bounce: 0.35)
+}

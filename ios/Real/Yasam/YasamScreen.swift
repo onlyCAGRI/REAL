@@ -23,8 +23,11 @@ struct YasamScreen: View {
     }
 
     @State private var shown = false
-    @State private var tilesShown = false
+    /// On from the start: the tiles ride in with the page. They used to rise in after it, so an empty black page
+    /// slid in first. Closing one of Me's own screens still plays their entrance (replayTiles).
+    @State private var tilesShown = true
     @State private var editing = false
+    @State private var tileDragging = false
     @State private var meScreen: MeScreen?
     @State private var resumeBook: String?
     @State private var discoveryTarget: (kind: DiscoveryKind, list: Bool)?
@@ -49,7 +52,6 @@ struct YasamScreen: View {
                 Color.black.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        PullToCloseMarker()
                         YasamMeHeader(greeting: YasamText.greeting(hour), bits: summaryBits, fallback: heroSentence, onBack: close)
                             .padding(.top, 8)
                             .yasamEnter(shown, delay: 0.04, y: 10)
@@ -58,16 +60,21 @@ struct YasamScreen: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                .scrollDisabled(tileDragging)
                 .allowsHitTesting(meScreen == nil)
             }
             .offset(x: reduceMotion ? 0 : (shown ? 0 : geo.size.width))
         }
+        // iOS 27 pages that slide in from the right close with the back button or a swipe from the left edge that the
+        // page follows (not a pull down, which is for sheets): Me itself here, its own screens on themselves below.
+        // Keşfet, Müzik and Kitaplar have their own.
+        .interactiveEdgeBack(enabled: meScreen == nil && !showRatings && discoveryTarget == nil && musicTarget == nil
+                                && !showPick && !editing) { close() }
         .overlay { overlays }
         .presentationBackground(.clear)
         .onAppear {
             MediaRatingStore.shared.importWatched(discovery.film.watched)
             withAnimation(reduceMotion ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: 0.42)) { shown = true }
-            replayTiles()
             if let initialScreen { meScreen = initialScreen }
         }
         .fullScreenCover(isPresented: $showMoodAdd, onDismiss: { tick += 1 }) { MoodAddSheet().liftedTopSafeArea() }
@@ -102,6 +109,7 @@ struct YasamScreen: View {
         ZStack {
             if let screen = meScreen {
                 meScreenView(screen)
+                    .interactiveEdgeBack(enabled: screen != .books) { closeScreen { meScreen = nil } }
                     .transition(Self.meTransition(reduceMotion))
                     .zIndex(3)
             }
@@ -112,6 +120,7 @@ struct YasamScreen: View {
             }
             if showRatings {
                 RatingsScreen { closeScreen { showRatings = false } }
+                    .interactiveEdgeBack { closeScreen { showRatings = false } }
                     .transition(Self.meTransition(reduceMotion))
                     .zIndex(4)
             }
@@ -129,9 +138,10 @@ struct YasamScreen: View {
     }
 
     /// MeMotion: in from the right with a small lift (340 ms), out to the right with a fade (420 ms).
+    /// No fade on the way in: the black page landed at once while its coloured top (Günlük, Moods…) faded in after it.
     static func meTransition(_ reduce: Bool) -> AnyTransition {
         reduce ? .opacity : .asymmetric(
-            insertion: .move(edge: .trailing).combined(with: .scale(scale: 0.94)).combined(with: .opacity).animation(openAnim),
+            insertion: .move(edge: .trailing).animation(openAnim),
             removal: .move(edge: .trailing).combined(with: .opacity).animation(closeAnim))
     }
 
@@ -280,7 +290,7 @@ struct YasamScreen: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if !counters.isEmpty {
-                YasamTileGrid(parts: counters, wide: layout.wide, editing: $editing, onTap: tapTile) { part, wide in
+                YasamTileGrid(parts: counters, wide: layout.wide, editing: $editing, dragging: $tileDragging, onTap: tapTile) { part, wide in
                     counterTile(part, wide: wide)
                 }
                 .yasamEnter(tilesShown, delay: 0.12, y: 14)
@@ -293,7 +303,7 @@ struct YasamScreen: View {
                 }
                 .padding(.top, 26).padding(.bottom, 12).padding(.horizontal, 4)
                 .yasamEnter(tilesShown, delay: 0.2, y: 10)
-                YasamTileGrid(parts: discover, wide: layout.wide, editing: $editing, onTap: tapTile) { part, wide in
+                YasamTileGrid(parts: discover, wide: layout.wide, editing: $editing, dragging: $tileDragging, onTap: tapTile) { part, wide in
                     discoverTile(part, wide: wide)
                 }
                 .yasamEnter(tilesShown, delay: 0.24, y: 14)

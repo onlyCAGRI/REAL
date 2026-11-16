@@ -140,10 +140,12 @@ struct VoiceRecordingBlock: View {
                 Text(t("Ses")).font(RealFont.inter(14, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
                 Spacer()
                 if editing, let onClose {
-                    Button { engine.cancel(); onClose() } label: {
-                        RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFA7A7B0)).frame(width: 32, height: 32)
+                    BlockOwnRemove {
+                        Button { engine.cancel(); onClose() } label: {
+                            RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFA7A7B0)).frame(width: 32, height: 32)
+                        }
+                        .accessibilityLabel(t("Ses bloğunu kaldır"))
                     }
-                    .accessibilityLabel(t("Ses bloğunu kaldır"))
                 }
             }
             if engine.recording {
@@ -171,6 +173,10 @@ struct VoiceRecordingBlock: View {
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .onDisappear { engine.cancel(); engine.stopPlayback() }
+        // Kaydet on the card while recording: the recording is finished and added first (it used to be dropped).
+        .onReceive(NotificationCenter.default.publisher(for: .realFinishVoiceRecording)) { _ in
+            if engine.recording, let r = engine.stop() { onRecorded(r) }
+        }
     }
 
     private func control(active: Bool) -> some View {
@@ -207,4 +213,9 @@ struct VoiceRecordingBlock: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
     }
+}
+
+extension Notification.Name {
+    /// Posted by the card's Kaydet: a voice block that is still recording stops and hands its recording over.
+    static let realFinishVoiceRecording = Notification.Name("realFinishVoiceRecording")
 }

@@ -161,6 +161,13 @@ struct HomeView: View {
     @State private var editingBuiltIn: ReminderCategory?
     @State private var showNewCategory = false
     @State private var showSettings = false
+    /// Back on Home from a pushed page: the dock waits for the zoom back to finish.
+    @State private var dockReturning = false
+    /// The home deck pager: the finger's sideways pull, each page's height and the deck's width.
+    @State private var deckDrag: CGFloat = 0
+    @State private var deckHeights: [CGFloat] = [0, 0]
+    @State private var deckWidth: CGFloat = 360
+    @State private var deckDragAxis: Axis?
     @State private var showAccountMenu = false
     @State private var showCategoryOrder = false
     @State private var showYasam = false
@@ -299,6 +306,14 @@ struct HomeView: View {
         .environment(\.cardConflicts, ReminderItem.conflictingIds(store.reminders + calendarItems.map(CalendarCards.card), now: .now))
         .scrollDismissesKeyboard(.interactively)
         .hideBottomScrollEdgeEffect()
+        .onChange(of: path.isEmpty) { _, empty in
+            guard empty else { return }
+            dockReturning = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(340))
+                withAnimation(.easeOut(duration: 0.24)) { dockReturning = false }
+            }
+        }
         .background(RealColors.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom) {
             if !selectedCategoryIds.isEmpty {
@@ -317,6 +332,10 @@ struct HomeView: View {
                             onOpenPano: { showPano = true })
                     .realPetPerch("composer")
                     .startupRise(5)
+                    // Out of the way while a card or category zooms open or back: the zooming page passed under it.
+                    // It comes back once the card has landed.
+                    .opacity(path.isEmpty && !dockReturning ? 1 : 0)
+                    .allowsHitTesting(path.isEmpty)
                     // The fade belongs to the dock: drawn above every card (stacked category cards included) and
                     // below the composer, from above the dock down to the screen edge.
                     .background(alignment: .bottom) { BottomFade() }
@@ -358,9 +377,12 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showNewCategory) { CategoryEditorSheet(existing: nil) }
         .realOverlay(isPresented: $showAccountMenu) {
-            AccountMenuOverlay(onSettings: { showSettings = true }, onCategoryOrder: { showCategoryOrder = true })
+            AccountMenuOverlay(onSettings: { withoutAnimation { showSettings = true } }, onCategoryOrder: { showCategoryOrder = true })
         }
-        .fullScreenCover(isPresented: $showSettings) { SettingsScreen { showSettings = false }.liftedTopSafeArea().pullToClose { showSettings = false } }
+        .fullScreenCover(isPresented: $showSettings) {
+            // A pushed page (in from the right, back swipe follows the finger), not a sheet from the bottom.
+            PushPage(onClosed: { showSettings = false }) { close in SettingsScreen(onBack: close).liftedTopSafeArea() }
+        }
         .sheet(isPresented: $showCategoryOrder) { CategoryOrderSheet() }
         .fullScreenCover(item: $homeBoard) { b in PanoBoardScreen(boardId: b.id).liftedTopSafeArea().presentationBackground(.black) }
         .fullScreenCover(isPresented: $showPano) { PanoScreen().liftedTopSafeArea().pullToClose { showPano = false }.presentationBackground(.black) }
@@ -391,7 +413,6 @@ struct HomeView: View {
                 path.append(.detail(id))
             })
             .liftedTopSafeArea()
-            .pullToClose { showYasam = false }
         }
         .sheet(item: $externalDetail) { ExternalCalendarEventDetail(event: $0) }
         .sheet(isPresented: $showMeRename) { YasamRenameSheet() }
@@ -456,32 +477,71 @@ struct HomeView: View {
         }
     }
 
-    /// Categories and boards share the deck's place: swipe sideways between them (HomeBoardDeck.kt pager).
+    /// Categories and boards share the deck's place: swipe sideways between them (HomeBoardDeck.kt pager). Both pages
+    /// sit side by side and follow the finger; the deck's height moves between theirs, so the list below glides
+    /// instead of jumping (the two decks used to cross-fade on top of each other).
     private var homeDeck: some View {
         let selecting = !selectedCategoryIds.isEmpty
         let news = PanoSeen.shared.unread(pano).values.contains { $0 > 0 }
+        let page = selecting ? 0 : deckPage
+        let span = deckWidth + 32   // one page: the deck and the screen margins on both sides
+        let progress = min(1, max(0, CGFloat(page) - deckDrag / span))
+        let h0 = deckHeights[0], h1 = deckHeights[1]
+        // Between pages the deck takes a height between theirs; on a page it is that page's own (so "Tümünü
+        // göster" still grows and shrinks the categories freely) and the page out of view takes no room.
+        let between = !selecting && progress > 0 && progress < 1 && h0 > 0 && h1 > 0
+        let height: CGFloat? = between ? h0 + (h1 - h0) * progress : nil
         return VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                if deckPage == 0 || selecting {
-                    categoryDeck.transition(.offset(x: -60).combined(with: .opacity))
-                } else {
+                categoryDeck
+                    .fixedSize(horizontal: false, vertical: true)   // keep its height; the mask cuts it, nothing squeezes it
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { deckHeights[0] = $0 }
+                    .frame(height: progress >= 1 ? 0 : nil, alignment: .top)
+                    .offset(x: -progress * span)
+                    .allowsHitTesting(progress < 0.5)
+                if !selecting {
                     HomeBoardDeck(previewCount: previewCount) { homeBoard = $0 }
-                        .transition(.offset(x: 60).combined(with: .opacity))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { deckHeights[1] = $0 }
+                        .frame(height: progress <= 0 ? 0 : nil, alignment: .top)
+                        .offset(x: (1 - progress) * span)
+                        .allowsHitTesting(progress >= 0.5)
+                        .accessibilityHidden(progress < 0.5)
                 }
             }
-            .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { v in
-                let dx = v.translation.width
-                guard abs(dx) > 60, abs(dx) > abs(v.translation.height) * 1.5 else { return }
-                let page = dx < 0 ? 1 : 0
-                guard page != deckPage else { return }
-                UISelectionFeedbackGenerator().selectionChanged()
-                withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.32)) { deckPage = page }
-            }, including: selecting ? .subviews : .all)
+            .frame(height: height, alignment: .top)
+            // Cut the page that is not shown at the deck's height, but let both slide in from the screen's edges.
+            .mask { Rectangle().padding(.horizontal, -48).padding(.bottom, -2) }
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { deckWidth = $0 }
+            .simultaneousGesture(DragGesture(minimumDistance: 14)
+                .onChanged { v in
+                    if deckDragAxis == nil {
+                        deckDragAxis = abs(v.translation.width) > abs(v.translation.height) * 1.2 ? .horizontal : .vertical
+                    }
+                    guard deckDragAxis == .horizontal else { return }
+                    var dx = v.translation.width
+                    // Past the first or last page it gives a little and pulls back.
+                    if (page == 0 && dx > 0) || (page == 1 && dx < 0) { dx *= 0.22 }
+                    var t = Transaction(); t.disablesAnimations = true
+                    withTransaction(t) { deckDrag = dx }
+                }
+                .onEnded { v in
+                    defer { deckDragAxis = nil }
+                    guard deckDragAxis == .horizontal else { return }
+                    let dx = v.translation.width, flick = v.predictedEndTranslation.width
+                    var next = page
+                    if dx < -span * 0.3 || flick < -span * 0.5 { next = 1 } else if dx > span * 0.3 || flick > span * 0.5 { next = 0 }
+                    if next != deckPage { UISelectionFeedbackGenerator().selectionChanged() }
+                    withAnimation(RealMotion.move) { deckPage = next; deckDrag = 0 }
+                }, including: selecting ? .subviews : .all)
             if !selecting {
                 HomeDeckDots(page: deckPage, boardsNews: news)
                     .padding(.bottom, 10)
                     .contentShape(Rectangle())
-                    .onTapGesture { withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.32)) { deckPage = 1 - deckPage } }
+                    .onTapGesture {
+                        UISelectionFeedbackGenerator().selectionChanged()
+                        withAnimation(RealMotion.move) { deckPage = 1 - deckPage }
+                    }
             }
         }
         .onAppear { pano.requestSync(delay: 0.4) }
@@ -634,7 +694,24 @@ struct PressScaleStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+            .brightness(configuration.isPressed ? -0.04 : 0)
+            // Down quickly with the finger, back up with a little life when it lifts.
+            .animation(configuration.isPressed ? .easeOut(duration: 0.12) : .spring(duration: 0.36, bounce: 0.35),
+                       value: configuration.isPressed)
+    }
+}
+
+/// A row in a list or menu: a soft highlight behind it while pressed (iOS's own menus), no shrinking.
+struct PressRowStyle: ButtonStyle {
+    var cornerRadius: CGFloat = 14
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.white.opacity(configuration.isPressed ? 0.09 : 0))
+                    .padding(.horizontal, -8)
+            }
+            .animation(configuration.isPressed ? nil : .easeOut(duration: 0.25), value: configuration.isPressed)
     }
 }
 

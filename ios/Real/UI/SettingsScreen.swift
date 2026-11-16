@@ -148,15 +148,16 @@ struct AccountMenuOverlay: View {
             }
             .padding(.vertical, 6).contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressRowStyle())
         .accessibilityLabel(label)
     }
 
     private func close(then: (() -> Void)? = nil) {
-        withAnimation(.easeIn(duration: 0.18)) { progress = 0 }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+        // The next page starts as the menu fades (it used to wait for the menu and a beat after it).
+        withAnimation(.easeIn(duration: 0.14)) { progress = 0 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
             withoutAnimation { dismiss() }
-            if let then { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { then() } }
+            if let then { DispatchQueue.main.async { then() } }
         }
     }
 }
@@ -230,7 +231,7 @@ struct SettingsScreen: View {
     var body: some View {
         SettingsLayout(onBack: {
             if page != .main { withAnimation(.easeOut(duration: 0.2)) { page = .main } } else { onBack() }
-        }) {
+        }, interactiveBack: page == .main) {
             switch page {
             case .main: mainPage
             case .developer: developerPage
@@ -338,10 +339,16 @@ struct SettingsScreen: View {
         .padding(.top, 6)
         SettingsSectionHeader(title: t("BİLDİRİMLER VE ALARMLAR"))
         SettingsGlassGroup {
-            SettingsStatusRow(icon: .bell, title: t("Bildirim izni"), status: notificationsAllowed ? t("Açık") : t("Kapalı"),
+            // One row for notifications: Android's separate "Hatırlatıcı kanalı" only opened iOS's notification settings,
+            // and "Tam saatinde hatırlatma" was always on with nothing to change on iOS.
+            SettingsStatusRow(icon: .bell, title: t("Bildirimler"), status: notificationsAllowed ? t("Açık") : t("Kapalı"),
                               statusColor: notificationsAllowed ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFA5A5AF),
-                              subtitle: notificationsAllowed ? t("Hatırlatıcı bildirimleri bu cihazda etkin.") : t("Bildirimleri alabilmek için bildirim iznini açabilirsin."),
-                              actionLabel: notificationsAllowed ? nil : t("İzni aç")) {
+                              subtitle: notificationsAllowed ? t("Hatırlatıcılar bu cihazda açık.") : t("Hatırlatıcıları alabilmek için izni aç."),
+                              actionLabel: notificationsAllowed ? t("Ses ve görünüm") : t("İzni aç")) {
+                if notificationsAllowed {
+                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+                    return
+                }
                 // Never asked: iOS's question here (Settings would have no Notifications row yet); otherwise iOS Settings.
                 Task {
                     await NotificationScheduler.allowFromSettings()
@@ -350,25 +357,14 @@ struct SettingsScreen: View {
                 }
             }
             SettingsDivider()
-            // Android's "Hatırlatıcı kanalı" is a per-channel setting; iOS keeps sound/banners in the app's notification settings.
-            SettingsStatusRow(icon: .settings, title: t("Hatırlatıcı kanalı"), status: notificationsAllowed ? t("Açık") : t("Kapalı"),
-                              statusColor: notificationsAllowed ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFA5A5AF),
-                              subtitle: t("Ses, titreşim ve kilit ekranı uyarıları iOS bildirim ayarlarından yönetilir."),
-                              actionLabel: t("Kanal ayarları")) {
-                if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
-            }
-            SettingsDivider()
-            SettingsStatusRow(icon: .calendar, title: t("Tam saatinde hatırlatma"), status: t("Açık"), statusColor: Color(argb: 0xFF91B9FF),
-                              subtitle: t("Alarmlar tam zamanında çalacak şekilde ayarlandı."), actionLabel: nil, action: {})
-            SettingsDivider()
             // Alarm cards: iOS plays its own alarm sound (apps cannot use the phone's ringtones); REAL's page has its chime.
             if #available(iOS 26.0, *) {
                 let allowed = alarmAllowed ?? RealAlarmKit.authorized
                 SettingsStatusRow(icon: .bell, title: t("Alarm izni"), status: allowed ? t("Açık") : t("Kapalı"),
                                   statusColor: allowed ? Color(argb: 0xFF91B9FF) : Color(argb: 0xFFA5A5AF),
-                                  subtitle: allowed ? t("Alarm kartları sessiz moddayken de tam ekran çalar.")
-                                                    : t("Alarm kartlarının sessiz modu delip çalması için izni aç."),
-                                  actionLabel: allowed ? nil : t("İzni aç")) {
+                                  subtitle: allowed ? t("Alarm kartları sessiz modda da çalar.")
+                                                    : t("Alarm kartları sessiz modda da çalsın diye izin ver."),
+                                  actionLabel: allowed ? nil : t("İzin ver")) {
                     Task {
                         let ok = await RealAlarmKit.requestAuthorization()
                         alarmAllowed = ok
@@ -383,8 +379,8 @@ struct SettingsScreen: View {
         SettingsSectionHeader(title: t("ANA EKRAN VE KARTLAR"))
         SettingsGlassGroup {
             // Me: on/off, its name (the person picks it) and its cards.
-            SettingsToggleRow(icon: .cards, title: YasamLayout.shared.name,
-                              subtitle: t("Logonun yanında. Kapatınca ana ekrandan kalkar; verilerin silinmez."),
+            SettingsToggleRow(icon: .person, title: YasamLayout.shared.name,
+                              subtitle: t("Logonun yanında. Kapatsan da verilerin kalır."),
                               isOn: Binding(get: { YasamLayout.shared.enabled }, set: { YasamLayout.shared.setEnabled($0) }))
             if YasamLayout.shared.enabled {
                 SettingsDivider()
@@ -397,21 +393,21 @@ struct SettingsScreen: View {
                 }
             }
             SettingsDivider()
-            SettingsToggleRow(icon: .check, title: t("Sade kartlar (Deneysel)"),
-                              subtitle: t("Ana ekranda tamamlama yuvarlağı yok; kartı sağa kaydırınca tamamlanır."), isOn: $plainCards)
+            SettingsToggleRow(icon: .check, title: t("Sade kartlar"),
+                              subtitle: t("Deneysel. Tamamlamak için kartı sağa kaydır."), isOn: $plainCards)
             SettingsDivider()
-            SettingsToggleRow(icon: .bell, title: t("Bağlam kartları"), subtitle: t("Ana ekranın altında arada su, mood, kitap ve film önerisi gösterir"), isOn: $contextCards)
+            SettingsToggleRow(icon: .category, title: t("Bağlam kartları"), subtitle: t("Ana ekranın altında ara sıra öneri kartları"), isOn: $contextCards)
             SettingsDivider()
             // Kapalı / 7 gün / 14 gün, picked in a sheet.
             SettingsChoiceRow(icon: .calendar, title: t("Ana ekranda takvim"),
                               value: calendarHomeDays > 0 ? t("Önümüzdeki {0} gün", calendarHomeDays) : t("Kapalı")) { sheet = .calendar }
             SettingsDivider()
             // "Çıkma vakti": how the time to leave for a card's place is counted.
-            SettingsChoiceRow(icon: .pin, title: t("Yola çıkış"),
+            SettingsChoiceRow(icon: .pin, title: t("Yola çıkış"), subtitle: t("Konumlu kartlarda ne zaman yola çıkacağın"),
                               value: (TravelMode(rawValue: travelModeRaw) ?? .average).label) { sheet = .travel }
             SettingsDivider()
             if RealPet.available {
-                SettingsChoiceRow(icon: .cat, title: "Vi", value: petMode == "kapali" ? t("Kapalı") : t("Açık")) { sheet = .vi }
+                SettingsChoiceRow(icon: .cat, title: "Vi", subtitle: t("Ana ekrandaki kedi"), value: petMode == "kapali" ? t("Kapalı") : t("Açık")) { sheet = .vi }
             } else {
                 SettingsToggleRow(icon: .cat, title: "Vi", subtitle: t("Geçici olarak devre dışı bırakıldı"), isOn: .constant(false), enabled: false)
             }
@@ -655,6 +651,8 @@ struct CatalogSourceNotice {
 struct SettingsLayout<Content: View>: View {
     let onBack: () -> Void
     var title = t("Ayarlar")
+    /// The page itself follows the back swipe (a page that closes); off for a sub-page, which steps back instead.
+    var interactiveBack = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -669,13 +667,22 @@ struct SettingsLayout<Content: View>: View {
                 }
             }
             .ignoresSafeArea()
+            // One layer: the groups scroll straight on the page and pass under the header. The page used to sit in a
+            // large glass box of its own, which cut the groups' corners and let their edges run past its rounded end.
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) { PullToCloseMarker(); content() }
-                    .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 28)
+                VStack(alignment: .leading, spacing: 0) { content() }
+                    .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 28)
             }
             .scrollIndicators(.hidden)
-            .liquidGlass(RoundedRectangle(cornerRadius: 34, style: .continuous), role: .sheet)
-            .padding(.horizontal, 12).padding(.top, 70).padding(.bottom, 10)
+            .safeAreaInset(edge: .top, spacing: 6) { header }
+        }
+        .background(Color.black.ignoresSafeArea())
+        // Pages, as in iOS's own Settings: the back button or a swipe from the left edge (a sub-page first).
+        .edgeSwipeBack(enabled: !interactiveBack) { onBack() }
+        .interactiveEdgeBack(enabled: interactiveBack) { onBack() }
+    }
+
+    private var header: some View {
             ZStack {
                 HStack {
                     Button(action: onBack) {
@@ -689,10 +696,16 @@ struct SettingsLayout<Content: View>: View {
             }
             .padding(.horizontal, 4)
             .frame(height: 52)
-            .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous), role: .chrome)
+            // Frosted: rows pass under the header now, and clear glass let their words read through the title.
+            .liquidGlass(RoundedRectangle(cornerRadius: 26, style: .continuous), role: .chrome, frosted: true)
             .padding(.horizontal, 16).padding(.top, 8)
-        }
-        .background(Color.black.ignoresSafeArea())
+            // The status bar above it darkens, so scrolled rows fade out instead of running under the clock.
+            .background(alignment: .top) {
+                LinearGradient(colors: [.black, .black.opacity(0.8), .clear], startPoint: .top, endPoint: .bottom)
+                    .padding(.bottom, -14)
+                    .ignoresSafeArea(edges: .top)
+                    .allowsHitTesting(false)
+            }
     }
 }
 
@@ -797,7 +810,7 @@ struct SettingsStatusRow: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 14) {
                 SettingsIconTile(icon: icon)
                 VStack(alignment: .leading, spacing: 0) {
@@ -814,14 +827,18 @@ struct SettingsStatusRow: View {
                 }
             }
             if let actionLabel {
+                // A link under the text (it used to be a large button on a line of its own, making the row tall).
                 Button(action: action) {
-                    Text(actionLabel).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFF91B9FF))
-                        .padding(.horizontal, 16).padding(.vertical, 8)
-                        .background(Capsule().fill(.white.opacity(0.09)))
-                        .overlay(Capsule().strokeBorder(liquidRim(.chrome), lineWidth: 0.75))
+                    HStack(spacing: 3) {
+                        Text(actionLabel).font(RealFont.inter(13.5, .semibold))
+                        ActionIcon(.chevronRight, color: Color(argb: 0xFF91B9FF), size: 12)
+                    }
+                    .foregroundStyle(Color(argb: 0xFF91B9FF))
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 10)
+                .padding(.leading, 50).padding(.top, 4)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)

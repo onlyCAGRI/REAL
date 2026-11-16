@@ -69,7 +69,7 @@ enum DateSuggestion {
 }
 
 /// HomeLiquidDock + GlassComposer. Collapsed: calendar circle · "Add to REAL" capsule · mic circle.
-/// Pull up: Yaşam / Pano / Takvim bar. Tap: full-width glass panel with the tool row.
+/// Tap: full-width glass panel with the tool row.
 struct ComposerBar: View {
     @Environment(ReminderStore.self) private var store
     var defaultCategoryId: Int64?
@@ -101,8 +101,6 @@ struct ComposerBar: View {
     @State private var pickForTrigger = false
     @State private var placeTrigger: LocationTrigger?
     @State private var placePermission = PlaceReminderPermission()
-    @State private var navExpanded = false
-    @State private var hintLift: CGFloat = 0
     /// Full screen (pushed up on the open panel): the detail rows, a note under the title, the tray of everything added.
     @State var fullScreen = false
     @State var fsPage: FullScreenPage?
@@ -152,8 +150,8 @@ struct ComposerBar: View {
                     else { composerPanel }
                 }
                 .animation(.timingCurve(0.16, 1, 0.3, 1, duration: 0.24), value: voice.phase)
-                    .padding(.horizontal, showChrome && !navExpanded ? 56 : 0)
-                if showChrome && !navExpanded {
+                    .padding(.horizontal, showChrome ? 56 : 0)
+                if showChrome {
                     HStack {
                         Button { onOpenPlanner?() } label: {
                             RealSymbol("calendar", size: 21.8).foregroundStyle(.white)
@@ -169,15 +167,6 @@ struct ComposerBar: View {
                     .transition(.opacity)
                 }
             }
-            if showChrome && navExpanded {
-                HStack(spacing: 12) {
-                    navigationBar
-                    micCircle
-                }
-                // The buttons here hold on to the touch, so the swipe back down is watched on them too.
-                .simultaneousGesture(dockSwipe)
-                .transition(.opacity)
-            }
         }
         .padding(.horizontal, 16)
         .opacity((1 - swapOut) * swapIn)
@@ -186,29 +175,11 @@ struct ComposerBar: View {
         // Dock bottom edge on the safe area (~34pt above the screen edge), like Android's nav-bar inset + 12dp: a swipe
         // starting on the dock stays clear of the home-indicator gesture, so it no longer sends people to the launcher.
         .padding(.bottom, expanded ? 8 : 0)
-        .animation(.spring(response: 0.34, dampingFraction: 0.85), value: navExpanded)
-        .offset(y: hintLift)
-        // Pull-up hint (Android, every time home shows): after a quiet moment the dock lifts a little, twice; motion only.
-        .task(id: showChrome && !navExpanded) {
-            hintLift = 0
-            guard showChrome, !navExpanded, !reduceMotion else { return }
-            try? await Task.sleep(for: .milliseconds(2500))
-            for _ in 0..<2 {
-                guard !Task.isCancelled else { break }
-                withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.28)) { hintLift = -14 }
-                try? await Task.sleep(for: .milliseconds(280))
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.42)) { hintLift = 0 }
-                try? await Task.sleep(for: .milliseconds(900))
-            }
-            hintLift = 0
-        }
-        .highPriorityGesture(dockSwipe)
         .onChange(of: wantsExpanded) { _, want in
             swapTask?.cancel()
             swapTask = Task { @MainActor in await swapPanel(to: want) }
         }
         .onChange(of: expanded) { _, e in
-            if e { navExpanded = false }
             if isHome { RealPet.shared.composer(expanded: e) }
         }
         .onChange(of: voice.phase) { _, phase in if isHome { RealPet.shared.mic(active: phase != .idle) } }
@@ -251,14 +222,6 @@ struct ComposerBar: View {
 
     // MARK: Dock chrome
 
-    /// Up shows Yaşam · Pano · Takvim, down puts them away.
-    private var dockSwipe: some Gesture {
-        DragGesture(minimumDistance: 20).onEnded { value in
-            guard showChrome else { return }
-            if value.translation.height < -28 { navExpanded = true } else if value.translation.height > 28 { navExpanded = false }
-        }
-    }
-
     private func dockCircle(symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             RealSymbol(symbol, size: 21.8).foregroundStyle(.white)
@@ -272,32 +235,6 @@ struct ComposerBar: View {
 
     private var micCircle: some View {
         dockCircle(symbol: "mic", label: t("Sesle REAL oluştur")) { startVoice() }
-    }
-
-    /// HomeDockExpandedNavigation: Yaşam · Pano · Takvim, Takvim selected.
-    private var navigationBar: some View {
-        HStack(spacing: 0) {
-            navItem(YasamLayout.shared.name, "rectangle.stack", selected: false) { navExpanded = false; onOpenYasam?() }
-            navItem(t("Pano"), "square.grid.2x2", selected: false) { navExpanded = false; onOpenPano?() }
-            navItem(t("Takvim"), "calendar", selected: true) { navExpanded = false; onOpenPlanner?() }
-        }
-        .padding(.horizontal, 5)
-        .frame(height: 60)
-        .background { Color.clear.liquidGlass(Capsule()).matchedGeometryEffect(id: "dockNav", in: dockNS) }
-    }
-
-    private func navItem(_ label: String, _ symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 1) {
-                RealSymbol(symbol, size: 21.8)
-                Text(label).font(RealFont.inter(12, selected ? .semibold : .medium)).lineLimit(1)
-            }
-            .foregroundStyle(selected ? Color.white : Color(argb: 0xFFB8B8BE))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background { if selected { Capsule().fill(LiquidGlassTokens.dockSelectedPill) } }
-            .padding(.vertical, 5)
-        }
-        .accessibilityValue(selected ? t("Seçili") : "")
     }
 
     // MARK: Composer panel
@@ -319,9 +256,9 @@ struct ComposerBar: View {
         .padding(.top, expanded ? 12 : 0)
         .padding(.bottom, expanded ? 6 : 0)
         .frame(minHeight: expanded ? 118 : 54)
-        .liquidGlass(shape, dim: expanded ? 0.26 : 0)
-        // A swipe on the closed bar moves the dock (Yaşam, Pano); only the open panel grows.
-        .simultaneousGesture(dockSwipe)
+        // Open, it holds typed text: frosted glass, so the cards passing behind no longer read through the words.
+        .liquidGlass(shape, dim: expanded ? 0.2 : 0, frosted: expanded)
+        // The closed bar no longer pulls up into Yaşam · Pano · Takvim (Me sits beside the brand, Pano beside the deck).
         .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { v in
             guard expanded, voice.phase == .idle, v.translation.height < -40,
                   abs(v.translation.height) > abs(v.translation.width) * 1.5 else { return }

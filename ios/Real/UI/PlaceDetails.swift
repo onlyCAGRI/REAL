@@ -9,6 +9,11 @@ struct PlaceDetails: View {
     let location: ReminderLocation
     @State private var scene: MKLookAroundScene?
     @State private var noLookAround = false
+    @State private var lookImage: UIImage?
+    @State private var showLook = false
+    /// Scenes found this run (or nil: none here) and their stills, so a card opened again shows them at once.
+    @MainActor private static var scenes: [String: MKLookAroundScene?] = [:]
+    @MainActor private static var stills: [String: UIImage] = [:]
     @State private var streetView = false
     @State private var item: MKMapItem?
 
@@ -20,9 +25,30 @@ struct PlaceDetails: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let scene {
-                LookAroundPreview(initialScene: scene, allowsNavigation: true, badgePosition: .bottomTrailing)
-                    .frame(height: 140)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // A still of the scene that fades in once it is drawn (the live preview sat black while it loaded),
+                // with Apple's badge; a tap opens the full Look Around.
+                Button { showLook = true } label: {
+                    // The still carries Apple's own Maps badge; ours only names the action.
+                    Color.white.opacity(0.06)
+                        .frame(maxWidth: .infinity).frame(height: 140)
+                        .overlay {
+                            if let lookImage {
+                                Image(uiImage: lookImage).resizable().scaledToFill().transition(.opacity)
+                            }
+                        }
+                        .overlay(alignment: .bottomTrailing) {
+                            Label(t("Etrafa Bak"), systemImage: "binoculars.fill")
+                                .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(Capsule().fill(.black.opacity(0.6)))
+                                .padding(10)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(PressScaleStyle(scale: 0.98))
+                .lookAroundViewer(isPresented: $showLook, initialScene: scene)
+                .task(id: sceneKey) { await drawLook(scene) }
             }
             let phone = item?.phoneNumber.flatMap { $0.isEmpty ? nil : $0 }
             let site = item?.url
@@ -83,11 +109,32 @@ struct PlaceDetails: View {
         return x.count >= 3 && y.count >= 3 && (x == y || x.hasPrefix(y) || y.hasPrefix(x))
     }
 
+    private func drawLook(_ scene: MKLookAroundScene) async {
+        let key = sceneKey
+        if let still = Self.stills[key] { lookImage = still; return }
+        let options = MKLookAroundSnapshotter.Options()
+        options.size = CGSize(width: 344, height: 140)   // the tile's own shape, so Apple's badge is not cropped
+        guard let image = try? await MKLookAroundSnapshotter(scene: scene, options: options).snapshot.image,
+              !Task.isCancelled else { return }
+        Self.stills[key] = image
+        withAnimation(.easeOut(duration: 0.35)) { lookImage = image }
+    }
+
+    private static func scene(at c: CLLocationCoordinate2D, known: MKLookAroundScene??) async -> MKLookAroundScene? {
+        if let known { return known }
+        return try? await MKLookAroundSceneRequest(coordinate: c).scene
+    }
+
+    private var sceneKey: String { String(format: "%.5f,%.5f", location.latitude ?? 0, location.longitude ?? 0) }
+
     private func load() async {
-        scene = nil
         noLookAround = false
-        guard let c = coordinate else { return }
-        async let look = try? await MKLookAroundSceneRequest(coordinate: c).scene
+        guard let c = coordinate else { scene = nil; return }
+        let key = sceneKey
+        if let remembered = Self.scenes[key] { scene = remembered; noLookAround = remembered == nil } else { scene = nil }
+        lookImage = Self.stills[key]
+        let known = Self.scenes[key]
+        async let look = Self.scene(at: c, known: known)
         // The business at the pin: Apple Maps' result for its name, only when it is really this place (within 150 m
         // and the same name; a street or an address picked by hand never borrows a nearby shop's phone).
         let request = MKLocalSearch.Request()
@@ -101,6 +148,7 @@ struct PlaceDetails: View {
         }
         let s = await look
         guard !Task.isCancelled else { return }
+        Self.scenes[key] = s
         withAnimation(.easeOut(duration: 0.25)) {
             scene = s
             noLookAround = (s == nil)

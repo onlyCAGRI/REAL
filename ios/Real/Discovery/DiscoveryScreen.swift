@@ -427,7 +427,7 @@ struct DiscoveryLoadingButton: View {
         .disabled(!enabled || loading)
         .padding(.horizontal, 28)
         .onChange(of: loading) { _, l in
-            if l { spin = false; withAnimation(.linear(duration: 2.6).repeatForever(autoreverses: false)) { spin = true } }
+            if l, !RealMotion.reduce { spin = false; withAnimation(.linear(duration: 2.6).repeatForever(autoreverses: false)) { spin = true } }
             else { withAnimation(.linear(duration: 0)) { spin = false } }
         }
     }
@@ -465,7 +465,7 @@ struct PosterEdgeGlow: View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
             let pad = max(w, h) * 0.8
-            TimelineView(.animation(paused: !playing)) { t in
+            TimelineView(.animation(paused: !playing || RealMotion.reduce)) { t in
                 let beat = playing ? (pulse?() ?? Self.beat(t.date.timeIntervalSinceReferenceDate)) : 0
                 Canvas { ctx, _ in
                     let radius = w * (0.47 + 0.14 * beat)
@@ -993,8 +993,10 @@ struct MediaBlockView: View {
                 Text(block.type == .MOVIE ? t("Film") : t("Dizi")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFA5A5B0))
                 Spacer()
                 if editing {
-                    Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 40, height: 40) }
-                        .accessibilityLabel(t("İçeriği kaldır"))
+                    BlockOwnRemove {
+                        Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 40, height: 40) }
+                            .accessibilityLabel(t("İçeriği kaldır"))
+                    }
                 }
             }
             HStack(alignment: .top, spacing: 12) {

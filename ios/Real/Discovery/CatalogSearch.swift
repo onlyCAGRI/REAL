@@ -637,8 +637,10 @@ struct MusicBlockView: View {
             if editing {
                 HStack {
                     Spacer()
-                    Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 36, height: 36) }
-                        .accessibilityLabel(t("İçeriği kaldır"))
+                    BlockOwnRemove {
+                        Button(action: onRemove) { RealSymbol("xmark", size: 14.9).foregroundStyle(Color(argb: 0xFFB8B8C2)).frame(width: 36, height: 36) }
+                            .accessibilityLabel(t("İçeriği kaldır"))
+                    }
                 }
             }
             HStack(alignment: .top, spacing: 12) {

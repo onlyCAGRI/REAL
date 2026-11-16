@@ -1,7 +1,9 @@
 import SwiftUI
+import Vision
 
 // Me > Alkol (YasamAlcohol.kt): camera first; while the photo is read the screen fills with a grey liquid you drag up or
 // down for the amount, which turns the drink's colour once it is known; then a name step with suggestions and kinds.
+// A photo with no writing on it (an unlabelled glass) skips the guess and opens the manual step straight away.
 
 private enum AlcoholStage { case idle, pour, name }
 
@@ -19,6 +21,8 @@ struct YasamAlcoholScreen: View {
     @State private var swipeOpen: String?
     @State private var scanning = false
     @State private var guess: DrinkGuess?
+    /// The photo had no readable writing: no guess was asked for, the manual step (kinds and portions) opened directly.
+    @State private var noLabel = false
     @State private var kind: DrinkKind?
     @State private var ml = 330
     @State private var mlTouched = false
@@ -166,7 +170,7 @@ struct YasamAlcoholScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 12) {
-                    YasamBackButton { if photo != nil { withAnimation { stage = .pour } } else { reset(dropPhoto: true) } }
+                    YasamBackButton { if photo != nil && !noLabel { withAnimation { stage = .pour } } else { reset(dropPhoto: true) } }
                     Text(t("Alkol")).font(RealFont.inter(28, .bold)).foregroundStyle(.white)
                 }
                 if let url = photo.map({ YasamDrinkLog.dir.appendingPathComponent($0) }), let image = UIImage(contentsOfFile: url.path) {
@@ -184,7 +188,7 @@ struct YasamAlcoholScreen: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 16).padding(.bottom, 10)
                 let suggestions = (guess?.names ?? []).isEmpty
-                    ? (photo == nil ? Array(NSOrderedSet(array: entries.reversed().map(\.name)).array.compactMap { $0 as? String }.prefix(3)) : [])
+                    ? (photo == nil || noLabel ? Array(NSOrderedSet(array: entries.reversed().map(\.name)).array.compactMap { $0 as? String }.prefix(3)) : [])
                     : guess!.names
                 if !suggestions.isEmpty {
                     ChipFlow(spacing: 6, lineSpacing: 6) {
@@ -200,7 +204,7 @@ struct YasamAlcoholScreen: View {
                     }
                 }
                 .padding(.top, 10)
-                if photo == nil {
+                if photo == nil || noLabel {
                     ChipFlow(spacing: 6, lineSpacing: 6) {
                         ForEach(kind?.portions ?? DrinkKind.unknownPortions, id: \.1) { label, v in
                             DrinkChip(label: t(label), on: v == ml) { ml = v; mlTouched = true }
@@ -238,7 +242,7 @@ struct YasamAlcoholScreen: View {
 
     private var question: String {
         if let g = guess, g.recognized, let k = g.kind { return t("Bu bir {0} gibi. Adı ne olsun?", k.label.lowercased(with: I18n.locale)) }
-        if photo != nil { return t("Ne olduğunu çıkaramadım. Türünü seç ya da adını yaz.") }
+        if photo != nil && !noLabel { return t("Ne olduğunu çıkaramadım. Türünü seç ya da adını yaz.") }
         return t("Ne içtin? Türünü seç, istersen ad yaz.")
     }
 
@@ -246,10 +250,19 @@ struct YasamAlcoholScreen: View {
 
     private func took(_ data: Data) {
         guard let image = UIImage(data: data), let kept = YasamDrinkLog.keepPhoto(image) else { return }
-        photo = kept; guess = nil; kind = nil; name = ""; ml = 330; mlTouched = false
+        photo = kept; guess = nil; kind = nil; name = ""; ml = 330; mlTouched = false; noLabel = false
         scanning = true
-        withAnimation(.easeOut(duration: 0.25)) { stage = .pour }
         Task { @MainActor in
+            // Nothing written on it (no label, no brand): there is nothing to read, so straight to the manual step.
+            guard await DrinkLabelText.hasText(image) else {
+                guard photo == kept else { return }
+                scanning = false
+                noLabel = true
+                withAnimation(.easeOut(duration: 0.25)) { stage = .name }
+                return
+            }
+            guard photo == kept else { return }
+            withAnimation(.easeOut(duration: 0.25)) { stage = .pour }
             // Read in the background while the liquid asks for the amount.
             let g = try? await DrinkRecognizer.recognize(image)
             guard photo == kept else { return }
@@ -265,7 +278,7 @@ struct YasamAlcoholScreen: View {
 
     private func reset(dropPhoto: Bool) {
         if dropPhoto, let p = photo { try? FileManager.default.removeItem(at: YasamDrinkLog.dir.appendingPathComponent(p)) }
-        photo = nil; guess = nil; kind = nil; name = ""; ml = 330; mlTouched = false; scanning = false
+        photo = nil; guess = nil; kind = nil; name = ""; ml = 330; mlTouched = false; scanning = false; noLabel = false
         nameFocused = false
         withAnimation(.easeOut(duration: 0.25)) { stage = .idle }
     }
@@ -488,5 +501,31 @@ private struct DrinkThumb: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+/// On-device check (Vision, no network) for any readable writing on a drink photo, before the AI guess is asked for.
+enum DrinkLabelText {
+    static func hasText(_ image: UIImage) async -> Bool {
+        // Drawn upright first, so the photo's orientation does not matter to Vision.
+        guard let cg = image.yasamScaled(maxSide: 1280).cgImage else { return true }
+        return await withCheckedContinuation { done in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = .accurate
+                request.usesLanguageCorrection = false
+                // A failed read must not hide the guess: treat it as "has text" and let the AI look.
+                guard (try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])) != nil else {
+                    done.resume(returning: true); return
+                }
+                let letters = (request.results ?? [])
+                    .compactMap { $0.topCandidates(1).first }
+                    .filter { $0.confidence >= 0.3 }
+                    .map(\.string).joined()
+                    .filter(\.isLetter)
+                // A stray mark is not a label: a few letters are needed.
+                done.resume(returning: letters.count >= 3)
+            }
+        }
     }
 }

@@ -77,6 +77,7 @@ struct PanoScreen: View {
                 }
                 .padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 32)
             }
+            .pullToCloseSource()
         }
         .background(Color.black.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)

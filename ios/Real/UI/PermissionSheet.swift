@@ -173,7 +173,7 @@ struct PermissionHero: View {
     var body: some View {
         ZStack {
             Circle().fill(RadialGradient(colors: [.white.opacity(0.07), .clear], center: .center, startRadius: 0, endRadius: 68))
-            TimelineView(.animation) { tl in
+            TimelineView(.animation(paused: RealMotion.reduce)) { tl in
                 let t = tl.date.timeIntervalSinceReferenceDate
                 ZStack {
                     ForEach(0..<3, id: \.self) { i in
@@ -190,7 +190,7 @@ struct PermissionHero: View {
                 .liquidGlass(Circle(), role: .chrome)
         }
         .frame(width: 136, height: 136)
-        .onAppear { withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) { breathe = true } }
+        .onAppear { guard !RealMotion.reduce else { return }; withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) { breathe = true } }
     }
 }
 

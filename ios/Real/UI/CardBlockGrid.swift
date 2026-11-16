@@ -119,7 +119,14 @@ extension EnvironmentValues {
         get { self[CardBlockHeightKey.self] }
         set { self[CardBlockHeightKey.self] = newValue }
     }
+    /// The grid shows its own "–" badge for removing this block, so the block hides its own ✕.
+    var cardBlockRemoveBadge: Bool {
+        get { self[CardBlockRemoveBadgeKey.self] }
+        set { self[CardBlockRemoveBadgeKey.self] = newValue }
+    }
 }
+
+private struct CardBlockRemoveBadgeKey: EnvironmentKey { static let defaultValue = false }
 
 // MARK: - Free placement geometry (CardFreePlacement.kt + CardDetailSizing.kt)
 
@@ -289,6 +296,10 @@ struct CardBlockGrid<Block: View>: View {
     var onResizeBegan: () -> Void = {}
     /// True while a block is lifted, so the screen can slide its docks away.
     var onMovingChange: (Bool) -> Void = { _ in }
+    /// Removing a block in Düzenle: one "–" badge on its top-left corner, the same on every block (as on the Home
+    /// Screen and Me's tiles). Each block used to carry its own ✕ in a different place and size.
+    var removable: (String) -> Bool = { _ in false }
+    var onRemove: ((String) -> Void)? = nil
     @ViewBuilder let block: (String) -> Block
 
     @State private var selected: String?
@@ -357,8 +368,10 @@ struct CardBlockGrid<Block: View>: View {
         let p = placement(key)
         let minH = isCatalog(key) ? 0 : CGFloat(p.minHeight)
         let isMoving = moving == key
+        let badge = editing && onRemove != nil && removable(key)
         block(key)
             .environment(\.cardBlockHeight, minH)
+            .environment(\.cardBlockRemoveBadge, badge)
             .frame(maxWidth: .infinity, minHeight: minH > 0 ? minH : nil, alignment: .top)
             .background(GeometryReader { g in
                 Color.clear.preference(key: CellFrameKey.self, value: [key: g.frame(in: .named("cardGrid"))])
@@ -372,13 +385,56 @@ struct CardBlockGrid<Block: View>: View {
             .overlay(alignment: .bottom) { if editing && !isMoving { bottomHandle(key) } }
             .overlay(alignment: .leading) { if editing && !isMoving && !isCatalog(key) { leftHandle(key) } }
             .overlay(alignment: .top) { if editing && !isMoving && !isCatalog(key) { topHandle(key) } }
+            // Top-left is free of the resize handles (left is centred, top is centred, right runs full height).
+            .overlay(alignment: .topLeading) {
+                if badge && !isMoving, let onRemove {
+                    Button { onRemove(key) } label: {
+                        Text("–").font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(Color(argb: 0xFF3A3A3F)))
+                            .overlay(Circle().strokeBorder(.white.opacity(0.35), lineWidth: 1))
+                            .shadow(color: .black.opacity(0.45), radius: 4, y: 1)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: -14, y: -14)
+                    .accessibilityLabel(t("Bloğu kaldır"))
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
             .opacity(isMoving ? 0.88 : 1)
             .scaleEffect(isMoving ? 1.025 : 1)
             .offset(isMoving ? snappedOffset(key) : .zero)
             .simultaneousGesture(TapGesture().onEnded { if editing { selected = key } }, including: editing ? .all : .subviews)
-            // High priority while editing: the hold wins over the block's own taps and controls, so a block lifts
-            // from anywhere on it; a quick tap still reaches them once the hold fails.
-            .highPriorityGesture(moveGesture(key), including: editing ? .all : .subviews)
+            .modifier(liftModifier(key))
+    }
+
+    /// iOS 18+: a UIKit long press lifts the block. It fails as soon as the finger moves before the hold, so a swipe
+    /// that starts on a block scrolls the card (SwiftUI's high-priority hold claimed it, and the page would not move).
+    /// iOS 17 keeps the SwiftUI hold-and-drag.
+    private func liftModifier(_ key: String) -> BlockLiftModifier<some Gesture> {
+        BlockLiftModifier(enabled: editing, fallback: moveGesture(key),
+                          began: { lift(key) },
+                          changed: { shift in if moving == key { moveOffset = shift } },
+                          ended: { shift in drop(key, shift) })
+    }
+
+    private func lift(_ key: String) {
+        guard editing, moving == nil else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(.easeOut(duration: 0.15)) { moving = key; selected = key }
+    }
+
+    /// `shift` nil: the hold was cancelled (a sheet, the keyboard).
+    private func drop(_ key: String, _ shift: CGSize?) {
+        defer { withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { moving = nil; moveOffset = .zero } }
+        guard editing, moving == key, let shift, let origin = frames[key], abs(shift.width) + abs(shift.height) >= 1 else { return }
+        if let next = placeCardInFreeSpace(keys, layout, frames, moving: key,
+                                           left: origin.minX + shift.width, top: origin.minY + shift.height, unit: unit) {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { onDrop(keys, next) }
+        }
     }
 
     /// One owner per drag: long-press lifts the block, the drag moves it, release drops it in free space.
@@ -509,4 +565,65 @@ struct CardBlockGrid<Block: View>: View {
             .padding(horizontal ? 5 : 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
     }
+}
+
+
+/// Lifts a card block with a hold. iOS 18+: a UIKit long press (scroll-friendly); iOS 17: the SwiftUI gesture.
+struct BlockLiftModifier<Fallback: Gesture>: ViewModifier {
+    let enabled: Bool
+    let fallback: Fallback
+    let began: () -> Void
+    let changed: (CGSize) -> Void
+    let ended: (CGSize?) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.gesture(BlockLiftRecognizer(enabled: enabled, began: began, changed: changed, ended: ended))
+        } else {
+            // High priority while editing: the hold wins over the block's own taps and controls.
+            content.highPriorityGesture(fallback, including: enabled ? .all : .subviews)
+        }
+    }
+}
+
+@available(iOS 18.0, *)
+private struct BlockLiftRecognizer: UIGestureRecognizerRepresentable {
+    let enabled: Bool
+    let began: () -> Void
+    let changed: (CGSize) -> Void
+    let ended: (CGSize?) -> Void
+
+    final class Coordinator { var start: CGPoint = .zero }
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let g = UILongPressGestureRecognizer()
+        g.minimumPressDuration = 0.35
+        g.isEnabled = enabled
+        return g
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        recognizer.isEnabled = enabled
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        let here = context.converter.location(in: .named("cardGrid"))
+        let start = context.coordinator.start
+        let shift = CGSize(width: here.x - start.x, height: here.y - start.y)
+        switch recognizer.state {
+        case .began: context.coordinator.start = here; began()
+        case .changed: changed(shift)
+        case .ended: ended(shift)
+        case .cancelled, .failed: ended(nil)
+        default: break
+        }
+    }
+}
+
+/// A block's own ✕: hidden while the grid shows its "–" badge for that block (still shown for a cover block).
+struct BlockOwnRemove<Content: View>: View {
+    @Environment(\.cardBlockRemoveBadge) private var badge
+    @ViewBuilder let content: () -> Content
+    var body: some View { if !badge { content() } }
 }

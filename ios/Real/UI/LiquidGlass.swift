@@ -25,18 +25,19 @@ enum LiquidGlassRole { case dock, chrome, sheet }
 
 extension View {
     /// LiquidGlassSurface: the real Liquid Glass material on iOS 26, a tinted blur with the Android edge stroke before.
-    func liquidGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole = .dock, dim: Double = 0) -> some View {
-        modifier(LiquidGlassSurface(shape: shape, role: role, dim: dim))
+    /// `frosted`: the blurring glass of panels, for a dock piece that holds typed text (the open composer).
+    func liquidGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole = .dock, dim: Double = 0, frosted: Bool = false) -> some View {
+        modifier(LiquidGlassSurface(shape: shape, role: role, dim: dim, frosted: frosted))
     }
 
     @ViewBuilder
-    fileprivate func systemOrFallbackGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole, dim: Double) -> some View {
+    fileprivate func systemOrFallbackGlass<S: InsettableShape>(_ shape: S, role: LiquidGlassRole, dim: Double, frosted: Bool) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             // Clear Liquid Glass everywhere: it takes the colour of what passes behind it. The only tint is inside the
             // glass (a light one for legibility on bright cards, a deeper one for panels full of text). Painting a
             // dark layer under the glass, as before, hid the glass and drew the band behind the dock.
-            self.glassEffect(Self.clearGlass(role: role, dim: dim), in: shape)
+            self.glassEffect(Self.clearGlass(role: role, dim: dim, frosted: frosted), in: shape)
         } else {
             fallbackGlass(shape, role: role, dim: dim)
         }
@@ -52,8 +53,8 @@ extension View {
     /// Dock and buttons: clear glass with a light dark tint. Panels (role .sheet) carry a lot of text, so they use the
     /// frosted glass (it blurs what is behind) with a deeper tint.
     @available(iOS 26.0, *)
-    static func clearGlass(role: LiquidGlassRole, dim: Double) -> Glass {
-        if role == .sheet { return Glass.regular.tint(.black.opacity(min(0.45 + dim, 0.85))) }
+    static func clearGlass(role: LiquidGlassRole, dim: Double, frosted: Bool = false) -> Glass {
+        if role == .sheet || frosted { return Glass.regular.tint(.black.opacity(min(0.45 + dim, 0.85))) }
         // Not .interactive(): this glass sits inside Button labels, and interactive glass takes the touch for its own
         // press bounce, so a tap often did not reach the button (water "+" needed several presses, back buttons too).
         return Glass.clear.tint(.black.opacity(min(0.14 + dim, 0.85)))
@@ -109,6 +110,7 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
     let shape: S
     let role: LiquidGlassRole
     let dim: Double
+    var frosted = false
     @AppStorage("reduce_dynamic_blur") private var reduceDynamicBlur = false
     /// iOS Ayarlar → Erişilebilirlik → Şeffaflığı Azalt: the system glass already turns opaque; the dock goes flat too,
     /// as with the app's own switch. (The iOS 27 Liquid Glass slider needs nothing here: glassEffect follows it.)
@@ -118,7 +120,7 @@ struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
         // The glass itself takes no touches: without this only the icon on it was tappable, and a tap beside the icon
         // went through to whatever lies below (the map under the back button zoomed in).
         if (reduceDynamicBlur || systemReduceTransparency) && role == .dock { content.flatDock(shape, dim: dim).contentShape(shape) }
-        else { content.systemOrFallbackGlass(shape, role: role, dim: dim).contentShape(shape) }
+        else { content.systemOrFallbackGlass(shape, role: role, dim: dim, frosted: frosted).contentShape(shape) }
     }
 }
 
@@ -151,6 +153,7 @@ struct ShimmerText: View {
                 }
             }
             .onAppear {
+                guard !RealMotion.reduce else { return }
                 withAnimation(.easeInOut(duration: 1.6).delay(2.4).repeatForever(autoreverses: false)) { phase = 1 }
             }
     }

@@ -47,7 +47,7 @@ struct VoiceListeningWindow: View {
             ZStack {
                 shape.fill(Color.black.opacity(0.26))
                 if processing {
-                    TimelineView(.animation) { tl in
+                    TimelineView(.animation(paused: RealMotion.reduce)) { tl in
                         RealSweepBand(progress: (tl.date.timeIntervalSinceReferenceDate / 1.4).truncatingRemainder(dividingBy: 1))
                     }
                 } else {

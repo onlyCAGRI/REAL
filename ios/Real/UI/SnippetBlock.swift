@@ -28,8 +28,10 @@ struct SnippetBlockView: View {
                     Button(t("Bitti")) { save() }.font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFE6E6EC))
                 }
                 if editing {
-                    Button(action: onRemove) { RealSymbol("xmark", size: 14).foregroundStyle(Color(argb: 0xFFAEAFB8)).frame(width: 36, height: 36) }
-                        .accessibilityLabel(t("Metin alıntısını kaldır"))
+                    BlockOwnRemove {
+                        Button(action: onRemove) { RealSymbol("xmark", size: 14).foregroundStyle(Color(argb: 0xFFAEAFB8)).frame(width: 36, height: 36) }
+                            .accessibilityLabel(t("Metin alıntısını kaldır"))
+                    }
                 }
             }
             if let title = attachment.sourceTitle, !title.isEmpty, title != "REAL_TEXT_BLOCK" {

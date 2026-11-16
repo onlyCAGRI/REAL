@@ -122,6 +122,8 @@ struct YasamTileGrid<Tile: View>: View {
     let parts: [YasamPart]
     let wide: Set<YasamPart>
     @Binding var editing: Bool
+    /// True while a lifted tile follows the finger; the screen turns its scrolling off for that time.
+    var dragging: Binding<Bool> = .constant(false)
     var onTap: (YasamPart) -> Void
     @ViewBuilder var tile: (YasamPart, Bool) -> Tile
 
@@ -209,41 +211,10 @@ struct YasamTileGrid<Tile: View>: View {
             .zIndex(lifted ? 2 : 0)
             .contentShape(Rectangle())
             .onTapGesture { if !editing { onTap(part) } }
-            .gesture(
-                LongPressGesture(minimumDuration: 0.4)
-                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("yasamTiles")))
-                    .onChanged { value in
-                        switch value {
-                        case .second(true, let drag):
-                            if dragged == nil {
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                editing = true
-                                hover = nil
-                                dragged = part
-                            }
-                            guard let drag else { return }
-                            translation = drag.translation
-                            let over = parts.first { $0 != part && (frames[$0]?.contains(drag.location) ?? false) }
-                            if over != hover {
-                                hover = over
-                                if over != nil { UISelectionFeedbackGenerator().selectionChanged() }
-                            }
-                        default: break
-                        }
-                    }
-                    .onEnded { _ in
-                        if let h = hover, let d = dragged {
-                            withAnimation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.82)) {
-                                YasamLayout.shared.move(d, to: h)
-                                translation = .zero
-                            }
-                        } else {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { translation = .zero }
-                        }
-                        hover = nil
-                        dragged = nil
-                    }
-            )
+            // Hold to lift, then drag. The UIKit long press gives the page back its scroll when the finger moves before
+            // the hold is reached: SwiftUI's hold-and-drag claimed every swipe that started on a tile, so the page
+            // could not scroll (or be pulled down to close) from a tile. The page stops scrolling once a tile lifts.
+            .modifier(YasamTileLift(lift: { lift(part) }, move: { follow(part, $0, $1) }, drop: drop))
             .accessibilityAction(named: isWide ? t("Yarım yap") : t("Tam yap")) { YasamLayout.shared.setWide(part, !isWide) }
             .accessibilityAction(named: t("Gizle")) { YasamLayout.shared.setHidden(part, true) }
             .accessibilityAction(named: t("Yukarı taşı")) {
@@ -252,6 +223,39 @@ struct YasamTileGrid<Tile: View>: View {
             .accessibilityAction(named: t("Aşağı taşı")) {
                 if let i = parts.firstIndex(of: part), i < parts.count - 1 { YasamLayout.shared.move(part, to: parts[i + 1]) }
             }
+    }
+
+    private func lift(_ part: YasamPart) {
+        guard dragged == nil else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        editing = true
+        hover = nil
+        dragged = part
+        dragging.wrappedValue = true
+    }
+
+    private func follow(_ part: YasamPart, _ shift: CGSize, _ location: CGPoint) {
+        guard dragged == part else { return }
+        translation = shift
+        let over = parts.first { $0 != part && (frames[$0]?.contains(location) ?? false) }
+        if over != hover {
+            hover = over
+            if over != nil { UISelectionFeedbackGenerator().selectionChanged() }
+        }
+    }
+
+    private func drop() {
+        if let h = hover, let d = dragged {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.82)) {
+                YasamLayout.shared.move(d, to: h)
+                translation = .zero
+            }
+        } else {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { translation = .zero }
+        }
+        hover = nil
+        dragged = nil
+        dragging.wrappedValue = false
     }
 }
 
@@ -614,5 +618,61 @@ struct YasamBackButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+/// Hold (0.4 s) to lift a Me tile, then drag it. iOS 18+: a UIKit long press, which fails as soon as the finger moves
+/// before the hold, so the scroll view keeps every ordinary swipe. iOS 17 keeps the SwiftUI hold-and-drag.
+private struct YasamTileLift: ViewModifier {
+    let lift: () -> Void
+    let move: (CGSize, CGPoint) -> Void
+    let drop: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.gesture(YasamTileLiftRecognizer(lift: lift, move: move, drop: drop))
+        } else {
+            content.simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.4)
+                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("yasamTiles")))
+                    .onChanged { value in
+                        guard case .second(true, let drag) = value else { return }
+                        lift()
+                        if let drag { move(drag.translation, drag.location) }
+                    }
+                    .onEnded { _ in drop() }
+            )
+        }
+    }
+}
+
+@available(iOS 18.0, *)
+private struct YasamTileLiftRecognizer: UIGestureRecognizerRepresentable {
+    let lift: () -> Void
+    let move: (CGSize, CGPoint) -> Void
+    let drop: () -> Void
+
+    final class Coordinator { var start: CGPoint = .zero }
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let g = UILongPressGestureRecognizer()
+        g.minimumPressDuration = 0.4
+        return g
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        let here = context.converter.location(in: .named("yasamTiles"))
+        switch recognizer.state {
+        case .began:
+            context.coordinator.start = here
+            lift()
+        case .changed:
+            let start = context.coordinator.start
+            move(CGSize(width: here.x - start.x, height: here.y - start.y), here)
+        case .ended, .cancelled, .failed:
+            drop()
+        default: break
+        }
     }
 }

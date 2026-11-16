@@ -982,6 +982,6 @@ private struct SkeletonLine: View {
             RoundedRectangle(cornerRadius: 4).fill(.white.opacity(on ? 0.12 : 0.05)).frame(width: g.size.width * fraction)
         }
         .frame(height: height)
-        .onAppear { withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { on = true } }
+        .onAppear { guard !RealMotion.reduce else { return }; withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { on = true } }
     }
 }
