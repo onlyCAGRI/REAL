@@ -602,7 +602,7 @@ struct CalendarWidgetView: View {
 
     /// With Zemin: Işıma, the picked day's first card glows from the corner (green while its event runs).
     static func glow(_ entry: RealEntry) -> Color? {
-        guard entry.surfaceGlow, let first = entry.cards(on: entry.pickedDay ?? entry.today).first(where: { !$0.done }) else { return nil }
+        guard entry.surfaceGlow, let first = entry.cards(on: entry.pickedDay ?? entry.today).first(where: { !$0.done && $0.id > 0 }) else { return nil }
         if first.running(at: entry.now) { return WColor.green }
         return first.stripeA.map { Color(argb: $0) }
     }
@@ -646,8 +646,11 @@ struct CalendarWidgetView: View {
             let ink: Color = coloured ? (widgetLuminance(argb ?? 0) > 0.5 ? Color(hex: 0xFF101010) : .white) : WColor.text
             let time = [first.alertAt.map { entry.clock($0) }, cards.count > 1 ? "+\(cards.count - 1)" : nil].compactMap { $0 }.joined(separator: "  ")
             HStack(spacing: 11) {
-                Button(intent: ToggleCardIntent(card: first.id)) { WidgetTick(done: first.done, ring: ink.opacity(0.85)) }
-                    .buttonStyle(.plain)
+                // A phone-calendar event (negative id) has nothing to tick.
+                if first.id > 0 {
+                    Button(intent: ToggleCardIntent(card: first.id)) { WidgetTick(done: first.done, ring: ink.opacity(0.85)) }
+                        .buttonStyle(.plain)
+                }
                 Link(destination: first.url) {
                     HStack(spacing: 6) {
                         Text(first.title).font(.system(size: 15, weight: .semibold)).strikethrough(first.done, color: ink).lineLimit(1)
@@ -691,7 +694,7 @@ struct CalendarDay: View {
 
     private var dots: [Color] {
         var seen = Set<Int>()
-        return entry.data.cards.filter { !$0.done && $0.day == day }
+        return entry.cards(on: day)
             .compactMap { card -> Color? in
                 let key = card.stripeA ?? 0
                 return seen.insert(key).inserted ? (card.stripeA.map { Color(argb: $0) } ?? WColor.sub) : nil

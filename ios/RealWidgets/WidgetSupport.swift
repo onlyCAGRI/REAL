@@ -133,9 +133,23 @@ struct RealEntry: TimelineEntry {
         return dayName(day)
     }
 
-    func cards(in category: String) -> [WidgetData.Card] { visible(data.cards.filter { $0.category == category }) }
+    /// A category's open cards, then its phone-calendar events.
+    func cards(in category: String) -> [WidgetData.Card] {
+        visible(data.cards.filter { $0.category == category }) + (data.categoryEvents ?? []).filter { $0.category == category }
+    }
+    /// A day's cards, open ones first: from the month the app drew, with a tick made on the widget carried over.
     func cards(on day: Int) -> [WidgetData.Card] {
-        visible(data.cards.filter { $0.day == day }).sorted { ($0.alertAt ?? .max) < ($1.alertAt ?? .max) }
+        if let month = data.month, day >= month.first, day <= month.last {
+            let live = Dictionary(data.cards.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            return month.cards.filter { $0.day == day }
+                .map { c -> WidgetData.Card in
+                    var c = c
+                    if let l = live[c.id] { c.done = l.done; c.doneAt = l.doneAt }
+                    return c
+                }
+                .sorted { ($0.done ? 1 : 0, $0.alertAt ?? .max) < ($1.done ? 1 : 0, $1.alertAt ?? .max) }
+        }
+        return visible(data.cards.filter { $0.day == day }).sorted { ($0.alertAt ?? .max) < ($1.alertAt ?? .max) }
     }
 }
 
@@ -523,8 +537,13 @@ struct CategoryLine: View {
     var body: some View {
         let late = entry.overdue(card)
         HStack(spacing: 10) {
-            Button(intent: ToggleCardIntent(card: card.id)) { WidgetTick(done: card.done, size: 18, ring: ink.opacity(0.85)) }
-                .buttonStyle(.plain)
+            // A phone-calendar event (negative id) has nothing to tick.
+            if card.id > 0 {
+                Button(intent: ToggleCardIntent(card: card.id)) { WidgetTick(done: card.done, size: 18, ring: ink.opacity(0.85)) }
+                    .buttonStyle(.plain)
+            } else {
+                Color.clear.frame(width: 18, height: 18)
+            }
             Link(destination: card.url) {
                 HStack(spacing: 6) {
                     Text(card.title).font(.system(size: 14)).strikethrough(card.done, color: ink).lineLimit(1)

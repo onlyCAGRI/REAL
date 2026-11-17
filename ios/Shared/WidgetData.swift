@@ -54,6 +54,19 @@ enum WidgetData {
         var categories: [Category] = []
         var water = Water()
         var english = false
+        /// This month as the in-app calendar has it (optional: older summaries have none).
+        var month: Month? = nil
+        /// Phone-calendar events filed under a category ("Kategorize et"), the next few of each, soonest first.
+        var categoryEvents: [Card]? = nil
+    }
+
+    /// The month's days [first, last] as the in-app calendar draws them: done cards too, a repeat on each of its days,
+    /// an event on every day it covers, and the phone's calendars REAL reads (their events have negative ids).
+    /// One Card per card and day, with [Card.day] set to that day.
+    struct Month: Codable {
+        var first: Int
+        var last: Int
+        var cards: [Card] = []
     }
 
     struct Action: Codable {

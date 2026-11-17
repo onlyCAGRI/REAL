@@ -92,15 +92,63 @@ enum WidgetBridge {
             return goal > 0 ? Double(life.total(on: date)) / Double(goal) : 0
         }
 
-        let snapshot = WidgetData.Snapshot(
+        // A phone-calendar event (negative id): its category's colour, else its calendar's.
+        func eventSummary(_ r: ReminderItem) -> WidgetData.Card {
+            var c = summary(r)
+            if c.stripeA == nil, let own = r.customSolidColorArgb { c.stripeA = own; c.stripeB = own }
+            return c
+        }
+
+        // The calendar widget's month as the in-app calendar draws it: done cards too, a repeat on each of its days,
+        // an event on every day it covers, and the phone's calendars REAL reads.
+        var month: WidgetData.Month? = nil
+        if let interval = calendar.dateInterval(of: .month, for: Date()) {
+            let first = Int(calendar.epochDay(of: interval.start))
+            let last = Int(calendar.epochDay(of: interval.end)) - 1
+            let phone = CalendarConnection.shared.occurrences(from: interval.start, to: interval.end).map(PlannerScreen.externalCard)
+            let all = store.cards.filter { $0.mood == nil && $0.journal == nil }
+            var cards: [WidgetData.Card] = []
+            var placed = Set<String>()
+            for e in Planner.events(all + phone, rangeStart: interval.start.epochMillis, rangeEnd: interval.end.epochMillis, calendar: calendar) {
+                let base = e.reminder.id < 0 ? eventSummary(e.reminder) : summary(e.reminder)
+                var day = e.startDay(calendar)
+                let lastDay = e.lastDay(calendar)
+                while day <= lastDay {
+                    let d = Int(calendar.epochDay(of: day))
+                    if d >= first, d <= last, placed.insert("\(e.reminder.id):\(d)").inserted {
+                        var c = base
+                        c.day = d
+                        c.done = e.reminder.isCompleted
+                        if e.reminder.id < 0 || e.reminder.hasRepeat { c.alertAt = e.isDateOnly ? nil : e.startMillis }
+                        cards.append(c)
+                    }
+                    guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+                    day = next
+                }
+            }
+            month = WidgetData.Month(first: first, last: last, cards: cards)
+        }
+
+        // Each category's phone-calendar events still to come ("Kategorize et"), soonest first.
+        var categoryEvents: [WidgetData.Card] = []
+        var eventCounts: [Int64: Int] = [:]
+        for c in store.categories {
+            let events = CalendarCards.inCategory(c.id)
+            eventCounts[c.id] = events.count
+            categoryEvents += events.prefix(4).map { eventSummary(CalendarCards.card($0)) }
+        }
+
+        var snapshot = WidgetData.Snapshot(
             cards: listed.map(summary),
             categories: store.categories.map { c in
                 let start = c.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(c.accentStart) ?? Color(argb: 0xFF233F73)
                 let end = c.customSolidColorArgb.map { Color(argbInt: $0) } ?? paletteColor(c.accentEnd) ?? start
                 return WidgetData.Category(id: "custom:\(c.id)", title: c.name, start: start.argbInt, end: end.argbInt,
-                                           open: open.filter { $0.customCategoryId == c.id }.count)
+                                           open: open.filter { $0.customCategoryId == c.id }.count + (eventCounts[c.id] ?? 0))
             },
             water: water, english: I18n.isEnglish)
+        snapshot.month = month
+        snapshot.categoryEvents = categoryEvents
         WidgetData.write(snapshot)
         WidgetCenter.shared.reloadAllTimelines()
     }
