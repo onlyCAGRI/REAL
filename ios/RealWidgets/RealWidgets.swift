@@ -437,8 +437,9 @@ enum WeekGlow: String, AppEnum {
 
 struct WaterWeekStyleIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Su hedefi"
-    static var description = IntentDescription("Widget'ın zemini.")
+    static var description = IntentDescription("Widget'ın zemini ve + ile eklenen miktar.")
     @Parameter(title: "Zemin", default: .plain) var glow: WeekGlow
+    @Parameter(title: "Miktar", default: .glass) var unit: WaterUnit
 
     init() {}
 }
@@ -449,6 +450,7 @@ struct WaterWeekProvider: AppIntentTimelineProvider {
     func snapshot(for configuration: WaterWeekStyleIntent, in context: Context) async -> RealEntry {
         var entry = RealTimeline.entries(preview: context.isPreview).first ?? RealEntry(date: Date(), data: .sample)
         entry.weekGlow = configuration.glow
+        entry.unitMl = configuration.unit.ml
         return entry
     }
 
@@ -456,6 +458,7 @@ struct WaterWeekProvider: AppIntentTimelineProvider {
         let entries = RealTimeline.entries().map { entry -> RealEntry in
             var entry = entry
             entry.weekGlow = configuration.glow
+            entry.unitMl = configuration.unit.ml
             return entry
         }
         return Timeline(entries: entries, policy: .atEnd)
@@ -497,7 +500,7 @@ struct WaterWeekWidget: Widget {
                 .containerBackground(for: .widget) { WeekSurface(glow: entry.weekGlow, today: WaterWeekView.ratios(entry).last ?? 0) }
         }
         .configurationDisplayName("Su hedefi")
-        .description("Son 7 günün su hedefi. + ile bir bardak ekle.")
+        .description("Son 7 günün su hedefi. + ile bir bardak ya da şişe ekle.")
         .supportedFamilies([.systemMedium])
         .contentMarginsDisabled()
     }
@@ -521,7 +524,7 @@ struct WaterWeekView: View {
             HStack {
                 Text(entry.s("Su hedefi", "Water goal")).font(.system(size: 14)).foregroundStyle(WColor.sub)
                 Spacer()
-                AddGlassButton(size: 34, fill: WColor.plusFill, ink: WColor.plusInk)
+                AddGlassButton(size: 34, fill: WColor.plusFill, ink: WColor.plusInk, ml: entry.unitMl)
             }
             HStack(alignment: .bottom, spacing: 10) {
                 VStack(alignment: .leading, spacing: 0) {
