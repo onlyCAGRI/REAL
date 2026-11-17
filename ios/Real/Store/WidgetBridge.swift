@@ -68,8 +68,12 @@ enum WidgetBridge {
         let todays = open.filter { !runningIds.contains($0.id) && day($0) == today }
             .sorted { ($0.alertAt ?? .max) < ($1.alertAt ?? .max) }
         let todayIds = Set(todays.map(\.id))
-        let rest = open.filter { !runningIds.contains($0.id) && !todayIds.contains($0.id) }.sorted { $0.createdAt > $1.createdAt }
-        var listed = Array((running + todays + rest).prefix(40))
+        let rest = open.filter { !runningIds.contains($0.id) && !todayIds.contains($0.id) }
+        // Then what is overdue (the latest first), then the rest, newest first.
+        let overdue = rest.filter { r in day(r).map { $0 < today } ?? false }.sorted { (day($0) ?? 0) > (day($1) ?? 0) }
+        let overdueIds = Set(overdue.map(\.id))
+        let others = rest.filter { !overdueIds.contains($0.id) }.sorted { $0.createdAt > $1.createdAt }
+        var listed = Array((running + todays + overdue + others).prefix(40))
         // The calendar widget's dots: every dated open card around this month.
         var seen = Set(listed.map(\.id))
         listed += open.filter { r in

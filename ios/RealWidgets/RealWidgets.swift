@@ -37,6 +37,7 @@ struct CardsWidgetView: View {
     static func glow(_ entry: RealEntry) -> Color? {
         guard let first = entry.visible(entry.data.cards).first, !first.done else { return nil }
         if first.running(at: entry.now) { return WColor.green }
+        if entry.overdue(first) { return WColor.late }
         return first.stripeA.map { Color(argb: $0) }
     }
 
@@ -58,7 +59,9 @@ struct CardsWidgetView: View {
                 if let hero = cards.first {
                     let rowHeight: CGFloat = large ? 42 : 27
                     // As many lines as the widget's height holds under the hero.
-                    let used: CGFloat = large ? 32 + 26 + 68 + (hero.running(at: entry.now) ? 20 : 0) + 8 : 28 + 62
+                    // A hero without a date line is shorter, so one more line fits instead of a gap.
+                    let short: CGFloat = hero.running(at: entry.now) || entry.dateText(hero) != nil ? 0 : 17
+                    let used: CGFloat = (large ? 32 + 26 + 68 + (hero.running(at: entry.now) ? 20 : 0) + 8 : 28 + 62) - short
                     let rows = min(cards.count - 1, max(0, Int((geo.size.height - used) / rowHeight)))
                     HeroCard(card: hero, entry: entry, large: large)
                     Spacer(minLength: large ? 8 : 0)
@@ -186,23 +189,22 @@ struct CategoryWidgetView: View {
     }
 
     private func medium(_ c: WidgetData.Category, _ cards: [WidgetData.Card]) -> some View {
-        VStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text(c.title).font(.system(size: 20, weight: .medium)).lineLimit(1)
+                Text(c.title).font(.system(size: 19, weight: .semibold)).lineLimit(1)
                 Spacer(minLength: 6)
                 pill(c)
-                Text("↗").font(.system(size: 22))
+                Text("↗").font(.system(size: 19))
             }
-            .padding(.horizontal, 4).padding(.bottom, 3)
+            Spacer(minLength: 4)
             if cards.isEmpty {
                 Text(entry.s("Bu kategoride açık kart yok.", "No open cards in this category.")).font(.system(size: 13)).opacity(0.8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.bottom, 8)
             } else {
-                ForEach(cards.prefix(2)) { WidgetCardRow(card: $0, entry: entry, onTile: true, height: 44) }
-                Spacer(minLength: 0)
+                ForEach(cards.prefix(3)) { CategoryLine(card: $0, entry: entry, ink: foreground(c)) }
             }
         }
-        .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 12)
+        .padding(14)
     }
 }
 
@@ -228,14 +230,17 @@ struct WaveTop: Shape {
 
 struct AddGlassButton: View {
     var size: CGFloat = 44
+    var fill: Color = .white
+    var ink: Color = Color(hex: 0xFF0B1E4A)
     @Environment(\.widgetRenderingMode) private var mode
     var body: some View {
         Button(intent: AddGlassIntent()) {
             // On glass everything is one tint: a translucent disc keeps the plus readable.
             Image(systemName: "plus").font(.system(size: size * 0.42, weight: .semibold))
-                .foregroundStyle(mode == .fullColor ? Color(hex: 0xFF0B1E4A) : .white)
+                .foregroundStyle(mode == .fullColor ? ink : Color.white)
                 .frame(width: size, height: size)
-                .background(Circle().fill(.white.opacity(mode == .fullColor ? 1 : 0.22)))
+                .background(Circle().fill(mode == .fullColor ? fill : Color.white.opacity(0.22))
+                    .shadow(color: .black.opacity(mode == .fullColor ? 0.18 : 0), radius: 5, y: 3))
         }
         .buttonStyle(.plain)
     }
@@ -246,7 +251,7 @@ struct WaterGlassWidget: Widget {
         StaticConfiguration(kind: "RealWaterGlass", provider: RealProvider()) { entry in
             WaterGlassView(entry: entry)
                 .containerBackground(for: .widget) {
-                    LinearGradient(colors: [Color(hex: 0xFF11141C), Color(hex: 0xFF080A10)], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(colors: [WColor.waterTop, WColor.waterBottom], startPoint: .top, endPoint: .bottom)
                 }
         }
         .configurationDisplayName("Su")
@@ -265,39 +270,40 @@ struct WaterGlassView: View {
         let glasses = water.todayMl / WidgetData.glassMl
         let goal = max(1, Int((Double(water.goalMl) / Double(WidgetData.glassMl)).rounded(.up)))
         let level = water.goalMl > 0 ? min(1, Double(water.todayMl) / Double(water.goalMl)) : 0
-        ZStack(alignment: .topLeading) {
-            GeometryReader { geo in
+        GeometryReader { geo in
+            let height = level <= 0 ? 0 : geo.size.height * level + 8
+            ZStack(alignment: .bottomTrailing) {
                 WaveTop()
-                    .fill(LinearGradient(colors: [Color(hex: 0xFF3D8BFF), Color(hex: 0xFF1450D8), Color(hex: 0xFF0B36A8)], startPoint: .top, endPoint: .bottom))
+                    .fill(LinearGradient(colors: [WColor.water1, WColor.water2], startPoint: .top, endPoint: .bottom))
                     .opacity(mode == .fullColor ? 1 : 0.3)
-                    .frame(height: level <= 0 ? 0 : geo.size.height * level + 8)
+                    .frame(height: height)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.7), value: level)
+                words(glasses, goal).foregroundStyle(WColor.text)
+                // Where the water covers the words they turn white, so nothing is lost as it rises.
+                words(glasses, goal).foregroundStyle(Color.white)
+                    .mask(alignment: .bottom) { WaveTop().frame(height: height) }
+                AddGlassButton(size: 38, fill: WColor.plusFill, ink: WColor.plusInk)
+                    .padding(15)
             }
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text(entry.s("Su", "Water")).font(.system(size: 14))
-                    Spacer()
-                    Text(entry.s("hedef \(goal)", "goal \(goal)")).font(.system(size: 12)).opacity(0.8)
-                }
-                Text("\(glasses)").font(.system(size: 56, weight: .light)).contentTransition(.numericText())
-                    .padding(.top, 4)
-                Text(entry.s("bardak", glasses == 1 ? "glass" : "glasses")).font(.system(size: 12)).opacity(0.85)
-                if glasses >= goal {
-                    let over = glasses - goal
-                    Text("✓ " + entry.s("hedef", "goal") + (over > 0 ? " +\(over)" : "")).font(.system(size: 11, weight: .bold))
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(.white.opacity(0.24)))
-                        .padding(.top, 6)
-                }
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 18).padding(.top, 16)
-            AddGlassButton()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(12)
         }
         .widgetURL(URL(string: "real://widget/water"))
+    }
+
+    private func words(_ glasses: Int, _ goal: Int) -> some View {
+        let over = glasses - goal
+        let unit = entry.s("bardak", glasses == 1 ? "glass" : "glasses") + (over >= 0 ? " · ✓" + (over > 0 ? " +\(over)" : "") : "")
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(entry.s("Su", "Water")).font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Text(entry.s("hedef \(goal)", "goal \(goal)")).font(.system(size: 13)).opacity(0.6)
+            }
+            Spacer(minLength: 0)
+            Text("\(glasses)").font(.system(size: 48, weight: .light)).contentTransition(.numericText())
+            Text(unit).font(.system(size: 12)).opacity(0.75).lineLimit(1).padding(.top, 2).padding(.trailing, 44)
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
