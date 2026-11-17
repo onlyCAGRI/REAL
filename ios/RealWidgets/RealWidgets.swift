@@ -158,7 +158,7 @@ struct CategoryWidgetView: View {
             }
             .foregroundStyle(foreground(category))
             .containerBackground(for: .widget) { tileFill(category) }
-            .widgetURL(URL(string: "real://widget/category"))
+            .widgetURL(URL(string: "real://widget/category/" + category.id.replacingOccurrences(of: "custom:", with: "")))
         } else {
             WidgetEmpty(text: entry.s("REAL'de bir kategori oluştur.", "Create a category in REAL."))
                 .padding(14)

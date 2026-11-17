@@ -111,6 +111,8 @@ enum WidgetBridge {
         let parts = url.pathComponents.filter { $0 != "/" }
         if parts.count == 2, parts[0] == "card", let id = Int64(parts[1]) {
             NotificationCenter.default.post(name: .realOpenReminder, object: nil, userInfo: ["reminderId": id])
+        } else if parts.count == 2, parts[0] == "category", let id = Int64(parts[1].replacingOccurrences(of: "custom:", with: "")) {
+            NotificationCenter.default.post(name: .realOpenCategory, object: nil, userInfo: ["categoryId": id])
         }
         return true
     }

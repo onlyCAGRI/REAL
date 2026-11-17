@@ -114,6 +114,12 @@ struct RootView: View {
                 path.append(.detail(id))
             }
         }
+        // The Kategori widget opens its category.
+        .onReceive(NotificationCenter.default.publisher(for: .realOpenCategory)) { note in
+            if let id = note.userInfo?["categoryId"] as? Int64, store.categories.contains(where: { $0.id == id }) {
+                path = [.customCategory(id)]
+            }
+        }
         .fullScreenCover(item: $arrival) { ctx in
             LocationArrivalFocusScreen(
                 context: ctx,
