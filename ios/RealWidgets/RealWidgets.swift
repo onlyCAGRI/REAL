@@ -228,6 +228,21 @@ struct WaveTop: Shape {
     }
 }
 
+/// WaveTop's upper edge alone.
+struct WaveLine: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let amplitude: CGFloat = 4, length = rect.width / 1.4
+        path.move(to: CGPoint(x: 0, y: amplitude))
+        var x: CGFloat = 0
+        while x <= rect.width {
+            path.addLine(to: CGPoint(x: x, y: amplitude + sin(x / length * 2 * .pi) * amplitude))
+            x += 2
+        }
+        return path
+    }
+}
+
 struct AddGlassButton: View {
     var size: CGFloat = 44
     var fill: Color = .white
@@ -275,9 +290,17 @@ struct WaterGlassView: View {
             ZStack(alignment: .bottomTrailing) {
                 WaveTop()
                     .fill(LinearGradient(colors: [WColor.water1, WColor.water2], startPoint: .top, endPoint: .bottom))
-                    .opacity(mode == .fullColor ? 1 : 0.3)
+                    .opacity(mode == .fullColor ? 1 : 0.55)
+                    .widgetAccentable()
                     .frame(height: height)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                // On glass the water is one tint: its surface as a bright line keeps the level readable.
+                if mode != .fullColor && height > 0 {
+                    WaveLine().stroke(Color.white, lineWidth: 2.4)
+                        .widgetAccentable()
+                        .frame(height: height)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                }
                 words(glasses, goal).foregroundStyle(WColor.text)
                 // Where the water covers the words they turn white, so nothing is lost as it rises.
                 words(glasses, goal).foregroundStyle(Color.white)
@@ -327,8 +350,11 @@ struct WeekLine: Shape {
 struct WeekChart: View {
     /// Seven ratios (water over goal), oldest first; the last is today.
     let ratios: [Double]
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        let light = scheme == .light
+        let ink = light ? Color(hex: 0xFF2563EB) : Color.white
         GeometryReader { geo in
             let padX: CGFloat = 9, top: CGFloat = 9, bottom = geo.size.height - 4
             let count = max(2, ratios.count)
@@ -342,21 +368,103 @@ struct WeekChart: View {
                     p.move(to: CGPoint(x: padX, y: goalY))
                     p.addLine(to: CGPoint(x: geo.size.width - padX, y: goalY))
                 }
-                .stroke(Color.white.opacity(0.14), style: StrokeStyle(lineWidth: 1, dash: [6, 7]))
+                .stroke(light ? Color.black.opacity(0.14) : Color.white.opacity(0.14), style: StrokeStyle(lineWidth: 1, dash: [6, 7]))
+                if light, let first = points.first, let last = points.last {
+                    Path { p in
+                        p.addPath(WeekLine(points: points).path(in: .zero))
+                        p.addLine(to: CGPoint(x: last.x, y: bottom))
+                        p.addLine(to: CGPoint(x: first.x, y: bottom))
+                        p.closeSubpath()
+                    }
+                    .fill(ink.opacity(0.08))
+                }
                 ForEach(Array(points.enumerated()), id: \.offset) { _, point in
                     Rectangle()
-                        .fill(LinearGradient(colors: [.white.opacity(0.32), .clear], startPoint: .top, endPoint: .bottom))
+                        .fill(LinearGradient(colors: [ink.opacity(light ? 0.22 : 0.32), .clear], startPoint: .top, endPoint: .bottom))
                         .frame(width: 1.2, height: max(0, bottom - point.y))
                         .position(x: point.x, y: (point.y + bottom) / 2)
                 }
                 WeekLine(points: points)
-                    .stroke(LinearGradient(colors: [.white.opacity(0.25), .white], startPoint: .leading, endPoint: .trailing),
+                    .stroke(light ? AnyShapeStyle(ink) : AnyShapeStyle(LinearGradient(colors: [.white.opacity(0.25), .white], startPoint: .leading, endPoint: .trailing)),
                             style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .shadow(color: WColor.blue, radius: 5)
+                    .shadow(color: light ? ink.opacity(0.35) : WColor.blue, radius: light ? 3 : 5)
+                    .widgetAccentable()
                 ForEach(Array(points.enumerated()), id: \.offset) { _, point in
-                    Circle().fill(Color.white.opacity(0.22)).frame(width: 11, height: 11).position(point)
-                    Circle().fill(Color(hex: 0xFFE2E5EA)).frame(width: 6, height: 6).position(point)
+                    if light {
+                        Circle().fill(Color.white).frame(width: 7, height: 7).position(point)
+                        Circle().stroke(ink, lineWidth: 1.6).frame(width: 7, height: 7).position(point)
+                    } else {
+                        Circle().fill(Color.white.opacity(0.22)).frame(width: 11, height: 11).position(point)
+                        Circle().fill(Color(hex: 0xFFE2E5EA)).frame(width: 6, height: 6).position(point)
+                    }
                 }
+            }
+        }
+    }
+}
+
+/// Su hedefi's surface, picked in Edit Widget: plain like the small Su, a halo from today's point, or a glow from the corner.
+enum WeekGlow: String, AppEnum {
+    case plain, today, corner
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Zemin"
+    static var caseDisplayRepresentations: [WeekGlow: DisplayRepresentation] = [
+        .plain: "Düz",
+        .today: "Bugünden hale",
+        .corner: "Köşeden ışıma"
+    ]
+}
+
+struct WaterWeekStyleIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Su hedefi"
+    static var description = IntentDescription("Widget'ın zemini.")
+    @Parameter(title: "Zemin", default: .plain) var glow: WeekGlow
+
+    init() {}
+}
+
+struct WaterWeekProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> RealEntry { RealEntry(date: Date(), data: .sample) }
+
+    func snapshot(for configuration: WaterWeekStyleIntent, in context: Context) async -> RealEntry {
+        var entry = RealTimeline.entries(preview: context.isPreview).first ?? RealEntry(date: Date(), data: .sample)
+        entry.weekGlow = configuration.glow
+        return entry
+    }
+
+    func timeline(for configuration: WaterWeekStyleIntent, in context: Context) async -> Timeline<RealEntry> {
+        let entries = RealTimeline.entries().map { entry -> RealEntry in
+            var entry = entry
+            entry.weekGlow = configuration.glow
+            return entry
+        }
+        return Timeline(entries: entries, policy: .atEnd)
+    }
+}
+
+struct WeekSurface: View {
+    let glow: WeekGlow
+    /// Today's ratio, to put the halo where today's point is.
+    let today: Double
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let light = scheme == .light
+        ZStack {
+            LinearGradient(colors: [WColor.waterTop, WColor.waterBottom], startPoint: .top, endPoint: .bottom)
+            if light {
+                LinearGradient(stops: [.init(color: .clear, location: 0.55), .init(color: Color(hex: 0xFFE3EBFB), location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+            }
+            switch glow {
+            case .plain:
+                EmptyView()
+            case .today:
+                RadialGradient(colors: [WColor.blue.opacity(light ? 0.2 : 0.42), WColor.blue.opacity(0)],
+                               center: UnitPoint(x: 0.92, y: 0.37 + 0.41 * (1 - min(today, 1.15) / 1.15)), startRadius: 0, endRadius: 150)
+            case .corner:
+                RadialGradient(colors: [WColor.blue.opacity(light ? 0.16 : 0.3), WColor.blue.opacity(0)],
+                               center: .topLeading, startRadius: 0, endRadius: 250)
             }
         }
     }
@@ -364,17 +472,9 @@ struct WeekChart: View {
 
 struct WaterWeekWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "RealWaterWeek", provider: RealProvider()) { entry in
+        AppIntentConfiguration(kind: "RealWaterWeek", intent: WaterWeekStyleIntent.self, provider: WaterWeekProvider()) { entry in
             WaterWeekView(entry: entry)
-                .containerBackground(for: .widget) {
-                    ZStack {
-                        LinearGradient(colors: [Color(hex: 0xFF0D1119), Color(hex: 0xFF05070B)], startPoint: .top, endPoint: .bottom)
-                        // WidgetGlowCard: the colour rises from the bottom edge.
-                        LinearGradient(stops: [.init(color: .clear, location: 0.55),
-                                               .init(color: WColor.blue.opacity(0.28), location: 0.9),
-                                               .init(color: WColor.blue.opacity(0.75), location: 1)], startPoint: .top, endPoint: .bottom)
-                    }
-                }
+                .containerBackground(for: .widget) { WeekSurface(glow: entry.weekGlow, today: WaterWeekView.ratios(entry).last ?? 0) }
         }
         .configurationDisplayName("Su hedefi")
         .description("Son 7 günün su hedefi. + ile bir bardak ekle.")
@@ -386,31 +486,36 @@ struct WaterWeekWidget: Widget {
 struct WaterWeekView: View {
     let entry: RealEntry
 
-    var body: some View {
+    /// Seven ratios, oldest first; the last is today.
+    static func ratios(_ entry: RealEntry) -> [Double] {
         let water = WidgetData.water(entry.data.water, today: entry.today)
         let todayRatio = water.goalMl > 0 ? Double(water.todayMl) / Double(water.goalMl) : 0
         let past = Array(repeating: 0.0, count: max(0, 6 - water.past.count)) + water.past.suffix(6)
-        let ratios = past + [todayRatio]
+        return past + [todayRatio]
+    }
+
+    var body: some View {
+        let ratios = Self.ratios(entry)
         let percent = Int((ratios.map { min($0, 1) }.reduce(0, +) / Double(ratios.count) * 100).rounded())
         VStack(spacing: 0) {
             HStack {
-                Text(entry.s("Su hedefi", "Water goal")).font(.system(size: 14)).foregroundStyle(Color(hex: 0xFFB4B9C4))
+                Text(entry.s("Su hedefi", "Water goal")).font(.system(size: 14)).foregroundStyle(WColor.sub)
                 Spacer()
-                AddGlassButton(size: 34)
+                AddGlassButton(size: 34, fill: WColor.plusFill, ink: WColor.plusInk)
             }
             HStack(alignment: .bottom, spacing: 10) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("\(percent)%").font(.system(size: 40)).foregroundStyle(.white).contentTransition(.numericText())
+                    Text("\(percent)%").font(.system(size: 40)).foregroundStyle(WColor.text).contentTransition(.numericText())
                         .lineLimit(1).minimumScaleFactor(0.7)
-                    Text(entry.s("7 gün ortalaması", "7 day average")).font(.system(size: 11.5)).foregroundStyle(Color(hex: 0xFFB4B9C4))
+                    Text(entry.s("7 gün ortalaması", "7 day average")).font(.system(size: 11.5)).foregroundStyle(WColor.sub)
                 }
                 .frame(width: 96, alignment: .leading)
                 VStack(spacing: 2) {
                     WeekChart(ratios: ratios)
                     HStack(spacing: 0) {
                         ForEach(0..<7, id: \.self) { i in
-                            Text(dayLetter(daysBack: 6 - i)).font(.system(size: 10))
-                                .foregroundStyle(i == 6 ? Color.white : Color.white.opacity(0.42))
+                            Text(dayLetter(daysBack: 6 - i)).font(.system(size: 10, weight: i == 6 ? .semibold : .regular))
+                                .foregroundStyle(i == 6 ? WColor.text : WColor.sub)
                                 .frame(maxWidth: .infinity)
                         }
                     }

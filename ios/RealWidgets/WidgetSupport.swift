@@ -79,6 +79,8 @@ struct RealEntry: TimelineEntry {
     var pickedDay: Int? = nil
     /// Kategori: the category chosen in the widget's settings.
     var categoryId: String? = nil
+    /// Su hedefi: the surface picked in the widget's settings.
+    var weekGlow: WeekGlow = .plain
 
     var now: Int64 { Int64(date.timeIntervalSince1970 * 1000) }
     var today: Int { WidgetData.epochDay(date) }
