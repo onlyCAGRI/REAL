@@ -81,6 +81,14 @@ struct RealEntry: TimelineEntry {
     var categoryId: String? = nil
     /// Su hedefi: the surface picked in the widget's settings.
     var weekGlow: WeekGlow = .plain
+    /// Kartlarım: which cards it shows.
+    var cardsShow: CardsShow = .all
+    /// Kartlarım and Takvim: the coloured glow in the corner, or a plain surface.
+    var surfaceGlow = true
+    /// Su: what one tap on + adds, and what the count counts.
+    var unitMl = WidgetData.glassMl
+    /// Takvim: weeks start on Sunday instead of Monday.
+    var sundayFirst = false
 
     var now: Int64 { Int64(date.timeIntervalSince1970 * 1000) }
     var today: Int { WidgetData.epochDay(date) }
@@ -210,6 +218,99 @@ extension WidgetData.Snapshot {
     }
 }
 
+// MARK: Edit Widget
+
+enum CardsShow: String, AppEnum {
+    case all, today, hideOverdue
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Göster"
+    static var caseDisplayRepresentations: [CardsShow: DisplayRepresentation] = [
+        .all: "Hepsi",
+        .today: "Yalnızca bugün",
+        .hideOverdue: "Gecikenler hariç"
+    ]
+}
+
+enum SurfaceStyle: String, AppEnum {
+    case glow, plain
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Zemin"
+    static var caseDisplayRepresentations: [SurfaceStyle: DisplayRepresentation] = [
+        .glow: "Işıma",
+        .plain: "Düz"
+    ]
+}
+
+enum WaterUnit: String, AppEnum {
+    case glass, bottle
+
+    var ml: Int { self == .bottle ? 500 : WidgetData.glassMl }
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Miktar"
+    static var caseDisplayRepresentations: [WaterUnit: DisplayRepresentation] = [
+        .glass: "Bardak (250 ml)",
+        .bottle: "Şişe (500 ml)"
+    ]
+}
+
+enum WeekStart: String, AppEnum {
+    case monday, sunday
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Hafta başı"
+    static var caseDisplayRepresentations: [WeekStart: DisplayRepresentation] = [
+        .monday: "Pazartesi",
+        .sunday: "Pazar"
+    ]
+}
+
+struct CardsWidgetIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Kartlarım"
+    static var description = IntentDescription("Hangi kartlar ve zemin.")
+    @Parameter(title: "Göster", default: .all) var show: CardsShow
+    @Parameter(title: "Zemin", default: .glow) var surface: SurfaceStyle
+
+    init() {}
+}
+
+struct WaterGlassIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Su"
+    static var description = IntentDescription("+ ile eklenen miktar.")
+    @Parameter(title: "Miktar", default: .glass) var unit: WaterUnit
+
+    init() {}
+}
+
+struct CalendarWidgetIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Takvim"
+    static var description = IntentDescription("Haftanın ilk günü ve zemin.")
+    @Parameter(title: "Hafta başı", default: .monday) var weekStart: WeekStart
+    @Parameter(title: "Zemin", default: .plain) var surface: SurfaceStyle
+
+    init() {}
+}
+
+/// A widget's timeline with what was picked in Edit Widget written onto each entry.
+struct ConfiguredProvider<Intent: WidgetConfigurationIntent>: AppIntentTimelineProvider {
+    let apply: (Intent, inout RealEntry) -> Void
+
+    func placeholder(in context: Context) -> RealEntry { RealEntry(date: Date(), data: .sample) }
+
+    func snapshot(for configuration: Intent, in context: Context) async -> RealEntry {
+        var entry = RealTimeline.entries(preview: context.isPreview).first ?? RealEntry(date: Date(), data: .sample)
+        apply(configuration, &entry)
+        return entry
+    }
+
+    func timeline(for configuration: Intent, in context: Context) async -> Timeline<RealEntry> {
+        let entries = RealTimeline.entries().map { entry -> RealEntry in
+            var entry = entry
+            apply(configuration, &entry)
+            return entry
+        }
+        return Timeline(entries: entries, policy: .atEnd)
+    }
+}
+
 // MARK: Buttons
 
 struct ToggleCardIntent: AppIntent {
@@ -230,9 +331,13 @@ struct ToggleCardIntent: AppIntent {
 struct AddGlassIntent: AppIntent {
     static var title: LocalizedStringResource = "Bir bardak su ekle"
     static var isDiscoverable = false
+    @Parameter(title: "Miktar", default: 250) var ml: Int
+
+    init() {}
+    init(ml: Int) { self.ml = ml }
 
     func perform() async throws -> some IntentResult {
-        WidgetData.addGlass()
+        WidgetData.addGlass(ml)
         WidgetCenter.shared.reloadAllTimelines()
         return .result()
     }

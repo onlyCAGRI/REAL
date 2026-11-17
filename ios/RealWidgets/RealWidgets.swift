@@ -17,7 +17,11 @@ struct RealWidgetsBundle: WidgetBundle {
 
 struct CardsWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "RealCards", provider: RealProvider()) { entry in
+        AppIntentConfiguration(kind: "RealCards", intent: CardsWidgetIntent.self,
+                               provider: ConfiguredProvider<CardsWidgetIntent> { config, entry in
+                                   entry.cardsShow = config.show
+                                   entry.surfaceGlow = config.surface == .glow
+                               }) { entry in
             CardsWidgetView(entry: entry)
                 .environment(\.locale, entry.locale)
                 .containerBackground(for: .widget) { WidgetSurface(glow: CardsWidgetView.glow(entry)) }
@@ -34,8 +38,18 @@ struct CardsWidgetView: View {
     @Environment(\.widgetFamily) private var family
 
     /// The surface's glow: green while the first card's event runs, else its category's colour.
+    /// The cards Edit Widget lets through, in the summary's order.
+    static func shown(_ entry: RealEntry) -> [WidgetData.Card] {
+        let cards = entry.visible(entry.data.cards)
+        switch entry.cardsShow {
+        case .all: return cards
+        case .today: return cards.filter { $0.running(at: entry.now) || $0.day == entry.today }
+        case .hideOverdue: return cards.filter { !entry.overdue($0) }
+        }
+    }
+
     static func glow(_ entry: RealEntry) -> Color? {
-        guard let first = entry.visible(entry.data.cards).first, !first.done else { return nil }
+        guard entry.surfaceGlow, let first = shown(entry).first, !first.done else { return nil }
         if first.running(at: entry.now) { return WColor.green }
         if entry.overdue(first) { return WColor.late }
         return first.stripeA.map { Color(argb: $0) }
@@ -43,7 +57,7 @@ struct CardsWidgetView: View {
 
     var body: some View {
         let large = family == .systemLarge
-        let cards = Array(entry.visible(entry.data.cards).prefix(8))
+        let cards = Array(Self.shown(entry).prefix(8))
         let open = entry.data.cards.filter { !$0.done }.count
         GeometryReader { geo in
             VStack(alignment: .leading, spacing: 0) {
@@ -67,7 +81,8 @@ struct CardsWidgetView: View {
                     Spacer(minLength: large ? 8 : 0)
                     ForEach(cards.dropFirst().prefix(rows)) { CardLine(card: $0, entry: entry, height: rowHeight) }
                 } else {
-                    WidgetEmpty(text: entry.s("Açık kart yok.", "No open cards."))
+                    WidgetEmpty(text: entry.cardsShow == .today ? entry.s("Bugün için kart yok.", "Nothing for today.")
+                                                                : entry.s("Açık kart yok.", "No open cards."))
                 }
             }
             .padding(large ? 16 : 14)
@@ -247,9 +262,10 @@ struct AddGlassButton: View {
     var size: CGFloat = 44
     var fill: Color = .white
     var ink: Color = Color(hex: 0xFF0B1E4A)
+    var ml: Int = WidgetData.glassMl
     @Environment(\.widgetRenderingMode) private var mode
     var body: some View {
-        Button(intent: AddGlassIntent()) {
+        Button(intent: AddGlassIntent(ml: ml)) {
             // On glass everything is one tint: a translucent disc keeps the plus readable.
             Image(systemName: "plus").font(.system(size: size * 0.42, weight: .semibold))
                 .foregroundStyle(mode == .fullColor ? ink : Color.white)
@@ -263,7 +279,8 @@ struct AddGlassButton: View {
 
 struct WaterGlassWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "RealWaterGlass", provider: RealProvider()) { entry in
+        AppIntentConfiguration(kind: "RealWaterGlass", intent: WaterGlassIntent.self,
+                               provider: ConfiguredProvider<WaterGlassIntent> { config, entry in entry.unitMl = config.unit.ml }) { entry in
             WaterGlassView(entry: entry)
                 .containerBackground(for: .widget) {
                     LinearGradient(colors: [WColor.waterTop, WColor.waterBottom], startPoint: .top, endPoint: .bottom)
@@ -282,8 +299,9 @@ struct WaterGlassView: View {
 
     var body: some View {
         let water = WidgetData.water(entry.data.water, today: entry.today)
-        let glasses = water.todayMl / WidgetData.glassMl
-        let goal = max(1, Int((Double(water.goalMl) / Double(WidgetData.glassMl)).rounded(.up)))
+        let unit = max(1, entry.unitMl)
+        let glasses = water.todayMl / unit
+        let goal = max(1, Int((Double(water.goalMl) / Double(unit)).rounded(.up)))
         let level = water.goalMl > 0 ? min(1, Double(water.todayMl) / Double(water.goalMl)) : 0
         GeometryReader { geo in
             let height = level <= 0 ? 0 : geo.size.height * level + 8
@@ -305,7 +323,7 @@ struct WaterGlassView: View {
                 // Where the water covers the words they turn white, so nothing is lost as it rises.
                 words(glasses, goal).foregroundStyle(Color.white)
                     .mask(alignment: .bottom) { WaveTop().frame(height: height) }
-                AddGlassButton(size: 38, fill: WColor.plusFill, ink: WColor.plusInk)
+                AddGlassButton(size: 38, fill: WColor.plusFill, ink: WColor.plusInk, ml: entry.unitMl)
                     .padding(15)
             }
         }
@@ -314,7 +332,9 @@ struct WaterGlassView: View {
 
     private func words(_ glasses: Int, _ goal: Int) -> some View {
         let over = glasses - goal
-        let unit = entry.s("bardak", glasses == 1 ? "glass" : "glasses") + (over >= 0 ? " · ✓" + (over > 0 ? " +\(over)" : "") : "")
+        let name = entry.unitMl >= 500 ? entry.s("şişe", glasses == 1 ? "bottle" : "bottles")
+                                       : entry.s("bardak", glasses == 1 ? "glass" : "glasses")
+        let unit = name + (over >= 0 ? " · ✓" + (over > 0 ? " +\(over)" : "") : "")
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(entry.s("Su", "Water")).font(.system(size: 13, weight: .semibold))
@@ -536,10 +556,14 @@ struct WaterWeekView: View {
 
 struct CalendarWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "RealCalendar", provider: RealProvider()) { entry in
+        AppIntentConfiguration(kind: "RealCalendar", intent: CalendarWidgetIntent.self,
+                               provider: ConfiguredProvider<CalendarWidgetIntent> { config, entry in
+                                   entry.sundayFirst = config.weekStart == .sunday
+                                   entry.surfaceGlow = config.surface == .glow
+                               }) { entry in
             CalendarWidgetView(entry: entry)
                 .environment(\.locale, entry.locale)
-                .containerBackground(for: .widget) { WidgetSurface() }
+                .containerBackground(for: .widget) { WidgetSurface(glow: CalendarWidgetView.glow(entry)) }
         }
         .configurationDisplayName("Takvim")
         .description("Ay ve günlerin kartları. Bir güne dokun, kartı altta görünsün.")
@@ -556,11 +580,12 @@ struct CalendarWidgetView: View {
     private var weeks: [[Int?]] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current
-        calendar.firstWeekday = 2
+        calendar.firstWeekday = entry.sundayFirst ? 1 : 2
         guard let month = calendar.dateInterval(of: .month, for: entry.date),
               let count = calendar.range(of: .day, in: .month, for: entry.date)?.count else { return [] }
         let first = WidgetData.epochDay(month.start)
-        let lead = (calendar.component(.weekday, from: month.start) + 5) % 7
+        let weekday = calendar.component(.weekday, from: month.start)      // Sunday = 1
+        let lead = entry.sundayFirst ? weekday - 1 : (weekday + 5) % 7
         var cells: [Int?] = Array(repeating: nil, count: lead)
         cells += (0..<count).map { Optional(first + $0) }
         while cells.count % 7 != 0 { cells.append(nil) }
@@ -568,7 +593,15 @@ struct CalendarWidgetView: View {
     }
 
     private var weekdayLetters: [String] {
-        entry.data.english ? ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] : ["Pt", "Sa", "Ça", "Pe", "Cu", "Ct", "Pz"]
+        let monday = entry.data.english ? ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] : ["Pt", "Sa", "Ça", "Pe", "Cu", "Ct", "Pz"]
+        return entry.sundayFirst ? Array(monday.suffix(1) + monday.prefix(6)) : monday
+    }
+
+    /// With Zemin: Işıma, the picked day's first card glows from the corner (green while its event runs).
+    static func glow(_ entry: RealEntry) -> Color? {
+        guard entry.surfaceGlow, let first = entry.cards(on: entry.pickedDay ?? entry.today).first(where: { !$0.done }) else { return nil }
+        if first.running(at: entry.now) { return WColor.green }
+        return first.stripeA.map { Color(argb: $0) }
     }
 
     var body: some View {

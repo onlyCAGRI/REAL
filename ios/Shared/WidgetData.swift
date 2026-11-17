@@ -140,13 +140,13 @@ enum WidgetData {
         queue(Action(kind: s.cards[i].done ? "done" : "undone", id: id, at: now))
     }
 
-    static func addGlass() {
+    static func addGlass(_ ml: Int = glassMl) {
         var s = read()
         s.water = water(s.water)
         if s.water.day == 0 { s.water.day = epochDay() }
-        s.water.todayMl += glassMl
+        s.water.todayMl += ml
         write(s)
-        queue(Action(kind: "water", ml: glassMl, at: nowMs()))
+        queue(Action(kind: "water", ml: ml, at: nowMs()))
     }
 
     // MARK: Calendar widget: the picked day
