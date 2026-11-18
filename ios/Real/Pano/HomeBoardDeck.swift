@@ -19,10 +19,14 @@ final class PanoSeen {
         items.reduce(into: [:]) { $0[$1.id] = $1.contentVersion ?? 0 }
     }
 
+    /// Merged into what was already seen, never replacing it: a board that opens before its blocks are loaded (an
+    /// empty or partial list) used to wipe the record, so every block came back as new on each visit.
     func mark(board: String, items: [PanoItem]) {
-        let snap = snapshot(items)
-        if let old = UserDefaults.standard.dictionary(forKey: key(board)) as? [String: Int], old == snap { return }
-        UserDefaults.standard.set(snap, forKey: key(board))
+        let old = UserDefaults.standard.dictionary(forKey: key(board)) as? [String: Int]
+        var next = old ?? [:]
+        for (id, v) in snapshot(items) where (next[id] ?? -1) < v { next[id] = v }
+        if let old, old == next { return }
+        UserDefaults.standard.set(next, forKey: key(board))
         version += 1
     }
 

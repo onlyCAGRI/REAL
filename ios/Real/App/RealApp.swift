@@ -165,6 +165,33 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// NotificationActionReceiver: "Tamamla" completes (repeats move on), "10 dk ertele" snoozes, a tap opens the card.
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let info = response.notification.request.content.userInfo
+        // A new card in a shared category, or a card sent to you: pull it first (it may not be here yet), then
+        // Tamamla completes it and a tap / Aç opens it (else its category).
+        let type = info["type"] as? String
+        if type == "category_cards" || type == "share_inbox" {
+            let action = response.actionIdentifier
+            let cardId = info["cardId"] as? String, sharedCategory = info["categoryId"] as? String
+            _ = await RealPush.shared.handle(info)
+            await MainActor.run {
+                guard let store = ReminderStore.current else { return }
+                let target: Int64? = type == "category_cards"
+                    ? cardId.map { SharedCategorySync.localId(for: $0) }
+                    : CardNews.shared.items.keys.compactMap { store.reminder($0) }.filter { $0.sharedCardId == nil }
+                        .max { $0.createdAt < $1.createdAt }?.id
+                if let id = target, let card = store.reminder(id) {
+                    if action == NotificationScheduler.completeAction {
+                        if !card.isCompleted { store.toggleCompleted(id) }
+                        CardNews.shared.seen(id)
+                    } else {
+                        NotificationCenter.default.post(name: .realOpenReminder, object: nil, userInfo: ["reminderId": id])
+                    }
+                } else if action != NotificationScheduler.completeAction, let sharedCategory,
+                          let local = store.categories.first(where: { $0.sharedId == sharedCategory })?.id {
+                    NotificationCenter.default.post(name: .realOpenCategory, object: nil, userInfo: ["categoryId": local])
+                }
+            }
+            return
+        }
         if info["type"] as? String == "pano_item", let board = info["boardId"] as? String {
             await MainActor.run {
                 PanoStore.pendingOpen = board

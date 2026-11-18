@@ -4,3 +4,17 @@
 "%@ yeni bir kart ekledi" = "%@ yeni bir kart ekledi";
 "Yeni bir kart var" = "Yeni bir kart var";
 "Sana bir kart gönderildi" = "Sana bir kart gönderildi";
+"%@ sana bir kart gönderdi" = "%@ sana bir kart gönderdi";
+"%@ panoya bir not ekledi" = "%@ panoya bir not ekledi";
+"%@ panoya bir liste ekledi" = "%@ panoya bir liste ekledi";
+"%@ panoya bir konum ekledi" = "%@ panoya bir konum ekledi";
+"%@ panoya bir fotoğraf ekledi" = "%@ panoya bir fotoğraf ekledi";
+"%@ panoya bir GIF ekledi" = "%@ panoya bir GIF ekledi";
+"%@ panoya bir kart ekledi" = "%@ panoya bir kart ekledi";
+"%@ panoya bir kart destesi ekledi" = "%@ panoya bir kart destesi ekledi";
+"%@ panoya bir şarkı ekledi" = "%@ panoya bir şarkı ekledi";
+"%@ panoya bir film ya da dizi ekledi" = "%@ panoya bir film ya da dizi ekledi";
+"%@ panoya bir ruh hali ekledi" = "%@ panoya bir ruh hali ekledi";
+"%@ panoya bir dosya ekledi" = "%@ panoya bir dosya ekledi";
+"%@ panoya bir ses kaydı ekledi" = "%@ panoya bir ses kaydı ekledi";
+"%@ panoya bir bağlantı ekledi" = "%@ panoya bir bağlantı ekledi";

@@ -13,6 +13,8 @@ enum NotificationScheduler {
     static var enabled = true
     static let dueCategory = "REAL_REMINDER_DUE"
     static let immediateCategory = "REAL_REMINDER"
+    static let cardNewsCategory = "REAL_CARD_NEWS"
+    static let openAction = "REAL_OPEN"
     static let eventStartCategory = "REAL_EVENT_START"
     static let eventEndCategory = "REAL_EVENT_END"
     static let completeAction = "REAL_COMPLETE"
@@ -34,7 +36,10 @@ enum NotificationScheduler {
         // Started: only "10 dk ertele"; finishing is asked again at the end. Ended: "Tamamlandı" / "+15 dk uzat".
         let eventStart = UNNotificationCategory(identifier: eventStartCategory, actions: [snooze], intentIdentifiers: [], options: [])
         let eventEnd = UNNotificationCategory(identifier: eventEndCategory, actions: [completeEvent, extend], intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([due, immediate, eventStart, eventEnd])
+        // A card someone added to a shared category or sent you (the server's banner names this category).
+        let open = UNNotificationAction(identifier: openAction, title: t("Aç"), options: [.foreground])
+        let news = UNNotificationCategory(identifier: cardNewsCategory, actions: [complete, open], intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([due, immediate, eventStart, eventEnd, news])
     }
 
     /// Off while REAL re-adds everything on its own (launch, coming to the front): only a card being set asks.
