@@ -248,7 +248,7 @@ private struct PanoLocationBlock: View {
                 .allowsHitTesting(false)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 Button(action: openMap) {
-                    Text("Open map").font(RealFont.inter(13, .medium)).foregroundStyle(.white)
+                    Text(t("Haritada aç")).font(RealFont.inter(13, .medium)).foregroundStyle(.white)
                         .padding(.horizontal, 14).padding(.vertical, 8)
                         .background(Capsule().fill(Color.white.opacity(0.1)))
                 }
@@ -411,7 +411,7 @@ struct PanoContentFlow: View {
 
     private var linkForm: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Link / text snippet").font(RealFont.inter(17, .semibold)).foregroundStyle(.white)
+            Text(t("Bağlantı / metin parçası")).font(RealFont.inter(17, .semibold)).foregroundStyle(.white)
             TextField("", text: $text, prompt: Text("https://… or a note").foregroundStyle(Color(argb: 0xFF6F6F78)), axis: .vertical)
                 .font(RealFont.inter(16)).foregroundStyle(.white).tint(RealColors.accentBlue)
                 .lineLimit(1...6)
@@ -425,7 +425,7 @@ struct PanoContentFlow: View {
                 Button {
                     if let c = PanoPayload.linkOrSnippet(text) { onDone(c) }
                 } label: {
-                    Text("Add").font(RealFont.inter(16, .semibold)).foregroundStyle(.white)
+                    Text(t("Ekle")).font(RealFont.inter(16, .semibold)).foregroundStyle(.white)
                         .padding(.horizontal, 18).frame(height: 40)
                         .background(Capsule().fill(Color(argb: 0xFF2C5696)))
                 }

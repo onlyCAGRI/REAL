@@ -93,9 +93,24 @@ struct PanoMutation: Codable, Hashable {
 
 /// Boards, blocks and per-board viewports, kept on the phone and synced both ways with the REAL server
 /// (BoardRepository: an item-level outbox, version-checked edits; the server copy wins a conflict).
+/// A board someone invited this account to (server "invites"); accepting makes it a member board.
+struct PanoInvite: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let ownerName: String
+}
+
 @Observable
 final class PanoStore {
+    /// The board on screen right now: its pushes stay quiet (PanoPush.openBoard on Android).
+    static var openBoard: String?
+    /// A board whose push was tapped before home could open it (cold start).
+    static var pendingOpen: String?
     private(set) var boards: [PanoBoard] = []
+    /// Pending invitations, shown on the home boards page.
+    private(set) var invites: [PanoInvite] = []
+    /// Boards whose push is on (server keeps it; on by default for owners and new members).
+    private(set) var notifyBoards: Set<String> = []
     private(set) var items: [String: [PanoItem]] = [:]
     /// Everyone on a board, owner first (server "members"); the home deck shows their initials.
     private(set) var members: [String: [String]] = [:]
@@ -504,6 +519,28 @@ final class PanoStore {
             names[id] = list.compactMap { $0["name"] as? String }
         }
         members = names
+        invites = (r["invites"] as? [[String: Any]] ?? []).compactMap { row in
+            guard let id = row["id"] as? String, let title = row["title"] as? String else { return nil }
+            return PanoInvite(id: id, title: title, ownerName: (row["owner_name"] as? String) ?? "REAL")
+        }
+        if let on = r["notifyBoards"] as? [String] { notifyBoards = Set(on) }
+    }
+
+    /// Board push on/off for this account. Returns false when the server could not be reached.
+    @MainActor
+    func setNotify(_ boardId: String, _ on: Bool) async -> Bool {
+        guard (try? await call("boards/\(boardId)/notify", method: "PUT", body: ["enabled": on])) != nil else { return false }
+        if on { notifyBoards.insert(boardId) } else { notifyBoards.remove(boardId) }
+        return true
+    }
+
+    /// Joins the invited board, then reads it so it shows up at once.
+    @MainActor
+    func accept(_ invite: PanoInvite) async -> Bool {
+        guard (try? await call("invites/\(invite.id)/accept", method: "POST", body: [:])) != nil else { return false }
+        invites.removeAll { $0.id == invite.id }
+        requestSync(delay: 0)
+        return true
     }
 
     @MainActor

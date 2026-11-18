@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
+import UserNotifications
 
 /// Board canvas (PanoBoardScreen.kt + BoardCanvas.kt): world-anchored dot grid, pan + pinch zoom, blocks drawn
 /// at their transforms. Pencil = edit mode: drag blocks, delete the selected one, and the bottom dock with
@@ -25,6 +26,9 @@ struct PanoBoardScreen: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showPhotoPicker = false
     @State private var editingText: PanoItem?
+    /// Someone else's new blocks: a red outline and dot for a moment, then they fade (markOn).
+    @State private var fresh: Set<String> = []
+    @State private var markOn = false
 
     private var board: PanoBoard? { pano.boards.first { $0.id == boardId } }
 
@@ -60,18 +64,72 @@ struct PanoBoardScreen: View {
             viewport = pano.viewports[boardId] ?? BoardViewport()
             pano.requestSync(delay: 0.1)
             withAnimation(.easeOut(duration: 0.44)) { revealed = true }
-            PanoSeen.shared.mark(board: boardId, items: pano.items(of: boardId))
+            see(pano.items(of: boardId))
+            PanoStore.openBoard = boardId
+            Task { await clearDelivered() }
         }
         // An open board is read as it changes: blocks arriving while it is on screen are not news on home.
-        .onChange(of: pano.items(of: boardId)) { _, items in PanoSeen.shared.mark(board: boardId, items: items) }
-        .onDisappear { pano.viewports[boardId] = viewport; pano.save(); PanoSeen.shared.mark(board: boardId, items: pano.items(of: boardId)) }
+        .onChange(of: pano.items(of: boardId)) { _, items in see(items) }
+        .onDisappear {
+            pano.viewports[boardId] = viewport; pano.save(); PanoSeen.shared.mark(board: boardId, items: pano.items(of: boardId))
+            if PanoStore.openBoard == boardId { PanoStore.openBoard = nil }
+        }
+        // While the board is open, what others add shows up by itself (Android reads every 15 s too).
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                if Task.isCancelled { break }
+                await pano.sync()
+            }
+        }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .onChange(of: photoItem) { _, item in importPhoto(item) }
         .sheet(item: $editingText) { item in PanoTextEditor(item: item) }
         .sheet(item: $contentRequest) { type in PanoContentFlow(type: type, onDone: addContent) }
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], onCompletion: importFile)
         .alert(notice ?? "", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
-            Button("OK", role: .cancel) {}
+            Button(t("Tamam"), role: .cancel) {}
+        }
+    }
+
+    /// Marks the board as seen, keeping what was news so those blocks flash red once.
+    private func see(_ items: [PanoItem]) {
+        let news = PanoSeen.shared.unreadIds(board: boardId, items: items)
+        PanoSeen.shared.mark(board: boardId, items: items)
+        guard !news.isEmpty else { return }
+        fresh.formUnion(news)
+        markOn = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.4))
+            withAnimation(.easeOut(duration: 0.6)) { markOn = false }
+        }
+    }
+
+    /// The board is open: its banners in Notification Center have done their job.
+    private func clearDelivered() async {
+        let center = UNUserNotificationCenter.current()
+        let ids = await center.deliveredNotifications()
+            .filter { $0.request.content.userInfo["boardId"] as? String == boardId }
+            .map(\.request.identifier)
+        if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
+    }
+
+    private var notifyOn: Bool { pano.notifyBoards.contains(boardId) }
+
+    /// Bell for boards other people write to: on by default, one tap turns this board's push off or back on.
+    private func toggleNotify() {
+        let on = !notifyOn
+        Task { @MainActor in
+            if on {
+                let center = UNUserNotificationCenter.current()
+                let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+                if !granted { notice = t("Bildirim izni kapalı. Ayarlar'dan REAL bildirimlerini açabilirsin."); return }
+            }
+            if await pano.setNotify(boardId, on) {
+                RealToast.shared.show(on ? t("Bu panonun bildirimleri açık") : t("Bu panonun bildirimleri kapalı"))
+            } else {
+                notice = t("Bağlanılamadı. Biraz sonra tekrar dene.")
+            }
         }
     }
 
@@ -116,6 +174,19 @@ struct PanoBoardScreen: View {
             .overlay {
                 if isSelected && editing {
                     RoundedRectangle(cornerRadius: 22).strokeBorder(RealColors.accentBlue, lineWidth: 2)
+                }
+            }
+            .overlay {
+                if fresh.contains(item.id) {
+                    RoundedRectangle(cornerRadius: 22).strokeBorder(panoNewsColor, lineWidth: 1.5).opacity(markOn ? 1 : 0)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if fresh.contains(item.id) && !(isSelected && editing) {
+                    Circle().fill(panoNewsColor).frame(width: 13, height: 13)
+                        .overlay(Circle().strokeBorder(.black, lineWidth: 2))
+                        .offset(x: 5, y: -5)
+                        .scaleEffect(markOn ? 1 : 0.4).opacity(markOn ? 1 : 0)
                 }
             }
             .overlay(alignment: .topTrailing) {
@@ -169,7 +240,7 @@ struct PanoBoardScreen: View {
         HStack(spacing: 8) {
             if editing {
                 Button { editing = false; selected = nil } label: {
-                    Label("Done", systemImage: "checkmark").font(RealFont.inter(14, .semibold)).foregroundStyle(.black)
+                    Label(t("Bitti"), systemImage: "checkmark").font(RealFont.inter(14, .semibold)).foregroundStyle(.black)
                         .padding(.horizontal, 14).frame(height: 40).background(Capsule().fill(RealColors.accentBlue))
                 }
             } else {
@@ -177,7 +248,14 @@ struct PanoBoardScreen: View {
                     RealSymbol("pencil", size: 18.4).foregroundStyle(.white)
                         .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
                 }
-                .accessibilityLabel("Edit")
+                .accessibilityLabel(t("Düzenle"))
+                if board?.shared == true || (pano.members[boardId]?.count ?? 0) > 1 {
+                    Button { toggleNotify() } label: {
+                        RealSymbol(notifyOn ? "bell" : "bell.slash", size: 17).foregroundStyle(notifyOn ? Color.white : Color.white.opacity(0.55))
+                            .frame(width: 40, height: 40).liquidGlass(Circle(), role: .chrome)
+                    }
+                    .accessibilityLabel(notifyOn ? t("Bildirimleri kapat") : t("Bildirimleri aç"))
+                }
                 HStack(spacing: 6) {
                     Text(t("BEN")).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
                         .frame(width: 28, height: 28).background(Circle().fill(Color(argb: 0xFF0C0C0E)))
@@ -185,7 +263,7 @@ struct PanoBoardScreen: View {
                 }
                 .padding(.horizontal, 8).frame(height: 40)
                 .liquidGlass(Capsule(), role: .chrome)
-                .accessibilityLabel("People")
+                .accessibilityLabel(t("Kişiler"))
             }
         }
         .animation(.easeOut(duration: 0.18), value: editing)
@@ -196,7 +274,7 @@ struct PanoBoardScreen: View {
             Button { adding = true } label: {
                 HStack(spacing: 5) {
                     Text("+").font(.system(size: 17, weight: .semibold))
-                    Text("Add").font(.system(size: 14, weight: .semibold))
+                    Text(t("Ekle")).font(.system(size: 14, weight: .semibold))
                 }
                 .foregroundStyle(.white).padding(.horizontal, 14).frame(height: 34)
                 .background(Capsule().fill(.white.opacity(0.16)))
@@ -208,7 +286,7 @@ struct PanoBoardScreen: View {
             dockButton("+", "Zoom in") { zoom(by: 1.2, size: size) }
             Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 20)
             Button { withAnimation(.spring(duration: 0.35)) { viewport = BoardViewport() } } label: {
-                Text("Reset").font(.system(size: 12)).foregroundStyle(Color(argb: 0xFFB4B4BC)).padding(.horizontal, 10).frame(minHeight: 34)
+                Text(t("Sıfırla")).font(.system(size: 12)).foregroundStyle(Color(argb: 0xFFB4B4BC)).padding(.horizontal, 10).frame(minHeight: 34)
             }
             .opacity(viewport == BoardViewport() ? 0.45 : 1)
         }
@@ -387,7 +465,7 @@ struct PanoBlockView: View {
             }
         case .checklist:
             VStack(alignment: .leading, spacing: 8) {
-                Text("Checklist").font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
+                Text(t("Yapılacaklar")).font(RealFont.inter(13, .medium)).foregroundStyle(Color(argb: 0xFFB7B7C0))
                 ForEach(item.checklist) { e in
                     Button { onToggle(e.id) } label: {
                         HStack(spacing: 10) {
@@ -439,7 +517,7 @@ struct PanoAddSheet: View {
                 }
                 Section("REAL card") {
                     if store.cards.isEmpty {
-                        Text("No local cards available.").foregroundStyle(.secondary)
+                        Text(t("Bu telefonda kart yok.")).foregroundStyle(.secondary)
                     }
                     ForEach(store.cards.sorted { $0.createdAt > $1.createdAt }.prefix(40)) { r in
                         Button { onAdd(.card, r.id) } label: {

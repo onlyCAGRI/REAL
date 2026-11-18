@@ -490,4 +490,6 @@ extension Notification.Name {
     /// Notification tap → open that card's detail.
     static let realOpenReminder = Notification.Name("REALOpenReminder")
     static let realOpenCategory = Notification.Name("REALOpenCategory")
+    /// Pano push tap → open that board (its id waits in PanoStore.pendingOpen until home is there).
+    static let realOpenPanoBoard = Notification.Name("REALOpenPanoBoard")
 }

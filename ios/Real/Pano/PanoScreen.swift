@@ -100,10 +100,13 @@ struct PanoScreen: View {
             .presentationBackground(.clear)
         }
         .fullScreenCover(item: $openBoard) { b in PanoBoardScreen(boardId: b.id).liftedTopSafeArea() }
-        .alert("Delete board?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            Button("Delete", role: .destructive) { if let d = deleting { pano.deleteBoard(d.id) }; deleting = nil }
-            Button("Cancel", role: .cancel) { deleting = nil }
-        } message: { Text("This removes the board. Original REAL cards are kept.") }
+        // A member does not delete someone else's board: the same action leaves it.
+        .alert(deleting?.role == "MEMBER" ? t("Panodan ayrılsın mı?") : t("Pano silinsin mi?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button(deleting?.role == "MEMBER" ? t("Ayrıl") : t("Sil"), role: .destructive) { if let d = deleting { pano.deleteBoard(d.id) }; deleting = nil }
+            Button(t("Vazgeç"), role: .cancel) { deleting = nil }
+        } message: {
+            Text(deleting?.role == "MEMBER" ? t("Bu panoya erişimin kalkar. Diğer üyeler ve asıl REAL kartları kalır.") : t("Pano silinir. Asıl REAL kartları kalır."))
+        }
     }
 
     private var header: some View {
@@ -134,10 +137,10 @@ struct PanoScreen: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("A PLACE FOR\nYOUR IDEAS").font(.system(size: 34)).foregroundStyle(.white)
-            Text("Arrange cards, notes and photos. Build alone or invite people.").foregroundStyle(.gray)
+            Text(t("FİKİRLERİN\nİÇİN BİR YER")).font(.system(size: 34)).foregroundStyle(.white)
+            Text(t("Kartları, notları ve fotoğrafları diz. Tek başına kur ya da kişi davet et.")).foregroundStyle(.gray)
             Button { withoutAnimation { creating = true } } label: {
-                Text("+ NEW BOARD").foregroundStyle(.black).padding(.horizontal, 22).padding(.vertical, 12)
+                Text(t("+ YENİ PANO")).foregroundStyle(.black).padding(.horizontal, 22).padding(.vertical, 12)
                     .background(RoundedRectangle(cornerRadius: 24).fill(PanoColors.ivory))
             }
             .padding(.top, 6)
@@ -182,6 +185,7 @@ struct PanoScreen: View {
 
 /// Long press: the board colour fills the screen; Open / Delete / People cards slide up one after another.
 struct PanoBoardPeek: View {
+    @Environment(PanoStore.self) private var pano
     let board: PanoBoard
     let color: Color
     let onOpen: () -> Void
@@ -201,34 +205,33 @@ struct PanoBoardPeek: View {
                         RealSymbol("chevron.left", size: 21.8).foregroundStyle(PanoColors.ink).frame(width: 44, height: 44)
                     }
                     Spacer()
-                    Text("1 PERSON").font(.system(size: 13, weight: .medium)).foregroundStyle(PanoColors.ink)
+                    Text(t("{0} KİŞİ", max(pano.members[board.id]?.count ?? 1, 1))).font(.system(size: 13, weight: .medium)).foregroundStyle(PanoColors.ink)
                         .padding(.horizontal, 16).padding(.vertical, 6)
                         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(PanoColors.ink, lineWidth: 1.6))
                 }
                 panoBig(title, title.count > 10 ? 54 : 72).padding(.top, 12).opacity(header ? 1 : 0)
                 HStack(spacing: 14) {
-                    Text(board.shared ? "SHARED" : "PRIVATE").font(.system(size: 12, weight: .semibold)).kerning(0.4).foregroundStyle(PanoColors.ink)
-                    Text("OWNER").font(.system(size: 12)).kerning(0.4).foregroundStyle(PanoColors.ink.opacity(0.45))
+                    Text(board.shared ? t("PAYLAŞILAN") : t("ÖZEL")).font(.system(size: 12, weight: .semibold)).kerning(0.4).foregroundStyle(PanoColors.ink)
+                    Text(board.role == "OWNER" ? t("SAHİBİ") : t("ÜYE")).font(.system(size: 12)).kerning(0.4).foregroundStyle(PanoColors.ink.opacity(0.45))
                 }
                 .padding(.top, 10)
                 Spacer()
             }
             .padding(.horizontal, 20).padding(.vertical, 12)
             ZStack(alignment: .top) {
-                stackCard(top: 0, height: 230, bg: .white, index: 0) { rowHead("OPEN BOARD", ink: PanoColors.ink, strike: false, action: onOpen) { EmptyView() } }
+                stackCard(top: 0, height: 230, bg: .white, index: 0) { rowHead(t("PANOYU AÇ"), ink: PanoColors.ink, strike: false, action: onOpen) { EmptyView() } }
                 stackCard(top: 112, height: 230, bg: PanoColors.inkDark, index: 1) {
-                    rowHead("DELETE BOARD", ink: Color(argb: 0xFF8A8A90), strike: true, action: onRemove) {
+                    rowHead(board.role == "OWNER" ? t("PANOYU SİL") : t("PANODAN AYRIL"), ink: Color(argb: 0xFF8A8A90), strike: true, action: onRemove) {
                         RealSymbol("xmark", size: 12.6).foregroundStyle(PanoColors.danger)
                     }
                 }
                 stackCard(top: 224, height: 256, bg: accent, index: 2) {
                     VStack(spacing: 0) {
-                        rowHead("PEOPLE", ink: PanoColors.ink, strike: false, action: {}) { EmptyView() }
+                        rowHead(t("KİŞİLER"), ink: PanoColors.ink, strike: false, action: {}) { EmptyView() }
                         Spacer()
                         HStack(spacing: 0) {
-                            Text("INVITE PERSON").font(.system(size: 16)).foregroundStyle(.white).frame(maxWidth: .infinity)
-                            Rectangle().fill(accent).frame(width: 1.5)
-                            RealSymbol("plus", size: 23).foregroundStyle(.white).frame(width: 66)
+                            Text(peopleLine).font(.system(size: 16)).foregroundStyle(.white).lineLimit(1)
+                                .padding(.horizontal, 20).frame(maxWidth: .infinity)
                         }
                         .frame(height: 58)
                         .background(RoundedRectangle(cornerRadius: 29).fill(PanoColors.ink))
@@ -245,6 +248,12 @@ struct PanoBoardPeek: View {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.82).delay(0.12 + Double(i) * 0.09)) { shown[i] = true }
             }
         }
+    }
+
+    /// Who is on the board, for the people card ("Sadece sen" on a private board).
+    private var peopleLine: String {
+        let names = pano.members[board.id] ?? []
+        return names.count > 1 ? names.joined(separator: ", ") : t("Sadece sen")
     }
 
     private func stackCard<C: View>(top: CGFloat, height: CGFloat, bg: Color, index: Int, @ViewBuilder content: () -> C) -> some View {
@@ -290,7 +299,7 @@ struct PanoNewBoardOverlay: View {
                     RealSymbol("chevron.left", size: 21.8).foregroundStyle(PanoColors.ink).frame(width: 44, height: 44)
                 }
                 Spacer()
-                Text("NEW").font(.system(size: 13, weight: .medium)).foregroundStyle(PanoColors.ink)
+                Text(t("YENİ")).font(.system(size: 13, weight: .medium)).foregroundStyle(PanoColors.ink)
                     .padding(.horizontal, 16).padding(.vertical, 6)
                     .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(PanoColors.ink, lineWidth: 1.6))
             }
@@ -322,7 +331,7 @@ struct PanoNewBoardOverlay: View {
             Spacer()
             Button { if ready { onCreate(title, shared) } } label: {
                 HStack(spacing: 0) {
-                    Text("CREATE BOARD").font(.system(size: 16)).foregroundStyle(.white).frame(maxWidth: .infinity)
+                    Text(t("PANO OLUŞTUR")).font(.system(size: 16)).foregroundStyle(.white).frame(maxWidth: .infinity)
                     Rectangle().fill(PanoColors.accentWarm).frame(width: 1.5)
                     RealSymbol("plus", size: 23).foregroundStyle(.white)
                         .rotationEffect(.degrees(ready ? 90 : 0)).frame(width: 68)

@@ -28,15 +28,21 @@ final class PanoSeen {
 
     /// Safe inside a body: a first-seen board is stored quietly, without bumping `version`.
     func unread(board: String, items: [PanoItem]) -> Int {
+        unreadIds(board: board, items: items).count
+    }
+
+    /// The blocks that are news on this board; the open board briefly marks them.
+    func unreadIds(board: String, items: [PanoItem]) -> Set<String> {
         guard let seen = UserDefaults.standard.dictionary(forKey: key(board)) as? [String: Int] else {
-            UserDefaults.standard.set(snapshot(items), forKey: key(board))
-            return 0
+            // Not met yet: its blocks are taken as seen once they are here (an empty first read is not a snapshot).
+            if !items.isEmpty { UserDefaults.standard.set(snapshot(items), forKey: key(board)) }
+            return []
         }
         let me = uid
-        return items.filter { item in
+        return Set(items.filter { item in
             guard let author = item.authorUid, author != me else { return false }
             return (seen[item.id] ?? -1) < (item.contentVersion ?? 0)
-        }.count
+        }.map(\.id))
     }
 
     /// Unread count per board, for the deck and the dots.
@@ -68,6 +74,16 @@ struct HomeBoardDeck: View {
         let colors = PanoColors.colors(for: boards.map(\.id), chosen: boards.reduce(into: [:]) { $0[$1.id] = $1.color })
         let shown = expanded ? boards : Array(boards.prefix(max(previewCount, 1)))
         return VStack(spacing: 0) {
+            ForEach(pano.invites) { invite in
+                PanoDeckCard(title: invite.title, color: Color(argb: 0xFF1C1C20), ink: .white,
+                             pills: [t("{0} davet etti", invite.ownerName), t("Katılmak için dokun")], last: true)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        Task { @MainActor in if !(await pano.accept(invite)) { RealToast.shared.show(t("Davet kabul edilemedi. Biraz sonra tekrar dene.")) } }
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .padding(.bottom, 12)
+            }
             if boards.isEmpty {
                 PanoDeckCard(title: t("Yeni pano"), color: Color(argb: 0xFF1C1C20), ink: .white,
                              pills: [t("Kart, not, fotoğraf")], last: true)

@@ -186,6 +186,17 @@ struct HomeView: View {
     @State private var deckPage = ProcessInfo.processInfo.arguments.contains("panodeck") ? 1 : 0
     /// A board opened straight from the home deck; closing it comes back home.
     @State private var homeBoard: PanoBoard?
+
+    /// A tapped Pano push: open its board (after a pull if this phone has not met the board yet).
+    private func openPendingBoard() {
+        guard let id = PanoStore.pendingOpen else { return }
+        PanoStore.pendingOpen = nil
+        if let board = pano.boards.first(where: { $0.id == id }) { homeBoard = board; return }
+        Task { @MainActor in
+            await pano.sync()
+            homeBoard = pano.boards.first { $0.id == id }
+        }
+    }
     @State private var contextTarget: ContextCardType?
     @AppStorage("sort_order") private var homeSort = ReminderSortOrder.recentlyAdded.rawValue
     /// What the sort arrow now does, under it on the right; it fades after a moment.
@@ -370,6 +381,8 @@ struct HomeView: View {
             if phase == .background { completedShown = 3 }
             // Profile picture for connected people (only uploads when it, or the photo-sharing switch, changed).
             if phase == .active { Task { await ProfilePictures.push() } }
+            // Boards changed while REAL was away: the red dot and "yeni" are there when home comes back.
+            if phase == .active { pano.requestSync(delay: 0.3) }
             // "Çıkma vakti": traffic changes, and so may where the phone is.
             if phase == .active, NotificationScheduler.enabled { DepartureReminder.refresh(store.reminders) }
             // iOS keeps only the soonest 64 pending requests: refill the later repeats each time REAL comes back.
@@ -391,6 +404,8 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showCategoryOrder) { CategoryOrderSheet() }
         .fullScreenCover(item: $homeBoard) { b in PanoBoardScreen(boardId: b.id).liftedTopSafeArea().presentationBackground(.black) }
+        .onReceive(NotificationCenter.default.publisher(for: .realOpenPanoBoard)) { _ in openPendingBoard() }
+        .onAppear { openPendingBoard() }
         .fullScreenCover(isPresented: $showPano) { PanoScreen().liftedTopSafeArea().pullToClose { showPano = false }.presentationBackground(.black) }
         .fullScreenCover(item: $contextTarget) { target in
             Group {

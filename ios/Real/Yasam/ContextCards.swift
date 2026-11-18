@@ -236,39 +236,39 @@ enum ContextCardEngine {
             let ml = s.waterTodayMl ?? 0
             let goal = max(s.waterGoalMl, 1)
             return ContextCard(type: type, eyebrow: t("Bugün"),
-                               title: ml == 0 ? t("Bugün su tarafı sessiz") : t("Su hedefinin biraz gerisindesin"),
-                               message: ml == 0 ? t("Henüz hiç su içmedin. Bir bardakla başlayalım.") : t("{0} / {1} ml. Bir bardak iyi gelir.", ml, goal),
+                               // The home card is one line: a short title and at most a two-word hint must fit it.
+                               title: ml == 0 ? t("Bugün hiç su yok") : t("Su · {0} / {1} ml", ml, goal),
+                               message: "",
                                primaryLabel: "+250 ml", progress: min(max(Double(ml) / Double(goal), 0), 1))
         case .mood:
-            return ContextCard(type: type, eyebrow: t("Bugün"), title: t("Bugün nasıl hissediyorsun?"),
-                               message: t("Günün havasını tek dokunuşla kaydet."), primaryLabel: t("Kaydet"))
+            return ContextCard(type: type, eyebrow: t("Bugün"), title: t("Bugün nasılsın?"),
+                               message: t("tek dokunuş"), primaryLabel: t("Kaydet"))
         case .book:
-            let parts = [s.unfinishedBookTitle, s.unfinishedBookAuthor].compactMap { $0 }.filter { !$0.isEmpty }
-            return ContextCard(type: type, eyebrow: t("Akşam"), title: t("Kaldığın yerden devam"),
-                               message: t("{0} seni bekliyor.", parts.isEmpty ? t("Kitaplığındaki kitap") : parts.joined(separator: " · ")),
+            return ContextCard(type: type, eyebrow: t("Akşam"), title: t("Okumaya devam"),
+                               message: s.unfinishedBookTitle ?? "",
                                primaryLabel: t("Oku"))
         case .media:
-            return ContextCard(type: type, eyebrow: t("Akşam"), title: t("Bu akşam ne izlesek?"),
-                               message: isLowMood(s) ? t("Yorucu bir gün gibi. Hafif bir şey bulalım.") : t("Türünü seç, afişleri keşfet."),
+            return ContextCard(type: type, eyebrow: t("Akşam"), title: t("Ne izlesek?"),
+                               message: isLowMood(s) ? t("hafif bir şey") : t("tür seç"),
                                primaryLabel: t("Keşfet"))
         case .watch:
             let message: String
             if let series = s.seriesInProgress, let ep = s.lastEpisode {
-                message = t("{0} · {1}. sezon {2}. bölüm seni bekliyor.", series, ep.season, ep.number + 1)
+                message = "\(series) \(ep.season)×\(ep.number + 1)"
             } else if let series = s.seriesInProgress {
-                message = t("{0} seni bekliyor.", series)
-            } else { message = t("Yarım kalan dizin seni bekliyor.") }
-            return ContextCard(type: type, eyebrow: t("Akşam"), title: t("Sıradaki bölüm"), message: message, primaryLabel: t("Puanlarım"))
+                message = series
+            } else { message = t("yarım kalan dizin") }
+            return ContextCard(type: type, eyebrow: t("Akşam"), title: t("Sıradaki"), message: message, primaryLabel: t("Puanlarım"))
         case .listen:
             return ContextCard(type: type, eyebrow: minutes(s) < 12 * 60 ? t("Sabah") : t("Yolda"), title: t("Ne dinlesek?"),
-                               message: t("Türünü seç, kartları kaydır."), primaryLabel: t("Keşfet"))
+                               message: t("tür seç"), primaryLabel: t("Keşfet"))
         case .play:
             return ContextCard(type: type, eyebrow: isWeekend(s) ? t("Hafta sonu") : t("Akşam"), title: t("Ne oynasak?"),
-                               message: isLowMood(s) ? t("Kafa dağıtacak hafif bir oyun bulalım.") : t("Bir tür seç, sana uyanları bulalım."),
+                               message: isLowMood(s) ? t("hafif bir şey") : t("tür seç"),
                                primaryLabel: t("Keşfet"))
         case .journal:
             return ContextCard(type: type, eyebrow: t("Gece"), title: t("Bugünü iki satırla yaz"),
-                               message: t("Kısa bir not, yarına güzel bir iz bırakır."), primaryLabel: t("Yaz"))
+                               message: "", primaryLabel: t("Yaz"))
         }
     }
 }

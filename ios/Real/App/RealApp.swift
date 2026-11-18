@@ -164,6 +164,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     /// NotificationActionReceiver: "Tamamla" completes (repeats move on), "10 dk ertele" snoozes, a tap opens the card.
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        let info = response.notification.request.content.userInfo
+        if info["type"] as? String == "pano_item", let board = info["boardId"] as? String {
+            await MainActor.run {
+                PanoStore.pendingOpen = board
+                NotificationCenter.default.post(name: .realOpenPanoBoard, object: nil)
+            }
+            return
+        }
         guard let id = response.notification.request.content.userInfo["reminderId"] as? Int64 else { return }
         await MainActor.run {
             let store = ReminderStore.current
@@ -185,6 +193,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        // Pano: no banner for the board already on screen (its blocks just appear there).
+        let info = notification.request.content.userInfo
+        if info["type"] as? String == "pano_item", let board = info["boardId"] as? String,
+           await MainActor.run(body: { PanoStore.openBoard == board }) { return [] }
         if notification.request.identifier.hasSuffix("-place") {
             Task { @MainActor in await ReminderStore.current?.clearFiredPlaces() }
         }
