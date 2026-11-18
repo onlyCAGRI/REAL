@@ -72,7 +72,12 @@ enum CardShareClient {
         _ = try? await RealBackend.post("/api/share/v1/profile", [:], timeout: 20)
         guard let r = try? await RealBackend.post("/api/share/v1/inbox", [:], timeout: 30),
               let delivered = (r["delivered"] as? NSNumber)?.intValue, delivered > 0 else { return }
+        let before = Set(store.reminders.map(\.id))
         await RealCloudSync.shared.runFully(store, life)
+        // The cards that just came in breathe red until opened ("yeni", like a shared category's new card).
+        for r in store.reminders.filter({ !before.contains($0.id) }).sorted(by: { $0.createdAt > $1.createdAt }).prefix(delivered) {
+            CardNews.shared.add(r.id, category: r.customCategoryId)
+        }
         RealToast.shared.show(delivered == 1 ? t("Sana bir kart gönderildi") : t("Sana {0} kart gönderildi", delivered))
     }
 }

@@ -155,7 +155,8 @@ struct ReminderCardView: View {
                 // Çakışma: an amber edge light when this card's time overlaps another's.
                 if conflict { ConflictEdge() }
                 // Kontrol ettir: a slow light from the right edge until this viewer opens the card.
-                if let glow = CheckRequests.shared.glow(reminder, me: RealAuth.shared.account?.uid, categoryColor: reminder.customCategoryId == nil ? nil : category.map { $0.visual.stripe.0 }) { CheckGlowOverlay(color: glow) }
+                if let glow = CheckRequests.shared.glow(reminder, me: RealAuth.shared.account?.uid, categoryColor: reminder.customCategoryId == nil ? nil : category.map { $0.visual.stripe.0 })
+                    ?? CardNews.shared.glow(reminder) { CheckGlowOverlay(color: glow) }
                 if let stripes {
                     HStack(spacing: 3.5) {
                         Rectangle().fill(stripes.0).frame(width: 5)
@@ -508,6 +509,8 @@ struct CategoryTileView: View {
     var selectionMode = false
     /// Hero tile on the category screen: progress ring + sort arrow next to the stacked pills (CategoryHeroActions).
     var heroActions: AnyView? = nil
+    /// Cards others just added (CardNews): "1 yeni" between the count and the description.
+    var newCount = 0
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: hero ? 30 : 26, style: .continuous)
@@ -538,8 +541,10 @@ struct CategoryTileView: View {
             } else {
                 HStack(spacing: 8) {
                     if showCount { CategoryPill(text: cardCountText(count), foreground: visual.foreground, number: count) }
+                    if newCount > 0 && !selectionMode { NewCardsBubble(count: newCount) }
                     if !description.isEmpty {
                         CategoryPill(text: description, foreground: visual.foreground).frame(maxWidth: 190, alignment: .leading)
+                            .layoutPriority(-1)
                     }
                     Spacer()
                     if selectionMode {

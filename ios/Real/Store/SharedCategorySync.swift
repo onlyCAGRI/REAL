@@ -227,6 +227,7 @@ final class SharedCategorySync {
                 guard let local = store.categories.first(where: { $0.sharedId == s.id }) else { continue }
                 try? await syncCategory(store, local, access: s.access, uid: uid)
             }
+            CardNews.shared.prune(existing: Set(store.reminders.map(\.id)))
             // Cards left by a shared category that is gone here: they are personal now.
             let sharedLocal = Set(store.categories.filter(\.isShared).map(\.id))
             if store.reminders.contains(where: { $0.sharedCardId != nil && !sharedLocal.contains($0.customCategoryId ?? -1) }) {
@@ -302,6 +303,8 @@ final class SharedCategorySync {
         guard let sharedId = category.sharedId else { return }
         var st = load(uid, sharedId)
         let readOnly = access == "view"
+        // The first pull of a category brings everything it already had: none of that is news.
+        let firstPull = st.cursor == 0
         // Pull.
         while true {
             let page = try await json("shared/\(sharedId)/cards?cursor=\(st.cursor)")
@@ -323,6 +326,10 @@ final class SharedCategorySync {
                 if !readOnly, let current, let entry, await hashOf(current, &st, sharedId: sharedId) != entry.hash { continue }
                 guard let item = try await incoming(card, localId: current?.id ?? localId, categoryId: category.id, existing: current, &st, sharedId: sharedId) else { continue }
                 store.putFromSync(item)
+                // Someone else's new card: "yeni" at home and in the category (iOS got the banner from the push).
+                if current == nil, entry == nil, !firstPull, (card["authorUid"] as? String) != uid {
+                    CardNews.shared.add(item.id, category: category.id)
+                }
                 let freshHash = await hashOf(item, &st, sharedId: sharedId) ?? ""
                 st.cards[cardId] = .init(localId: item.id, revision: revision, hash: freshHash)
             }

@@ -1,3 +1,6 @@
 /* Pano push banners: the server sends these keys (worker/boards/notify.mjs panoAlert). */
 "%@ panoya yeni bir şey ekledi" = "%@ added something new";
 "Panoda yeni bir şey var" = "Something new on this board";
+"%@ yeni bir kart ekledi" = "%@ added a new card";
+"Yeni bir kart var" = "There's a new card";
+"Sana bir kart gönderildi" = "You've been sent a card";

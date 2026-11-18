@@ -557,7 +557,7 @@ struct HomeView: View {
                     withAnimation(RealMotion.move) { deckPage = next; deckDrag = 0 }
                 }, including: selecting ? .subviews : .all)
             if !selecting {
-                HomeDeckDots(page: deckPage, boardsNews: news)
+                HomeDeckDots(page: deckPage, boardsNews: news, categoriesNews: CardNews.shared.anyInCategories)
                     .padding(.bottom, 10)
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -580,7 +580,8 @@ struct HomeView: View {
                     CategoryTileView(visual: visual(item), count: store.count(for: item) + calendarCount(item), description: description(item),
                                      extendUnderNext: index < visible.count - 1,
                                      isSelected: customId.map(selectedCategoryIds.contains) ?? false,
-                                     selectionMode: selecting && customId != nil)
+                                     selectionMode: selecting && customId != nil,
+                                     newCount: customId.map { CardNews.shared.count(in: $0) } ?? 0)
                         .realPetPerch("category:\(item.orderKey)")
                         .scaleEffect(pressedTile == item.orderKey ? 0.985 : 1)
                         .contentShape(Rectangle())

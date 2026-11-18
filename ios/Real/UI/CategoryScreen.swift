@@ -248,6 +248,11 @@ struct CategoryScreen: View {
         }
         .sheet(isPresented: $showColorSheet) { if let builtIn { BuiltInCategoryColorSheet(category: builtIn) } }
         .onChange(of: custom == nil && customId != nil) { _, gone in if gone { dismiss() } }
+        // Yeni: what others added here glows while you are inside; leaving the category (not opening one of its
+        // cards on top of it) counts as seen.
+        .onDisappear {
+            if let customId, !path.contains(.customCategory(customId)) { CardNews.shared.seenCategory(customId) }
+        }
         .sheet(isPresented: Binding(get: { checkTargets != nil }, set: { if !$0 { checkTargets = nil } })) {
             CheckRequestSheet(targets: checkTargets ?? [], canClear: checkIds.contains { store.reminder($0)?.checkRequest != nil },
                               onSave: { target, day, color in store.setCheckRequest(checkIds, target: target, startEpochDay: day, color: color) },

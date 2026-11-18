@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Pano news: the "3 yeni" pill and the boards dot under the home deck.
-let panoNewsColor = Color(argb: 0xFFFF5A4E)
+let panoNewsColor = Color(argb: 0xFFFF4D6A)
 private let deckInk = Color(argb: 0xFF151517)
 
 /// What this phone has already seen on each board: block id → content version (PanoSeen.kt). A block someone else
@@ -234,12 +234,14 @@ struct PanoDeckCard: View {
 struct HomeDeckDots: View {
     let page: Int
     let boardsNews: Bool
+    var categoriesNews = false
 
     var body: some View {
         HStack(spacing: 6) {
             ForEach(0..<2, id: \.self) { i in
                 Capsule()
-                    .fill(i == 1 && boardsNews ? panoNewsColor : i == page ? Color(argb: 0xFFD8D8E0) : Color(argb: 0xFF3A3A42))
+                    .fill(i == 0 && categoriesNews ? CardNews.color : i == 1 && boardsNews ? panoNewsColor
+                          : i == page ? Color(argb: 0xFFD8D8E0) : Color(argb: 0xFF3A3A42))
                     .frame(width: i == page ? 18 : 6, height: 6)
             }
         }
@@ -247,7 +249,7 @@ struct HomeDeckDots: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 10)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(boardsNews ? t("Panolarda yeni bir şey var") : (page == 0 ? t("Kategoriler") : t("Panolar")))
+        .accessibilityLabel(categoriesNews ? t("Kategorilerde yeni kart var") : boardsNews ? t("Panolarda yeni bir şey var") : (page == 0 ? t("Kategoriler") : t("Panolar")))
     }
 }
 
